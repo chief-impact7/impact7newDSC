@@ -1,0 +1,132 @@
+import {
+    collection, getDocs, query, where
+} from 'firebase/firestore';
+import { db } from '../../firebase-config.js';
+
+// 학생 전체 목록 (재원 학생만)
+export async function fetchStudents() {
+    const snap = await getDocs(collection(db, 'students'));
+    const list = [];
+    snap.forEach(docSnap => {
+        const data = { id: docSnap.id, ...docSnap.data() };
+        data.enrollments = normalizeEnrollments(data);
+        list.push(data);
+    });
+    list.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+    return list;
+}
+
+// 특정 날짜의 daily_checks
+export async function fetchDailyChecks(date) {
+    const q = query(
+        collection(db, 'daily_checks'),
+        where('date', '==', date)
+    );
+    const snap = await getDocs(q);
+    const map = {};
+    snap.forEach(docSnap => {
+        map[docSnap.id] = docSnap.data();
+    });
+    return map;
+}
+
+// 기간별 daily_checks (startDate ~ endDate 포함)
+export async function fetchDailyChecksRange(startDate, endDate) {
+    const q = query(
+        collection(db, 'daily_checks'),
+        where('date', '>=', startDate),
+        where('date', '<=', endDate)
+    );
+    const snap = await getDocs(q);
+    const list = [];
+    snap.forEach(docSnap => {
+        list.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    return list;
+}
+
+// 특정 날짜의 pending 연기 작업
+export async function fetchPostponedTasks(date) {
+    const q = query(
+        collection(db, 'postponed_tasks'),
+        where('scheduled_date', '==', date),
+        where('status', '==', 'pending')
+    );
+    const snap = await getDocs(q);
+    const list = [];
+    snap.forEach(docSnap => {
+        list.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    return list;
+}
+
+// 기간별 pending 연기 작업
+export async function fetchPostponedTasksRange(startDate, endDate) {
+    const q = query(
+        collection(db, 'postponed_tasks'),
+        where('scheduled_date', '>=', startDate),
+        where('scheduled_date', '<=', endDate)
+    );
+    const snap = await getDocs(q);
+    const list = [];
+    snap.forEach(docSnap => {
+        list.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    return list;
+}
+
+// ─── 유틸 ───
+
+function normalizeDays(day) {
+    if (!day) return [];
+    if (Array.isArray(day)) return day.map(d => d.replace('요일', '').trim());
+    return day.split(/[,·\s]+/).map(d => d.replace('요일', '').trim()).filter(Boolean);
+}
+
+function normalizeEnrollments(s) {
+    if (s.enrollments?.length) return s.enrollments;
+    let levelSymbol = s.level_symbol || s.level_code || '';
+    let classNumber = s.class_number || '';
+    // Auto-correction: level_symbol에 숫자만 있으면 class_number로 이동
+    if (/^\d+$/.test(levelSymbol) && !classNumber) {
+        classNumber = levelSymbol;
+        levelSymbol = '';
+    }
+    const day = normalizeDays(s.day);
+    const ct = s.class_type || '정규';
+    const e = { class_type: ct, level_symbol: levelSymbol, class_number: classNumber, day, start_date: s.start_date || '' };
+    if (ct === '특강') e.end_date = s.special_end_date || '';
+    return [e];
+}
+
+export const enrollmentCode = (e) => `${e.level_symbol || ''}${e.class_number || ''}`;
+
+export const branchFromClassNumber = (num) => {
+    const first = (num || '').trim()[0];
+    if (first === '1') return '2단지';
+    if (first === '2') return '10단지';
+    return '';
+};
+
+export const branchFromStudent = (s) =>
+    s.branch || (s.enrollments?.[0] ? branchFromClassNumber(s.enrollments[0].class_number) : '');
+
+export function getDayName(dateStr) {
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    return days[new Date(dateStr).getDay()];
+}
+
+export { normalizeDays };
+
+// ─── 날짜 유틸 ───
+
+export function todayStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+export function addDays(dateStr, days) {
+    const d = new Date(dateStr);
+    d.setDate(d.getDate() + days);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
