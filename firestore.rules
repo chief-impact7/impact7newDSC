@@ -1,0 +1,165 @@
+rules_version = '2';
+
+  service cloud.firestore {
+    match /databases/{database}/documents {
+
+      // =========================================================================
+      // 인증: gw.impact7.kr 또는 impact7.kr 도메인의 인증된 Google 계정만 허용
+      // =========================================================================
+      function isAuthorized() {
+        return request.auth != null
+          && (request.auth.token.email.matches('.*@gw[.]impact7[.]kr')
+              || request.auth.token.email.matches('.*@impact7[.]kr'));
+      }
+
+      // =========================================================================
+      // 학생 마스터 컬렉션
+      // =========================================================================
+      match /students/{docId} {
+
+        function hasRequiredStudentFields() {
+          let data = request.resource.data;
+          return data.keys().hasAll(['name', 'parent_phone_1', 'branch', 'status', 'enrollments'])
+            && data.name is string
+            && data.name.size() > 0
+            && data.parent_phone_1 is string
+            && data.parent_phone_1.size() > 0
+            && data.branch is string
+            && data.status is string
+            && data.status in ['등원예정', '재원', '실휴원', '가휴원', '퇴원']
+            && data.enrollments is list;
+        }
+
+        function hasOnlyAllowedStudentFields() {
+          let allowed = [
+            'name', 'level', 'school', 'grade',
+            'student_phone', 'parent_phone_1', 'parent_phone_2',
+            'branch', 'status', 'enrollments',
+            'pause_start_date', 'pause_end_date',
+            'day', 'class_type', 'level_code', 'level_symbol', 'class_number',
+            'start_date', 'special_start_date', 'special_end_date'
+          ];
+          return request.resource.data.keys().hasOnly(allowed);
+        }
+
+        function withinSizeLimit() {
+          return request.resource.data.keys().size() <= 20;
+        }
+
+        allow read: if isAuthorized();
+
+        allow create: if isAuthorized()
+          && hasRequiredStudentFields()
+          && hasOnlyAllowedStudentFields()
+          && withinSizeLimit();
+
+        allow update: if isAuthorized()
+          && hasRequiredStudentFields()
+          && hasOnlyAllowedStudentFields()
+          && withinSizeLimit();
+
+        allow delete: if isAuthorized();
+
+        match /memos/{memoId} {
+
+          function hasRequiredMemoFields() {
+            let data = request.resource.data;
+            return data.keys().hasAll(['text', 'author', 'created_at'])
+              && data.text is string
+              && data.text.size() > 0
+              && data.text.size() <= 2000
+              && data.author is string;
+          }
+
+          function hasOnlyAllowedMemoFields() {
+            return request.resource.data.keys().hasOnly(['text', 'author', 'created_at']);
+          }
+
+          allow read: if isAuthorized();
+
+          allow create: if isAuthorized()
+            && hasRequiredMemoFields()
+            && hasOnlyAllowedMemoFields();
+
+          allow update: if false;
+
+          allow delete: if isAuthorized();
+        }
+      }
+
+      // =========================================================================
+      // 이력 로그
+      // =========================================================================
+      match /history_logs/{logId} {
+
+        function hasRequiredLogFields() {
+          let data = request.resource.data;
+          return data.keys().hasAll(['doc_id', 'change_type', 'before', 'after', 'google_login_id', 'timestamp'])
+            && data.doc_id is string
+            && data.doc_id.size() > 0
+            && data.change_type is string
+            && data.change_type in ['ENROLL', 'UPDATE', 'WITHDRAW']
+            && data.before is string
+            && data.after is string
+            && data.google_login_id is string
+            && data.google_login_id.size() > 0;
+        }
+
+        function hasOnlyAllowedLogFields() {
+          return request.resource.data.keys().hasOnly([
+            'doc_id', 'change_type', 'before', 'after', 'google_login_id', 'timestamp'
+          ]);
+        }
+
+        allow read: if isAuthorized();
+
+        allow create: if isAuthorized()
+          && hasRequiredLogFields()
+          && hasOnlyAllowedLogFields();
+
+        allow update, delete: if false;
+      }
+
+      // =========================================================================
+      // Daily Records (daily-ops 일일 기록)
+      // =========================================================================
+      match /daily_records/{docId} {
+        allow read, write: if isAuthorized();
+      }
+
+      // =========================================================================
+      // Retake Schedule (재시/보충 일정)
+      // =========================================================================
+      match /retake_schedule/{docId} {
+        allow read, write: if isAuthorized();
+      }
+
+      // =========================================================================
+      // User Settings (역할 설정)
+      // =========================================================================
+      match /user_settings/{email} {
+        allow read, write: if isAuthorized();
+      }
+
+      // =========================================================================
+      // Role Memos (역할별 메모)
+      // =========================================================================
+      match /role_memos/{docId} {
+        allow read, write: if isAuthorized();
+      }
+
+      // =========================================================================
+      // Class Settings (반별 설정: 영역, 테스트 등)
+      // =========================================================================
+      match /class_settings/{classCode} {
+        allow read, write: if isAuthorized();
+      }
+
+      // =========================================================================
+      // 기본 거부: 위에 매칭되지 않는 모든 경로 차단
+      // =========================================================================
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+  }

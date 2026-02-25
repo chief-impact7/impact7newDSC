@@ -23,6 +23,7 @@ let currentRole = null;
 let roleMemos = [];
 let memoTab = 'inbox';
 let classSettings = {};          // classCode → { domains: [...] }
+let selectedBranch = null;       // 소속 글로벌 필터 (null = 전체, '2단지' | '10단지')
 const DEFAULT_DOMAINS = ['Gr', 'A/G', 'R/C'];
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -40,6 +41,20 @@ function todayStr() {
 function getDayName(dateStr) {
     const days = ['일', '월', '화', '수', '목', '금', '토'];
     return days[new Date(dateStr).getDay()];
+}
+
+function formatTime12h(time24) {
+    if (!time24) return '';
+    const [h, m] = time24.split(':');
+    const hour = parseInt(h);
+    const ampm = hour >= 12 ? '오후' : '오전';
+    const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+    return `${ampm} ${h12}:${m}`;
+}
+
+function nowTimeStr() {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 function normalizeDays(day) {
@@ -255,9 +270,13 @@ async function saveImmediately(studentId, updates) {
 // ─── 반 관리 헬퍼 ────────────────────────────────────────────────────────────
 
 function getUniqueClassCodes() {
+    const dayName = getDayName(selectedDate);
     const codes = new Set();
     allStudents.forEach(s => {
+        if (s.status === '퇴원') return;
+        if (selectedBranch && branchFromStudent(s) !== selectedBranch) return;
         s.enrollments.forEach(e => {
+            if (!e.day.includes(dayName)) return;
             const code = enrollmentCode(e);
             if (code) codes.add(code);
         });
@@ -266,15 +285,38 @@ function getUniqueClassCodes() {
 }
 
 function getClassMgmtCount(filterKey) {
-    if (filterKey === 'all') return allStudents.filter(s => s.status !== '퇴원').length;
-    return allStudents.filter(s =>
-        s.enrollments.some(e => enrollmentCode(e) === filterKey)
+    const dayName = getDayName(selectedDate);
+    let students = allStudents.filter(s =>
+        s.status !== '퇴원' && s.enrollments.some(e => e.day.includes(dayName))
+    );
+    if (selectedBranch) students = students.filter(s => branchFromStudent(s) === selectedBranch);
+    if (filterKey === 'all') return students.length;
+    return students.filter(s =>
+        s.enrollments.some(e => e.day.includes(dayName) && enrollmentCode(e) === filterKey)
     ).length;
 }
 
 // ─── Category & SubFilter ──────────────────────────────────────────────────
 
 function setCategory(category) {
+    // 소속은 글로벌 필터 — 카테고리를 바꾸지 않고 L2 토글만
+    if (category === 'branch') {
+        const branchL1 = document.querySelector('.nav-l1[data-category="branch"]');
+        const isExpanded = branchL1?.classList.contains('expanded');
+        // 접을 때 필터 해제
+        if (isExpanded && selectedBranch) {
+            selectedBranch = null;
+            branchL1?.classList.remove('expanded');
+            renderBranchFilter();
+            renderSubFilters();
+            renderListPanel();
+            return;
+        }
+        branchL1?.classList.toggle('expanded', !isExpanded);
+        renderBranchFilter();
+        return;
+    }
+
     if (currentCategory === category) {
         // 같은 카테고리 클릭: L2 필터 활성이면 해제+접기(현황판), 아니면 L2 토글
         if (currentSubFilter.size > 0) {
@@ -290,8 +332,9 @@ function setCategory(category) {
     }
     checkedItems.clear();
 
-    // L1 active 토글
+    // L1 active 토글 (branch 제외)
     document.querySelectorAll('.nav-l1').forEach(el => {
+        if (el.dataset.category === 'branch') return;
         el.classList.toggle('active', el.dataset.category === category);
     });
 
@@ -367,6 +410,53 @@ function renderSubFilters() {
     container.style.display = l2Expanded ? '' : 'none';
 }
 
+function renderBranchFilter() {
+    let container = document.getElementById('nav-branch-l2');
+    const branchL1 = document.querySelector('.nav-l1[data-category="branch"]');
+    if (!branchL1) return;
+
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'nav-branch-l2';
+        container.className = 'nav-l2-group';
+        branchL1.after(container);
+    }
+
+    const branches = [
+        { key: '2단지', label: '2단지' },
+        { key: '10단지', label: '10단지' }
+    ];
+    const active = allStudents.filter(s => s.status !== '퇴원');
+
+    container.innerHTML = branches.map(b => {
+        const isActive = selectedBranch === b.key ? 'active' : '';
+        const count = active.filter(s => branchFromStudent(s) === b.key).length;
+        return `<div class="nav-l2 ${isActive}" data-filter="${b.key}" onclick="setBranch('${b.key}')">
+            ${esc(b.label)}
+            ${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
+        </div>`;
+    }).join('');
+
+    const isExpanded = branchL1.classList.contains('expanded');
+    container.style.display = isExpanded ? '' : 'none';
+
+    // 소속 L1 expand 아이콘 업데이트
+    const icon = branchL1.querySelector('.nav-l1-expand');
+    if (icon) icon.textContent = isExpanded ? 'expand_less' : 'expand_more';
+
+    // 소속 선택 시 L1에 시각적 표시
+    branchL1.classList.toggle('has-filter', !!selectedBranch);
+}
+
+function setBranch(branchKey) {
+    selectedBranch = selectedBranch === branchKey ? null : branchKey;
+    checkedItems.clear();
+    renderBranchFilter();
+    renderSubFilters();
+    updateBatchBar();
+    renderListPanel();
+}
+
 function setSubFilter(filterKey) {
     // 단일 선택: 같은 필터 클릭 시 해제, 다른 필터 클릭 시 교체
     if (currentSubFilter.has(filterKey)) {
@@ -396,9 +486,10 @@ function setSubFilter(filterKey) {
 
 function getSubFilterCount(filterKey) {
     const dayName = getDayName(selectedDate);
-    const todayStudents = allStudents.filter(s =>
+    let todayStudents = allStudents.filter(s =>
         s.enrollments.some(e => e.day.includes(dayName))
     );
+    if (selectedBranch) todayStudents = todayStudents.filter(s => branchFromStudent(s) === selectedBranch);
 
     if (currentCategory === 'attendance') {
         switch (filterKey) {
@@ -447,9 +538,13 @@ function getSubFilterCount(filterKey) {
 // ─── Filtering ──────────────────────────────────────────────────────────────
 
 function getFilteredStudents() {
-    // 반 관리: 요일 무관, 모든 재원 학생 표시
+    // 반 관리: 오늘 등원 예정 학생만 표시
     if (currentCategory === 'class_mgmt') {
-        let students = allStudents.filter(s => s.status !== '퇴원');
+        const dayName = getDayName(selectedDate);
+        let students = allStudents.filter(s =>
+            s.status !== '퇴원' && s.enrollments.some(e => e.day.includes(dayName))
+        );
+        if (selectedBranch) students = students.filter(s => branchFromStudent(s) === selectedBranch);
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
             students = students.filter(s =>
@@ -457,7 +552,7 @@ function getFilteredStudents() {
                 s.enrollments.some(e => enrollmentCode(e).toLowerCase().includes(q))
             );
         }
-        if (currentSubFilter.size > 0) {
+        if (currentSubFilter.size > 0 && !currentSubFilter.has('all')) {
             students = students.filter(s =>
                 s.enrollments.some(e => currentSubFilter.has(enrollmentCode(e)))
             );
@@ -469,6 +564,9 @@ function getFilteredStudents() {
     let students = allStudents.filter(s =>
         s.enrollments.some(e => e.day.includes(dayName))
     );
+
+    // 소속 글로벌 필터
+    if (selectedBranch) students = students.filter(s => branchFromStudent(s) === selectedBranch);
 
     // 검색어 필터
     if (searchQuery) {
@@ -519,6 +617,16 @@ function getFilteredStudents() {
         }
     }
 
+    // 출결: 등원시간(start_time) 임박순 정렬
+    if (currentCategory === 'attendance') {
+        const dayName = getDayName(selectedDate);
+        students.sort((a, b) => {
+            const timeA = a.enrollments.find(e => e.day.includes(dayName))?.start_time || '99:99';
+            const timeB = b.enrollments.find(e => e.day.includes(dayName))?.start_time || '99:99';
+            return timeA.localeCompare(timeB);
+        });
+    }
+
     return students;
 }
 
@@ -532,19 +640,31 @@ function renderListPanel() {
     // 카테고리별 라벨
     const categoryLabels = { attendance: '출결', homework: '숙제', test: '테스트', automation: '자동화', class_mgmt: '반 관리' };
 
-    // L2 필터 활성 시 필터명 포함 (예: "4명 등원전")
+    // L2 필터 활성 시 필터명 표시
     const subFilterLabels = {
         pre_arrival: '등원전', present: '출석', late: '지각', absent: '결석', other: '기타',
         hw_1st: '1차', hw_2nd: '2차', hw_next: '다음숙제',
         test_1st: '1차', test_2nd: '2차'
     };
-    if (currentSubFilter.size > 0) {
-        const filterNames = [...currentSubFilter].map(k => subFilterLabels[k] || k).join('·');
-        countEl.textContent = `${students.length}명 ${filterNames}`;
-    } else {
-        countEl.textContent = `${students.length}명`;
-    }
+
     document.getElementById('filter-label').textContent = categoryLabels[currentCategory] || '';
+
+    const subLabel = document.getElementById('sub-filter-label');
+    if (currentSubFilter.size > 0 && !currentSubFilter.has('all')) {
+        const filterNames = [...currentSubFilter].map(k => subFilterLabels[k] || k).join(' · ');
+        subLabel.textContent = filterNames;
+    } else {
+        subLabel.textContent = '전체';
+    }
+
+    countEl.textContent = `${students.length}명`;
+
+    // 전체 선택 체크박스 상태 동기화
+    const selectAllCb = document.getElementById('select-all-checkbox');
+    if (selectAllCb) {
+        selectAllCb.checked = students.length > 0 && students.every(s => checkedItems.has(s.docId));
+        selectAllCb.indeterminate = students.some(s => checkedItems.has(s.docId)) && !selectAllCb.checked;
+    }
 
     if (students.length === 0) {
         container.innerHTML = `<div class="empty-state">
@@ -565,7 +685,7 @@ function renderListPanel() {
         if (currentCategory === 'attendance') {
             const rec = dailyRecords[s.docId];
             const attStatus = rec?.attendance?.status || '미확인';
-            const statuses = ['등원전', '출석', '지각', '결석', '기타'];
+            const statuses = ['등원전', '출석', '지각', '결석', '조퇴', '기타'];
             // 미확인 maps to 등원전 for display
             const currentDisplay = attStatus === '미확인' ? '등원전' : attStatus;
             toggleHtml = `<div class="toggle-group">` +
@@ -618,12 +738,25 @@ function renderListPanel() {
         } else if (currentCategory === 'class_mgmt') {
             toggleHtml = s.enrollments.map((e, idx) => {
                 const days = e.day?.join('\u00B7') || '';
-                const time = e.start_time || '';
+                const time = e.start_time ? formatTime12h(e.start_time) : '';
                 return `<div style="margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                     <span style="font-size:12px;color:var(--text-sec);">${esc(enrollmentCode(e))} ${days} ${time}</span>
                     <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openEnrollmentModal('${s.docId}', ${idx})">편집</button>
                 </div>`;
             }).join('');
+        }
+
+        // 등원시간 표시: 실제 기록된 시간 또는 예정 시간
+        let timeTag = '';
+        const rec = dailyRecords[s.docId];
+        const arrivalTime = rec?.arrival_time;
+        if (arrivalTime) {
+            timeTag = `<span class="item-time arrived">${esc(formatTime12h(arrivalTime))}</span>`;
+        } else if (currentCategory === 'attendance' || currentCategory === 'class_mgmt') {
+            const dayName = getDayName(selectedDate);
+            const todayEnroll = s.enrollments.find(e => e.day.includes(dayName));
+            const st = todayEnroll?.start_time;
+            if (st) timeTag = `<span class="item-time">${esc(formatTime12h(st))}</span>`;
         }
 
         return `<div class="list-item ${isActive}" data-id="${s.docId}" onclick="selectStudent('${s.docId}')">
@@ -632,6 +765,7 @@ function renderListPanel() {
             <div class="item-main">
                 <div class="item-header">
                     <span class="item-title">${esc(s.name)}</span>
+                    ${timeTag}
                     <span class="item-desc">${esc(s.level || '')} · ${esc(code)} · ${esc(branch)}</span>
                 </div>
                 ${toggleHtml}
@@ -641,6 +775,15 @@ function renderListPanel() {
 }
 
 // ─── Class Detail Panel ─────────────────────────────────────────────────────
+
+const DEFAULT_TEST_SECTIONS = {
+    '기반학습테스트': [],
+    '리뷰테스트': []
+};
+
+function getClassTestSections(classCode) {
+    return classSettings[classCode]?.test_sections || JSON.parse(JSON.stringify(DEFAULT_TEST_SECTIONS));
+}
 
 function renderClassDetail(classCode) {
     if (!classCode) {
@@ -654,10 +797,17 @@ function renderClassDetail(classCode) {
     document.getElementById('detail-empty').style.display = 'none';
     document.getElementById('detail-content').style.display = '';
 
+    const dayName = getDayName(selectedDate);
     const classStudents = allStudents.filter(s =>
-        s.enrollments.some(e => enrollmentCode(e) === classCode)
+        s.status !== '퇴원' &&
+        s.enrollments.some(e => enrollmentCode(e) === classCode && e.day.includes(dayName))
     );
+    if (selectedBranch) {
+        classStudents.splice(0, classStudents.length,
+            ...classStudents.filter(s => branchFromStudent(s) === selectedBranch));
+    }
     const domains = getClassDomains(classCode);
+    const testSections = getClassTestSections(classCode);
 
     // 프로필 헤더를 반 정보로 교체
     document.getElementById('profile-avatar').textContent = classCode[0] || '?';
@@ -668,7 +818,17 @@ function renderClassDetail(classCode) {
 
     const cardsContainer = document.getElementById('detail-cards');
 
-    // 영역 관리 카드
+    // ① 등원예정시간 (enrollment start_time — 영구 저장)
+    const arrivalRows = classStudents.map(s => {
+        const todayEnroll = s.enrollments.find(e => enrollmentCode(e) === classCode && e.day.includes(dayName));
+        const currentTime = todayEnroll?.start_time || '';
+        return `<div class="arrival-time-row">
+            <span class="arrival-student-name">${esc(s.name)}</span>
+            <input type="time" class="arrival-time-input" data-student-id="${s.docId}" value="${currentTime}">
+        </div>`;
+    }).join('');
+
+    // ② 영역숙제관리
     const domainChips = domains.map((d, i) => `
         <span class="domain-chip">
             ${esc(d)}
@@ -676,22 +836,49 @@ function renderClassDetail(classCode) {
         </span>
     `).join('');
 
-    // 등원시간 - 반별 입력
-    const arrivalRows = classStudents.map(s => {
-        const rec = dailyRecords[s.docId];
-        const currentTime = rec?.arrival_time || '';
-        return `<div class="arrival-time-row">
-            <span class="arrival-student-name">${esc(s.name)}</span>
-            <input type="time" class="arrival-time-input" value="${currentTime}"
-                onchange="saveStudentArrivalTime('${s.docId}', this.value)">
-        </div>`;
+    // ③ 테스트관리 — 섹션별 구성
+    const sectionNames = Object.keys(testSections);
+    const testSectionsHtml = sectionNames.map(secName => {
+        const tests = testSections[secName] || [];
+        const testChips = tests.map((t, i) => `
+            <span class="domain-chip">
+                ${esc(t)}
+                <button class="domain-chip-remove" onclick="event.stopPropagation(); removeTestFromSection('${esc(classCode)}', '${esc(secName)}', ${i})" title="삭제">&times;</button>
+            </span>
+        `).join('');
+        return `
+            <div class="test-section">
+                <div class="test-section-header">
+                    <span class="test-section-name">${esc(secName)}</span>
+                    <button class="domain-chip-remove" onclick="event.stopPropagation(); removeTestSection('${esc(classCode)}', '${esc(secName)}')" title="섹션 삭제">&times;</button>
+                </div>
+                <div class="domain-chips-container">${testChips || '<span style="font-size:12px;color:var(--text-sec);">테스트 없음</span>'}</div>
+                <div class="domain-add-row">
+                    <input type="text" class="field-input" data-test-section="${esc(secName)}" placeholder="테스트 이름" style="flex:1;"
+                        onkeydown="if(event.key==='Enter') addTestToSection('${esc(classCode)}', '${esc(secName)}')">
+                    <button class="btn btn-primary btn-sm" onclick="addTestToSection('${esc(classCode)}', '${esc(secName)}')">추가</button>
+                </div>
+            </div>
+        `;
     }).join('');
 
     cardsContainer.innerHTML = `
         <div class="detail-card">
             <div class="detail-card-title">
+                <span class="material-symbols-outlined">schedule</span>
+                등원예정시간
+            </div>
+            <div class="arrival-bulk-row">
+                <input type="time" id="arrival-bulk-time-detail" class="arrival-time-input">
+                <button class="btn btn-primary btn-sm" onclick="applyClassArrivalTimeDetail('${esc(classCode)}')">전체 적용</button>
+            </div>
+            <div class="arrival-student-list">${arrivalRows || '<span class="detail-card-empty">학생 없음</span>'}</div>
+        </div>
+
+        <div class="detail-card">
+            <div class="detail-card-title">
                 <span class="material-symbols-outlined">category</span>
-                영역 관리
+                영역숙제관리
             </div>
             <div class="domain-chips-container">${domainChips || '<span class="detail-card-empty">영역 없음</span>'}</div>
             <div class="domain-add-row">
@@ -704,14 +891,25 @@ function renderClassDetail(classCode) {
 
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined">schedule</span>
-                등원시간 입력
+                <span class="material-symbols-outlined">quiz</span>
+                테스트관리
             </div>
-            <div class="arrival-bulk-row">
-                <input type="time" id="arrival-bulk-time-detail" class="arrival-time-input">
-                <button class="btn btn-primary btn-sm" onclick="applyClassArrivalTimeDetail('${esc(classCode)}')">전체 적용</button>
+            ${testSectionsHtml}
+            <div class="domain-add-row" style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
+                <input type="text" id="test-section-add-input" class="field-input" placeholder="새 섹션 이름" style="flex:1;"
+                    onkeydown="if(event.key==='Enter') addTestSection('${esc(classCode)}')">
+                <button class="btn btn-secondary btn-sm" onclick="addTestSection('${esc(classCode)}')">섹션 추가</button>
             </div>
-            <div class="arrival-student-list">${arrivalRows || '<span class="detail-card-empty">학생 없음</span>'}</div>
+            <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="resetTestSections('${esc(classCode)}')">기본값 복원</button>
+        </div>
+
+        <div class="class-detail-actions">
+            <button class="btn btn-primary" onclick="saveClassScheduledTimes('${esc(classCode)}')">
+                <span class="material-symbols-outlined" style="font-size:18px;">save</span> 일괄 저장
+            </button>
+            <button class="btn btn-secondary" onclick="clearClassDetail()">
+                <span class="material-symbols-outlined" style="font-size:18px;">delete_sweep</span> 클리어
+            </button>
         </div>
     `;
 
@@ -747,18 +945,125 @@ async function resetClassDomains(classCode) {
     renderClassDetail(classCode);
 }
 
-function applyClassArrivalTimeDetail(classCode) {
+async function addTestToSection(classCode, sectionName) {
+    const input = document.querySelector(`input[data-test-section="${sectionName}"]`);
+    const name = input?.value.trim();
+    if (!name) return;
+    const sections = getClassTestSections(classCode);
+    if (!sections[sectionName]) sections[sectionName] = [];
+    if (sections[sectionName].includes(name)) { alert('이미 존재하는 테스트입니다.'); return; }
+    sections[sectionName].push(name);
+    await saveClassSettings(classCode, { test_sections: sections });
+    renderClassDetail(classCode);
+}
+
+async function removeTestFromSection(classCode, sectionName, index) {
+    const sections = getClassTestSections(classCode);
+    if (!sections[sectionName]) return;
+    sections[sectionName].splice(index, 1);
+    await saveClassSettings(classCode, { test_sections: sections });
+    renderClassDetail(classCode);
+}
+
+async function addTestSection(classCode) {
+    const input = document.getElementById('test-section-add-input');
+    const name = input?.value.trim();
+    if (!name) return;
+    const sections = getClassTestSections(classCode);
+    if (sections[name] !== undefined) { alert('이미 존재하는 섹션입니다.'); return; }
+    sections[name] = [];
+    await saveClassSettings(classCode, { test_sections: sections });
+    renderClassDetail(classCode);
+}
+
+async function removeTestSection(classCode, sectionName) {
+    const sections = getClassTestSections(classCode);
+    if (Object.keys(sections).length <= 1) { alert('최소 1개의 섹션이 필요합니다.'); return; }
+    delete sections[sectionName];
+    await saveClassSettings(classCode, { test_sections: sections });
+    renderClassDetail(classCode);
+}
+
+async function resetTestSections(classCode) {
+    await saveClassSettings(classCode, { test_sections: JSON.parse(JSON.stringify(DEFAULT_TEST_SECTIONS)) });
+    renderClassDetail(classCode);
+}
+
+async function applyClassArrivalTimeDetail(classCode) {
     const timeInput = document.getElementById('arrival-bulk-time-detail');
     const time = timeInput?.value;
     if (!time) { alert('시간을 먼저 입력하세요.'); return; }
 
-    const classStudents = allStudents.filter(s =>
-        s.enrollments.some(e => enrollmentCode(e) === classCode)
+    const dayName = getDayName(selectedDate);
+    let classStudents = allStudents.filter(s =>
+        s.status !== '퇴원' &&
+        s.enrollments.some(e => enrollmentCode(e) === classCode && e.day.includes(dayName))
     );
-    classStudents.forEach(s => {
-        saveImmediately(s.docId, { arrival_time: time });
+    if (selectedBranch) {
+        classStudents = classStudents.filter(s => branchFromStudent(s) === selectedBranch);
+    }
+
+    showSaveIndicator('saving');
+    try {
+        const batch = writeBatch(db);
+        classStudents.forEach(s => {
+            const enrollments = [...s.enrollments];
+            const idx = enrollments.findIndex(e => enrollmentCode(e) === classCode && e.day.includes(dayName));
+            if (idx !== -1) {
+                enrollments[idx] = { ...enrollments[idx], start_time: time };
+                batch.update(doc(db, 'students', s.docId), { enrollments });
+                s.enrollments = enrollments;
+            }
+        });
+        await batch.commit();
+        showSaveIndicator('saved');
+        renderClassDetail(classCode);
+    } catch (err) {
+        console.error('등원예정시간 저장 실패:', err);
+        showSaveIndicator('error');
+    }
+}
+
+async function saveClassScheduledTimes(classCode) {
+    const dayName = getDayName(selectedDate);
+    const inputs = document.querySelectorAll('.arrival-time-input[data-student-id]');
+
+    showSaveIndicator('saving');
+    try {
+        const batch = writeBatch(db);
+        let hasChanges = false;
+
+        inputs.forEach(input => {
+            const studentId = input.dataset.studentId;
+            const time = input.value;
+            const student = allStudents.find(s => s.docId === studentId);
+            if (!student) return;
+
+            const enrollments = [...student.enrollments];
+            const idx = enrollments.findIndex(e => enrollmentCode(e) === classCode && e.day.includes(dayName));
+            if (idx !== -1) {
+                enrollments[idx] = { ...enrollments[idx], start_time: time };
+                batch.update(doc(db, 'students', studentId), { enrollments });
+                student.enrollments = enrollments;
+                hasChanges = true;
+            }
+        });
+
+        if (hasChanges) {
+            await batch.commit();
+        }
+        showSaveIndicator('saved');
+        renderListPanel();
+    } catch (err) {
+        console.error('등원예정시간 일괄 저장 실패:', err);
+        showSaveIndicator('error');
+    }
+}
+
+function clearClassDetail() {
+    document.querySelectorAll('.arrival-time-input').forEach(input => {
+        input.value = '';
     });
-    renderClassDetail(classCode);
 }
 
 // ─── Student Detail Panel ───────────────────────────────────────────────────
@@ -931,8 +1236,18 @@ function toggleAttendance(studentId, displayStatus) {
 
     const attendance = { ...(rec.attendance || {}), status: newStatus };
 
+    // 출석/지각 시 실제 등원시간 자동 기록, 등원전으로 되돌리면 삭제
+    const updates = { attendance };
+    if (newStatus === '출석' || newStatus === '지각') {
+        if (!rec?.arrival_time) {
+            updates.arrival_time = nowTimeStr();
+        }
+    } else if (newStatus === '미확인') {
+        updates.arrival_time = '';
+    }
+
     // 즉시 저장 (debounce 없이)
-    saveImmediately(studentId, { attendance });
+    saveImmediately(studentId, updates);
 
     // 로컬 캐시 즉시 업데이트
     if (!dailyRecords[studentId]) {
@@ -1073,7 +1388,8 @@ function updateBatchBar() {
     } else if (currentCategory === 'homework') {
         buttons = `
             <button class="batch-btn" onclick="confirmBatchAction('homework_status', '제출')">제출 확인</button>
-            <button class="batch-btn" onclick="confirmBatchAction('homework_status', '확인완료')">확인완료</button>`;
+            <button class="batch-btn" onclick="confirmBatchAction('homework_status', '확인완료')">확인완료</button>
+            <button class="batch-btn" onclick="confirmBatchAction('homework_notify', '미제출 통보')">미제출 통보</button>`;
     } else if (currentCategory === 'test') {
         buttons = `
             <button class="batch-btn" onclick="confirmBatchAction('test_result', '통과')">통과 처리</button>
@@ -1136,6 +1452,9 @@ async function handleBatchAction(action, value) {
                 const homework = (rec.homework || []).map(h => ({ ...h, status: value }));
                 batch.set(ref, { ...baseData, homework }, { merge: true });
                 if (dailyRecords[studentId]) dailyRecords[studentId].homework = homework;
+            } else if (action === 'homework_notify') {
+                // TODO: 실제 알림 발송 로직 연동 (현재는 로그만 남김)
+                console.log(`[NOTIFY] ${studentId} 학생에게 숙제 미제출 통보`);
             } else if (action === 'test_result') {
                 const rec = dailyRecords[studentId] || {};
                 const tests = (rec.tests || []).map(t => ({ ...t, result: value }));
@@ -1400,10 +1719,28 @@ async function saveTestFromModal() {
     renderStudentDetail(selectedStudentId);
 }
 
-// ─── 등원시간 (반 상세 패널에서 사용) ────────────────────────────────────────
+// ─── 등원예정시간 (반 상세 패널에서 사용, students 컬렉션에 영구 저장) ──────
 
-function saveStudentArrivalTime(studentId, time) {
-    saveImmediately(studentId, { arrival_time: time });
+async function saveStudentScheduledTime(studentId, classCode, time) {
+    const student = allStudents.find(s => s.docId === studentId);
+    if (!student) return;
+
+    const dayName = getDayName(selectedDate);
+    const enrollments = [...student.enrollments];
+    const idx = enrollments.findIndex(e => enrollmentCode(e) === classCode && e.day.includes(dayName));
+    if (idx === -1) return;
+
+    enrollments[idx] = { ...enrollments[idx], start_time: time };
+
+    showSaveIndicator('saving');
+    try {
+        await updateDoc(doc(db, 'students', studentId), { enrollments });
+        student.enrollments = enrollments;
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('등원예정시간 저장 실패:', err);
+        showSaveIndicator('error');
+    }
 }
 
 // ─── 롤(역할) 관리 ──────────────────────────────────────────────────────────
@@ -1928,9 +2265,10 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('user-avatar').textContent = (user.email || 'U')[0].toUpperCase();
 
         await loadStudents();
-        await Promise.all([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadUserRole(), loadClassSettings()]);
-        await loadRoleMemos();
+        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadUserRole(), loadClassSettings()]);
+        await loadRoleMemos().catch(() => {});
         updateDateDisplay();
+        renderBranchFilter();
         renderSubFilters();
         updateL1ExpandIcons();
         renderListPanel();
@@ -1979,6 +2317,7 @@ window.openDatePicker = openDatePicker;
 window.goToday = goToday;
 window.setCategory = setCategory;
 window.setSubFilter = setSubFilter;
+window.setBranch = setBranch;
 window.toggleAttendance = toggleAttendance;
 window.toggleHomework = toggleHomework;
 window.confirmBatchAction = confirmBatchAction;
@@ -1990,7 +2329,8 @@ window.renderStudentDetail = renderStudentDetail;
 window.refreshData = async () => {
     showSaveIndicator('saving');
     await loadStudents();
-    await Promise.all([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadRoleMemos(), loadClassSettings()]);
+    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadRoleMemos(), loadClassSettings()]);
+    renderBranchFilter();
     renderSubFilters();
     renderListPanel();
     if (selectedStudentId) renderStudentDetail(selectedStudentId);
@@ -2022,10 +2362,17 @@ window.cancelRetake = cancelRetake;
 window.handleBatchAction = handleBatchAction;
 window.openEnrollmentModal = openEnrollmentModal;
 window.saveEnrollment = saveEnrollment;
-window.saveStudentArrivalTime = saveStudentArrivalTime;
+window.saveStudentScheduledTime = saveStudentScheduledTime;
+window.saveClassScheduledTimes = saveClassScheduledTimes;
+window.clearClassDetail = clearClassDetail;
 window.addClassDomain = addClassDomain;
 window.removeClassDomain = removeClassDomain;
 window.resetClassDomains = resetClassDomains;
+window.addTestToSection = addTestToSection;
+window.removeTestFromSection = removeTestFromSection;
+window.addTestSection = addTestSection;
+window.removeTestSection = removeTestSection;
+window.resetTestSections = resetTestSections;
 window.applyClassArrivalTimeDetail = applyClassArrivalTimeDetail;
 
 // 롤/메모 관련

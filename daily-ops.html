@@ -116,6 +116,11 @@
                         <span class="nav-l1-text">자동화</span>
                         <span class="material-symbols-outlined nav-l1-expand">expand_more</span>
                     </div>
+                    <div class="nav-l1" data-category="branch" onclick="setCategory('branch')">
+                        <span class="material-symbols-outlined nav-l1-icon">apartment</span>
+                        <span class="nav-l1-text">소속</span>
+                        <span class="material-symbols-outlined nav-l1-expand">expand_more</span>
+                    </div>
                     <div class="nav-l1" data-category="class_mgmt" onclick="setCategory('class_mgmt')">
                         <span class="material-symbols-outlined nav-l1-icon">groups</span>
                         <span class="nav-l1-text">반 관리</span>
@@ -136,8 +141,11 @@
             <!-- List Panel -->
             <section class="list-panel" id="list-panel">
                 <div class="panel-header" id="panel-header">
+                    <input type="checkbox" class="select-all-checkbox" id="select-all-checkbox"
+                        onchange="toggleSelectAll(this.checked)" title="전체 선택">
+                    <span class="category-badge" id="filter-label">출결</span>
+                    <span class="sub-filter-label" id="sub-filter-label"></span>
                     <span class="count-chip" id="list-count">0명</span>
-                    <span class="filter-chips" id="filter-label">출결</span>
                     <div class="panel-actions">
                         <button class="icon-btn" onclick="refreshData()">
                             <span class="material-symbols-outlined">refresh</span>

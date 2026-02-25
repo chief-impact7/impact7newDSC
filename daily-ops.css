@@ -297,6 +297,14 @@ body {
     color: var(--primary);
 }
 
+/* 소속 글로벌 필터 활성 표시 */
+.nav-l1.has-filter {
+    border-left: 3px solid var(--primary);
+}
+.nav-l1.has-filter .nav-l1-icon {
+    color: var(--primary);
+}
+
 /* --- L2 Sub-Filter Items --- */
 .nav-l2-group {
     padding: 4px 0 8px 0;
@@ -357,21 +365,45 @@ body {
     gap: 12px;
 }
 
-.count-chip {
-    font-family: var(--font-heading);
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--primary);
+.select-all-checkbox {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary);
+    cursor: pointer;
     flex-shrink: 0;
 }
 
-.filter-chips {
+.category-badge {
+    font-family: var(--font-heading);
+    font-size: 12px;
+    font-weight: 700;
+    color: white;
+    background: var(--primary);
+    padding: 3px 10px;
+    border-radius: 12px;
+    flex-shrink: 0;
+    letter-spacing: 0.3px;
+}
+
+.sub-filter-label {
     font-size: 13px;
-    color: var(--text-sec);
+    font-weight: 500;
+    color: var(--text-main);
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.count-chip {
+    font-family: var(--font-heading);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-sec);
+    flex-shrink: 0;
+    background: var(--bg-sub);
+    padding: 2px 8px;
+    border-radius: 10px;
 }
 
 .panel-actions {
@@ -449,6 +481,20 @@ body {
     align-items: baseline;
     gap: 8px;
     flex-wrap: wrap;
+}
+
+.item-time {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-sec);
+    background: var(--surface-hover);
+    padding: 1px 6px;
+    border-radius: 8px;
+    white-space: nowrap;
+}
+.item-time.arrived {
+    color: #137333;
+    background: #e6f4ea;
 }
 
 .item-tag {
@@ -1396,6 +1442,25 @@ textarea.field-input {
     text-overflow: ellipsis;
 }
 
+/* ===== Class Detail Actions (일괄 저장/클리어) ===== */
+.class-detail-actions {
+    display: flex;
+    gap: 12px;
+    padding: 16px 0 8px;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+}
+.class-detail-actions .btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
 /* ===== Day Selector (요일 토글) ===== */
 .day-selector {
     display: flex;
@@ -1771,4 +1836,24 @@ textarea.field-input {
     display: flex;
     gap: 8px;
     align-items: center;
+}
+
+/* 테스트 섹션 */
+.test-section {
+    padding: 12px;
+    margin-bottom: 8px;
+    background: var(--surface);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+}
+.test-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+.test-section-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--primary);
 }
