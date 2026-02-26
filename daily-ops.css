@@ -232,7 +232,7 @@ body {
 .sidebar {
     width: 200px;
     min-width: 200px;
-    overflow-y: auto;
+    overflow: hidden;
     border-right: 1px solid var(--border);
     padding: 8px 0;
     background: var(--surface-container);
@@ -245,6 +245,14 @@ body {
     display: none;
 }
 
+/* --- L1 Nav Group --- */
+.nav-l1-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
 /* --- L1 Nav Items --- */
 .nav-l1 {
     height: 44px;
@@ -255,6 +263,7 @@ body {
     cursor: pointer;
     transition: background 0.15s;
     user-select: none;
+    flex-shrink: 0;
 }
 
 .nav-l1:hover {
@@ -307,14 +316,17 @@ body {
 
 /* --- L2 Sub-Filter Items --- */
 .nav-l2-group {
-    padding: 4px 0 8px 0;
-    flex: 1;
+    padding: 4px 0 4px 0;
+    margin-left: 28px;
+    border-left: 2px solid var(--border);
+    max-height: 40vh;
     overflow-y: auto;
+    min-height: 0;
 }
 
 .nav-l2 {
     height: 32px;
-    padding-left: 48px;
+    padding-left: 20px;
     font-size: 13px;
     display: flex;
     align-items: center;

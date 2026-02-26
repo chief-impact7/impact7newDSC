@@ -33,6 +33,11 @@ const esc = (str) => {
     return d.innerHTML;
 };
 
+// HTML 속성(특히 onclick 내부 문자열 리터럴)에서 안전하게 사용하기 위한 이스케이프
+const escAttr = (str) => {
+    return esc(str).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+};
+
 function todayStr() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -373,7 +378,11 @@ function renderSubFilters() {
             { key: 'test_1st', label: '1차' },
             { key: 'test_2nd', label: '2차' }
         ],
-        automation: [],
+        automation: [
+            { key: 'auto_hw_missing', label: '미제출 숙제' },
+            { key: 'auto_retake', label: '재시 필요' },
+            { key: 'auto_unchecked', label: '미체크 출석' }
+        ],
         class_mgmt: []
     };
 
@@ -512,6 +521,9 @@ function getSubFilterCount(filterKey) {
     if (currentCategory === 'homework') {
         switch (filterKey) {
             case 'all': return todayStudents.length;
+            case 'hw_1st': return todayStudents.filter(s => (dailyRecords[s.docId]?.homework || []).length >= 1).length;
+            case 'hw_2nd': return todayStudents.filter(s => (dailyRecords[s.docId]?.homework || []).length >= 2).length;
+            case 'hw_next': return todayStudents.filter(s => (dailyRecords[s.docId]?.homework || []).length >= 3).length;
             case 'not_submitted': return todayStudents.filter(s => {
                 const rec = dailyRecords[s.docId];
                 return rec?.homework?.some(h => h.status === '미제출') || !rec?.homework?.length;
@@ -525,9 +537,29 @@ function getSubFilterCount(filterKey) {
     if (currentCategory === 'test') {
         switch (filterKey) {
             case 'all': return todayStudents.length;
+            case 'test_1st': return todayStudents.filter(s => (dailyRecords[s.docId]?.tests || []).length >= 1).length;
+            case 'test_2nd': return todayStudents.filter(s => (dailyRecords[s.docId]?.tests || []).length >= 2).length;
             case 'scheduled': return todayStudents.filter(s => dailyRecords[s.docId]?.tests?.some(t => t.score === undefined || t.score === null)).length;
             case 'pass': return todayStudents.filter(s => dailyRecords[s.docId]?.tests?.some(t => t.result === '통과')).length;
             case 'retake': return todayStudents.filter(s => dailyRecords[s.docId]?.tests?.some(t => t.result === '재시필요')).length;
+            default: return 0;
+        }
+    }
+
+    if (currentCategory === 'automation') {
+        switch (filterKey) {
+            case 'auto_hw_missing': return todayStudents.filter(s => {
+                const rec = dailyRecords[s.docId];
+                return !rec?.homework?.length || rec.homework.some(h => h.status === '미제출');
+            }).length;
+            case 'auto_retake': return todayStudents.filter(s => {
+                const rec = dailyRecords[s.docId];
+                return rec?.tests?.some(t => t.result === '재시필요');
+            }).length;
+            case 'auto_unchecked': return todayStudents.filter(s => {
+                const rec = dailyRecords[s.docId];
+                return !rec?.attendance?.status || rec.attendance.status === '미확인';
+            }).length;
             default: return 0;
         }
     }
@@ -596,7 +628,9 @@ function getFilteredStudents() {
             students = students.filter(s => {
                 const rec = dailyRecords[s.docId];
                 for (const f of currentSubFilter) {
-                    if (f === 'hw_1st' || f === 'hw_2nd' || f === 'hw_next') return true; // 차수 필터는 추후 확장
+                    if (f === 'hw_1st' && (rec?.homework || []).length >= 1) return true;
+                    if (f === 'hw_2nd' && (rec?.homework || []).length >= 2) return true;
+                    if (f === 'hw_next' && (rec?.homework || []).length >= 3) return true;
                     if (f === 'not_submitted' && (rec?.homework?.some(h => h.status === '미제출') || !rec?.homework?.length)) return true;
                     if (f === 'submitted' && rec?.homework?.some(h => h.status === '제출')) return true;
                     if (f === 'confirmed' && rec?.homework?.some(h => h.status === '확인완료')) return true;
@@ -607,10 +641,21 @@ function getFilteredStudents() {
             students = students.filter(s => {
                 const rec = dailyRecords[s.docId];
                 for (const f of currentSubFilter) {
-                    if (f === 'test_1st' || f === 'test_2nd') return true; // 차수 필터는 추후 확장
+                    if (f === 'test_1st' && (rec?.tests || []).length >= 1) return true;
+                    if (f === 'test_2nd' && (rec?.tests || []).length >= 2) return true;
                     if (f === 'scheduled' && rec?.tests?.some(t => t.score === undefined || t.score === null)) return true;
                     if (f === 'pass' && rec?.tests?.some(t => t.result === '통과')) return true;
                     if (f === 'retake' && rec?.tests?.some(t => t.result === '재시필요')) return true;
+                }
+                return false;
+            });
+        } else if (currentCategory === 'automation') {
+            students = students.filter(s => {
+                const rec = dailyRecords[s.docId];
+                for (const f of currentSubFilter) {
+                    if (f === 'auto_hw_missing' && (!rec?.homework?.length || rec.homework.some(h => h.status === '미제출'))) return true;
+                    if (f === 'auto_retake' && rec?.tests?.some(t => t.result === '재시필요')) return true;
+                    if (f === 'auto_unchecked' && (!rec?.attendance?.status || rec.attendance.status === '미확인')) return true;
                 }
                 return false;
             });
@@ -644,7 +689,8 @@ function renderListPanel() {
     const subFilterLabels = {
         pre_arrival: '등원전', present: '출석', late: '지각', absent: '결석', other: '기타',
         hw_1st: '1차', hw_2nd: '2차', hw_next: '다음숙제',
-        test_1st: '1차', test_2nd: '2차'
+        test_1st: '1차', test_2nd: '2차',
+        auto_hw_missing: '미제출 숙제', auto_retake: '재시 필요', auto_unchecked: '미체크 출석'
     };
 
     document.getElementById('filter-label').textContent = categoryLabels[currentCategory] || '';
@@ -677,7 +723,7 @@ function renderListPanel() {
     container.innerHTML = students.map(s => {
         const isActive = s.docId === selectedStudentId ? 'active' : '';
         const isChecked = checkedItems.has(s.docId) ? 'checked' : '';
-        const code = s.enrollments.map(e => enrollmentCode(e)).join(', ');
+        const code = (s.enrollments || []).map(e => enrollmentCode(e)).join(', ');
         const branch = branchFromStudent(s);
 
         let toggleHtml = '';
@@ -735,6 +781,31 @@ function renderListPanel() {
                     </div>`;
                 }).join('');
             }
+        } else if (currentCategory === 'automation') {
+            const autoRec = dailyRecords[s.docId];
+            const issues = [];
+            if (!autoRec?.homework?.length) {
+                issues.push('<span class="tag tag-absent" style="font-size:11px;">숙제 미등록</span>');
+            } else {
+                const missing = autoRec.homework.filter(h => h.status === '미제출');
+                if (missing.length > 0) {
+                    issues.push(...missing.map(h => `<span class="tag tag-absent" style="font-size:11px;">미제출: ${esc(h.title || '숙제')}</span>`));
+                }
+            }
+            if (autoRec?.tests?.length) {
+                const retakes = autoRec.tests.filter(t => t.result === '재시필요');
+                if (retakes.length > 0) {
+                    issues.push(...retakes.map(t => `<span class="tag tag-late" style="font-size:11px;">재시: ${esc(t.title || '테스트')} (${t.score != null ? t.score + '점' : '-'})</span>`));
+                }
+            }
+            if (!autoRec?.attendance?.status || autoRec.attendance.status === '미확인') {
+                issues.push('<span class="tag tag-pending" style="font-size:11px;">출석 미체크</span>');
+            }
+            if (issues.length > 0) {
+                toggleHtml = `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;">${issues.join('')}</div>`;
+            } else {
+                toggleHtml = `<div style="margin-top:4px;"><span style="font-size:12px;color:var(--text-sec);">이슈 없음</span></div>`;
+            }
         } else if (currentCategory === 'class_mgmt') {
             toggleHtml = s.enrollments.map((e, idx) => {
                 const days = e.day?.join('\u00B7') || '';
@@ -777,12 +848,17 @@ function renderListPanel() {
 // ─── Class Detail Panel ─────────────────────────────────────────────────────
 
 const DEFAULT_TEST_SECTIONS = {
-    '기반학습테스트': [],
+    '기반학습테스트': ['Vo', 'Id', 'ISC'],
     '리뷰테스트': []
 };
 
 function getClassTestSections(classCode) {
-    return classSettings[classCode]?.test_sections || JSON.parse(JSON.stringify(DEFAULT_TEST_SECTIONS));
+    const saved = classSettings[classCode]?.test_sections;
+    if (saved) return JSON.parse(JSON.stringify(saved));
+    // 최초: 리뷰테스트를 영역숙제관리(domains) 기반으로 초기화
+    const sections = JSON.parse(JSON.stringify(DEFAULT_TEST_SECTIONS));
+    sections['리뷰테스트'] = [...getClassDomains(classCode)];
+    return sections;
 }
 
 function renderClassDetail(classCode) {
@@ -831,7 +907,7 @@ function renderClassDetail(classCode) {
     const domainChips = domains.map((d, i) => `
         <span class="domain-chip">
             ${esc(d)}
-            <button class="domain-chip-remove" onclick="event.stopPropagation(); removeClassDomain('${esc(classCode)}', ${i})" title="삭제">&times;</button>
+            <button class="domain-chip-remove" onclick="event.stopPropagation(); removeClassDomain('${escAttr(classCode)}', ${i})" title="삭제">&times;</button>
         </span>
     `).join('');
 
@@ -842,21 +918,22 @@ function renderClassDetail(classCode) {
         const testChips = tests.map((t, i) => `
             <span class="domain-chip">
                 ${esc(t)}
-                <button class="domain-chip-remove" onclick="event.stopPropagation(); removeTestFromSection('${esc(classCode)}', '${esc(secName)}', ${i})" title="삭제">&times;</button>
+                <button class="domain-chip-remove" onclick="event.stopPropagation(); removeTestFromSection('${escAttr(classCode)}', '${escAttr(secName)}', ${i})" title="삭제">&times;</button>
             </span>
         `).join('');
         return `
             <div class="test-section">
                 <div class="test-section-header">
                     <span class="test-section-name">${esc(secName)}</span>
-                    <button class="domain-chip-remove" onclick="event.stopPropagation(); removeTestSection('${esc(classCode)}', '${esc(secName)}')" title="섹션 삭제">&times;</button>
+                    <button class="domain-chip-remove" onclick="event.stopPropagation(); removeTestSection('${escAttr(classCode)}', '${escAttr(secName)}')" title="섹션 삭제">&times;</button>
                 </div>
                 <div class="domain-chips-container">${testChips || '<span style="font-size:12px;color:var(--text-sec);">테스트 없음</span>'}</div>
                 <div class="domain-add-row">
-                    <input type="text" class="field-input" data-test-section="${esc(secName)}" placeholder="테스트 이름" style="flex:1;"
-                        onkeydown="if(event.key==='Enter') addTestToSection('${esc(classCode)}', '${esc(secName)}')">
-                    <button class="btn btn-primary btn-sm" onclick="addTestToSection('${esc(classCode)}', '${esc(secName)}')">추가</button>
+                    <input type="text" class="field-input" data-test-section="${escAttr(secName)}" placeholder="테스트 이름" style="flex:1;"
+                        onkeydown="if(event.key==='Enter') addTestToSection('${escAttr(classCode)}', '${escAttr(secName)}')">
+                    <button class="btn btn-primary btn-sm" onclick="addTestToSection('${escAttr(classCode)}', '${escAttr(secName)}')">추가</button>
                 </div>
+                <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="resetTestSection('${escAttr(classCode)}', '${escAttr(secName)}')">기본값 복원</button>
             </div>
         `;
     }).join('');
@@ -869,7 +946,7 @@ function renderClassDetail(classCode) {
             </div>
             <div class="arrival-bulk-row">
                 <input type="time" id="arrival-bulk-time-detail" class="arrival-time-input">
-                <button class="btn btn-primary btn-sm" onclick="applyClassArrivalTimeDetail('${esc(classCode)}')">전체 적용</button>
+                <button class="btn btn-primary btn-sm" onclick="applyClassArrivalTimeDetail('${escAttr(classCode)}')">전체 적용</button>
             </div>
             <div class="arrival-student-list">${arrivalRows || '<span class="detail-card-empty">학생 없음</span>'}</div>
         </div>
@@ -882,10 +959,10 @@ function renderClassDetail(classCode) {
             <div class="domain-chips-container">${domainChips || '<span class="detail-card-empty">영역 없음</span>'}</div>
             <div class="domain-add-row">
                 <input type="text" id="domain-add-input" class="field-input" placeholder="새 영역 이름" style="flex:1;"
-                    onkeydown="if(event.key==='Enter') addClassDomain('${esc(classCode)}')">
-                <button class="btn btn-primary btn-sm" onclick="addClassDomain('${esc(classCode)}')">추가</button>
+                    onkeydown="if(event.key==='Enter') addClassDomain('${escAttr(classCode)}')">
+                <button class="btn btn-primary btn-sm" onclick="addClassDomain('${escAttr(classCode)}')">추가</button>
             </div>
-            <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="resetClassDomains('${esc(classCode)}')">기본값 복원</button>
+            <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="resetClassDomains('${escAttr(classCode)}')">기본값 복원</button>
         </div>
 
         <div class="detail-card">
@@ -896,15 +973,15 @@ function renderClassDetail(classCode) {
             ${testSectionsHtml}
             <div class="domain-add-row" style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
                 <input type="text" id="test-section-add-input" class="field-input" placeholder="새 섹션 이름" style="flex:1;"
-                    onkeydown="if(event.key==='Enter') addTestSection('${esc(classCode)}')">
-                <button class="btn btn-secondary btn-sm" onclick="addTestSection('${esc(classCode)}')">섹션 추가</button>
+                    onkeydown="if(event.key==='Enter') addTestSection('${escAttr(classCode)}')">
+                <button class="btn btn-secondary btn-sm" onclick="addTestSection('${escAttr(classCode)}')">섹션 추가</button>
             </div>
-            <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="resetTestSections('${esc(classCode)}')">기본값 복원</button>
+            <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="resetTestSections('${escAttr(classCode)}')">기본값 복원</button>
         </div>
 
         <div class="class-detail-actions">
-            <button class="btn btn-primary" onclick="saveClassScheduledTimes('${esc(classCode)}')">
-                <span class="material-symbols-outlined" style="font-size:18px;">save</span> 일괄 저장
+            <button class="btn btn-primary" onclick="saveClassScheduledTimes('${escAttr(classCode)}')">
+                <span class="material-symbols-outlined" style="font-size:18px;">save</span> 반에 저장
             </button>
             <button class="btn btn-secondary" onclick="clearClassDetail()">
                 <span class="material-symbols-outlined" style="font-size:18px;">delete_sweep</span> 클리어
@@ -924,24 +1001,54 @@ async function addClassDomain(classCode) {
     const input = document.getElementById('domain-add-input');
     const name = input?.value.trim();
     if (!name) return;
-    const domains = getClassDomains(classCode);
-    if (domains.includes(name)) { alert('이미 존재하는 영역입니다.'); return; }
-    domains.push(name);
-    await saveClassSettings(classCode, { domains });
-    renderClassDetail(classCode);
+    try {
+        const domains = getClassDomains(classCode);
+        if (domains.includes(name)) { alert('이미 존재하는 영역입니다.'); return; }
+        domains.push(name);
+        // 리뷰테스트에도 동기화 추가
+        const sections = getClassTestSections(classCode);
+        if (sections['리뷰테스트'] && !sections['리뷰테스트'].includes(name)) {
+            sections['리뷰테스트'].push(name);
+        }
+        await saveClassSettings(classCode, { domains, test_sections: sections });
+        input.value = '';
+        renderClassDetail(classCode);
+    } catch (e) {
+        console.error('영역 추가 실패:', e);
+        alert('영역 추가에 실패했습니다: ' + e.message);
+    }
 }
 
 async function removeClassDomain(classCode, index) {
-    const domains = getClassDomains(classCode);
-    if (domains.length <= 1) { alert('최소 1개의 영역이 필요합니다.'); return; }
-    domains.splice(index, 1);
-    await saveClassSettings(classCode, { domains });
-    renderClassDetail(classCode);
+    try {
+        const domains = getClassDomains(classCode);
+        if (domains.length <= 1) { alert('최소 1개의 영역이 필요합니다.'); return; }
+        const removed = domains.splice(index, 1)[0];
+        // 리뷰테스트에서도 동기화 삭제
+        const sections = getClassTestSections(classCode);
+        if (sections['리뷰테스트']) {
+            const ri = sections['리뷰테스트'].indexOf(removed);
+            if (ri !== -1) sections['리뷰테스트'].splice(ri, 1);
+        }
+        await saveClassSettings(classCode, { domains, test_sections: sections });
+        renderClassDetail(classCode);
+    } catch (e) {
+        console.error('영역 삭제 실패:', e);
+        alert('영역 삭제에 실패했습니다: ' + e.message);
+    }
 }
 
 async function resetClassDomains(classCode) {
-    await saveClassSettings(classCode, { domains: [...DEFAULT_DOMAINS] });
-    renderClassDetail(classCode);
+    try {
+        // 리뷰테스트도 기본 영역으로 초기화
+        const sections = getClassTestSections(classCode);
+        sections['리뷰테스트'] = [...DEFAULT_DOMAINS];
+        await saveClassSettings(classCode, { domains: [...DEFAULT_DOMAINS], test_sections: sections });
+        renderClassDetail(classCode);
+    } catch (e) {
+        console.error('기본값 복원 실패:', e);
+        alert('기본값 복원에 실패했습니다: ' + e.message);
+    }
 }
 
 async function addTestToSection(classCode, sectionName) {
@@ -986,6 +1093,23 @@ async function removeTestSection(classCode, sectionName) {
 async function resetTestSections(classCode) {
     await saveClassSettings(classCode, { test_sections: JSON.parse(JSON.stringify(DEFAULT_TEST_SECTIONS)) });
     renderClassDetail(classCode);
+}
+
+async function resetTestSection(classCode, sectionName) {
+    try {
+        const sections = getClassTestSections(classCode);
+        // 리뷰테스트는 영역숙제관리 기반, 기반학습테스트는 Vo/Id/ISC, 나머지는 빈 배열
+        if (sectionName === '리뷰테스트') {
+            sections[sectionName] = [...getClassDomains(classCode)];
+        } else {
+            sections[sectionName] = [...(DEFAULT_TEST_SECTIONS[sectionName] || [])];
+        }
+        await saveClassSettings(classCode, { test_sections: sections });
+        renderClassDetail(classCode);
+    } catch (e) {
+        console.error('섹션 기본값 복원 실패:', e);
+        alert('기본값 복원에 실패했습니다: ' + e.message);
+    }
 }
 
 async function applyClassArrivalTimeDetail(classCode) {
@@ -1393,6 +1517,10 @@ function updateBatchBar() {
         buttons = `
             <button class="batch-btn" onclick="confirmBatchAction('test_result', '통과')">통과 처리</button>
             <button class="batch-btn" onclick="confirmBatchAction('test_result', '재시필요')">재시 지정</button>`;
+    } else if (currentCategory === 'automation') {
+        buttons = `
+            <button class="batch-btn" onclick="confirmBatchAction('attendance', '출석')">출석 처리</button>
+            <button class="batch-btn" onclick="confirmBatchAction('homework_notify', '미제출 통보')">미제출 통보</button>`;
     }
 
     actionsEl.innerHTML = buttons;
@@ -2044,8 +2172,8 @@ function searchMemoStudent(query) {
     }
 
     dropdown.innerHTML = matches.map(s => {
-        const code = s.enrollments.map(e => enrollmentCode(e)).join(', ');
-        return `<div class="memo-student-dropdown-item" onclick="selectMemoStudent('${s.docId}', '${esc(s.name)}')">${esc(s.name)} <span style="color:var(--text-sec);font-size:11px;">${esc(code)}</span></div>`;
+        const code = (s.enrollments || []).map(e => enrollmentCode(e)).join(', ');
+        return `<div class="memo-student-dropdown-item" onclick="selectMemoStudent('${escAttr(s.docId)}', '${escAttr(s.name)}')">${esc(s.name)} <span style="color:var(--text-sec);font-size:11px;">${esc(code)}</span></div>`;
     }).join('');
     dropdown.style.display = '';
 }
@@ -2306,9 +2434,11 @@ window.handleLogin = async () => {
     }
 };
 
+let _searchTimer = null;
 window.handleSearch = (value) => {
     searchQuery = value;
-    renderListPanel();
+    if (_searchTimer) clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(() => renderListPanel(), 150);
 };
 
 window.changeDate = changeDate;
@@ -2372,6 +2502,7 @@ window.removeTestFromSection = removeTestFromSection;
 window.addTestSection = addTestSection;
 window.removeTestSection = removeTestSection;
 window.resetTestSections = resetTestSections;
+window.resetTestSection = resetTestSection;
 window.applyClassArrivalTimeDetail = applyClassArrivalTimeDetail;
 
 // 롤/메모 관련
