@@ -70,9 +70,8 @@ function formatTime12h(time24) {
     if (!time24) return '';
     const [h, m] = time24.split(':');
     const hour = parseInt(h);
-    const ampm = hour >= 12 ? '오후' : '오전';
     const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-    return `${ampm} ${h12}:${m}`;
+    return `${h12}:${m}`;
 }
 
 function nowTimeStr() {
@@ -97,6 +96,15 @@ function branchFromStudent(s) {
 
 function enrollmentCode(e) {
     return `${e.level_symbol || ''}${e.class_number || ''}`;
+}
+
+// 학교+학부앞글자+학년앞글자 조합 (예: 대일고1, 진명여고1)
+function studentShortLabel(s) {
+    let school = (s.school || '').replace('여자', '여');
+    const dept = s.level || '';
+    const grade = String(s.grade || '');
+    if (!school) return '';
+    return school + (dept ? dept[0] : '') + (grade ? grade[0] : '');
 }
 
 function makeDailyRecordId(studentDocId, date) {
@@ -348,16 +356,10 @@ function setCategory(category) {
     if (category === 'branch') {
         const branchL1 = document.querySelector('.nav-l1[data-category="branch"]');
         const isExpanded = branchL1?.classList.contains('expanded');
-        if (isExpanded && selectedBranch) {
-            selectedBranch = null;
-            branchL1?.classList.remove('expanded');
-            renderBranchFilter();
-            renderSubFilters();
-            renderListPanel();
-            return;
-        }
         branchL1?.classList.toggle('expanded', !isExpanded);
         renderBranchFilter();
+        renderSubFilters();
+        renderListPanel();
         return;
     }
 
@@ -365,46 +367,34 @@ function setCategory(category) {
     if (category === 'class_mgmt') {
         const classL1 = document.querySelector('.nav-l1[data-category="class_mgmt"]');
         const isExpanded = classL1?.classList.contains('expanded');
-        if (isExpanded && selectedClassCode) {
-            selectedClassCode = null;
-            classL1?.classList.remove('expanded');
-            renderClassCodeFilter();
-            renderClassCodeChip();
-            renderSubFilters();
-            renderListPanel();
-            return;
-        }
         classL1?.classList.toggle('expanded', !isExpanded);
         renderClassCodeFilter();
+        renderFilterChips();
+        renderSubFilters();
+        renderListPanel();
         return;
     }
 
     if (currentCategory === category) {
-        // 같은 카테고리 클릭: L2 필터 활성이면 해제+접기(현황판), 아니면 L2 토글
-        if (currentSubFilter.size > 0) {
-            currentSubFilter.clear();
-            savedSubFilters[category] = new Set();
-            l2Expanded = false;
-            savedL2Expanded[category] = false;
-        } else {
-            l2Expanded = !l2Expanded;
-            savedL2Expanded[category] = l2Expanded;
-        }
+        // 같은 카테고리 클릭: L2 토글 (필터는 유지)
+        l2Expanded = !l2Expanded;
+        savedL2Expanded[category] = l2Expanded;
     } else {
-        // 현재 카테고리 상태 저장
+        // 이전 카테고리 상태 저장 (필터 유지)
         savedSubFilters[currentCategory] = new Set(currentSubFilter);
-        savedL2Expanded[currentCategory] = l2Expanded;
+        savedL2Expanded[currentCategory] = false; // L2는 접지만 필터는 유지
 
         currentCategory = category;
 
-        // 새 카테고리의 저장된 상태 복원
+        // 새 카테고리의 저장된 필터 복원
         currentSubFilter.clear();
         if (savedSubFilters[category]?.size > 0) {
             for (const f of savedSubFilters[category]) {
                 currentSubFilter.add(f);
             }
         }
-        l2Expanded = savedL2Expanded[category] !== undefined ? savedL2Expanded[category] : true;
+        l2Expanded = true;
+        savedL2Expanded[category] = true;
     }
     checkedItems.clear();
 
@@ -465,10 +455,10 @@ function renderSubFilters() {
     } else {
         container.innerHTML = items.map(f => {
             const isActive = currentSubFilter.has(f.key) ? 'active' : '';
-            const count = getSubFilterCount(f.key);
+            const { count, total } = getSubFilterCount(f.key);
             return `<div class="nav-l2 ${isActive}" data-filter="${f.key}" onclick="setSubFilter('${f.key}')">
                 ${esc(f.label)}
-                ${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
+                ${total > 0 ? `<span class="nav-l2-count">${count}/${total}</span>` : ''}
             </div>`;
         }).join('');
     }
@@ -558,12 +548,17 @@ function renderClassCodeFilter() {
 
 function setClassCode(code) {
     selectedClassCode = selectedClassCode === code ? null : code;
+    selectedStudentId = null; // 반 변경 시 학생 선택 해제
     checkedItems.clear();
     renderClassCodeFilter();
-    renderClassCodeChip();
+    renderFilterChips();
     renderSubFilters();
     updateBatchBar();
     renderListPanel();
+    // 반 해제 시 디테일 초기화
+    if (!selectedClassCode) {
+        renderStudentDetail(null);
+    }
 }
 
 function setBranch(branchKey) {
@@ -575,25 +570,111 @@ function setBranch(branchKey) {
     renderListPanel();
 }
 
-function renderClassCodeChip() {
-    const chip = document.getElementById('class-code-chip');
-    if (!chip) return;
+function renderFilterChips() {
+    const container = document.getElementById('filter-chips');
+    if (!container) return;
+
+    const categoryLabels = { attendance: '출결', homework: '숙제', test: '테스트', automation: '자동화' };
+    const subFilterLabels = {
+        pre_arrival: '등원전', present: '출석', late: '지각', absent: '결석', other: '기타',
+        hw_1st: '1차', hw_2nd: '2차', hw_next: '다음숙제',
+        test_1st: '1차', test_2nd: '2차',
+        auto_hw_missing: '미제출 숙제', auto_retake: '재시 필요', auto_unchecked: '미체크 출석'
+    };
+
+    const chips = [];
+
+    // 모든 콘텐츠 카테고리의 활성 필터를 칩으로 표시
+    const allFilters = { ...savedSubFilters };
+    allFilters[currentCategory] = new Set(currentSubFilter);
+
+    for (const [cat, filters] of Object.entries(allFilters)) {
+        if (!filters?.size || !categoryLabels[cat]) continue;
+        const catLabel = categoryLabels[cat];
+        const subLabel = [...filters].map(k => subFilterLabels[k] || k).join('·');
+        chips.push({ label: `${catLabel}: ${subLabel}`, onRemove: `clearCat:${cat}` });
+    }
+
+    // 소속 칩
+    if (selectedBranch) {
+        chips.push({ label: `소속: ${selectedBranch}`, onRemove: 'clearBranch' });
+    }
+
+    // 반 칩
     if (selectedClassCode) {
-        chip.style.display = '';
-        chip.innerHTML = `${esc(selectedClassCode)}<button class="class-code-chip-close" onclick="clearClassCodeFilter()" title="반 필터 해제">&times;</button>`;
+        chips.push({ label: `반: ${selectedClassCode}`, onRemove: 'clearClassCode' });
+    }
+
+    if (chips.length === 0) {
+        container.innerHTML = '<span class="filter-chips-empty">전체</span>';
     } else {
-        chip.style.display = 'none';
-        chip.innerHTML = '';
+        container.innerHTML = chips.map(c =>
+            `<span class="filter-chip">${esc(c.label)}<button class="filter-chip-close" onclick="removeFilterChip('${escAttr(c.onRemove)}')">&times;</button></span>`
+        ).join('') +
+            `<button class="filter-chip-clear-all" onclick="clearAllFilters()" title="모든 필터 해제">&times;</button>`;
     }
 }
 
-function clearClassCodeFilter() {
-    selectedClassCode = null;
-    renderClassCodeFilter();
-    renderClassCodeChip();
-    renderSubFilters();
+function removeFilterChip(action) {
+    if (action.startsWith('clearCat:')) {
+        const cat = action.replace('clearCat:', '');
+        if (cat === currentCategory) {
+            currentSubFilter.clear();
+            l2Expanded = false;
+        }
+        savedSubFilters[cat] = new Set();
+        savedL2Expanded[cat] = false;
+        // L2 UI 동기화
+        renderSubFilters();
+        updateL1ExpandIcons();
+    } else if (action === 'clearBranch') {
+        selectedBranch = null;
+        const branchL1 = document.querySelector('.nav-l1[data-category="branch"]');
+        branchL1?.classList.remove('expanded');
+        renderBranchFilter();
+    } else if (action === 'clearClassCode') {
+        selectedClassCode = null;
+        const classL1 = document.querySelector('.nav-l1[data-category="class_mgmt"]');
+        classL1?.classList.remove('expanded');
+        renderClassCodeFilter();
+        // 디테일 패널 초기화
+        selectedStudentId = null;
+        renderStudentDetail(null);
+    }
+    checkedItems.clear();
+    updateBatchBar();
+    renderFilterChips();
     renderListPanel();
 }
+
+function clearAllFilters() {
+    // 콘텐츠 필터 전부 해제
+    currentSubFilter.clear();
+    for (const cat of Object.keys(savedSubFilters)) {
+        savedSubFilters[cat] = new Set();
+        savedL2Expanded[cat] = false;
+    }
+    l2Expanded = false;
+    // 글로벌 필터 해제
+    selectedBranch = null;
+    selectedClassCode = null;
+    document.querySelector('.nav-l1[data-category="branch"]')?.classList.remove('expanded');
+    document.querySelector('.nav-l1[data-category="class_mgmt"]')?.classList.remove('expanded');
+    // UI 동기화
+    selectedStudentId = null;
+    renderStudentDetail(null);
+    checkedItems.clear();
+    renderBranchFilter();
+    renderClassCodeFilter();
+    renderSubFilters();
+    updateL1ExpandIcons();
+    updateBatchBar();
+    renderFilterChips();
+    renderListPanel();
+}
+
+window.removeFilterChip = removeFilterChip;
+window.clearAllFilters = clearAllFilters;
 
 function setSubFilter(filterKey) {
     // 단일 선택: 같은 필터 클릭 시 해제, 다른 필터 클릭 시 교체
@@ -624,78 +705,81 @@ function getSubFilterCount(filterKey) {
     if (selectedBranch) todayStudents = todayStudents.filter(s => branchFromStudent(s) === selectedBranch);
     if (selectedClassCode) todayStudents = todayStudents.filter(s => s.enrollments.some(e => enrollmentCode(e) === selectedClassCode));
 
+    const total = todayStudents.length;
+    const r = (count) => ({ count, total });
+
     if (currentCategory === 'attendance') {
         switch (filterKey) {
-            case 'all': return todayStudents.length;
-            case 'pre_arrival': return todayStudents.filter(s => {
+            case 'all': return r(total);
+            case 'pre_arrival': return r(todayStudents.filter(s => {
                 const rec = dailyRecords[s.docId];
                 return !rec?.attendance?.status || rec.attendance.status === '미확인';
-            }).length;
-            case 'present': return todayStudents.filter(s => dailyRecords[s.docId]?.attendance?.status === '출석').length;
-            case 'late': return todayStudents.filter(s => dailyRecords[s.docId]?.attendance?.status === '지각').length;
-            case 'absent': return todayStudents.filter(s => dailyRecords[s.docId]?.attendance?.status === '결석').length;
-            case 'other': return todayStudents.filter(s => {
+            }).length);
+            case 'present': return r(todayStudents.filter(s => dailyRecords[s.docId]?.attendance?.status === '출석').length);
+            case 'late': return r(todayStudents.filter(s => dailyRecords[s.docId]?.attendance?.status === '지각').length);
+            case 'absent': return r(todayStudents.filter(s => dailyRecords[s.docId]?.attendance?.status === '결석').length);
+            case 'other': return r(todayStudents.filter(s => {
                 const st = dailyRecords[s.docId]?.attendance?.status;
                 return st && !['미확인', '출석', '지각', '결석'].includes(st);
-            }).length;
-            default: return 0;
+            }).length);
+            default: return r(0);
         }
     }
 
     if (currentCategory === 'homework') {
         switch (filterKey) {
-            case 'all': return todayStudents.length;
-            case 'hw_1st': return todayStudents.filter(s => {
+            case 'all': return r(total);
+            case 'hw_1st': return r(todayStudents.filter(s => {
                 const domains = dailyRecords[s.docId]?.hw_domains_1st;
                 return domains && Object.values(domains).some(v => v);
-            }).length;
-            case 'hw_2nd': return todayStudents.filter(s => {
+            }).length);
+            case 'hw_2nd': return r(todayStudents.filter(s => {
                 const domains = getStudentDomains(s.docId);
                 const d1st = dailyRecords[s.docId]?.hw_domains_1st || {};
                 return domains.some(d => d1st[d] !== 'O');
-            }).length;
-            case 'hw_next': return todayStudents.filter(s => (dailyRecords[s.docId]?.homework || []).length >= 3).length;
-            case 'not_submitted': return todayStudents.filter(s => {
+            }).length);
+            case 'hw_next': return r(todayStudents.filter(s => (dailyRecords[s.docId]?.homework || []).length >= 3).length);
+            case 'not_submitted': return r(todayStudents.filter(s => {
                 const rec = dailyRecords[s.docId];
                 return rec?.homework?.some(h => h.status === '미제출') || !rec?.homework?.length;
-            }).length;
-            case 'submitted': return todayStudents.filter(s => dailyRecords[s.docId]?.homework?.some(h => h.status === '제출')).length;
-            case 'confirmed': return todayStudents.filter(s => dailyRecords[s.docId]?.homework?.some(h => h.status === '확인완료')).length;
-            default: return 0;
+            }).length);
+            case 'submitted': return r(todayStudents.filter(s => dailyRecords[s.docId]?.homework?.some(h => h.status === '제출')).length);
+            case 'confirmed': return r(todayStudents.filter(s => dailyRecords[s.docId]?.homework?.some(h => h.status === '확인완료')).length);
+            default: return r(0);
         }
     }
 
     if (currentCategory === 'test') {
         switch (filterKey) {
-            case 'all': return todayStudents.length;
-            case 'test_1st': return todayStudents.filter(s => {
+            case 'all': return r(total);
+            case 'test_1st': return r(todayStudents.filter(s => {
                 const d = dailyRecords[s.docId]?.test_domains_1st;
                 return d && Object.values(d).some(v => v);
-            }).length;
-            case 'test_2nd': return todayStudents.filter(s => {
+            }).length);
+            case 'test_2nd': return r(todayStudents.filter(s => {
                 const { flat } = getStudentTestItems(s.docId);
                 const d1st = dailyRecords[s.docId]?.test_domains_1st || {};
                 return flat.some(t => d1st[t] !== 'O');
-            }).length;
-            default: return 0;
+            }).length);
+            default: return r(0);
         }
     }
 
     if (currentCategory === 'automation') {
         switch (filterKey) {
-            case 'auto_hw_missing': return todayStudents.filter(s => {
+            case 'auto_hw_missing': return r(todayStudents.filter(s => {
                 const rec = dailyRecords[s.docId];
                 return !rec?.homework?.length || rec.homework.some(h => h.status === '미제출');
-            }).length;
-            case 'auto_retake': return todayStudents.filter(s => {
+            }).length);
+            case 'auto_retake': return r(todayStudents.filter(s => {
                 const rec = dailyRecords[s.docId];
                 return rec?.tests?.some(t => t.result === '재시필요');
-            }).length;
-            case 'auto_unchecked': return todayStudents.filter(s => {
+            }).length);
+            case 'auto_unchecked': return r(todayStudents.filter(s => {
                 const rec = dailyRecords[s.docId];
                 return !rec?.attendance?.status || rec.attendance.status === '미확인';
-            }).length;
-            default: return 0;
+            }).length);
+            default: return r(0);
         }
     }
 
@@ -751,84 +835,99 @@ function getFilteredStudents() {
         );
     }
 
-    // 서브필터 복수 선택 (OR 로직): 선택된 것 중 하나라도 매칭되면 표시
-    if (currentSubFilter.size > 0) {
-        if (currentCategory === 'attendance') {
+    // 모든 카테고리 필터를 AND로 적용
+    // 현재 카테고리는 currentSubFilter, 나머지는 savedSubFilters에서
+    const allFilters = { ...savedSubFilters };
+    allFilters[currentCategory] = new Set(currentSubFilter);
+
+    // 출결 필터
+    const attF = allFilters['attendance'];
+    if (attF?.size > 0) {
+        students = students.filter(s => {
+            const rec = dailyRecords[s.docId];
+            const st = rec?.attendance?.status || '미확인';
+            for (const f of attF) {
+                if (f === 'pre_arrival' && (!st || st === '미확인')) return true;
+                if (f === 'present' && st === '출석') return true;
+                if (f === 'late' && st === '지각') return true;
+                if (f === 'absent' && st === '결석') return true;
+                if (f === 'other' && st && !['미확인', '출석', '지각', '결석'].includes(st)) return true;
+            }
+            return false;
+        });
+    }
+
+    // 숙제 필터
+    const hwF = allFilters['homework'];
+    if (hwF?.size > 0) {
+        const isHw1st = hwF.has('hw_1st');
+        const isHw2nd = hwF.has('hw_2nd');
+        if (isHw1st) {
+            // 1차: 전원 표시
+        } else if (isHw2nd) {
             students = students.filter(s => {
-                const rec = dailyRecords[s.docId];
-                const st = rec?.attendance?.status || '미확인';
-                for (const f of currentSubFilter) {
-                    if (f === 'pre_arrival' && (!st || st === '미확인')) return true;
-                    if (f === 'present' && st === '출석') return true;
-                    if (f === 'late' && st === '지각') return true;
-                    if (f === 'absent' && st === '결석') return true;
-                    if (f === 'other' && st && !['미확인', '출석', '지각', '결석'].includes(st)) return true;
-                }
-                return false;
+                const domains = getStudentDomains(s.docId);
+                const d1st = dailyRecords[s.docId]?.hw_domains_1st || {};
+                return domains.some(d => d1st[d] !== 'O');
             });
-        } else if (currentCategory === 'homework') {
-            const isHw1st = currentSubFilter.has('hw_1st');
-            const isHw2nd = currentSubFilter.has('hw_2nd');
-            if (isHw1st) {
-                // 1차: 전원 표시
-            } else if (isHw2nd) {
-                // 2차: 1차에서 모든 영역이 O가 아닌 학생만 표시
-                students = students.filter(s => {
-                    const domains = getStudentDomains(s.docId);
-                    const d1st = dailyRecords[s.docId]?.hw_domains_1st || {};
-                    // 영역 중 하나라도 O가 아니면 표시
-                    return domains.some(d => d1st[d] !== 'O');
-                });
-            } else {
-                students = students.filter(s => {
-                    const rec = dailyRecords[s.docId];
-                    for (const f of currentSubFilter) {
-                        if (f === 'hw_next' && (rec?.homework || []).length >= 3) return true;
-                        if (f === 'not_submitted' && (rec?.homework?.some(h => h.status === '미제출') || !rec?.homework?.length)) return true;
-                        if (f === 'submitted' && rec?.homework?.some(h => h.status === '제출')) return true;
-                        if (f === 'confirmed' && rec?.homework?.some(h => h.status === '확인완료')) return true;
-                    }
-                    return false;
-                });
-            }
-        } else if (currentCategory === 'test') {
-            const isTest1st = currentSubFilter.has('test_1st');
-            const isTest2nd = currentSubFilter.has('test_2nd');
-            if (isTest1st) {
-                // 1차: 전원 표시
-            } else if (isTest2nd) {
-                // 2차: 1차에서 O가 아닌 항목이 있는 학생만
-                students = students.filter(s => {
-                    const { flat } = getStudentTestItems(s.docId);
-                    const d1st = dailyRecords[s.docId]?.test_domains_1st || {};
-                    return flat.some(t => d1st[t] !== 'O');
-                });
-            } else {
-                students = students.filter(s => {
-                    const rec = dailyRecords[s.docId];
-                    for (const f of currentSubFilter) {
-                        if (f === 'scheduled' && rec?.tests?.some(t => t.score === undefined || t.score === null)) return true;
-                        if (f === 'pass' && rec?.tests?.some(t => t.result === '통과')) return true;
-                        if (f === 'retake' && rec?.tests?.some(t => t.result === '재시필요')) return true;
-                    }
-                    return false;
-                });
-            }
-        } else if (currentCategory === 'automation') {
+        } else {
             students = students.filter(s => {
                 const rec = dailyRecords[s.docId];
-                for (const f of currentSubFilter) {
-                    if (f === 'auto_hw_missing' && (!rec?.homework?.length || rec.homework.some(h => h.status === '미제출'))) return true;
-                    if (f === 'auto_retake' && rec?.tests?.some(t => t.result === '재시필요')) return true;
-                    if (f === 'auto_unchecked' && (!rec?.attendance?.status || rec.attendance.status === '미확인')) return true;
+                for (const f of hwF) {
+                    if (f === 'hw_next' && (rec?.homework || []).length >= 3) return true;
+                    if (f === 'not_submitted' && (rec?.homework?.some(h => h.status === '미제출') || !rec?.homework?.length)) return true;
+                    if (f === 'submitted' && rec?.homework?.some(h => h.status === '제출')) return true;
+                    if (f === 'confirmed' && rec?.homework?.some(h => h.status === '확인완료')) return true;
                 }
                 return false;
             });
         }
     }
 
-    // 출결: 등원시간(start_time) 임박순 정렬
-    if (currentCategory === 'attendance') {
+    // 테스트 필터
+    const testF = allFilters['test'];
+    if (testF?.size > 0) {
+        const isTest1st = testF.has('test_1st');
+        const isTest2nd = testF.has('test_2nd');
+        if (isTest1st) {
+            // 1차: 전원 표시
+        } else if (isTest2nd) {
+            students = students.filter(s => {
+                const { flat } = getStudentTestItems(s.docId);
+                const d1st = dailyRecords[s.docId]?.test_domains_1st || {};
+                return flat.some(t => d1st[t] !== 'O');
+            });
+        } else {
+            students = students.filter(s => {
+                const rec = dailyRecords[s.docId];
+                for (const f of testF) {
+                    if (f === 'scheduled' && rec?.tests?.some(t => t.score === undefined || t.score === null)) return true;
+                    if (f === 'pass' && rec?.tests?.some(t => t.result === '통과')) return true;
+                    if (f === 'retake' && rec?.tests?.some(t => t.result === '재시필요')) return true;
+                }
+                return false;
+            });
+        }
+    }
+
+    // 자동화 필터
+    const autoF = allFilters['automation'];
+    if (autoF?.size > 0) {
+        students = students.filter(s => {
+            const rec = dailyRecords[s.docId];
+            for (const f of autoF) {
+                if (f === 'auto_hw_missing' && (!rec?.homework?.length || rec.homework.some(h => h.status === '미제출'))) return true;
+                if (f === 'auto_retake' && rec?.tests?.some(t => t.result === '재시필요')) return true;
+                if (f === 'auto_unchecked' && (!rec?.attendance?.status || rec.attendance.status === '미확인')) return true;
+            }
+            return false;
+        });
+    }
+
+    // 출결 필터 활성 시 등원시간 임박순 정렬
+    const allF = { ...savedSubFilters };
+    allF[currentCategory] = new Set(currentSubFilter);
+    if (allF['attendance']?.size > 0 || currentCategory === 'attendance') {
         const dayName = getDayName(selectedDate);
         students.sort((a, b) => {
             const timeA = a.enrollments.find(e => e.day.includes(dayName))?.start_time || '99:99';
@@ -847,29 +946,8 @@ function renderListPanel() {
     const container = document.getElementById('list-items');
     const countEl = document.getElementById('list-count');
 
-    // 반 글로벌 필터 칩 동기화
-    renderClassCodeChip();
-
-    // 카테고리별 라벨
-    const categoryLabels = { attendance: '출결', homework: '숙제', test: '테스트', automation: '자동화', class_mgmt: '반 관리' };
-
-    // L2 필터 활성 시 필터명 표시
-    const subFilterLabels = {
-        pre_arrival: '등원전', present: '출석', late: '지각', absent: '결석', other: '기타',
-        hw_1st: '1차', hw_2nd: '2차', hw_next: '다음숙제',
-        test_1st: '1차', test_2nd: '2차',
-        auto_hw_missing: '미제출 숙제', auto_retake: '재시 필요', auto_unchecked: '미체크 출석'
-    };
-
-    document.getElementById('filter-label').textContent = categoryLabels[currentCategory] || '';
-
-    const subLabel = document.getElementById('sub-filter-label');
-    if (currentSubFilter.size > 0 && !currentSubFilter.has('all')) {
-        const filterNames = [...currentSubFilter].map(k => subFilterLabels[k] || k).join(' · ');
-        subLabel.textContent = filterNames;
-    } else {
-        subLabel.textContent = '전체';
-    }
+    // 필터 칩 렌더링
+    renderFilterChips();
 
     countEl.textContent = `${students.length}명`;
 
@@ -1106,32 +1184,42 @@ function renderListPanel() {
             }).join('');
         }
 
-        // 등원시간 표시: 실제 기록된 시간 또는 예정 시간
-        let timeTag = '';
+        // 등원시간
         const rec = dailyRecords[s.docId];
         const arrivalTime = rec?.arrival_time;
+        const dayName = getDayName(selectedDate);
+        const todayEnroll = s.enrollments.find(e => e.day.includes(dayName));
+        const scheduledTime = todayEnroll?.start_time;
+        let timeLabel = '', timeValue = '', timeClass = '';
         if (arrivalTime) {
-            timeTag = `<span class="item-time arrived">${esc(formatTime12h(arrivalTime))}</span>`;
-        } else if (currentCategory === 'attendance' || currentCategory === 'class_mgmt') {
-            const dayName = getDayName(selectedDate);
-            const todayEnroll = s.enrollments.find(e => e.day.includes(dayName));
-            const st = todayEnroll?.start_time;
-            if (st) timeTag = `<span class="item-time">${esc(formatTime12h(st))}</span>`;
+            timeLabel = '등원'; timeValue = formatTime12h(arrivalTime); timeClass = 'arrived';
+        } else if (scheduledTime) {
+            timeLabel = '예정'; timeValue = formatTime12h(scheduledTime);
         }
+        const timeHtml = timeValue ? `<div class="item-time-block ${timeClass}">
+            <span class="item-time-label">${timeLabel}</span>
+            <span class="item-time-value">${esc(timeValue)}</span>
+        </div>` : '';
 
         return `<div class="list-item ${isActive}" data-id="${s.docId}" onclick="selectStudent('${s.docId}')">
             <input type="checkbox" class="item-checkbox" ${isChecked}
                 onclick="event.stopPropagation(); toggleCheck('${s.docId}', this.checked)">
-            <div class="item-main">
-                <div class="item-header">
-                    <span class="item-title">${esc(s.name)}</span>
-                    ${timeTag}
-                    <span class="item-desc">${esc(s.level || '')} · ${esc(code)} · ${esc(branch)}</span>
-                </div>
-                ${toggleHtml}
+            <div class="item-info">
+                <span class="item-title">${esc(s.name)} <span class="item-class-type">${esc(todayEnroll?.class_type || '')}</span></span>
+                <span class="item-desc">${esc(code)}${studentShortLabel(s) ? ', ' + esc(studentShortLabel(s)) : ''}</span>
             </div>
+            ${timeHtml}
+            <div class="item-actions">${toggleHtml}</div>
         </div>`;
     }).join('');
+
+    // 반 상세 표시: 반(+소속)만 선택되고, 콘텐츠 서브필터 없을 때
+    const allFilters = { ...savedSubFilters };
+    allFilters[currentCategory] = new Set(currentSubFilter);
+    const hasContentFilter = ['attendance', 'homework', 'test', 'automation'].some(cat => allFilters[cat]?.size > 0);
+    if (selectedClassCode && !selectedStudentId && !hasContentFilter) {
+        renderClassDetail(selectedClassCode);
+    }
 }
 
 // ─── Class Detail Panel ─────────────────────────────────────────────────────
@@ -2920,7 +3008,6 @@ window.toggleHomework = toggleHomework;
 window.toggleHwDomainOX = toggleHwDomainOX;
 window.confirmBatchHwDomainOX = confirmBatchHwDomainOX;
 window.executeBatchHwDomainOX = executeBatchHwDomainOX;
-window.clearClassCodeFilter = clearClassCodeFilter;
 window.setClassCode = setClassCode;
 window.confirmBatchAction = confirmBatchAction;
 window.executeBatchAction = executeBatchAction;
@@ -2990,5 +3077,51 @@ window.searchMemoStudent = searchMemoStudent;
 window.selectMemoStudent = selectMemoStudent;
 window.markMemoRead = markMemoRead;
 window.expandMemo = expandMemo;
+
+// ─── 임시출석 ──────────────────────────────────────────────────────────────
+
+function openTempAttendanceModal() {
+    document.getElementById('temp-att-name').value = '';
+    document.getElementById('temp-att-school').value = '';
+    document.getElementById('temp-att-level').value = '';
+    document.getElementById('temp-att-grade').value = '';
+    document.getElementById('temp-att-student-phone').value = '';
+    document.getElementById('temp-att-parent-phone').value = '';
+    document.getElementById('temp-att-memo').value = '';
+    document.getElementById('temp-att-date').value = selectedDate;
+    document.getElementById('temp-att-time').value = nowTimeStr();
+    document.getElementById('temp-attendance-modal').style.display = '';
+}
+
+async function saveTempAttendance() {
+    const name = document.getElementById('temp-att-name').value.trim();
+    if (!name) { alert('이름을 입력하세요.'); return; }
+
+    const data = {
+        name,
+        school: document.getElementById('temp-att-school').value.trim(),
+        level: document.getElementById('temp-att-level').value,
+        grade: document.getElementById('temp-att-grade').value.trim(),
+        student_phone: document.getElementById('temp-att-student-phone').value.trim(),
+        parent_phone_1: document.getElementById('temp-att-parent-phone').value.trim(),
+        memo: document.getElementById('temp-att-memo').value.trim(),
+        temp_date: document.getElementById('temp-att-date').value,
+        temp_time: document.getElementById('temp-att-time').value,
+        created_at: serverTimestamp(),
+        created_by: currentUser?.email || ''
+    };
+
+    try {
+        await addDoc(collection(db, 'temp_attendance'), data);
+        document.getElementById('temp-attendance-modal').style.display = 'none';
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('임시출석 저장 실패:', err);
+        alert('저장에 실패했습니다.');
+    }
+}
+
+window.openTempAttendanceModal = openTempAttendanceModal;
+window.saveTempAttendance = saveTempAttendance;
 
 console.log('[DailyOps] App initialized.');
