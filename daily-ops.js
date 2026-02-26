@@ -24,7 +24,25 @@ let roleMemos = [];
 let memoTab = 'inbox';
 let classSettings = {};          // classCode → { domains: [...] }
 let selectedBranch = null;       // 소속 글로벌 필터 (null = 전체, '2단지' | '10단지')
+let selectedClassCode = null;    // 반 글로벌 필터 (null = 전체, 'ax104' 등)
+let savedSubFilters = {};        // 카테고리별 L2 선택 기억 { homework: Set['hw_1st'], ... }
+let savedL2Expanded = {};        // 카테고리별 L2 펼침 상태 기억
 const DEFAULT_DOMAINS = ['Gr', 'A/G', 'R/C'];
+
+// ─── OX Helpers ─────────────────────────────────────────────────────────────
+const OX_CYCLE = ['', 'O', 'X', '△'];
+
+function nextOXValue(current) {
+    const idx = OX_CYCLE.indexOf(current || '');
+    return OX_CYCLE[(idx + 1) % OX_CYCLE.length];
+}
+
+function oxDisplayClass(value) {
+    if (value === 'O') return 'ox-green';
+    if (value === 'X') return 'ox-red';
+    if (value === '△') return 'ox-yellow';
+    return 'ox-empty';
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 const esc = (str) => {
@@ -105,6 +123,28 @@ function getStudentDomains(studentId) {
         getClassDomains(enrollmentCode(e)).forEach(d => domains.add(d));
     });
     return domains.size > 0 ? [...domains] : [...DEFAULT_DOMAINS];
+}
+
+function getStudentTestItems(studentId) {
+    const student = allStudents.find(s => s.docId === studentId);
+    if (!student) return { sections: JSON.parse(JSON.stringify(DEFAULT_TEST_SECTIONS)), flat: [] };
+    const merged = {};
+    student.enrollments.forEach(e => {
+        const sections = getClassTestSections(enrollmentCode(e));
+        for (const [secName, items] of Object.entries(sections)) {
+            if (!merged[secName]) merged[secName] = new Set();
+            items.forEach(t => merged[secName].add(t));
+        }
+    });
+    const sections = {};
+    for (const [secName, itemSet] of Object.entries(merged)) {
+        sections[secName] = [...itemSet];
+    }
+    if (Object.keys(sections).length === 0) {
+        return { sections: JSON.parse(JSON.stringify(DEFAULT_TEST_SECTIONS)), flat: [] };
+    }
+    const flat = Object.values(sections).flat();
+    return { sections, flat };
 }
 
 async function saveClassSettings(classCode, data) {
@@ -308,7 +348,6 @@ function setCategory(category) {
     if (category === 'branch') {
         const branchL1 = document.querySelector('.nav-l1[data-category="branch"]');
         const isExpanded = branchL1?.classList.contains('expanded');
-        // 접을 때 필터 해제
         if (isExpanded && selectedBranch) {
             selectedBranch = null;
             branchL1?.classList.remove('expanded');
@@ -322,24 +361,56 @@ function setCategory(category) {
         return;
     }
 
+    // 반 관리도 글로벌 필터 — 카테고리를 바꾸지 않고 반 코드 드롭다운만 토글
+    if (category === 'class_mgmt') {
+        const classL1 = document.querySelector('.nav-l1[data-category="class_mgmt"]');
+        const isExpanded = classL1?.classList.contains('expanded');
+        if (isExpanded && selectedClassCode) {
+            selectedClassCode = null;
+            classL1?.classList.remove('expanded');
+            renderClassCodeFilter();
+            renderClassCodeChip();
+            renderSubFilters();
+            renderListPanel();
+            return;
+        }
+        classL1?.classList.toggle('expanded', !isExpanded);
+        renderClassCodeFilter();
+        return;
+    }
+
     if (currentCategory === category) {
         // 같은 카테고리 클릭: L2 필터 활성이면 해제+접기(현황판), 아니면 L2 토글
         if (currentSubFilter.size > 0) {
             currentSubFilter.clear();
+            savedSubFilters[category] = new Set();
             l2Expanded = false;
+            savedL2Expanded[category] = false;
         } else {
             l2Expanded = !l2Expanded;
+            savedL2Expanded[category] = l2Expanded;
         }
     } else {
+        // 현재 카테고리 상태 저장
+        savedSubFilters[currentCategory] = new Set(currentSubFilter);
+        savedL2Expanded[currentCategory] = l2Expanded;
+
         currentCategory = category;
+
+        // 새 카테고리의 저장된 상태 복원
         currentSubFilter.clear();
-        l2Expanded = true;
+        if (savedSubFilters[category]?.size > 0) {
+            for (const f of savedSubFilters[category]) {
+                currentSubFilter.add(f);
+            }
+        }
+        l2Expanded = savedL2Expanded[category] !== undefined ? savedL2Expanded[category] : true;
     }
     checkedItems.clear();
 
-    // L1 active 토글 (branch 제외)
+    // L1 active 토글 (branch, class_mgmt 제외 — 글로벌 필터)
     document.querySelectorAll('.nav-l1').forEach(el => {
-        if (el.dataset.category === 'branch') return;
+        if (el.dataset.category === 'branch' || el.dataset.category === 'class_mgmt') return;
         el.classList.toggle('active', el.dataset.category === category);
     });
 
@@ -354,6 +425,8 @@ function updateL1ExpandIcons() {
     document.querySelectorAll('.nav-l1').forEach(el => {
         const icon = el.querySelector('.nav-l1-expand');
         if (!icon) return;
+        // branch, class_mgmt는 별도 관리
+        if (el.dataset.category === 'branch' || el.dataset.category === 'class_mgmt') return;
         const isActive = el.dataset.category === currentCategory;
         icon.textContent = (isActive && l2Expanded) ? 'expand_less' : 'expand_more';
     });
@@ -382,26 +455,17 @@ function renderSubFilters() {
             { key: 'auto_hw_missing', label: '미제출 숙제' },
             { key: 'auto_retake', label: '재시 필요' },
             { key: 'auto_unchecked', label: '미체크 출석' }
-        ],
-        class_mgmt: []
+        ]
     };
 
-    // 반 관리: 동적 서브필터 생성
-    let items;
-    if (currentCategory === 'class_mgmt') {
-        const classCodes = getUniqueClassCodes();
-        items = [{ key: 'all', label: '전체' }];
-        classCodes.forEach(code => items.push({ key: code, label: code }));
-    } else {
-        items = filters[currentCategory] || [];
-    }
+    const items = filters[currentCategory] || [];
 
     if (items.length === 0) {
         container.innerHTML = '<div style="padding:16px;color:var(--text-sec);font-size:13px;">추후 확장 예정</div>';
     } else {
         container.innerHTML = items.map(f => {
             const isActive = currentSubFilter.has(f.key) ? 'active' : '';
-            const count = currentCategory === 'class_mgmt' ? getClassMgmtCount(f.key) : getSubFilterCount(f.key);
+            const count = getSubFilterCount(f.key);
             return `<div class="nav-l2 ${isActive}" data-filter="${f.key}" onclick="setSubFilter('${f.key}')">
                 ${esc(f.label)}
                 ${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
@@ -457,12 +521,77 @@ function renderBranchFilter() {
     branchL1.classList.toggle('has-filter', !!selectedBranch);
 }
 
+function renderClassCodeFilter() {
+    let container = document.getElementById('nav-class-l2');
+    const classL1 = document.querySelector('.nav-l1[data-category="class_mgmt"]');
+    if (!classL1) return;
+
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'nav-class-l2';
+        container.className = 'nav-l2-group';
+        classL1.after(container);
+    }
+
+    const classCodes = getUniqueClassCodes();
+    const dayName = getDayName(selectedDate);
+
+    container.innerHTML = classCodes.map(code => {
+        const isActive = selectedClassCode === code ? 'active' : '';
+        const count = allStudents.filter(s =>
+            s.enrollments.some(e => e.day.includes(dayName) && enrollmentCode(e) === code)
+        ).length;
+        return `<div class="nav-l2 ${isActive}" data-filter="${code}" onclick="setClassCode('${escAttr(code)}')">
+            ${esc(code)}
+            ${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
+        </div>`;
+    }).join('');
+
+    const isExpanded = classL1.classList.contains('expanded');
+    container.style.display = isExpanded ? '' : 'none';
+
+    const icon = classL1.querySelector('.nav-l1-expand');
+    if (icon) icon.textContent = isExpanded ? 'expand_less' : 'expand_more';
+
+    classL1.classList.toggle('has-filter', !!selectedClassCode);
+}
+
+function setClassCode(code) {
+    selectedClassCode = selectedClassCode === code ? null : code;
+    checkedItems.clear();
+    renderClassCodeFilter();
+    renderClassCodeChip();
+    renderSubFilters();
+    updateBatchBar();
+    renderListPanel();
+}
+
 function setBranch(branchKey) {
     selectedBranch = selectedBranch === branchKey ? null : branchKey;
     checkedItems.clear();
     renderBranchFilter();
     renderSubFilters();
     updateBatchBar();
+    renderListPanel();
+}
+
+function renderClassCodeChip() {
+    const chip = document.getElementById('class-code-chip');
+    if (!chip) return;
+    if (selectedClassCode) {
+        chip.style.display = '';
+        chip.innerHTML = `${esc(selectedClassCode)}<button class="class-code-chip-close" onclick="clearClassCodeFilter()" title="반 필터 해제">&times;</button>`;
+    } else {
+        chip.style.display = 'none';
+        chip.innerHTML = '';
+    }
+}
+
+function clearClassCodeFilter() {
+    selectedClassCode = null;
+    renderClassCodeFilter();
+    renderClassCodeChip();
+    renderSubFilters();
     renderListPanel();
 }
 
@@ -480,17 +609,11 @@ function setSubFilter(filterKey) {
         el.classList.toggle('active', currentSubFilter.has(el.dataset.filter));
     });
 
+    // 현재 카테고리의 L2 상태 저장
+    savedSubFilters[currentCategory] = new Set(currentSubFilter);
+
     updateBatchBar();
     renderListPanel();
-
-    // 반 관리 모드에서 반 코드 선택 시 상세 패널에 반 설정 표시
-    if (currentCategory === 'class_mgmt' && filterKey !== 'all' && currentSubFilter.has(filterKey)) {
-        renderClassDetail(filterKey);
-    } else if (currentCategory === 'class_mgmt' && !currentSubFilter.size) {
-        // 반 선택 해제 시 상세 패널 초기화
-        document.getElementById('detail-empty').style.display = '';
-        document.getElementById('detail-content').style.display = 'none';
-    }
 }
 
 function getSubFilterCount(filterKey) {
@@ -499,6 +622,7 @@ function getSubFilterCount(filterKey) {
         s.enrollments.some(e => e.day.includes(dayName))
     );
     if (selectedBranch) todayStudents = todayStudents.filter(s => branchFromStudent(s) === selectedBranch);
+    if (selectedClassCode) todayStudents = todayStudents.filter(s => s.enrollments.some(e => enrollmentCode(e) === selectedClassCode));
 
     if (currentCategory === 'attendance') {
         switch (filterKey) {
@@ -521,8 +645,15 @@ function getSubFilterCount(filterKey) {
     if (currentCategory === 'homework') {
         switch (filterKey) {
             case 'all': return todayStudents.length;
-            case 'hw_1st': return todayStudents.filter(s => (dailyRecords[s.docId]?.homework || []).length >= 1).length;
-            case 'hw_2nd': return todayStudents.filter(s => (dailyRecords[s.docId]?.homework || []).length >= 2).length;
+            case 'hw_1st': return todayStudents.filter(s => {
+                const domains = dailyRecords[s.docId]?.hw_domains_1st;
+                return domains && Object.values(domains).some(v => v);
+            }).length;
+            case 'hw_2nd': return todayStudents.filter(s => {
+                const domains = getStudentDomains(s.docId);
+                const d1st = dailyRecords[s.docId]?.hw_domains_1st || {};
+                return domains.some(d => d1st[d] !== 'O');
+            }).length;
             case 'hw_next': return todayStudents.filter(s => (dailyRecords[s.docId]?.homework || []).length >= 3).length;
             case 'not_submitted': return todayStudents.filter(s => {
                 const rec = dailyRecords[s.docId];
@@ -537,11 +668,15 @@ function getSubFilterCount(filterKey) {
     if (currentCategory === 'test') {
         switch (filterKey) {
             case 'all': return todayStudents.length;
-            case 'test_1st': return todayStudents.filter(s => (dailyRecords[s.docId]?.tests || []).length >= 1).length;
-            case 'test_2nd': return todayStudents.filter(s => (dailyRecords[s.docId]?.tests || []).length >= 2).length;
-            case 'scheduled': return todayStudents.filter(s => dailyRecords[s.docId]?.tests?.some(t => t.score === undefined || t.score === null)).length;
-            case 'pass': return todayStudents.filter(s => dailyRecords[s.docId]?.tests?.some(t => t.result === '통과')).length;
-            case 'retake': return todayStudents.filter(s => dailyRecords[s.docId]?.tests?.some(t => t.result === '재시필요')).length;
+            case 'test_1st': return todayStudents.filter(s => {
+                const d = dailyRecords[s.docId]?.test_domains_1st;
+                return d && Object.values(d).some(v => v);
+            }).length;
+            case 'test_2nd': return todayStudents.filter(s => {
+                const { flat } = getStudentTestItems(s.docId);
+                const d1st = dailyRecords[s.docId]?.test_domains_1st || {};
+                return flat.some(t => d1st[t] !== 'O');
+            }).length;
             default: return 0;
         }
     }
@@ -600,6 +735,13 @@ function getFilteredStudents() {
     // 소속 글로벌 필터
     if (selectedBranch) students = students.filter(s => branchFromStudent(s) === selectedBranch);
 
+    // 반 글로벌 필터
+    if (selectedClassCode) {
+        students = students.filter(s =>
+            s.enrollments.some(e => enrollmentCode(e) === selectedClassCode)
+        );
+    }
+
     // 검색어 필터
     if (searchQuery) {
         const q = searchQuery.toLowerCase();
@@ -625,30 +767,53 @@ function getFilteredStudents() {
                 return false;
             });
         } else if (currentCategory === 'homework') {
-            students = students.filter(s => {
-                const rec = dailyRecords[s.docId];
-                for (const f of currentSubFilter) {
-                    if (f === 'hw_1st' && (rec?.homework || []).length >= 1) return true;
-                    if (f === 'hw_2nd' && (rec?.homework || []).length >= 2) return true;
-                    if (f === 'hw_next' && (rec?.homework || []).length >= 3) return true;
-                    if (f === 'not_submitted' && (rec?.homework?.some(h => h.status === '미제출') || !rec?.homework?.length)) return true;
-                    if (f === 'submitted' && rec?.homework?.some(h => h.status === '제출')) return true;
-                    if (f === 'confirmed' && rec?.homework?.some(h => h.status === '확인완료')) return true;
-                }
-                return false;
-            });
+            const isHw1st = currentSubFilter.has('hw_1st');
+            const isHw2nd = currentSubFilter.has('hw_2nd');
+            if (isHw1st) {
+                // 1차: 전원 표시
+            } else if (isHw2nd) {
+                // 2차: 1차에서 모든 영역이 O가 아닌 학생만 표시
+                students = students.filter(s => {
+                    const domains = getStudentDomains(s.docId);
+                    const d1st = dailyRecords[s.docId]?.hw_domains_1st || {};
+                    // 영역 중 하나라도 O가 아니면 표시
+                    return domains.some(d => d1st[d] !== 'O');
+                });
+            } else {
+                students = students.filter(s => {
+                    const rec = dailyRecords[s.docId];
+                    for (const f of currentSubFilter) {
+                        if (f === 'hw_next' && (rec?.homework || []).length >= 3) return true;
+                        if (f === 'not_submitted' && (rec?.homework?.some(h => h.status === '미제출') || !rec?.homework?.length)) return true;
+                        if (f === 'submitted' && rec?.homework?.some(h => h.status === '제출')) return true;
+                        if (f === 'confirmed' && rec?.homework?.some(h => h.status === '확인완료')) return true;
+                    }
+                    return false;
+                });
+            }
         } else if (currentCategory === 'test') {
-            students = students.filter(s => {
-                const rec = dailyRecords[s.docId];
-                for (const f of currentSubFilter) {
-                    if (f === 'test_1st' && (rec?.tests || []).length >= 1) return true;
-                    if (f === 'test_2nd' && (rec?.tests || []).length >= 2) return true;
-                    if (f === 'scheduled' && rec?.tests?.some(t => t.score === undefined || t.score === null)) return true;
-                    if (f === 'pass' && rec?.tests?.some(t => t.result === '통과')) return true;
-                    if (f === 'retake' && rec?.tests?.some(t => t.result === '재시필요')) return true;
-                }
-                return false;
-            });
+            const isTest1st = currentSubFilter.has('test_1st');
+            const isTest2nd = currentSubFilter.has('test_2nd');
+            if (isTest1st) {
+                // 1차: 전원 표시
+            } else if (isTest2nd) {
+                // 2차: 1차에서 O가 아닌 항목이 있는 학생만
+                students = students.filter(s => {
+                    const { flat } = getStudentTestItems(s.docId);
+                    const d1st = dailyRecords[s.docId]?.test_domains_1st || {};
+                    return flat.some(t => d1st[t] !== 'O');
+                });
+            } else {
+                students = students.filter(s => {
+                    const rec = dailyRecords[s.docId];
+                    for (const f of currentSubFilter) {
+                        if (f === 'scheduled' && rec?.tests?.some(t => t.score === undefined || t.score === null)) return true;
+                        if (f === 'pass' && rec?.tests?.some(t => t.result === '통과')) return true;
+                        if (f === 'retake' && rec?.tests?.some(t => t.result === '재시필요')) return true;
+                    }
+                    return false;
+                });
+            }
         } else if (currentCategory === 'automation') {
             students = students.filter(s => {
                 const rec = dailyRecords[s.docId];
@@ -681,6 +846,9 @@ function renderListPanel() {
     const students = getFilteredStudents();
     const container = document.getElementById('list-items');
     const countEl = document.getElementById('list-count');
+
+    // 반 글로벌 필터 칩 동기화
+    renderClassCodeChip();
 
     // 카테고리별 라벨
     const categoryLabels = { attendance: '출결', homework: '숙제', test: '테스트', automation: '자동화', class_mgmt: '반 관리' };
@@ -748,38 +916,159 @@ function renderListPanel() {
                 `</div>`;
         } else if (currentCategory === 'homework') {
             const rec = dailyRecords[s.docId];
-            const homework = rec?.homework || [];
-            if (homework.length === 0) {
-                toggleHtml = `<div class="toggle-group"><span style="font-size:12px;color:var(--text-sec);">숙제 없음</span></div>`;
+            const isHw1st = currentSubFilter.has('hw_1st');
+            const isHw2nd = currentSubFilter.has('hw_2nd');
+            const isHwNext = currentSubFilter.has('hw_next');
+
+            if (isHw1st || isHw2nd) {
+                const field = isHw1st ? 'hw_domains_1st' : 'hw_domains_2nd';
+                const domainData = rec?.[field] || {};
+                const allDomains = getStudentDomains(s.docId);
+                // 2차: 1차에서 O가 아닌 영역만 표시
+                const domains = isHw2nd
+                    ? allDomains.filter(d => (rec?.hw_domains_1st || {})[d] !== 'O')
+                    : allDomains;
+                toggleHtml = `<div class="hw-domain-group">` +
+                    domains.map(d => {
+                        const val = domainData[d] || '';
+                        const cls = oxDisplayClass(val);
+                        return `<div class="hw-domain-item">
+                            <span class="hw-domain-label">${esc(d)}</span>
+                            <button class="hw-domain-ox ${cls}" data-student="${s.docId}" data-field="${field}" data-domain="${escAttr(d)}"
+                                onclick="event.stopPropagation(); toggleHwDomainOX('${s.docId}', '${field}', '${escAttr(d)}')">${esc(val || '—')}</button>
+                        </div>`;
+                    }).join('') +
+                    `</div>`;
+            } else if (isHwNext) {
+                // L2 hw_next: 기존 커스텀 숙제 배열
+                const homework = rec?.homework || [];
+                if (homework.length === 0) {
+                    toggleHtml = `<div class="toggle-group"><span style="font-size:12px;color:var(--text-sec);">숙제 없음</span></div>`;
+                } else {
+                    toggleHtml = homework.map((h, i) => {
+                        const hStatuses = ['미제출', '제출', '확인완료'];
+                        return `<div style="margin-top:4px;"><span style="font-size:12px;color:var(--text-sec);margin-right:8px;">${esc(h.title || '숙제'+(i+1))}</span>
+                            <div class="toggle-group" style="display:inline-flex;">` +
+                            hStatuses.map(st => {
+                                let activeClass = '';
+                                if (h.status === st) {
+                                    activeClass = st === '확인완료' ? 'active-present' : st === '제출' ? 'active-late' : 'active-absent';
+                                }
+                                return `<button class="toggle-btn ${activeClass}" onclick="event.stopPropagation(); toggleHomework('${s.docId}', ${i}, '${st}')">${st}</button>`;
+                            }).join('') +
+                            `</div></div>`;
+                    }).join('');
+                }
             } else {
-                toggleHtml = homework.map((h, i) => {
-                    const hStatuses = ['미제출', '제출', '확인완료'];
-                    return `<div style="margin-top:4px;"><span style="font-size:12px;color:var(--text-sec);margin-right:8px;">${esc(h.title || '숙제'+(i+1))}</span>
-                        <div class="toggle-group" style="display:inline-flex;">` +
-                        hStatuses.map(st => {
-                            let activeClass = '';
-                            if (h.status === st) {
-                                activeClass = st === '확인완료' ? 'active-present' : st === '제출' ? 'active-late' : 'active-absent';
-                            }
-                            return `<button class="toggle-btn ${activeClass}" onclick="event.stopPropagation(); toggleHomework('${s.docId}', ${i}, '${st}')">${st}</button>`;
-                        }).join('') +
-                        `</div></div>`;
-                }).join('');
+                // L1 숙제 (서브필터 없음): 읽기전용 영역 상태 요약
+                const d1st = rec?.hw_domains_1st || {};
+                const d2nd = rec?.hw_domains_2nd || {};
+                const domains = getStudentDomains(s.docId);
+                const has1st = Object.values(d1st).some(v => v);
+                const has2nd = Object.values(d2nd).some(v => v);
+
+                if (!has1st && !has2nd) {
+                    toggleHtml = `<div class="toggle-group"><span style="font-size:12px;color:var(--text-sec);">영역 숙제 미입력</span></div>`;
+                } else {
+                    let summaryParts = [];
+                    if (has1st) {
+                        summaryParts.push(`<div class="hw-domain-summary"><span class="hw-domain-summary-label">1차</span><div class="hw-domain-group">` +
+                            domains.map(d => {
+                                const val = d1st[d] || '';
+                                const cls = oxDisplayClass(val);
+                                return `<div class="hw-domain-item">
+                                    <span class="hw-domain-label">${esc(d)}</span>
+                                    <span class="hw-domain-ox readonly ${cls}">${esc(val || '—')}</span>
+                                </div>`;
+                            }).join('') +
+                            `</div></div>`);
+                    }
+                    if (has2nd) {
+                        summaryParts.push(`<div class="hw-domain-summary"><span class="hw-domain-summary-label">2차</span><div class="hw-domain-group">` +
+                            domains.map(d => {
+                                const val = d2nd[d] || '';
+                                const cls = oxDisplayClass(val);
+                                return `<div class="hw-domain-item">
+                                    <span class="hw-domain-label">${esc(d)}</span>
+                                    <span class="hw-domain-ox readonly ${cls}">${esc(val || '—')}</span>
+                                </div>`;
+                            }).join('') +
+                            `</div></div>`);
+                    }
+                    toggleHtml = summaryParts.join('');
+                }
             }
         } else if (currentCategory === 'test') {
             const rec = dailyRecords[s.docId];
-            const tests = rec?.tests || [];
-            if (tests.length === 0) {
-                toggleHtml = `<div class="toggle-group"><span style="font-size:12px;color:var(--text-sec);">테스트 없음</span></div>`;
+            const isTest1st = currentSubFilter.has('test_1st');
+            const isTest2nd = currentSubFilter.has('test_2nd');
+
+            if (isTest1st || isTest2nd) {
+                // 1차/2차: 섹션별 OX 토글
+                const field = isTest1st ? 'test_domains_1st' : 'test_domains_2nd';
+                const domainData = rec?.[field] || {};
+                const { sections } = getStudentTestItems(s.docId);
+                const d1st = rec?.test_domains_1st || {};
+
+                let sectionHtmlParts = [];
+                for (const [secName, items] of Object.entries(sections)) {
+                    const filtered = isTest2nd ? items.filter(t => d1st[t] !== 'O') : items;
+                    if (filtered.length === 0) continue;
+                    sectionHtmlParts.push(
+                        `<div style="margin-top:4px;">` +
+                        `<span style="font-size:11px;color:var(--text-sec);font-weight:500;">${esc(secName)}</span>` +
+                        `<div class="hw-domain-group" style="margin-top:2px;">` +
+                        filtered.map(t => {
+                            const val = domainData[t] || '';
+                            const cls = oxDisplayClass(val);
+                            return `<div class="hw-domain-item">
+                                <span class="hw-domain-label">${esc(t)}</span>
+                                <button class="hw-domain-ox ${cls}" data-student="${s.docId}" data-field="${field}" data-domain="${escAttr(t)}"
+                                    onclick="event.stopPropagation(); toggleHwDomainOX('${s.docId}', '${field}', '${escAttr(t)}')">${esc(val || '—')}</button>
+                            </div>`;
+                        }).join('') +
+                        `</div></div>`
+                    );
+                }
+                toggleHtml = sectionHtmlParts.length > 0
+                    ? sectionHtmlParts.join('')
+                    : `<div class="toggle-group"><span style="font-size:12px;color:var(--text-sec);">테스트 항목 없음</span></div>`;
             } else {
-                toggleHtml = tests.map((t, i) => {
-                    const scoreText = t.score != null ? `${t.score}점` : '-';
-                    const resultClass = t.result === '통과' ? 'active-present' : t.result === '재시필요' ? 'active-absent' : 'active-other';
-                    return `<div style="margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                        <span style="font-size:12px;color:var(--text-sec);">${esc(t.title || '테스트'+(i+1))} (${scoreText}/${t.pass_score || '-'})</span>
-                        <span class="toggle-btn ${t.result ? resultClass : ''}" style="pointer-events:none;font-size:11px;">${esc(t.result || '미완료')}</span>
-                    </div>`;
-                }).join('');
+                // L1 테스트 (서브필터 없음): 읽기전용 요약
+                const d1st = rec?.test_domains_1st || {};
+                const d2nd = rec?.test_domains_2nd || {};
+                const { sections } = getStudentTestItems(s.docId);
+                const has1st = Object.values(d1st).some(v => v);
+                const has2nd = Object.values(d2nd).some(v => v);
+
+                if (!has1st && !has2nd) {
+                    toggleHtml = `<div class="toggle-group"><span style="font-size:12px;color:var(--text-sec);">테스트 미입력</span></div>`;
+                } else {
+                    let summaryParts = [];
+                    for (const [round, data] of [['1차', d1st], ['2차', d2nd]]) {
+                        if (!Object.values(data).some(v => v)) continue;
+                        let secParts = [];
+                        for (const [secName, items] of Object.entries(sections)) {
+                            const hasAny = items.some(t => data[t]);
+                            if (!hasAny) continue;
+                            secParts.push(
+                                `<span style="font-size:10px;color:var(--text-sec);">${esc(secName)}</span>` +
+                                `<div class="hw-domain-group">` +
+                                items.map(t => {
+                                    const val = data[t] || '';
+                                    const cls = oxDisplayClass(val);
+                                    return `<div class="hw-domain-item">
+                                        <span class="hw-domain-label">${esc(t)}</span>
+                                        <span class="hw-domain-ox readonly ${cls}">${esc(val || '—')}</span>
+                                    </div>`;
+                                }).join('') +
+                                `</div>`
+                            );
+                        }
+                        summaryParts.push(`<div class="hw-domain-summary"><span class="hw-domain-summary-label">${round}</span><div style="display:flex;flex-direction:column;gap:2px;">${secParts.join('')}</div></div>`);
+                    }
+                    toggleHtml = summaryParts.join('');
+                }
             }
         } else if (currentCategory === 'automation') {
             const autoRec = dailyRecords[s.docId];
@@ -1252,8 +1541,91 @@ function renderStudentDetail(studentId) {
         </div>
     ` : '';
 
+    // 영역 숙제 현황 카드
+    const detailDomains = getStudentDomains(studentId);
+    const d1st = rec.hw_domains_1st || {};
+    const d2nd = rec.hw_domains_2nd || {};
+    const hasAnyDomain = Object.values(d1st).some(v => v) || Object.values(d2nd).some(v => v);
+    const domainHwHtml = `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">domain_verification</span>
+                영역별 숙제
+            </div>
+            ${!hasAnyDomain ? '<div class="detail-card-empty">영역 숙제 미입력</div>' : `
+                <div style="margin-bottom:8px;">
+                    <div style="font-size:12px;font-weight:500;color:var(--text-sec);margin-bottom:4px;">1차</div>
+                    <div class="hw-domain-group">
+                        ${detailDomains.map(d => {
+                            const val = d1st[d] || '';
+                            return `<div class="hw-domain-item">
+                                <span class="hw-domain-label">${esc(d)}</span>
+                                <span class="hw-domain-ox readonly ${oxDisplayClass(val)}">${esc(val || '—')}</span>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size:12px;font-weight:500;color:var(--text-sec);margin-bottom:4px;">2차</div>
+                    <div class="hw-domain-group">
+                        ${detailDomains.map(d => {
+                            const val = d2nd[d] || '';
+                            return `<div class="hw-domain-item">
+                                <span class="hw-domain-label">${esc(d)}</span>
+                                <span class="hw-domain-ox readonly ${oxDisplayClass(val)}">${esc(val || '—')}</span>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </div>
+            `}
+        </div>
+    `;
+
+    // 테스트 OX 현황 카드
+    const { sections: detailTestSections } = getStudentTestItems(studentId);
+    const t1st = rec.test_domains_1st || {};
+    const t2nd = rec.test_domains_2nd || {};
+    const hasAnyTest = Object.values(t1st).some(v => v) || Object.values(t2nd).some(v => v);
+    const domainTestHtml = `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">quiz</span>
+                테스트 현황
+            </div>
+            ${!hasAnyTest ? '<div class="detail-card-empty">테스트 미입력</div>' : `
+                ${['1차', '2차'].map((round, ri) => {
+                    const data = ri === 0 ? t1st : t2nd;
+                    if (!Object.values(data).some(v => v)) return '';
+                    return `<div style="margin-bottom:8px;">
+                        <div style="font-size:12px;font-weight:500;color:var(--text-sec);margin-bottom:4px;">${round}</div>
+                        ${Object.entries(detailTestSections).map(([secName, items]) => {
+                            const hasAny = items.some(t => data[t]);
+                            if (!hasAny) return '';
+                            return `<span style="font-size:10px;color:var(--text-sec);">${esc(secName)}</span>
+                                <div class="hw-domain-group" style="margin-bottom:4px;">
+                                    ${items.map(t => {
+                                        const val = data[t] || '';
+                                        return `<div class="hw-domain-item">
+                                            <span class="hw-domain-label">${esc(t)}</span>
+                                            <span class="hw-domain-ox readonly ${oxDisplayClass(val)}">${esc(val || '—')}</span>
+                                        </div>`;
+                                    }).join('')}
+                                </div>`;
+                        }).join('')}
+                    </div>`;
+                }).join('')}
+            `}
+        </div>
+    `;
+
     cardsContainer.innerHTML = `
         ${reasonHtml}
+
+        <!-- 영역별 숙제 카드 -->
+        ${domainHwHtml}
+
+        <!-- 테스트 현황 카드 -->
+        ${domainTestHtml}
 
         <!-- 미완료 숙제 카드 -->
         <div class="detail-card">
@@ -1448,6 +1820,91 @@ function toggleHomework(studentId, hwIndex, status) {
     }
 }
 
+function oxFieldLabel(field) {
+    const labels = { hw_domains_1st: '숙제1차', hw_domains_2nd: '숙제2차', test_domains_1st: '테스트1차', test_domains_2nd: '테스트2차' };
+    return labels[field] || field;
+}
+
+function toggleHwDomainOX(studentId, field, domain) {
+    // 체크된 학생이 2명 이상이면 값 선택 모달
+    if (checkedItems.size >= 2 && checkedItems.has(studentId)) {
+        showHwDomainBatchModal(field, domain, oxFieldLabel(field));
+        return;
+    }
+
+    applyHwDomainOX(studentId, field, domain);
+    renderSubFilters();
+    if (selectedStudentId === studentId) renderStudentDetail(studentId);
+}
+
+function showHwDomainBatchModal(field, domain, label) {
+    // 1단계: 값 선택
+    document.getElementById('batch-confirm-title').textContent = `${label} · ${domain}`;
+    document.getElementById('batch-confirm-message').innerHTML =
+        `<div style="text-align:center;color:var(--text-sec);font-size:13px;margin-bottom:12px;">${checkedItems.size}명 일괄입력 — 값을 선택하세요</div>` +
+        `<div style="display:flex;gap:10px;justify-content:center;">` +
+            `<button class="hw-domain-ox ox-green" style="width:52px;height:44px;font-size:18px;" onclick="confirmBatchHwDomainOX('${field}','${escAttr(domain)}','O')">O</button>` +
+            `<button class="hw-domain-ox ox-yellow" style="width:52px;height:44px;font-size:18px;" onclick="confirmBatchHwDomainOX('${field}','${escAttr(domain)}','△')">△</button>` +
+            `<button class="hw-domain-ox ox-red" style="width:52px;height:44px;font-size:18px;" onclick="confirmBatchHwDomainOX('${field}','${escAttr(domain)}','X')">X</button>` +
+            `<button class="hw-domain-ox ox-empty" style="width:52px;height:44px;font-size:18px;" onclick="confirmBatchHwDomainOX('${field}','${escAttr(domain)}','')">—</button>` +
+        `</div>`;
+    document.getElementById('batch-confirm-ok').style.display = 'none';
+    document.getElementById('batch-confirm-modal').style.display = 'flex';
+}
+
+function confirmBatchHwDomainOX(field, domain, value) {
+    // 2단계: 확인
+    const label = oxFieldLabel(field);
+    const displayVal = value || '취소(빈값)';
+    document.getElementById('batch-confirm-title').textContent = '일괄입력 확인';
+    document.getElementById('batch-confirm-message').innerHTML =
+        `<p>${checkedItems.size}명의 <b>${esc(label)} · ${esc(domain)}</b> 영역을 <b style="font-size:16px;">${esc(displayVal)}</b>(으)로 저장하시겠습니까?</p>`;
+    const okBtn = document.getElementById('batch-confirm-ok');
+    okBtn.style.display = '';
+    okBtn.textContent = '일괄입력';
+    okBtn.onclick = () => executeBatchHwDomainOX(field, domain, value);
+}
+
+function executeBatchHwDomainOX(field, domain, value) {
+    document.getElementById('batch-confirm-modal').style.display = 'none';
+    // 확인 버튼 원복
+    const okBtn = document.getElementById('batch-confirm-ok');
+    okBtn.textContent = '확인';
+    okBtn.onclick = executeBatchAction;
+
+    for (const sid of checkedItems) {
+        applyHwDomainOX(sid, field, domain, value);
+    }
+    renderSubFilters();
+    renderListPanel();
+    if (selectedStudentId) renderStudentDetail(selectedStudentId);
+}
+
+function applyHwDomainOX(studentId, field, domain, forceValue) {
+    const rec = dailyRecords[studentId] || {};
+    const domainData = { ...(rec[field] || {}) };
+    const currentVal = domainData[domain] || '';
+    const newVal = forceValue !== undefined ? forceValue : nextOXValue(currentVal);
+    domainData[domain] = newVal;
+
+    // 즉시 저장
+    saveImmediately(studentId, { [field]: domainData });
+
+    // 로컬 캐시 업데이트
+    if (!dailyRecords[studentId]) {
+        dailyRecords[studentId] = { student_id: studentId, date: selectedDate };
+    }
+    dailyRecords[studentId][field] = domainData;
+
+    // DOM 직접 업데이트 (버튼만 갱신)
+    const btn = document.querySelector(`.hw-domain-ox[data-student="${studentId}"][data-field="${field}"][data-domain="${CSS.escape(domain)}"]`);
+    if (btn) {
+        btn.classList.remove('ox-green', 'ox-red', 'ox-yellow', 'ox-empty');
+        btn.classList.add(oxDisplayClass(newVal));
+        btn.textContent = newVal || '—';
+    }
+}
+
 // ─── Field change handlers ──────────────────────────────────────────────────
 
 function handleAttendanceChange(studentId, field, value) {
@@ -1509,14 +1966,25 @@ function updateBatchBar() {
             <button class="batch-btn" onclick="confirmBatchAction('attendance', '지각')">지각 처리</button>
             <button class="batch-btn" onclick="confirmBatchAction('attendance', '결석')">결석 처리</button>`;
     } else if (currentCategory === 'homework') {
-        buttons = `
-            <button class="batch-btn" onclick="confirmBatchAction('homework_status', '제출')">제출 확인</button>
-            <button class="batch-btn" onclick="confirmBatchAction('homework_status', '확인완료')">확인완료</button>
-            <button class="batch-btn" onclick="confirmBatchAction('homework_notify', '미제출 통보')">미제출 통보</button>`;
+        const isHwDomain = currentSubFilter.has('hw_1st') || currentSubFilter.has('hw_2nd');
+        if (isHwDomain) {
+            // 1차/2차: OX 버튼 직접 클릭으로 일괄 입력 — 배치 바는 선택 인원만 표시
+            buttons = '';
+        } else {
+            buttons = `
+                <button class="batch-btn" onclick="confirmBatchAction('homework_status', '제출')">제출 확인</button>
+                <button class="batch-btn" onclick="confirmBatchAction('homework_status', '확인완료')">확인완료</button>
+                <button class="batch-btn" onclick="confirmBatchAction('homework_notify', '미제출 통보')">미제출 통보</button>`;
+        }
     } else if (currentCategory === 'test') {
-        buttons = `
-            <button class="batch-btn" onclick="confirmBatchAction('test_result', '통과')">통과 처리</button>
-            <button class="batch-btn" onclick="confirmBatchAction('test_result', '재시필요')">재시 지정</button>`;
+        const isTestDomain = currentSubFilter.has('test_1st') || currentSubFilter.has('test_2nd');
+        if (isTestDomain) {
+            buttons = '';
+        } else {
+            buttons = `
+                <button class="batch-btn" onclick="confirmBatchAction('test_result', '통과')">통과 처리</button>
+                <button class="batch-btn" onclick="confirmBatchAction('test_result', '재시필요')">재시 지정</button>`;
+        }
     } else if (currentCategory === 'automation') {
         buttons = `
             <button class="batch-btn" onclick="confirmBatchAction('attendance', '출석')">출석 처리</button>
@@ -2449,6 +2917,11 @@ window.setSubFilter = setSubFilter;
 window.setBranch = setBranch;
 window.toggleAttendance = toggleAttendance;
 window.toggleHomework = toggleHomework;
+window.toggleHwDomainOX = toggleHwDomainOX;
+window.confirmBatchHwDomainOX = confirmBatchHwDomainOX;
+window.executeBatchHwDomainOX = executeBatchHwDomainOX;
+window.clearClassCodeFilter = clearClassCodeFilter;
+window.setClassCode = setClassCode;
 window.confirmBatchAction = confirmBatchAction;
 window.executeBatchAction = executeBatchAction;
 window.closeSidebar = closeSidebar;
