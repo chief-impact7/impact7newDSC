@@ -1094,8 +1094,7 @@ function renderListPanel() {
                     if (filtered.length === 0) continue;
                     sectionHtmlParts.push(
                         `<div style="margin-top:4px;">` +
-                        `<span style="font-size:11px;color:var(--text-sec);font-weight:500;">${esc(secName)}</span>` +
-                        `<div class="hw-domain-group" style="margin-top:2px;">` +
+                        `<div class="hw-domain-group">` +
                         filtered.map(t => {
                             const val = domainData[t] || '';
                             const cls = oxDisplayClass(val);
@@ -1130,7 +1129,6 @@ function renderListPanel() {
                             const hasAny = items.some(t => data[t]);
                             if (!hasAny) continue;
                             secParts.push(
-                                `<span style="font-size:10px;color:var(--text-sec);">${esc(secName)}</span>` +
                                 `<div class="hw-domain-group">` +
                                 items.map(t => {
                                     const val = data[t] || '';
@@ -1808,18 +1806,26 @@ function renderStudentDetail(studentId) {
 // ─── Toggle handlers (immediate save) ──────────────────────────────────────
 
 function toggleAttendance(studentId, displayStatus) {
+    // 2명 이상 체크된 경우 일괄입력 모달 표시
+    if (checkedItems.size >= 2 && checkedItems.has(studentId)) {
+        showAttendanceBatchModal(displayStatus);
+        return;
+    }
+    applyAttendance(studentId, displayStatus);
+}
+
+function applyAttendance(studentId, displayStatus, force = false, silent = false) {
     // 등원전 → 미확인으로 매핑
     const firestoreStatus = displayStatus === '등원전' ? '미확인' : displayStatus;
 
     const rec = dailyRecords[studentId] || {};
     const currentStatus = rec?.attendance?.status || '미확인';
 
-    // 같은 상태 클릭 → 미확인으로 토글 (해제)
-    const newStatus = currentStatus === firestoreStatus ? '미확인' : firestoreStatus;
+    // force=true 시 강제 설정, 아니면 같은 상태 클릭 → 미확인으로 토글
+    const newStatus = force ? firestoreStatus : (currentStatus === firestoreStatus ? '미확인' : firestoreStatus);
 
     const attendance = { ...(rec.attendance || {}), status: newStatus };
 
-    // 출석/지각 시 실제 등원시간 자동 기록, 등원전으로 되돌리면 삭제
     const updates = { attendance };
     if (newStatus === '출석' || newStatus === '지각') {
         if (!rec?.arrival_time) {
@@ -1829,16 +1835,15 @@ function toggleAttendance(studentId, displayStatus) {
         updates.arrival_time = '';
     }
 
-    // 즉시 저장 (debounce 없이)
     saveImmediately(studentId, updates);
 
-    // 로컬 캐시 즉시 업데이트
     if (!dailyRecords[studentId]) {
         dailyRecords[studentId] = { student_id: studentId, date: selectedDate };
     }
     dailyRecords[studentId].attendance = attendance;
 
-    // DOM에서 해당 학생의 버튼 스타일 직접 업데이트
+    if (silent) return;
+
     const row = document.querySelector(`.list-item[data-id="${studentId}"]`);
     if (row) {
         const newDisplay = newStatus === '미확인' ? '등원전' : newStatus;
@@ -1853,10 +1858,8 @@ function toggleAttendance(studentId, displayStatus) {
         });
     }
 
-    // L2 카운트 갱신
     renderSubFilters();
 
-    // L2 필터 활성 상태에서 학생이 더 이상 현재 필터에 맞지 않으면 페이드아웃
     if (currentCategory === 'attendance' && currentSubFilter.size > 0 && row) {
         const matchesFilter = doesStatusMatchFilter(newStatus, currentSubFilter);
         if (!matchesFilter) {
@@ -1864,7 +1867,6 @@ function toggleAttendance(studentId, displayStatus) {
             row.addEventListener('transitionend', () => {
                 renderListPanel();
             }, { once: true });
-            // transitionend 미발생 시 안전장치
             setTimeout(() => {
                 if (row.classList.contains('fade-out')) renderListPanel();
             }, 500);
@@ -1876,6 +1878,45 @@ function toggleAttendance(studentId, displayStatus) {
     }
 
     if (selectedStudentId === studentId) renderStudentDetail(studentId);
+}
+
+function showAttendanceBatchModal(displayStatus) {
+    const statuses = ['출석', '지각', '결석', '조퇴'];
+    document.getElementById('batch-confirm-title').textContent = '출결 일괄입력';
+    document.getElementById('batch-confirm-message').innerHTML =
+        `<div style="text-align:center;color:var(--text-sec);font-size:13px;margin-bottom:12px;">${checkedItems.size}명 일괄입력 — 값을 선택하세요</div>` +
+        `<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">` +
+        statuses.map(st => {
+            const cls = st === '출석' ? 'active-present' : st === '지각' ? 'active-late' : st === '결석' ? 'active-absent' : 'active-other';
+            return `<button class="toggle-btn ${cls}" style="font-size:14px;padding:8px 16px;" onclick="confirmBatchAttendance('${st}')">${st}</button>`;
+        }).join('') +
+        `</div>`;
+    document.getElementById('batch-confirm-ok').style.display = 'none';
+    document.getElementById('batch-confirm-modal').style.display = 'flex';
+}
+
+function confirmBatchAttendance(status) {
+    document.getElementById('batch-confirm-title').textContent = '출결 일괄입력 확인';
+    document.getElementById('batch-confirm-message').innerHTML =
+        `<p>${checkedItems.size}명을 <b style="font-size:16px;">${esc(status)}</b>(으)로 처리하시겠습니까?</p>`;
+    const okBtn = document.getElementById('batch-confirm-ok');
+    okBtn.style.display = '';
+    okBtn.textContent = '일괄입력';
+    okBtn.onclick = () => executeBatchAttendance(status);
+}
+
+function executeBatchAttendance(status) {
+    document.getElementById('batch-confirm-modal').style.display = 'none';
+    const okBtn = document.getElementById('batch-confirm-ok');
+    okBtn.textContent = '확인';
+    okBtn.onclick = executeBatchAction;
+
+    for (const sid of checkedItems) {
+        applyAttendance(sid, status, true, true); // force + silent
+    }
+    renderSubFilters();
+    renderListPanel();
+    if (selectedStudentId) renderStudentDetail(selectedStudentId);
 }
 
 // 학생의 출결 상태가 현재 L2 필터에 매칭되는지 판별
@@ -2049,10 +2090,7 @@ function updateBatchBar() {
 
     let buttons = '';
     if (currentCategory === 'attendance') {
-        buttons = `
-            <button class="batch-btn" onclick="confirmBatchAction('attendance', '출석')">출석 처리</button>
-            <button class="batch-btn" onclick="confirmBatchAction('attendance', '지각')">지각 처리</button>
-            <button class="batch-btn" onclick="confirmBatchAction('attendance', '결석')">결석 처리</button>`;
+        buttons = ''; // 출결 일괄입력은 토글버튼 직접 클릭 방식 사용
     } else if (currentCategory === 'homework') {
         const isHwDomain = currentSubFilter.has('hw_1st') || currentSubFilter.has('hw_2nd');
         if (isHwDomain) {
@@ -3004,6 +3042,8 @@ window.setCategory = setCategory;
 window.setSubFilter = setSubFilter;
 window.setBranch = setBranch;
 window.toggleAttendance = toggleAttendance;
+window.confirmBatchAttendance = confirmBatchAttendance;
+window.executeBatchAttendance = executeBatchAttendance;
 window.toggleHomework = toggleHomework;
 window.toggleHwDomainOX = toggleHwDomainOX;
 window.confirmBatchHwDomainOX = confirmBatchHwDomainOX;
