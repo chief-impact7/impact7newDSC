@@ -525,7 +525,7 @@ function getSubFilterCount(filterKey) {
     if (currentCategory === 'test') {
         switch (filterKey) {
             case 'all': return todayStudents.length;
-            case 'scheduled': return todayStudents.filter(s => dailyRecords[s.docId]?.tests?.some(t => !t.score && t.score !== 0)).length;
+            case 'scheduled': return todayStudents.filter(s => dailyRecords[s.docId]?.tests?.some(t => t.score === undefined || t.score === null)).length;
             case 'pass': return todayStudents.filter(s => dailyRecords[s.docId]?.tests?.some(t => t.result === '통과')).length;
             case 'retake': return todayStudents.filter(s => dailyRecords[s.docId]?.tests?.some(t => t.result === '재시필요')).length;
             default: return 0;
@@ -608,7 +608,7 @@ function getFilteredStudents() {
                 const rec = dailyRecords[s.docId];
                 for (const f of currentSubFilter) {
                     if (f === 'test_1st' || f === 'test_2nd') return true; // 차수 필터는 추후 확장
-                    if (f === 'scheduled' && rec?.tests?.some(t => !t.score && t.score !== 0)) return true;
+                    if (f === 'scheduled' && rec?.tests?.some(t => t.score === undefined || t.score === null)) return true;
                     if (f === 'pass' && rec?.tests?.some(t => t.result === '통과')) return true;
                     if (f === 'retake' && rec?.tests?.some(t => t.result === '재시필요')) return true;
                 }
@@ -798,13 +798,12 @@ function renderClassDetail(classCode) {
     document.getElementById('detail-content').style.display = '';
 
     const dayName = getDayName(selectedDate);
-    const classStudents = allStudents.filter(s =>
+    let classStudents = allStudents.filter(s =>
         s.status !== '퇴원' &&
         s.enrollments.some(e => enrollmentCode(e) === classCode && e.day.includes(dayName))
     );
     if (selectedBranch) {
-        classStudents.splice(0, classStudents.length,
-            ...classStudents.filter(s => branchFromStudent(s) === selectedBranch));
+        classStudents = classStudents.filter(s => branchFromStudent(s) === selectedBranch);
     }
     const domains = getClassDomains(classCode);
     const testSections = getClassTestSections(classCode);
