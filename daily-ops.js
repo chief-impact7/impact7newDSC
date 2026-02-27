@@ -1179,7 +1179,7 @@ function renderScheduledVisitList() {
         const completedClass = isCompleted ? 'visit-completed' : '';
         const clickHandler = v.studentId
             ? `onclick="selectedStudentId='${escAttr(v.studentId)}'; renderStudentDetail('${escAttr(v.studentId)}'); document.querySelectorAll('.list-item').forEach(el=>el.classList.remove('active')); this.classList.add('active');"`
-            : '';
+            : (v.source === 'temp' ? `onclick="renderTempAttendanceDetail('${escAttr(v.docId)}'); document.querySelectorAll('.list-item').forEach(el=>el.classList.remove('active')); this.classList.add('active');"` : '');
         const guestBadge = !v.studentId ? '<span class="visit-guest-badge">비등록</span>' : '';
         const timeDisplay = v.time ? formatTime12h(v.time) : '';
         const completedTag = isCompleted ? '<span class="visit-source-badge" style="background:#059669;">완료</span>' : '';
@@ -1187,7 +1187,7 @@ function renderScheduledVisitList() {
             ? `<button class="toggle-btn active-present" style="padding:2px 10px;font-size:12px;min-width:auto;" onclick="event.stopPropagation(); completeScheduledVisit('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">확인</button>`
             : '';
 
-        return `<div class="list-item visit-item ${completedClass}" ${clickHandler} style="${v.studentId ? 'cursor:pointer;' : ''}">
+        return `<div class="list-item visit-item ${completedClass}" ${clickHandler} style="${(v.studentId || v.source === 'temp') ? 'cursor:pointer;' : ''}">
             <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
                 <span class="item-title" style="font-weight:500;min-width:60px;">${esc(v.name)}</span>
                 <span class="visit-source-badge" style="background:${v.sourceColor};">${esc(v.sourceLabel)}</span>
@@ -2196,7 +2196,7 @@ function renderPendingTasksCard(studentId, tasks) {
                     <span class="pending-task-source">${esc(sourceLabel)} · ${esc(t.source_date || '')}</span>
                 </div>
                 <div class="pending-task-detail">${detail}</div>
-                <div class="pending-task-meta">담당: ${esc(t.handler || '')} · 입력: ${esc(t.created_by || '')}</div>
+                <div class="pending-task-meta">담당: ${esc(t.handler || '')}</div>
                 <div class="pending-task-actions">
                     <button class="hw-fail-type-btn active" style="background:var(--success);border-color:var(--success);font-size:11px;"
                         onclick="${completeFunc}('${escAttr(t.docId)}', '${escAttr(studentId)}')">
@@ -2978,6 +2978,76 @@ async function confirmDeparture(studentId) {
 }
 
 window.confirmDeparture = confirmDeparture;
+
+// ─── Temp Attendance Detail Panel ────────────────────────────────────────────
+
+function renderTempAttendanceDetail(docId) {
+    const ta = tempAttendances.find(t => t.docId === docId);
+    if (!ta) return;
+
+    document.getElementById('detail-empty').style.display = 'none';
+    document.getElementById('detail-content').style.display = '';
+
+    // 프로필 헤더
+    document.getElementById('profile-avatar').textContent = (ta.name || '?')[0];
+    document.getElementById('detail-name').textContent = ta.name || '';
+    document.getElementById('profile-tags').innerHTML = `
+        <span class="tag" style="background:#7c3aed;color:#fff;">임시출석</span>
+        <span class="tag tag-pending">비등록</span>
+    `;
+
+    // 카드들
+    const cardsContainer = document.getElementById('detail-cards');
+
+    // 입력일시 포맷
+    let createdAtStr = '';
+    if (ta.created_at) {
+        const ts = ta.created_at.toDate ? ta.created_at.toDate() : new Date(ta.created_at);
+        createdAtStr = `${ts.getFullYear()}-${String(ts.getMonth()+1).padStart(2,'0')}-${String(ts.getDate()).padStart(2,'0')} ${String(ts.getHours()).padStart(2,'0')}:${String(ts.getMinutes()).padStart(2,'0')}`;
+    }
+
+    // 이메일에서 아이디만 추출 (@gw.impact7.kr, @impact7.kr 제거)
+    const createdById = (ta.created_by || '').replace(/@(gw\.)?impact7\.kr$/, '');
+
+    const infoRows = [
+        { icon: 'apartment', label: '소속', value: ta.branch },
+        { icon: 'school', label: '학교', value: ta.school },
+        { icon: 'bar_chart', label: '학부', value: ta.level },
+        { icon: 'grade', label: '학년', value: ta.grade },
+        { icon: 'phone_android', label: '학생 전화', value: ta.student_phone },
+        { icon: 'phone', label: '학부모 전화', value: ta.parent_phone_1 },
+        { icon: 'calendar_today', label: '예정 날짜', value: ta.temp_date },
+        { icon: 'schedule', label: '예정 시간', value: ta.temp_time ? formatTime12h(ta.temp_time) : '' },
+        { icon: 'edit_calendar', label: '입력일시', value: createdAtStr },
+        { icon: 'person', label: '입력', value: createdById },
+    ].filter(r => r.value);
+
+    const memoHtml = ta.memo ? `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:var(--primary);">sticky_note_2</span> 메모
+            </div>
+            <div style="padding:8px 0;color:var(--text-pri);white-space:pre-wrap;font-size:14px;">${esc(ta.memo)}</div>
+        </div>
+    ` : '';
+
+    cardsContainer.innerHTML = `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:#7c3aed;">info</span> 임시출석 정보
+            </div>
+            ${infoRows.map(r => `
+                <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
+                    <span class="material-symbols-outlined" style="font-size:18px;color:var(--text-sec);">${r.icon}</span>
+                    <span style="font-size:13px;color:var(--text-sec);min-width:80px;">${esc(r.label)}</span>
+                    <span style="font-size:14px;color:var(--text-pri);font-weight:500;">${esc(r.value)}</span>
+                </div>
+            `).join('')}
+        </div>
+        ${memoHtml}
+    `;
+}
+window.renderTempAttendanceDetail = renderTempAttendanceDetail;
 
 // ─── Student Detail Panel ───────────────────────────────────────────────────
 
