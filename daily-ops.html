@@ -552,15 +552,51 @@
                     <span class="material-symbols-outlined">close</span>
                 </button>
             </div>
+            <div class="parent-msg-tabs">
+                <button class="parent-msg-tab active" id="parent-msg-tab-ai" onclick="switchParentMsgTab('ai')">
+                    <span class="material-symbols-outlined" style="font-size:16px;">auto_awesome</span>
+                    AI 작성
+                </button>
+                <button class="parent-msg-tab" id="parent-msg-tab-manual" onclick="switchParentMsgTab('manual')">
+                    <span class="material-symbols-outlined" style="font-size:16px;">edit_note</span>
+                    직접 작성
+                </button>
+            </div>
             <div class="parent-msg-body" id="parent-msg-body">
-                <div class="parent-msg-loading" id="parent-msg-loading">
-                    <div class="spinner"></div>
-                    Gemini가 알림 메시지를 작성하고 있습니다...
+                <!-- AI 탭 -->
+                <div id="parent-msg-ai-panel">
+                    <div class="parent-msg-loading" id="parent-msg-loading" style="display:none;">
+                        <div class="spinner"></div>
+                        Gemini가 알림 메시지를 작성하고 있습니다...
+                    </div>
+                    <div id="parent-msg-prompt-section" class="parent-msg-prompt-section">
+                        <button class="parent-msg-prompt-toggle" onclick="togglePromptEditor()">
+                            <span class="material-symbols-outlined" style="font-size:16px;">tune</span>
+                            프롬프트 설정
+                            <span class="material-symbols-outlined parent-msg-prompt-arrow" id="prompt-arrow" style="font-size:16px;">expand_more</span>
+                        </button>
+                        <div id="parent-msg-prompt-editor" style="display:none;">
+                            <textarea class="parent-msg-prompt-textarea" id="parent-msg-prompt"
+                                placeholder="AI에게 전달할 지시사항을 입력하세요..."></textarea>
+                            <div style="display:flex;gap:6px;margin-top:6px;">
+                                <button class="parent-msg-btn-small" onclick="resetPromptToDefault()">기본값 복원</button>
+                                <button class="parent-msg-btn-small primary" onclick="saveCustomPrompt()">저장</button>
+                            </div>
+                        </div>
+                    </div>
+                    <textarea class="parent-msg-textarea" id="parent-msg-text"
+                        placeholder="AI 생성 버튼을 눌러 메시지를 작성하세요..."></textarea>
+                    <div class="parent-msg-info">
+                        * AI가 생성한 내용입니다. 발송 전 반드시 확인해 주세요.
+                    </div>
                 </div>
-                <textarea class="parent-msg-textarea" id="parent-msg-text" style="display:none;"
-                    placeholder="생성된 메시지가 여기에 표시됩니다..."></textarea>
-                <div class="parent-msg-info" id="parent-msg-info" style="display:none;">
-                    * AI가 생성한 내용입니다. 발송 전 반드시 확인해 주세요.
+                <!-- 직접 작성 탭 -->
+                <div id="parent-msg-manual-panel" style="display:none;">
+                    <div class="parent-msg-template-info">
+                        학생 데이터가 자동으로 채워집니다. 내용을 수정한 후 복사하세요.
+                    </div>
+                    <textarea class="parent-msg-textarea" id="parent-msg-manual-text"
+                        placeholder="직접 메시지를 작성하세요..."></textarea>
                 </div>
             </div>
             <div class="parent-msg-footer">
@@ -568,11 +604,11 @@
                     <span class="material-symbols-outlined" style="font-size:14px;">check</span>
                     복사됨
                 </span>
-                <button class="parent-msg-btn-regen" onclick="regenerateParentMessage()" id="parent-msg-regen-btn" style="display:none;">
+                <button class="parent-msg-btn-regen" onclick="regenerateParentMessage()" id="parent-msg-regen-btn">
                     <span class="material-symbols-outlined" style="font-size:16px;">refresh</span>
-                    다시 작성
+                    AI 생성
                 </button>
-                <button class="parent-msg-btn-copy" onclick="copyParentMessage()" id="parent-msg-copy-btn" style="display:none;">
+                <button class="parent-msg-btn-copy" onclick="copyParentMessage()">
                     <span class="material-symbols-outlined" style="font-size:16px;">content_copy</span>
                     복사
                 </button>

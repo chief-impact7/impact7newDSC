@@ -4588,6 +4588,56 @@ window.expandMemo = expandMemo;
 // ─── 학부모 알림 메시지 생성 ────────────────────────────────────────────────
 
 let parentMsgStudentId = null;
+let parentMsgMode = 'ai'; // 'ai' | 'manual'
+
+const DEFAULT_PARENT_MSG_PROMPT = `당신은 한국 영어학원 "임팩트7" 선생님입니다. 아래 학생의 하루 학습 데이터를 바탕으로 학부모님께 보내는 문자 메시지를 작성해주세요.
+
+규칙:
+- 존댓말 사용, 간결하고 따뜻한 톤
+- 이모지 적절히 사용 (1-2개)
+- O는 통과, X는 미통과, △는 부분통과로 해석
+- 긍정적인 면 먼저 언급, 개선 필요한 부분은 부드럽게 전달
+- 미통과 항목이 있으면 후속 조치 안내
+- 귀가 완료면 귀가 시간 안내
+- 핵심만 담아 200자 이내
+- "안녕하세요, {name} 학부모님" 으로 시작
+- 학원명 "임팩트7"은 마지막 인사에만 포함`;
+
+function getCustomPrompt() {
+    try {
+        return localStorage.getItem('parent_msg_prompt') || DEFAULT_PARENT_MSG_PROMPT;
+    } catch { return DEFAULT_PARENT_MSG_PROMPT; }
+}
+
+function saveCustomPrompt() {
+    const textarea = document.getElementById('parent-msg-prompt');
+    if (textarea) {
+        localStorage.setItem('parent_msg_prompt', textarea.value);
+        showSaveIndicator('saved');
+    }
+}
+
+function resetPromptToDefault() {
+    const textarea = document.getElementById('parent-msg-prompt');
+    if (textarea) {
+        textarea.value = DEFAULT_PARENT_MSG_PROMPT;
+        localStorage.removeItem('parent_msg_prompt');
+        showSaveIndicator('saved');
+    }
+}
+
+function togglePromptEditor() {
+    const editor = document.getElementById('parent-msg-prompt-editor');
+    const arrow = document.getElementById('prompt-arrow');
+    if (!editor) return;
+    const isHidden = editor.style.display === 'none';
+    editor.style.display = isHidden ? '' : 'none';
+    arrow?.classList.toggle('expanded', isHidden);
+    if (isHidden) {
+        const textarea = document.getElementById('parent-msg-prompt');
+        if (textarea) textarea.value = getCustomPrompt();
+    }
+}
 
 function collectStudentDaySummary(studentId) {
     const student = allStudents.find(s => s.docId === studentId);
@@ -4646,45 +4696,116 @@ async function generateParentMessage(studentId) {
     const summary = collectStudentDaySummary(studentId);
     if (!summary) return '학생 정보를 찾을 수 없습니다.';
 
-    const prompt = `당신은 한국 영어학원 "임팩트7" 선생님입니다. 아래 학생의 하루 학습 데이터를 바탕으로 학부모님께 보내는 문자 메시지를 작성해주세요.
+    const customPrompt = getCustomPrompt().replace('{name}', summary.name);
+    const fullPrompt = `${customPrompt}\n\n학생 데이터:\n${JSON.stringify(summary, null, 2)}`;
 
-규칙:
-- 존댓말 사용, 간결하고 따뜻한 톤
-- 이모지 적절히 사용 (1-2개)
-- O는 통과, X는 미통과, △는 부분통과로 해석
-- 긍정적인 면 먼저 언급, 개선 필요한 부분은 부드럽게 전달
-- 미통과 항목이 있으면 후속 조치 안내
-- 귀가 완료면 귀가 시간 안내
-- 핵심만 담아 200자 이내
-- "안녕하세요, ${summary.name} 학부모님" 으로 시작
-- 학원명 "임팩트7"은 마지막 인사에만 포함
-
-학생 데이터:
-${JSON.stringify(summary, null, 2)}`;
-
-    const result = await geminiModel.generateContent(prompt);
+    const result = await geminiModel.generateContent(fullPrompt);
     return result.response.text();
+}
+
+function generateManualTemplate(studentId) {
+    const summary = collectStudentDaySummary(studentId);
+    if (!summary) return '';
+
+    const lines = [`안녕하세요, ${summary.name} 학부모님.`];
+    lines.push(`[${summary.date}] 수업 결과를 안내드립니다.`);
+    lines.push('');
+
+    // 출결
+    const att = summary.attendance === '미확인' ? '등원전' : summary.attendance;
+    lines.push(`▸ 출결: ${att}${summary.arrival_time ? ' (' + formatTime12h(summary.arrival_time) + ')' : ''}`);
+
+    // 숙제
+    const hw1 = Object.entries(summary.homework_1st);
+    if (hw1.length > 0) {
+        lines.push(`▸ 숙제 1차: ${hw1.map(([d, v]) => d + ' ' + v).join(', ')}`);
+    }
+    const hw2 = Object.entries(summary.homework_2nd);
+    if (hw2.length > 0) {
+        lines.push(`▸ 숙제 2차: ${hw2.map(([d, v]) => d + ' ' + v).join(', ')}`);
+    }
+
+    // 테스트
+    const t1 = Object.entries(summary.test_1st);
+    if (t1.length > 0) {
+        lines.push(`▸ 테스트 1차: ${t1.map(([t, v]) => t + ' ' + v).join(', ')}`);
+    }
+    const t2 = Object.entries(summary.test_2nd);
+    if (t2.length > 0) {
+        lines.push(`▸ 테스트 2차: ${t2.map(([t, v]) => t + ' ' + v).join(', ')}`);
+    }
+
+    // 미통과 후속 조치
+    const hwActions = Object.entries(summary.hw_fail_actions);
+    const testActions = Object.entries(summary.test_fail_actions);
+    if (hwActions.length > 0 || testActions.length > 0) {
+        lines.push('');
+        lines.push('▸ 후속 조치:');
+        hwActions.forEach(([d, a]) => {
+            if (a.type === '등원') lines.push(`  - ${d}: ${a.scheduled_date} 등원 예정`);
+            else if (a.type === '대체숙제') lines.push(`  - ${d}: 대체숙제 "${a.alt_hw || ''}"`);
+        });
+        testActions.forEach(([t, a]) => {
+            if (a.type === '등원') lines.push(`  - ${t}: ${a.scheduled_date} 등원 예정`);
+            else if (a.type === '대체숙제') lines.push(`  - ${t}: 대체숙제 "${a.alt_hw || ''}"`);
+        });
+    }
+
+    // 귀가
+    if (summary.departure?.status === '귀가') {
+        lines.push('');
+        lines.push(`▸ 귀가: ${formatTime12h(summary.departure.time || '')}`);
+    }
+
+    lines.push('');
+    lines.push('감사합니다. 임팩트7');
+
+    return lines.join('\n');
+}
+
+function switchParentMsgTab(mode) {
+    parentMsgMode = mode;
+    document.getElementById('parent-msg-tab-ai').classList.toggle('active', mode === 'ai');
+    document.getElementById('parent-msg-tab-manual').classList.toggle('active', mode === 'manual');
+    document.getElementById('parent-msg-ai-panel').style.display = mode === 'ai' ? '' : 'none';
+    document.getElementById('parent-msg-manual-panel').style.display = mode === 'manual' ? '' : 'none';
+
+    if (mode === 'manual' && parentMsgStudentId) {
+        const manualText = document.getElementById('parent-msg-manual-text');
+        if (manualText && !manualText.value) {
+            manualText.value = generateManualTemplate(parentMsgStudentId);
+        }
+    }
 }
 
 async function openParentMessageModal(studentId) {
     parentMsgStudentId = studentId;
+    parentMsgMode = 'ai';
 
     document.getElementById('parent-msg-modal').style.display = '';
+    document.getElementById('parent-msg-tab-ai').classList.add('active');
+    document.getElementById('parent-msg-tab-manual').classList.remove('active');
+    document.getElementById('parent-msg-ai-panel').style.display = '';
+    document.getElementById('parent-msg-manual-panel').style.display = 'none';
     document.getElementById('parent-msg-loading').style.display = '';
     document.getElementById('parent-msg-text').style.display = 'none';
-    document.getElementById('parent-msg-info').style.display = 'none';
-    document.getElementById('parent-msg-copy-btn').style.display = 'none';
-    document.getElementById('parent-msg-regen-btn').style.display = 'none';
     document.getElementById('parent-msg-copied').style.display = 'none';
+
+    // 프롬프트 에디터 접기
+    const editor = document.getElementById('parent-msg-prompt-editor');
+    if (editor) editor.style.display = 'none';
+    const arrow = document.getElementById('prompt-arrow');
+    if (arrow) arrow.classList.remove('expanded');
+
+    // Manual 초기화
+    const manualText = document.getElementById('parent-msg-manual-text');
+    if (manualText) manualText.value = '';
 
     try {
         const message = await generateParentMessage(studentId);
         document.getElementById('parent-msg-text').value = message;
         document.getElementById('parent-msg-loading').style.display = 'none';
         document.getElementById('parent-msg-text').style.display = '';
-        document.getElementById('parent-msg-info').style.display = '';
-        document.getElementById('parent-msg-copy-btn').style.display = '';
-        document.getElementById('parent-msg-regen-btn').style.display = '';
     } catch (err) {
         console.error('메시지 생성 실패:', err);
         document.getElementById('parent-msg-loading').innerHTML = `
@@ -4695,12 +4816,35 @@ async function openParentMessageModal(studentId) {
 
 async function regenerateParentMessage() {
     if (!parentMsgStudentId) return;
-    openParentMessageModal(parentMsgStudentId);
+    if (parentMsgMode === 'ai') {
+        document.getElementById('parent-msg-loading').style.display = '';
+        document.getElementById('parent-msg-loading').innerHTML = `
+            <div class="spinner"></div>
+            Gemini가 알림 메시지를 작성하고 있습니다...`;
+        document.getElementById('parent-msg-text').style.display = 'none';
+        try {
+            const message = await generateParentMessage(parentMsgStudentId);
+            document.getElementById('parent-msg-text').value = message;
+            document.getElementById('parent-msg-loading').style.display = 'none';
+            document.getElementById('parent-msg-text').style.display = '';
+        } catch (err) {
+            console.error('메시지 재생성 실패:', err);
+            document.getElementById('parent-msg-loading').innerHTML = `
+                <span class="material-symbols-outlined" style="font-size:28px;color:var(--danger);">error</span>
+                메시지 생성에 실패했습니다.<br><span style="font-size:11px;">${esc(err.message)}</span>`;
+        }
+    } else {
+        const manualText = document.getElementById('parent-msg-manual-text');
+        if (manualText) manualText.value = generateManualTemplate(parentMsgStudentId);
+    }
 }
 
 function copyParentMessage() {
-    const textarea = document.getElementById('parent-msg-text');
-    navigator.clipboard.writeText(textarea.value).then(() => {
+    const textEl = parentMsgMode === 'ai'
+        ? document.getElementById('parent-msg-text')
+        : document.getElementById('parent-msg-manual-text');
+    if (!textEl) return;
+    navigator.clipboard.writeText(textEl.value).then(() => {
         const copied = document.getElementById('parent-msg-copied');
         copied.style.display = '';
         setTimeout(() => { copied.style.display = 'none'; }, 2000);
@@ -4710,6 +4854,10 @@ function copyParentMessage() {
 window.openParentMessageModal = openParentMessageModal;
 window.regenerateParentMessage = regenerateParentMessage;
 window.copyParentMessage = copyParentMessage;
+window.switchParentMsgTab = switchParentMsgTab;
+window.togglePromptEditor = togglePromptEditor;
+window.saveCustomPrompt = saveCustomPrompt;
+window.resetPromptToDefault = resetPromptToDefault;
 
 // ─── 등원예정 완료 처리 ────────────────────────────────────────────────────
 
