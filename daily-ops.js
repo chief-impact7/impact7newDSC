@@ -530,7 +530,8 @@ function renderSubFilters() {
             { key: 'present', label: '출석' },
             { key: 'late', label: '지각' },
             { key: 'absent', label: '결석' },
-            { key: 'other', label: '기타' }
+            { key: 'other', label: '기타' },
+            { key: 'departure_check', label: '귀가점검' }
         ],
         homework: [
             { key: 'hw_1st', label: '1차' },
@@ -827,6 +828,10 @@ function getSubFilterCount(filterKey) {
                 const st = dailyRecords[s.docId]?.attendance?.status;
                 return st && !['미확인', '출석', '지각', '결석'].includes(st);
             }).length);
+            case 'departure_check': {
+                const departed = todayStudents.filter(s => dailyRecords[s.docId]?.departure?.status === '귀가').length;
+                return { count: departed, total };
+            }
             default: return r(0);
         }
     }
@@ -1198,10 +1203,88 @@ function renderScheduledVisitList() {
     }).join('');
 }
 
+function renderDepartureCheckList() {
+    const dayName = getDayName(selectedDate);
+    let students = allStudents.filter(s =>
+        s.enrollments.some(e => e.day.includes(dayName))
+    );
+    if (selectedBranch) students = students.filter(s => branchFromStudent(s) === selectedBranch);
+    if (selectedClassCode) students = students.filter(s => s.enrollments.some(e => enrollmentCode(e) === selectedClassCode));
+    if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        students = students.filter(s =>
+            s.name?.toLowerCase().includes(q) ||
+            s.enrollments.some(e => enrollmentCode(e).toLowerCase().includes(q))
+        );
+    }
+
+    // 정렬: 미귀가 먼저, 그 안에서 진행률 높은순
+    students.sort((a, b) => {
+        const depA = dailyRecords[a.docId]?.departure?.status === '귀가' ? 1 : 0;
+        const depB = dailyRecords[b.docId]?.departure?.status === '귀가' ? 1 : 0;
+        if (depA !== depB) return depA - depB;
+        const checkA = getStudentChecklistStatus(a.docId);
+        const checkB = getStudentChecklistStatus(b.docId);
+        const pctA = checkA.filter(i => i.done).length / (checkA.length || 1);
+        const pctB = checkB.filter(i => i.done).length / (checkB.length || 1);
+        return pctB - pctA; // 진행률 높은순
+    });
+
+    const container = document.getElementById('list-items');
+    const countEl = document.getElementById('list-count');
+    renderFilterChips();
+    countEl.textContent = `${students.length}명`;
+
+    if (students.length === 0) {
+        container.innerHTML = `<div class="empty-state">
+            <span class="material-symbols-outlined">fact_check</span>
+            <p>해당하는 학생이 없습니다</p>
+        </div>`;
+        return;
+    }
+
+    container.innerHTML = students.map(s => {
+        const items = getStudentChecklistStatus(s.docId);
+        const doneCount = items.filter(i => i.done).length;
+        const total = items.length;
+        const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+        const isDeparted = dailyRecords[s.docId]?.departure?.status === '귀가';
+        const isActive = s.docId === selectedStudentId ? 'active' : '';
+
+        let statusTag = '';
+        if (isDeparted) {
+            statusTag = '<span class="departure-status-tag departed">귀가</span>';
+        } else if (doneCount > 0) {
+            statusTag = '<span class="departure-status-tag in-progress">진행중</span>';
+        } else {
+            statusTag = '<span class="departure-status-tag not-started">대기</span>';
+        }
+
+        return `<div class="list-item departure-list-item ${isActive}" data-id="${s.docId}"
+            onclick="selectedStudentId='${escAttr(s.docId)}'; renderStudentDetail('${escAttr(s.docId)}'); document.querySelectorAll('.list-item').forEach(el=>el.classList.remove('active')); this.classList.add('active');"
+            style="cursor:pointer;${isDeparted ? 'opacity:0.5;' : ''}">
+            <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+                <span style="font-weight:500;min-width:56px;">${esc(s.name)}</span>
+                ${statusTag}
+                <span style="font-size:11px;color:var(--text-sec);">${doneCount}/${total}</span>
+            </div>
+            <div class="departure-list-progress" style="width:60px;">
+                <div class="departure-list-progress-fill ${pct === 100 ? 'complete' : ''}" style="width:${pct}%"></div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
 function renderListPanel() {
     // 등원예정 서브필터 활성 시 통합 리스트로 전환
     if (currentCategory === 'attendance' && currentSubFilter.has('scheduled_visit')) {
         renderScheduledVisitList();
+        return;
+    }
+
+    // 귀가점검 서브필터 활성 시 귀가 체크 리스트로 전환
+    if (currentCategory === 'attendance' && currentSubFilter.has('departure_check')) {
+        renderDepartureCheckList();
         return;
     }
 
@@ -2699,6 +2782,195 @@ function renderNextHwClassDetail(classCode) {
 }
 
 
+// ─── Checklist Status ────────────────────────────────────────────────────────
+
+function getStudentChecklistStatus(studentId) {
+    const rec = dailyRecords[studentId] || {};
+    const items = [];
+
+    // 1. 출석
+    const attStatus = rec?.attendance?.status || '미확인';
+    items.push({
+        key: 'attendance',
+        label: '출석',
+        done: attStatus !== '미확인'
+    });
+
+    // 2. 숙제 1차
+    const domains = getStudentDomains(studentId);
+    const hw1st = rec.hw_domains_1st || {};
+    const hw1stFilled = domains.some(d => hw1st[d]);
+    items.push({
+        key: 'hw_1st',
+        label: '숙제 1차',
+        done: hw1stFilled
+    });
+
+    // 3. 숙제 2차 (1차에서 미통과 있을 때만)
+    const hw1stFails = domains.filter(d => hw1st[d] && hw1st[d] !== 'O');
+    if (hw1stFails.length > 0) {
+        const hw2nd = rec.hw_domains_2nd || {};
+        const hw2ndFilled = hw1stFails.every(d => hw2nd[d]);
+        items.push({
+            key: 'hw_2nd',
+            label: '숙제 2차',
+            done: hw2ndFilled
+        });
+    }
+
+    // 4. 테스트 1차
+    const { flat: testItems } = getStudentTestItems(studentId);
+    const t1st = rec.test_domains_1st || {};
+    const t1stFilled = testItems.some(t => t1st[t]);
+    if (testItems.length > 0) {
+        items.push({
+            key: 'test_1st',
+            label: '테스트 1차',
+            done: t1stFilled
+        });
+    }
+
+    // 5. 테스트 2차 (1차에서 미통과 있을 때만)
+    const t1stFails = testItems.filter(t => t1st[t] && t1st[t] !== 'O');
+    if (t1stFails.length > 0) {
+        const t2nd = rec.test_domains_2nd || {};
+        const t2ndFilled = t1stFails.every(t => t2nd[t]);
+        items.push({
+            key: 'test_2nd',
+            label: '테스트 2차',
+            done: t2ndFilled
+        });
+    }
+
+    // 6. 미통과 처리 (숙제 2차 X/△ 있으면)
+    const hw2nd = rec.hw_domains_2nd || {};
+    const hwFailDomains = domains.filter(d => hw2nd[d] && hw2nd[d] !== 'O');
+    const t2nd = rec.test_domains_2nd || {};
+    const testFailItems = testItems.filter(t => t2nd[t] && t2nd[t] !== 'O');
+    if (hwFailDomains.length > 0 || testFailItems.length > 0) {
+        const hwAction = rec.hw_fail_action || {};
+        const testAction = rec.test_fail_action || {};
+        const allHandled = hwFailDomains.every(d => hwAction[d]?.type) && testFailItems.every(t => testAction[t]?.type);
+        items.push({
+            key: 'fail_action',
+            label: '미통과 처리',
+            done: allHandled
+        });
+    }
+
+    // 7. 귀가
+    items.push({
+        key: 'departure',
+        label: '귀가',
+        done: rec.departure?.status === '귀가'
+    });
+
+    return items;
+}
+
+function renderChecklistCard(studentId) {
+    const items = getStudentChecklistStatus(studentId);
+    const doneCount = items.filter(i => i.done).length;
+    const total = items.length;
+    const allDone = doneCount === total;
+    const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+
+    const rec = dailyRecords[studentId] || {};
+    const departure = rec.departure || {};
+    const isDeparted = departure.status === '귀가';
+
+    // Non-departure items that are not done
+    const pendingItems = items.filter(i => !i.done && i.key !== 'departure');
+    const canDepart = pendingItems.length === 0;
+
+    let departureSection = '';
+    if (isDeparted) {
+        departureSection = `
+            <button class="departure-btn departed" disabled>
+                <span class="material-symbols-outlined" style="font-size:16px;">check_circle</span>
+                귀가 완료 (${formatTime12h(departure.time || '')})
+            </button>`;
+    } else if (canDepart) {
+        departureSection = `
+            <button class="departure-btn ready" onclick="confirmDeparture('${escAttr(studentId)}')">
+                <span class="material-symbols-outlined" style="font-size:16px;">logout</span>
+                귀가 확인
+            </button>`;
+    } else {
+        departureSection = `
+            <button class="departure-btn not-ready" onclick="confirmDeparture('${escAttr(studentId)}')">
+                <span class="material-symbols-outlined" style="font-size:16px;">logout</span>
+                귀가 확인 (미완료 ${pendingItems.length}건)
+            </button>`;
+    }
+
+    return `
+        <div class="checklist-card">
+            <div class="checklist-progress">
+                <div class="checklist-progress-bar">
+                    <div class="checklist-progress-fill ${allDone ? 'complete' : ''}" style="width:${pct}%"></div>
+                </div>
+                <span class="checklist-progress-text">${doneCount}/${total}</span>
+            </div>
+            <div class="checklist-items">
+                ${items.filter(i => i.key !== 'departure').map(i => `
+                    <span class="checklist-item ${i.done ? 'done' : ''}">
+                        <span class="material-symbols-outlined checklist-icon">${i.done ? 'check_circle' : 'radio_button_unchecked'}</span>
+                        ${esc(i.label)}
+                    </span>
+                `).join('')}
+            </div>
+            ${departureSection}
+        </div>`;
+}
+
+async function confirmDeparture(studentId) {
+    const rec = dailyRecords[studentId] || {};
+    const items = getStudentChecklistStatus(studentId);
+    const pendingItems = items.filter(i => !i.done && i.key !== 'departure');
+
+    let reason = '';
+    if (pendingItems.length > 0) {
+        const pendingLabels = pendingItems.map(i => i.label).join(', ');
+        reason = prompt(`미완료 항목: ${pendingLabels}\n\n미완료 사유를 입력하세요:`);
+        if (reason === null) return; // 취소
+        if (!reason.trim()) {
+            alert('미완료 사유를 입력해주세요.');
+            return;
+        }
+    }
+
+    showSaveIndicator('saving');
+    try {
+        const departure = {
+            status: '귀가',
+            time: nowTimeStr(),
+            confirmed_by: (currentUser?.email || '').split('@')[0],
+            confirmed_at: new Date().toISOString()
+        };
+        if (reason) {
+            departure.incomplete_reason = reason.trim();
+            departure.incomplete_items = pendingItems.map(i => i.label);
+        }
+
+        await saveImmediately(studentId, { departure });
+        if (!dailyRecords[studentId]) {
+            dailyRecords[studentId] = { student_id: studentId, date: selectedDate };
+        }
+        dailyRecords[studentId].departure = departure;
+
+        renderStudentDetail(studentId);
+        renderSubFilters();
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('귀가 확인 실패:', err);
+        showSaveIndicator('error');
+    }
+}
+
+window.confirmDeparture = confirmDeparture;
+
 // ─── Student Detail Panel ───────────────────────────────────────────────────
 
 function renderStudentDetail(studentId) {
@@ -2914,6 +3186,7 @@ function renderStudentDetail(studentId) {
     `;
 
     cardsContainer.innerHTML = `
+        ${renderChecklistCard(studentId)}
         ${reasonHtml}
 
         <!-- 영역별 숙제 카드 -->
