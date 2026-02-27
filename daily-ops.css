@@ -1722,13 +1722,6 @@ textarea.field-input {
   }
 }
 
-/* ===== Sidebar Bottom (등원시간) ===== */
-.sidebar-bottom {
-  border-top: 1px solid var(--border);
-  margin-top: auto;
-  padding: 12px;
-}
-
 .sidebar-bottom-title {
   display: flex;
   align-items: center;

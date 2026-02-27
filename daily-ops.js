@@ -903,7 +903,7 @@ function getSubFilterCount(filterKey) {
         }
     }
 
-    return 0;
+    return { count: 0, total: 0 };
 }
 
 // ─── 등원예정 통합 집계 ─────────────────────────────────────────────────────
@@ -1810,7 +1810,7 @@ async function resetClassDomains(classCode) {
 }
 
 async function addTestToSection(classCode, sectionName) {
-    const input = document.querySelector(`input[data-test-section="${sectionName}"]`);
+    const input = document.querySelector(`input[data-test-section="${CSS.escape(sectionName)}"]`);
     const name = input?.value.trim();
     if (!name) return;
     const sections = getClassTestSections(classCode);
@@ -2119,17 +2119,26 @@ async function saveHwFailAction(studentId, hwFailAction) {
         dailyRecords[studentId].hw_fail_action = hwFailAction;
 
         // hw_fail_tasks 컬렉션 동기화 (domain당 1개 doc: studentId_domain_sourceDate)
-        for (const [domain, action] of Object.entries(hwFailAction)) {
-            if (!action.type) continue;
+        // 1) 서버 확인이 필요한 항목들을 병렬로 읽기
+        const hwTaskEntries = Object.entries(hwFailAction).filter(([, action]) => action.type);
+        const hwTaskChecks = await Promise.all(hwTaskEntries.map(async ([domain, action]) => {
             const taskDocId = `${studentId}_${domain}_${selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
             const existing = hwFailTasks.find(t => t.docId === taskDocId);
-            // 이미 완료/취소된 태스크는 덮어쓰지 않음 (메모리에 없으면 서버 확인)
-            if (existing && existing.status !== 'pending') continue;
+            if (existing && existing.status !== 'pending') return null; // 스킵
+            let serverSnap = null;
             if (!existing) {
-                const snap = await getDoc(doc(db, 'hw_fail_tasks', taskDocId));
-                if (snap.exists() && snap.data().status !== 'pending') continue;
+                serverSnap = await getDoc(doc(db, 'hw_fail_tasks', taskDocId));
+                if (serverSnap.exists() && serverSnap.data().status !== 'pending') return null; // 스킵
             }
+            return { domain, action, taskDocId, existing };
+        }));
 
+        // 2) 쓰기를 배치로 모아서 커밋
+        const hwWriteBatch = writeBatch(db);
+        let hwWriteCount = 0;
+        for (const check of hwTaskChecks) {
+            if (!check) continue;
+            const { domain, action, taskDocId, existing } = check;
             const taskData = {
                 student_id: studentId,
                 student_name: student?.name || '',
@@ -2145,7 +2154,8 @@ async function saveHwFailAction(studentId, hwFailAction) {
                 created_at: existing?.created_at || new Date().toISOString(),
                 branch: branchFromStudent(student || {}),
             };
-            await setDoc(doc(db, 'hw_fail_tasks', taskDocId), taskData, { merge: true });
+            hwWriteBatch.set(doc(db, 'hw_fail_tasks', taskDocId), taskData, { merge: true });
+            hwWriteCount++;
             // 로컬 캐시 갱신
             const idx = hwFailTasks.findIndex(t => t.docId === taskDocId);
             if (idx >= 0) {
@@ -2154,6 +2164,7 @@ async function saveHwFailAction(studentId, hwFailAction) {
                 hwFailTasks.push({ docId: taskDocId, ...taskData });
             }
         }
+        if (hwWriteCount > 0) await hwWriteBatch.commit();
 
         // 삭제된 domain의 pending tasks: 타입 제거 시 hw_fail_tasks에서도 상태 업데이트
         const hwCancelTargets = hwFailTasks.filter(t => t.student_id === studentId && t.source_date === selectedDate && t.status === 'pending' && (!hwFailAction[t.domain] || !hwFailAction[t.domain].type));
@@ -2437,16 +2448,26 @@ async function saveTestFailAction(studentId, testFailAction) {
         dailyRecords[studentId].test_fail_action = testFailAction;
 
         // test_fail_tasks 컬렉션 동기화
-        for (const [item, action] of Object.entries(testFailAction)) {
-            if (!action.type) continue;
+        // 1) 서버 확인이 필요한 항목들을 병렬로 읽기
+        const testTaskEntries = Object.entries(testFailAction).filter(([, action]) => action.type);
+        const testTaskChecks = await Promise.all(testTaskEntries.map(async ([item, action]) => {
             const taskDocId = `test_${studentId}_${item}_${selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
             const existing = testFailTasks.find(t => t.docId === taskDocId);
-            if (existing && existing.status !== 'pending') continue;
+            if (existing && existing.status !== 'pending') return null; // 스킵
+            let serverSnap = null;
             if (!existing) {
-                const snap = await getDoc(doc(db, 'test_fail_tasks', taskDocId));
-                if (snap.exists() && snap.data().status !== 'pending') continue;
+                serverSnap = await getDoc(doc(db, 'test_fail_tasks', taskDocId));
+                if (serverSnap.exists() && serverSnap.data().status !== 'pending') return null; // 스킵
             }
+            return { item, action, taskDocId, existing };
+        }));
 
+        // 2) 쓰기를 배치로 모아서 커밋
+        const testWriteBatch = writeBatch(db);
+        let testWriteCount = 0;
+        for (const check of testTaskChecks) {
+            if (!check) continue;
+            const { item, action, taskDocId, existing } = check;
             const taskData = {
                 student_id: studentId,
                 student_name: student?.name || '',
@@ -2463,7 +2484,8 @@ async function saveTestFailAction(studentId, testFailAction) {
                 created_at: existing?.created_at || new Date().toISOString(),
                 branch: branchFromStudent(student || {}),
             };
-            await setDoc(doc(db, 'test_fail_tasks', taskDocId), taskData, { merge: true });
+            testWriteBatch.set(doc(db, 'test_fail_tasks', taskDocId), taskData, { merge: true });
+            testWriteCount++;
             const idx = testFailTasks.findIndex(t => t.docId === taskDocId);
             if (idx >= 0) {
                 testFailTasks[idx] = { docId: taskDocId, ...taskData };
@@ -2471,6 +2493,7 @@ async function saveTestFailAction(studentId, testFailAction) {
                 testFailTasks.push({ docId: taskDocId, ...taskData });
             }
         }
+        if (testWriteCount > 0) await testWriteBatch.commit();
 
         // 삭제된 item의 pending tasks 취소
         const testCancelTargets = testFailTasks.filter(t => t.student_id === studentId && t.source_date === selectedDate && t.status === 'pending' && (!testFailAction[t.domain] || !testFailAction[t.domain].type));
@@ -2718,7 +2741,7 @@ function restoreModalHandlers() {
 
 function refreshNextHwViews(classCode) {
     // 반별 다음숙제 뷰가 열려있으면 리렌더
-    if (currentCategory === 'homework' && currentSubFilter.has('next_hw')) {
+    if (currentCategory === 'homework' && currentSubFilter.has('hw_next')) {
         renderNextHwClassList();
         if (selectedNextHwClass === classCode) renderNextHwClassDetail(classCode);
     }
@@ -3397,7 +3420,7 @@ function applyAttendance(studentId, displayStatus, force = false, silent = false
 
     if (silent) return;
 
-    const row = document.querySelector(`.list-item[data-id="${studentId}"]`);
+    const row = document.querySelector(`.list-item[data-id="${CSS.escape(studentId)}"]`);
     if (row) {
         const newDisplay = newStatus === '미확인' ? '등원전' : newStatus;
         row.querySelectorAll('.toggle-btn').forEach(btn => {
@@ -3597,7 +3620,7 @@ function applyHwDomainOX(studentId, field, domain, forceValue) {
     dailyRecords[studentId][field] = domainData;
 
     // DOM 직접 업데이트 (버튼만 갱신)
-    const btn = document.querySelector(`.hw-domain-ox[data-student="${studentId}"][data-field="${field}"][data-domain="${CSS.escape(domain)}"]`);
+    const btn = document.querySelector(`.hw-domain-ox[data-student="${CSS.escape(studentId)}"][data-field="${CSS.escape(field)}"][data-domain="${CSS.escape(domain)}"]`);
     if (btn) {
         btn.classList.remove('ox-green', 'ox-red', 'ox-yellow', 'ox-empty');
         btn.classList.add(oxDisplayClass(newVal));
@@ -3714,11 +3737,13 @@ async function executeBatchAction() {
 async function handleBatchAction(action, value) {
     if (checkedItems.size === 0) return;
     const ids = Array.from(checkedItems);
+    const BATCH_SIZE = 200;
 
     showSaveIndicator('saving');
 
     try {
-        const batch = writeBatch(db);
+        // 먼저 모든 ops를 수집한 뒤 BATCH_SIZE 단위로 커밋
+        const ops = []; // { type: 'set'|'update', ref, data, options? }
 
         for (const studentId of ids) {
             const docId = makeDailyRecordId(studentId, selectedDate);
@@ -3734,7 +3759,7 @@ async function handleBatchAction(action, value) {
             };
 
             if (action === 'attendance') {
-                batch.set(ref, { ...baseData, attendance: { status: value } }, { merge: true });
+                ops.push({ type: 'set', ref, data: { ...baseData, attendance: { status: value } }, options: { merge: true } });
                 if (!dailyRecords[studentId]) {
                     dailyRecords[studentId] = { docId, student_id: studentId, date: selectedDate };
                 }
@@ -3742,7 +3767,7 @@ async function handleBatchAction(action, value) {
             } else if (action === 'homework_status') {
                 const rec = dailyRecords[studentId] || {};
                 const homework = (rec.homework || []).map(h => ({ ...h, status: value }));
-                batch.set(ref, { ...baseData, homework }, { merge: true });
+                ops.push({ type: 'set', ref, data: { ...baseData, homework }, options: { merge: true } });
                 if (dailyRecords[studentId]) dailyRecords[studentId].homework = homework;
             } else if (action === 'homework_notify') {
                 // TODO: 실제 알림 발송 로직 연동 (현재는 로그만 남김)
@@ -3750,18 +3775,30 @@ async function handleBatchAction(action, value) {
             } else if (action === 'test_result') {
                 const rec = dailyRecords[studentId] || {};
                 const tests = (rec.tests || []).map(t => ({ ...t, result: value }));
-                batch.set(ref, { ...baseData, tests }, { merge: true });
+                ops.push({ type: 'set', ref, data: { ...baseData, tests }, options: { merge: true } });
                 if (dailyRecords[studentId]) dailyRecords[studentId].tests = tests;
             } else if (action === 'retake_status') {
                 const retakes = retakeSchedules.filter(r => r.student_id === studentId && r.status === '예정');
                 for (const r of retakes) {
-                    batch.update(doc(db, 'retake_schedule', r.docId), { status: value, updated_at: serverTimestamp() });
+                    ops.push({ type: 'update', ref: doc(db, 'retake_schedule', r.docId), data: { status: value, updated_at: serverTimestamp() } });
                     r.status = value;
                 }
             }
         }
 
-        await batch.commit();
+        // BATCH_SIZE 단위로 분할 커밋
+        for (let i = 0; i < ops.length; i += BATCH_SIZE) {
+            const chunk = ops.slice(i, i + BATCH_SIZE);
+            const batch = writeBatch(db);
+            for (const op of chunk) {
+                if (op.type === 'set') {
+                    batch.set(op.ref, op.data, op.options || {});
+                } else {
+                    batch.update(op.ref, op.data);
+                }
+            }
+            await batch.commit();
+        }
 
         checkedItems.clear();
         updateBatchBar();
@@ -3940,8 +3977,8 @@ async function saveScheduleFromModal() {
 
     showSaveIndicator('saving');
     try {
-        for (const studentId of _scheduleTargetIds) {
-            await saveRetakeSchedule({
+        await Promise.all(_scheduleTargetIds.map(studentId =>
+            saveRetakeSchedule({
                 student_id: studentId,
                 type,
                 subject,
@@ -3950,8 +3987,8 @@ async function saveScheduleFromModal() {
                 scheduled_date: scheduledDate,
                 status: '예정',
                 result_score: null
-            });
-        }
+            })
+        ));
         document.getElementById('schedule-modal').style.display = 'none';
         _scheduleTargetIds = [];
         renderSubFilters();
@@ -4577,7 +4614,7 @@ onAuthStateChanged(auth, async (user) => {
 // ─── Keyboard shortcut: ESC closes modals ───────────────────────────────────
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-        ['schedule-modal', 'homework-modal', 'test-modal', 'batch-confirm-modal', 'enrollment-modal', 'memo-modal'].forEach(id => {
+        ['schedule-modal', 'homework-modal', 'test-modal', 'batch-confirm-modal', 'enrollment-modal', 'memo-modal', 'next-hw-modal', 'parent-msg-modal', 'temp-attendance-modal'].forEach(id => {
             const modal = document.getElementById(id);
             if (modal?.style.display !== 'none') {
                 modal.style.display = 'none';

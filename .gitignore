@@ -20,3 +20,5 @@ build/
 Thumbs.db
 .aider*
 .claude/
+.vscode/
+*.log

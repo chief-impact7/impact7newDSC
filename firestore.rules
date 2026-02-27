@@ -8,8 +8,9 @@ rules_version = '2';
       // =========================================================================
       function isAuthorized() {
         return request.auth != null
-          && (request.auth.token.email.matches('.*@gw[.]impact7[.]kr')
-              || request.auth.token.email.matches('.*@impact7[.]kr'));
+          && request.auth.token.email_verified == true
+          && (request.auth.token.email.matches('.*@gw[.]impact7[.]kr$')
+              || request.auth.token.email.matches('.*@impact7[.]kr$'));
       }
 
       // =========================================================================

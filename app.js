@@ -1,6 +1,6 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import {
-    collection, getDocs, doc, setDoc, getDoc, addDoc,
+    collection, getDocs, doc, setDoc, addDoc,
     query, where, serverTimestamp, updateDoc
 } from 'firebase/firestore';
 import { auth, db } from './firebase-config.js';
@@ -20,6 +20,10 @@ const esc = (str) => {
     d.textContent = str ?? '';
     return d.innerHTML;
 };
+
+const escAttr = (str) =>
+    String(str ?? '').replace(/&/g, '&amp;').replace(/'/g, '&#39;')
+        .replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 function todayStr() {
     const d = new Date();
@@ -399,8 +403,8 @@ function renderTable(rows) {
             <td colspan="42" style="text-align:left;padding-left:12px;">
                 <strong>${esc(pt.content)}</strong>
                 (원래: ${esc(pt.original_date)}) — 담당: ${esc(pt.handler || '')}
-                <button class="btn btn-sm btn-primary" onclick="completePostponed('${pt.id}')" style="margin-left:8px;">완료</button>
-                <button class="btn btn-sm btn-secondary" onclick="absentPostponed('${pt.id}')" style="margin-left:4px;">결석</button>
+                <button class="btn btn-sm btn-primary" onclick="completePostponed('${escAttr(pt.id)}')" style="margin-left:8px;">완료</button>
+                <button class="btn btn-sm btn-secondary" onclick="absentPostponed('${escAttr(pt.id)}')" style="margin-left:4px;">결석</button>
             </td>
         `;
         tbody.appendChild(tr);
@@ -454,7 +458,7 @@ function renderTableCell(field, value, checkId) {
 
 // ─── OX cycle ────────────────────────────────────────────────────────────────
 window.cycleOX = (td) => {
-    const cycle = ['O', 'X', '△', ''];
+    const cycle = ['O', '△', 'X', ''];
     const current = td.dataset.value || '';
     const nextIdx = (cycle.indexOf(current) + 1) % cycle.length;
     const next = cycle[nextIdx];
@@ -572,8 +576,8 @@ function renderCards(rows) {
                 <p style="font-size:13px;margin-bottom:8px;"><strong>${esc(pt.content)}</strong> (원래: ${esc(pt.original_date)})</p>
                 <p style="font-size:12px;color:var(--text-sec);">담당: ${esc(pt.handler || '')}</p>
                 <div class="card-actions">
-                    <button class="btn btn-primary btn-sm" onclick="completePostponed('${pt.id}')">완료</button>
-                    <button class="btn btn-secondary btn-sm" onclick="absentPostponed('${pt.id}')">결석</button>
+                    <button class="btn btn-primary btn-sm" onclick="completePostponed('${escAttr(pt.id)}')">완료</button>
+                    <button class="btn btn-secondary btn-sm" onclick="absentPostponed('${escAttr(pt.id)}')">결석</button>
                 </div>
             </div>
         `;
@@ -601,7 +605,7 @@ function renderCards(rows) {
             <div class="card-body">
                 ${renderCardSections(row.checkId, checkData)}
                 <div class="card-actions">
-                    <button class="btn btn-secondary btn-sm" onclick="openPostponeModal('${row.student.id}', '${esc(row.student.name)}', ${row.enrollIdx})">
+                    <button class="btn btn-secondary btn-sm" onclick="openPostponeModal('${escAttr(row.student.id)}', '${escAttr(row.student.name)}', ${row.enrollIdx})">
                         연기/보강
                     </button>
                 </div>

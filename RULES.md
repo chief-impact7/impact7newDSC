@@ -116,6 +116,46 @@ postponed_tasks/{autoId}
 ├── created_at: timestamp
 ```
 
+### `daily_records` 컬렉션 (daily-ops.js 전용)
+```
+daily_records/{studentId}_{date}
+├── student_id: string
+├── date: string                 # "2026-02-27"
+├── branch: string
+├── hw_fail_action: map          # 숙제 2차 미통과 처리 (domain별)
+│   └── {domain}: map            # 예: "Gr", "A/G", "R/C"
+│       ├── type: string         # "등원" | "대체숙제"
+│       ├── handler: string      # 담당자 이메일
+│       ├── scheduled_date: string  # 등원 예약 날짜
+│       ├── scheduled_time: string  # 등원 예약 시간 (예: "16:00")
+│       ├── alt_hw: string       # 대체숙제 내용
+│       └── updated_at: string   # ISO 8601 타임스탬프
+├── updated_by: string
+├── updated_at: timestamp
+```
+
+### `hw_fail_tasks` 컬렉션 (숙제 미통과 처리 태스크)
+```
+hw_fail_tasks/{studentId}_{domain}_{sourceDate}
+├── student_id: string
+├── student_name: string
+├── domain: string               # "Gr" | "A/G" | "R/C" 등
+├── type: string                 # "등원" | "대체숙제"
+├── source_date: string          # 원래 미통과 발생 날짜
+├── scheduled_date: string       # 등원 예약 날짜
+├── scheduled_time: string       # 등원 예약 시간
+├── alt_hw: string               # 대체숙제 내용
+├── handler: string              # 담당자
+├── status: string               # "pending" | "완료" | "취소"
+├── branch: string
+├── created_by: string
+├── created_at: string           # ISO 8601 타임스탬프
+├── completed_by: string         # (완료 시)
+├── completed_at: string         # (완료 시)
+├── cancelled_by: string         # (취소 시)
+├── cancelled_at: string         # (취소 시)
+```
+
 ---
 
 ## 5. 핵심 비즈니스 로직
@@ -130,7 +170,7 @@ postponed_tasks/{autoId}
 - 없으면 `class_number` 첫 자리로 추론: `1` → 2단지, `2` → 10단지
 
 ### 5.3 OX 순환
-- 클릭 순서: `""` → `"O"` → `"X"` → `"△"` → `""`
+- 클릭 순서: `""` → `"O"` → `"△"` → `"X"` → `""`
 - 색상: O=green, X=red, △=yellow
 
 ### 5.4 자동 저장
