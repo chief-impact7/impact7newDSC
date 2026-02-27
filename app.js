@@ -268,7 +268,7 @@ function populateClassFilter() {
         });
     });
     const sorted = [...classSet].sort();
-    const html = '<option value="">전체 반</option>' + sorted.map(c => `<option value="${c}">${c}</option>`).join('');
+    const html = '<option value="">전체 반</option>' + sorted.map(c => `<option value="${escAttr(c)}">${esc(c)}</option>`).join('');
     document.getElementById('filter-class').innerHTML = html;
     document.getElementById('mobile-filter-class').innerHTML = html;
 }

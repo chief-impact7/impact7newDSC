@@ -1,13 +1,5 @@
 import React, { useMemo, useState } from 'react';
-
-const RETEST_FIELDS = [
-    { key: 'retest_isc', label: 'ISC' },
-    { key: 'retest_reading', label: '독해' },
-    { key: 'retest_grammar', label: '문법' },
-    { key: 'retest_practice', label: '실전' },
-    { key: 'retest_listening', label: '청해' },
-    { key: 'retest_grading', label: '채점' },
-];
+import { RETEST_FIELDS } from '../constants.js';
 
 const INITIAL_ROWS = 10;
 

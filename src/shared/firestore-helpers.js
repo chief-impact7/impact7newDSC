@@ -3,9 +3,13 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../firebase-config.js';
 
-// 학생 전체 목록 (재원 학생만)
+// 학생 전체 목록 (재원 학생만 — 퇴원 제외)
 export async function fetchStudents() {
-    const snap = await getDocs(collection(db, 'students'));
+    const q = query(
+        collection(db, 'students'),
+        where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원'])
+    );
+    const snap = await getDocs(q);
     const list = [];
     snap.forEach(docSnap => {
         const data = { id: docSnap.id, ...docSnap.data() };
@@ -60,7 +64,7 @@ export async function fetchPostponedTasks(date) {
     return list;
 }
 
-// 기간별 pending 연기 작업
+// 기간별 연기 작업 (전체 상태)
 export async function fetchPostponedTasksRange(startDate, endDate) {
     const q = query(
         collection(db, 'postponed_tasks'),

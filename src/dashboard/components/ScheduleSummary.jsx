@@ -1,14 +1,5 @@
 import React, { useMemo, useState, useCallback } from 'react';
-
-const NEXT_HW_FIELDS = [
-    { key: 'next_listening', label: '청해' },
-    { key: 'next_summary', label: '요약' },
-    { key: 'next_reading', label: '독해' },
-    { key: 'next_grammar', label: '문법' },
-    { key: 'next_practice', label: '실전' },
-    { key: 'next_listening2', label: '청해2' },
-    { key: 'next_extra', label: '추가' },
-];
+import { NEXT_HW_FIELDS } from '../constants.js';
 
 const INITIAL_ROWS = 5;
 

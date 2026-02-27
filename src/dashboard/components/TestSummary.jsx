@@ -1,12 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-
-const TEST_FIELDS = [
-    { key: 'test_reading', label: '독해' },
-    { key: 'test_grammar', label: '문법' },
-    { key: 'test_practice', label: '실전' },
-    { key: 'test_listening', label: '청해' },
-];
+import { TEST_FIELDS } from '../constants.js';
 
 const BAR_COLORS = ['#1a73e8', '#188038', '#f9ab00', '#d93025'];
 

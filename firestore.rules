@@ -198,9 +198,17 @@ rules_version = '2';
       // User Settings (역할 설정)
       // =========================================================================
       match /user_settings/{email} {
+
+        function hasOnlyAllowedUserSettingsFields() {
+          return request.resource.data.keys().hasOnly([
+            'role', 'updated_at'
+          ]);
+        }
+
         allow read: if isAuthorized();
 
         allow create, update: if isAuthorized()
+          && hasOnlyAllowedUserSettingsFields()
           && withinFieldLimit(10);
 
         allow delete: if isAuthorized();
@@ -210,10 +218,20 @@ rules_version = '2';
       // Role Memos (역할별 메모)
       // =========================================================================
       match /role_memos/{docId} {
+
+        function hasOnlyAllowedRoleMemoFields() {
+          return request.resource.data.keys().hasOnly([
+            'type', 'student_id', 'student_name', 'content',
+            'sender_email', 'sender_role', 'target_roles',
+            'date', 'read_by', 'created_at', 'updated_at'
+          ]);
+        }
+
         allow read: if isAuthorized();
 
         allow create, update: if isAuthorized()
-          && withinFieldLimit(10);
+          && hasOnlyAllowedRoleMemoFields()
+          && withinFieldLimit(15);
 
         allow delete: if isAuthorized();
       }
@@ -222,9 +240,17 @@ rules_version = '2';
       // Class Settings (반별 설정: 영역, 테스트 등)
       // =========================================================================
       match /class_settings/{classCode} {
+
+        function hasOnlyAllowedClassSettingsFields() {
+          return request.resource.data.keys().hasOnly([
+            'domains', 'test_sections'
+          ]);
+        }
+
         allow read: if isAuthorized();
 
         allow create, update: if isAuthorized()
+          && hasOnlyAllowedClassSettingsFields()
           && withinFieldLimit(15);
 
         allow delete: if isAuthorized();
@@ -234,9 +260,18 @@ rules_version = '2';
       // Class Next Homework (반별 다음숙제)
       // =========================================================================
       match /class_next_hw/{docId} {
+
+        function hasOnlyAllowedClassNextHwFields() {
+          return request.resource.data.keys().hasOnly([
+            'class_code', 'date', 'domains',
+            'updated_by', 'updated_at'
+          ]);
+        }
+
         allow read: if isAuthorized();
 
         allow create, update: if isAuthorized()
+          && hasOnlyAllowedClassNextHwFields()
           && withinFieldLimit(15);
 
         allow delete: if isAuthorized();
@@ -244,12 +279,47 @@ rules_version = '2';
 
       // =========================================================================
       // Daily Checks (메인 대시보드 일일 체크)
+      // - merge:true로 부분 업데이트되므로 hasAll 대신 hasOnly만 적용
       // =========================================================================
       match /daily_checks/{docId} {
+
+        function hasOnlyAllowedDailyCheckFields() {
+          return request.resource.data.keys().hasOnly([
+            // 메타데이터
+            'date', 'student_id', 'enrollment_index', 'class_code',
+            'student_name', 'branch', 'updated_by', 'updated_at',
+            // 출결
+            'attendance', 'attendance_time', 'attendance_reason',
+            // 숙제
+            'hw_reading', 'hw_grammar', 'hw_practice', 'hw_listening',
+            'hw_extra', 'hw_vocab', 'hw_idiom', 'hw_verb3',
+            // 리뷰테스트
+            'test_reading', 'test_grammar', 'test_practice', 'test_listening',
+            // ISC
+            'isc',
+            // 부실 숙제 보완
+            'review_reading', 'review_grammar', 'review_practice', 'review_listening',
+            'review_extra', 'review_vocab', 'review_idiom', 'review_verb3',
+            // 재시
+            'retest_isc', 'retest_reading', 'retest_grammar', 'retest_practice',
+            'retest_listening', 'retest_grading',
+            // 다음 숙제
+            'next_listening', 'next_summary', 'next_reading', 'next_grammar',
+            'next_practice', 'next_listening2', 'next_extra',
+            // 전달사항
+            'note_class_to_study', 'note_to_parent',
+            // 결석생 대응
+            'absent_handler', 'absent_consultation',
+            // LMS
+            'lms_content'
+          ]);
+        }
+
         allow read: if isAuthorized();
 
         allow create, update: if isAuthorized()
-          && withinFieldLimit(20);
+          && hasOnlyAllowedDailyCheckFields()
+          && withinFieldLimit(50);
 
         allow delete: if isAuthorized();
       }
@@ -258,9 +328,20 @@ rules_version = '2';
       // Postponed Tasks (연기/보강 작업)
       // =========================================================================
       match /postponed_tasks/{docId} {
+
+        function hasOnlyAllowedPostponedFields() {
+          return request.resource.data.keys().hasOnly([
+            'student_id', 'student_name', 'original_date',
+            'scheduled_date', 'scheduled_time', 'content', 'handler',
+            'status', 'result',
+            'created_by', 'created_at', 'updated_by', 'updated_at'
+          ]);
+        }
+
         allow read: if isAuthorized();
 
         allow create, update: if isAuthorized()
+          && hasOnlyAllowedPostponedFields()
           && withinFieldLimit(15);
 
         allow delete: if isAuthorized();

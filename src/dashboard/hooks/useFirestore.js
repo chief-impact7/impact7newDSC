@@ -16,7 +16,7 @@ export function useStudents(user) {
         setLoading(true);
         setError(null);
         fetchStudents()
-            .then(list => setStudents(list.filter(s => s.status !== '퇴원')))
+            .then(list => setStudents(list))
             .catch(err => {
                 console.error('[useStudents]', err);
                 setError(err);

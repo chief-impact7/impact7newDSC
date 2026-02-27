@@ -1344,7 +1344,7 @@ function renderListPanel() {
                         else if (st === '지각') activeClass = 'active-late';
                         else activeClass = 'active-other';
                     }
-                    return `<button class="toggle-btn ${activeClass}" onclick="event.stopPropagation(); toggleAttendance('${s.docId}', '${st}')">${st}</button>`;
+                    return `<button class="toggle-btn ${activeClass}" onclick="event.stopPropagation(); toggleAttendance('${escAttr(s.docId)}', '${st}')">${st}</button>`;
                 }).join('') +
                 `</div>`;
         } else if (currentCategory === 'homework') {
@@ -1367,8 +1367,8 @@ function renderListPanel() {
                         const cls = oxDisplayClass(val);
                         return `<div class="hw-domain-item">
                             <span class="hw-domain-label">${esc(d)}</span>
-                            <button class="hw-domain-ox ${cls}" data-student="${s.docId}" data-field="${field}" data-domain="${escAttr(d)}"
-                                onclick="event.stopPropagation(); toggleHwDomainOX('${s.docId}', '${field}', '${escAttr(d)}')">${esc(val || '—')}</button>
+                            <button class="hw-domain-ox ${cls}" data-student="${escAttr(s.docId)}" data-field="${field}" data-domain="${escAttr(d)}"
+                                onclick="event.stopPropagation(); toggleHwDomainOX('${escAttr(s.docId)}', '${field}', '${escAttr(d)}')">${esc(val || '—')}</button>
                         </div>`;
                     }).join('') +
                     `</div>`;
@@ -1387,7 +1387,7 @@ function renderListPanel() {
                                 if (h.status === st) {
                                     activeClass = st === '확인완료' ? 'active-present' : st === '제출' ? 'active-late' : 'active-absent';
                                 }
-                                return `<button class="toggle-btn ${activeClass}" onclick="event.stopPropagation(); toggleHomework('${s.docId}', ${i}, '${st}')">${st}</button>`;
+                                return `<button class="toggle-btn ${activeClass}" onclick="event.stopPropagation(); toggleHomework('${escAttr(s.docId)}', ${i}, '${st}')">${st}</button>`;
                             }).join('') +
                             `</div></div>`;
                     }).join('');
@@ -1455,8 +1455,8 @@ function renderListPanel() {
                             const cls = oxDisplayClass(val);
                             return `<div class="hw-domain-item">
                                 <span class="hw-domain-label">${esc(t)}</span>
-                                <button class="hw-domain-ox ${cls}" data-student="${s.docId}" data-field="${field}" data-domain="${escAttr(t)}"
-                                    onclick="event.stopPropagation(); toggleHwDomainOX('${s.docId}', '${field}', '${escAttr(t)}')">${esc(val || '—')}</button>
+                                <button class="hw-domain-ox ${cls}" data-student="${escAttr(s.docId)}" data-field="${field}" data-domain="${escAttr(t)}"
+                                    onclick="event.stopPropagation(); toggleHwDomainOX('${escAttr(s.docId)}', '${field}', '${escAttr(t)}')">${esc(val || '—')}</button>
                             </div>`;
                         }).join('') +
                         `</div></div>`
@@ -1532,7 +1532,7 @@ function renderListPanel() {
                 const time = e.start_time ? formatTime12h(e.start_time) : '';
                 return `<div style="margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                     <span style="font-size:12px;color:var(--text-sec);">${esc(enrollmentCode(e))} ${days} ${time}</span>
-                    <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openEnrollmentModal('${s.docId}', ${idx})">편집</button>
+                    <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openEnrollmentModal('${escAttr(s.docId)}', ${idx})">편집</button>
                 </div>`;
             }).join('');
         }
@@ -1582,9 +1582,9 @@ function renderListPanel() {
             ? `<span class="hw-fail-badge hw-fail-visit" title="등원 예약 있음"><span class="material-symbols-outlined" style="font-size:14px;">directions_walk</span></span>`
             : '';
 
-        return `<div class="list-item ${isActive}" data-id="${s.docId}" onclick="selectStudent('${s.docId}')">
+        return `<div class="list-item ${isActive}" data-id="${escAttr(s.docId)}" onclick="selectStudent('${escAttr(s.docId)}')">
             <input type="checkbox" class="item-checkbox" ${isChecked}
-                onclick="event.stopPropagation(); toggleCheck('${s.docId}', this.checked)">
+                onclick="event.stopPropagation(); toggleCheck('${escAttr(s.docId)}', this.checked)">
             <div class="item-info">
                 <span class="item-title">${esc(s.name)}${hwFailIconHtml} <span class="item-class-type">${esc(todayEnroll?.class_type || '')}</span></span>
                 <span class="item-desc">${esc(code)}${studentShortLabel(s) ? ', ' + esc(studentShortLabel(s)) : ''}</span>
@@ -2810,7 +2810,7 @@ function renderNextHwClassDetail(classCode) {
             </div>
             ${classStudents.length === 0
                 ? '<div class="detail-card-empty">소속 학생 없음</div>'
-                : classStudents.map(s => `<div class="detail-item" style="cursor:pointer;" onclick="selectStudent('${s.docId}')">
+                : classStudents.map(s => `<div class="detail-item" style="cursor:pointer;" onclick="selectStudent('${escAttr(s.docId)}')">
                     <span>${esc(s.name)}</span>
                     <span class="tag" style="font-size:11px;">${esc(studentShortLabel(s))}</span>
                 </div>`).join('')

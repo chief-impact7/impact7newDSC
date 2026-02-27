@@ -1,9 +1,5 @@
 import React, { useMemo } from 'react';
-
-const HW_FIELDS = [
-    'hw_reading', 'hw_grammar', 'hw_practice', 'hw_listening',
-    'hw_extra', 'hw_vocab', 'hw_idiom', 'hw_verb3',
-];
+import { HW_FIELDS } from '../constants.js';
 
 function OverviewCard({ checks, students }) {
     const stats = useMemo(() => {
@@ -28,8 +24,8 @@ function OverviewCard({ checks, students }) {
         let hwDone = 0;
         let hwTotal = 0;
         checks.forEach(c => {
-            HW_FIELDS.forEach(key => {
-                const v = c[key]?.trim?.();
+            HW_FIELDS.forEach(f => {
+                const v = c[f.key]?.trim?.();
                 if (v === 'O' || v === 'X' || v === '△') {
                     hwTotal++;
                     if (v === 'O') hwDone++;

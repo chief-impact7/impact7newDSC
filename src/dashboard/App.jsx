@@ -85,8 +85,8 @@ export default function App() {
     }, [rangeType, baseDate, validCustomStart, validCustomEnd]);
 
     // 데이터 로드
-    const { students, loading: studentsLoading } = useStudents(user);
-    const { checks, postponed, loading: dataLoading } = useDashboardData(user, startDate, endDate);
+    const { students, loading: studentsLoading, error } = useStudents(user);
+    const { checks, postponed, loading: dataLoading, error: dashError } = useDashboardData(user, startDate, endDate);
 
     // 반 목록 추출
     const classList = useMemo(() => {
@@ -143,6 +143,28 @@ export default function App() {
     }
 
     const loading = studentsLoading || dataLoading;
+
+    if (error || dashError) {
+        return (
+            <div style={{
+                padding: '20px',
+                margin: '20px',
+                background: '#fce8e6',
+                color: '#c5221f',
+                borderRadius: '8px',
+                textAlign: 'center'
+            }}>
+                <p style={{ fontWeight: 500 }}>데이터 로드 실패</p>
+                <p style={{ fontSize: '14px', marginTop: '8px' }}>{(error || dashError)?.message || '알 수 없는 오류가 발생했습니다'}</p>
+                <button
+                    onClick={() => window.location.reload()}
+                    style={{ marginTop: '12px', padding: '8px 16px', cursor: 'pointer', borderRadius: '4px', border: '1px solid #c5221f', background: 'white', color: '#c5221f' }}
+                >
+                    새로고침
+                </button>
+            </div>
+        );
+    }
 
     return (
         <div className="dash-app">

@@ -1,16 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-
-const HW_FIELDS = [
-    { key: 'hw_reading', label: '독해' },
-    { key: 'hw_grammar', label: '문법' },
-    { key: 'hw_practice', label: '실전' },
-    { key: 'hw_listening', label: '청해' },
-    { key: 'hw_extra', label: '추가' },
-    { key: 'hw_vocab', label: '어휘' },
-    { key: 'hw_idiom', label: '숙어' },
-    { key: 'hw_verb3', label: '3단' },
-];
+import { HW_FIELDS } from '../constants.js';
 
 const PIE_COLORS = ['#188038', '#d93025', '#f9ab00', '#dadce0'];
 
