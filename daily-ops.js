@@ -275,7 +275,8 @@ async function loadDailyRecords(date) {
 async function loadRetakeSchedules() {
     retakeSchedules = [];
     try {
-        const snap = await getDocs(collection(db, 'retake_schedule'));
+        const q = query(collection(db, 'retake_schedule'), where('status', '==', '예정'));
+        const snap = await getDocs(q);
         snap.forEach(d => {
             retakeSchedules.push({ docId: d.id, ...d.data() });
         });
@@ -287,7 +288,8 @@ async function loadRetakeSchedules() {
 async function loadHwFailTasks() {
     hwFailTasks = [];
     try {
-        const snap = await getDocs(collection(db, 'hw_fail_tasks'));
+        const q = query(collection(db, 'hw_fail_tasks'), where('status', '==', 'pending'));
+        const snap = await getDocs(q);
         snap.forEach(d => {
             hwFailTasks.push({ docId: d.id, ...d.data() });
         });
@@ -299,7 +301,8 @@ async function loadHwFailTasks() {
 async function loadTestFailTasks() {
     testFailTasks = [];
     try {
-        const snap = await getDocs(collection(db, 'test_fail_tasks'));
+        const q = query(collection(db, 'test_fail_tasks'), where('status', '==', 'pending'));
+        const snap = await getDocs(q);
         snap.forEach(d => {
             testFailTasks.push({ docId: d.id, ...d.data() });
         });
@@ -2120,8 +2123,12 @@ async function saveHwFailAction(studentId, hwFailAction) {
             if (!action.type) continue;
             const taskDocId = `${studentId}_${domain}_${selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
             const existing = hwFailTasks.find(t => t.docId === taskDocId);
-            // 이미 완료/취소된 태스크는 덮어쓰지 않음
+            // 이미 완료/취소된 태스크는 덮어쓰지 않음 (메모리에 없으면 서버 확인)
             if (existing && existing.status !== 'pending') continue;
+            if (!existing) {
+                const snap = await getDoc(doc(db, 'hw_fail_tasks', taskDocId));
+                if (snap.exists() && snap.data().status !== 'pending') continue;
+            }
 
             const taskData = {
                 student_id: studentId,
@@ -2149,16 +2156,18 @@ async function saveHwFailAction(studentId, hwFailAction) {
         }
 
         // 삭제된 domain의 pending tasks: 타입 제거 시 hw_fail_tasks에서도 상태 업데이트
-        for (const t of hwFailTasks.filter(t => t.student_id === studentId && t.source_date === selectedDate && t.status === 'pending')) {
-            const action = hwFailAction[t.domain];
-            if (!action || !action.type) {
-                await updateDoc(doc(db, 'hw_fail_tasks', t.docId), {
+        const hwCancelTargets = hwFailTasks.filter(t => t.student_id === studentId && t.source_date === selectedDate && t.status === 'pending' && (!hwFailAction[t.domain] || !hwFailAction[t.domain].type));
+        if (hwCancelTargets.length > 0) {
+            const cancelBatch = writeBatch(db);
+            for (const t of hwCancelTargets) {
+                cancelBatch.update(doc(db, 'hw_fail_tasks', t.docId), {
                     status: '취소',
                     cancelled_by: (currentUser?.email || '').split('@')[0],
                     cancelled_at: new Date().toISOString()
                 });
                 t.status = '취소';
             }
+            await cancelBatch.commit();
         }
 
         showSaveIndicator('saved');
@@ -2433,6 +2442,10 @@ async function saveTestFailAction(studentId, testFailAction) {
             const taskDocId = `test_${studentId}_${item}_${selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
             const existing = testFailTasks.find(t => t.docId === taskDocId);
             if (existing && existing.status !== 'pending') continue;
+            if (!existing) {
+                const snap = await getDoc(doc(db, 'test_fail_tasks', taskDocId));
+                if (snap.exists() && snap.data().status !== 'pending') continue;
+            }
 
             const taskData = {
                 student_id: studentId,
@@ -2460,16 +2473,18 @@ async function saveTestFailAction(studentId, testFailAction) {
         }
 
         // 삭제된 item의 pending tasks 취소
-        for (const t of testFailTasks.filter(t => t.student_id === studentId && t.source_date === selectedDate && t.status === 'pending')) {
-            const action = testFailAction[t.domain];
-            if (!action || !action.type) {
-                await updateDoc(doc(db, 'test_fail_tasks', t.docId), {
+        const testCancelTargets = testFailTasks.filter(t => t.student_id === studentId && t.source_date === selectedDate && t.status === 'pending' && (!testFailAction[t.domain] || !testFailAction[t.domain].type));
+        if (testCancelTargets.length > 0) {
+            const cancelBatch = writeBatch(db);
+            for (const t of testCancelTargets) {
+                cancelBatch.update(doc(db, 'test_fail_tasks', t.docId), {
                     status: '취소',
                     cancelled_by: (currentUser?.email || '').split('@')[0],
                     cancelled_at: new Date().toISOString()
                 });
                 t.status = '취소';
             }
+            await cancelBatch.commit();
         }
 
         showSaveIndicator('saved');
@@ -2998,6 +3013,7 @@ function renderTempAttendanceDetail(docId) {
 
     // 카드들
     const cardsContainer = document.getElementById('detail-cards');
+    if (!cardsContainer) return;
 
     // 입력일시 포맷
     let createdAtStr = '';
@@ -4793,8 +4809,14 @@ async function generateParentMessage(studentId) {
     const summary = collectStudentDaySummary(studentId);
     if (!summary) return '학생 정보를 찾을 수 없습니다.';
 
+    // PII 제거: 이름만 유지, 전화번호 등 개인정보 제외
+    const safeSummary = { ...summary };
+    delete safeSummary.student_phone;
+    delete safeSummary.parent_phone_1;
+    delete safeSummary.parent_phone_2;
+
     const customPrompt = getCustomPrompt().replace('{name}', summary.name);
-    const fullPrompt = `${customPrompt}\n\n학생 데이터:\n${JSON.stringify(summary, null, 2)}`;
+    const fullPrompt = `${customPrompt}\n\n학생 데이터:\n${JSON.stringify(safeSummary, null, 2)}`;
 
     const result = await geminiModel.generateContent(fullPrompt);
     return result.response.text();
@@ -4900,12 +4922,14 @@ async function openParentMessageModal(studentId) {
 
     try {
         const message = await generateParentMessage(studentId);
-        document.getElementById('parent-msg-text').value = message;
-        document.getElementById('parent-msg-loading').style.display = 'none';
-        document.getElementById('parent-msg-text').style.display = '';
+        const msgTextEl = document.getElementById('parent-msg-text');
+        const loadingEl = document.getElementById('parent-msg-loading');
+        if (msgTextEl) { msgTextEl.value = message; msgTextEl.style.display = ''; }
+        if (loadingEl) loadingEl.style.display = 'none';
     } catch (err) {
         console.error('메시지 생성 실패:', err);
-        document.getElementById('parent-msg-loading').innerHTML = `
+        const loadingEl = document.getElementById('parent-msg-loading');
+        if (loadingEl) loadingEl.innerHTML = `
             <span class="material-symbols-outlined" style="font-size:28px;color:var(--danger);">error</span>
             메시지 생성에 실패했습니다.<br><span style="font-size:11px;">${esc(err.message)}</span>`;
     }
@@ -4914,19 +4938,21 @@ async function openParentMessageModal(studentId) {
 async function regenerateParentMessage() {
     if (!parentMsgStudentId) return;
     if (parentMsgMode === 'ai') {
-        document.getElementById('parent-msg-loading').style.display = '';
-        document.getElementById('parent-msg-loading').innerHTML = `
-            <div class="spinner"></div>
+        const loadingEl = document.getElementById('parent-msg-loading');
+        const msgTextEl = document.getElementById('parent-msg-text');
+        if (loadingEl) {
+            loadingEl.style.display = '';
+            loadingEl.innerHTML = `<div class="spinner"></div>
             Gemini가 알림 메시지를 작성하고 있습니다...`;
-        document.getElementById('parent-msg-text').style.display = 'none';
+        }
+        if (msgTextEl) msgTextEl.style.display = 'none';
         try {
             const message = await generateParentMessage(parentMsgStudentId);
-            document.getElementById('parent-msg-text').value = message;
-            document.getElementById('parent-msg-loading').style.display = 'none';
-            document.getElementById('parent-msg-text').style.display = '';
+            if (msgTextEl) { msgTextEl.value = message; msgTextEl.style.display = ''; }
+            if (loadingEl) loadingEl.style.display = 'none';
         } catch (err) {
             console.error('메시지 재생성 실패:', err);
-            document.getElementById('parent-msg-loading').innerHTML = `
+            if (loadingEl) loadingEl.innerHTML = `
                 <span class="material-symbols-outlined" style="font-size:28px;color:var(--danger);">error</span>
                 메시지 생성에 실패했습니다.<br><span style="font-size:11px;">${esc(err.message)}</span>`;
         }
@@ -4943,8 +4969,13 @@ function copyParentMessage() {
     if (!textEl) return;
     navigator.clipboard.writeText(textEl.value).then(() => {
         const copied = document.getElementById('parent-msg-copied');
-        copied.style.display = '';
-        setTimeout(() => { copied.style.display = 'none'; }, 2000);
+        if (copied) {
+            copied.style.display = '';
+            setTimeout(() => { copied.style.display = 'none'; }, 2000);
+        }
+    }).catch(err => {
+        console.error('클립보드 복사 실패:', err);
+        alert('클립보드 복사에 실패했습니다.');
     });
 }
 

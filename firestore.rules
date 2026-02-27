@@ -13,6 +13,13 @@ rules_version = '2';
       }
 
       // =========================================================================
+      // 공통: 문서 크기 제한
+      // =========================================================================
+      function withinFieldLimit(max) {
+        return request.resource.data.keys().size() <= max;
+      }
+
+      // =========================================================================
       // 학생 마스터 컬렉션
       // =========================================================================
       match /students/{docId} {
@@ -42,21 +49,17 @@ rules_version = '2';
           return request.resource.data.keys().hasOnly(allowed);
         }
 
-        function withinSizeLimit() {
-          return request.resource.data.keys().size() <= 20;
-        }
-
         allow read: if isAuthorized();
 
         allow create: if isAuthorized()
           && hasRequiredStudentFields()
           && hasOnlyAllowedStudentFields()
-          && withinSizeLimit();
+          && withinFieldLimit(20);
 
         allow update: if isAuthorized()
           && hasRequiredStudentFields()
           && hasOnlyAllowedStudentFields()
-          && withinSizeLimit();
+          && withinFieldLimit(20);
 
         allow delete: if isAuthorized();
 
@@ -122,79 +125,164 @@ rules_version = '2';
 
       // =========================================================================
       // Daily Records (daily-ops 일일 기록)
+      // - merge:true로 부분 업데이트되므로 hasAll 대신 크기제한만 적용
       // =========================================================================
       match /daily_records/{docId} {
-        allow read, write: if isAuthorized();
+        allow read: if isAuthorized();
+
+        allow create, update: if isAuthorized()
+          && withinFieldLimit(30);
+
+        allow delete: if isAuthorized();
       }
 
       // =========================================================================
       // Retake Schedule (재시/보충 일정)
       // =========================================================================
       match /retake_schedule/{docId} {
-        allow read, write: if isAuthorized();
+        allow read: if isAuthorized();
+
+        allow create, update: if isAuthorized()
+          && request.resource.data.keys().hasOnly([
+            'student_id', 'student_name', 'branch', 'class_code',
+            'type', 'domain', 'scheduled_date', 'scheduled_time',
+            'status', 'created_by', 'created_at', 'completed_by', 'completed_at'
+          ])
+          && withinFieldLimit(15);
+
+        allow delete: if isAuthorized();
       }
 
       // =========================================================================
       // HW Fail Tasks (2차 미통과 밀린 숙제)
       // =========================================================================
       match /hw_fail_tasks/{docId} {
-        allow read, write: if isAuthorized();
-      }
+        allow read: if isAuthorized();
 
-      // =========================================================================
-      // User Settings (역할 설정)
-      // =========================================================================
-      match /user_settings/{email} {
-        allow read, write: if isAuthorized();
-      }
+        allow create, update: if isAuthorized()
+          && request.resource.data.keys().hasOnly([
+            'student_id', 'student_name', 'domain', 'type', 'source',
+            'source_date', 'scheduled_date', 'scheduled_time',
+            'alt_hw', 'handler', 'status', 'created_by', 'created_at',
+            'completed_by', 'completed_at', 'cancelled_by', 'cancelled_at', 'branch'
+          ])
+          && request.resource.data.status is string
+          && request.resource.data.status in ['pending', '완료', '취소']
+          && withinFieldLimit(20);
 
-      // =========================================================================
-      // Role Memos (역할별 메모)
-      // =========================================================================
-      match /role_memos/{docId} {
-        allow read, write: if isAuthorized();
-      }
-
-      // =========================================================================
-      // Class Settings (반별 설정: 영역, 테스트 등)
-      // =========================================================================
-      match /class_settings/{classCode} {
-        allow read, write: if isAuthorized();
-      }
-
-      // =========================================================================
-      // Class Next Homework (반별 다음숙제)
-      // =========================================================================
-      match /class_next_hw/{docId} {
-        allow read, write: if isAuthorized();
-      }
-
-      // =========================================================================
-      // Daily Checks (메인 대시보드 일일 체크)
-      // =========================================================================
-      match /daily_checks/{docId} {
-        allow read, write: if isAuthorized();
-      }
-
-      // =========================================================================
-      // Postponed Tasks (연기/보강 작업)
-      // =========================================================================
-      match /postponed_tasks/{docId} {
-        allow read, write: if isAuthorized();
+        allow delete: if isAuthorized();
       }
 
       // =========================================================================
       // Test Fail Tasks (2차 미통과 밀린 테스트)
       // =========================================================================
       match /test_fail_tasks/{docId} {
-        allow read, write: if isAuthorized();
+        allow read: if isAuthorized();
+
+        allow create, update: if isAuthorized()
+          && request.resource.data.keys().hasOnly([
+            'student_id', 'student_name', 'domain', 'type', 'source',
+            'source_date', 'scheduled_date', 'scheduled_time',
+            'alt_hw', 'handler', 'status', 'created_by', 'created_at',
+            'completed_by', 'completed_at', 'cancelled_by', 'cancelled_at', 'branch'
+          ])
+          && request.resource.data.status is string
+          && request.resource.data.status in ['pending', '완료', '취소']
+          && withinFieldLimit(20);
+
+        allow delete: if isAuthorized();
+      }
+
+      // =========================================================================
+      // User Settings (역할 설정)
+      // =========================================================================
+      match /user_settings/{email} {
+        allow read: if isAuthorized();
+
+        allow create, update: if isAuthorized()
+          && withinFieldLimit(10);
+
+        allow delete: if isAuthorized();
+      }
+
+      // =========================================================================
+      // Role Memos (역할별 메모)
+      // =========================================================================
+      match /role_memos/{docId} {
+        allow read: if isAuthorized();
+
+        allow create, update: if isAuthorized()
+          && withinFieldLimit(10);
+
+        allow delete: if isAuthorized();
+      }
+
+      // =========================================================================
+      // Class Settings (반별 설정: 영역, 테스트 등)
+      // =========================================================================
+      match /class_settings/{classCode} {
+        allow read: if isAuthorized();
+
+        allow create, update: if isAuthorized()
+          && withinFieldLimit(15);
+
+        allow delete: if isAuthorized();
+      }
+
+      // =========================================================================
+      // Class Next Homework (반별 다음숙제)
+      // =========================================================================
+      match /class_next_hw/{docId} {
+        allow read: if isAuthorized();
+
+        allow create, update: if isAuthorized()
+          && withinFieldLimit(15);
+
+        allow delete: if isAuthorized();
+      }
+
+      // =========================================================================
+      // Daily Checks (메인 대시보드 일일 체크)
+      // =========================================================================
+      match /daily_checks/{docId} {
+        allow read: if isAuthorized();
+
+        allow create, update: if isAuthorized()
+          && withinFieldLimit(20);
+
+        allow delete: if isAuthorized();
+      }
+
+      // =========================================================================
+      // Postponed Tasks (연기/보강 작업)
+      // =========================================================================
+      match /postponed_tasks/{docId} {
+        allow read: if isAuthorized();
+
+        allow create, update: if isAuthorized()
+          && withinFieldLimit(15);
+
+        allow delete: if isAuthorized();
       }
 
       // =========================================================================
       // Temp Attendance (임시출석)
       // =========================================================================
       match /temp_attendance/{docId} {
-        allow read, write: if isAuthorized();
+        allow read: if isAuthorized();
+
+        allow create, update: if isAuthorized()
+          && request.resource.data.keys().hasOnly([
+            'name', 'branch', 'school', 'level', 'grade',
+            'student_phone', 'parent_phone_1', 'memo',
+            'temp_date', 'temp_time', 'visit_status',
+            'created_at', 'created_by'
+          ])
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && withinFieldLimit(15);
+
+        allow delete: if isAuthorized();
       }
 
       // =========================================================================
