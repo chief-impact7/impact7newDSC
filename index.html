@@ -4,17 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Impact7 DSC</title>
+    <!-- Google Sans + Roboto -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Material Symbols -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="stylesheet" href="daily-ops.css">
 </head>
 <body>
     <!-- ===== 로그인 화면 ===== -->
     <div id="login-screen" class="login-screen">
         <div class="login-card">
             <h1 class="login-title">Impact7 DSC</h1>
-            <p class="login-subtitle">Daily Students Checklist</p>
+            <p class="login-subtitle">학생 일일활동 관리</p>
             <button id="login-btn" class="login-btn" onclick="handleLogin()">
                 <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
                 Google 로그인
@@ -24,204 +26,597 @@
 
     <!-- ===== 메인 화면 ===== -->
     <div id="main-screen" class="main-screen" style="display:none;">
-        <!-- 상단 바 -->
-        <header class="top-bar">
-            <div class="top-bar-left">
-                <h1 class="app-title">Impact7 DSC</h1>
-                <a href="/dashboard.html" style="font-size:13px;color:var(--primary);text-decoration:none;border-left:1px solid var(--border);padding-left:12px;">대시보드</a>
+
+        <!-- App Bar -->
+        <header class="app-bar">
+            <div class="app-bar-left">
+                <button class="icon-btn" id="sidebar-toggle" onclick="toggleSidebar()" aria-label="사이드바 열기/닫기">
+                    <span class="material-symbols-outlined">menu</span>
+                </button>
+                <span class="app-title">DSC</span>
             </div>
-            <div class="top-bar-center">
-                <button class="date-nav-btn" id="date-prev" onclick="changeDate(-1)">
-                    <span class="material-symbols-outlined">chevron_left</span>
-                </button>
-                <button class="date-display" id="date-display" onclick="openDatePicker()">
-                    <span id="date-text">2026-02-23 (월)</span>
-                </button>
-                <button class="date-nav-btn" id="date-next" onclick="changeDate(1)">
-                    <span class="material-symbols-outlined">chevron_right</span>
-                </button>
-                <input type="date" id="date-picker" class="date-picker-hidden">
-                <button class="date-nav-btn today-btn" onclick="goToday()" title="오늘">
-                    <span class="material-symbols-outlined">today</span>
-                </button>
+            <div class="app-bar-center">
+                <div class="search-pill">
+                    <span class="material-symbols-outlined">search</span>
+                    <input type="text" id="search-input" placeholder="학생 검색..." oninput="handleSearch(this.value)">
+                </div>
             </div>
-            <div class="top-bar-right">
-                <div class="filter-group">
-                    <select id="filter-branch" onchange="applyFilters()">
-                        <option value="">전체 소속</option>
-                        <option value="2단지">2단지</option>
-                        <option value="10단지">10단지</option>
-                    </select>
-                    <select id="filter-class" onchange="applyFilters()">
-                        <option value="">전체 반</option>
-                    </select>
+            <div class="app-bar-right">
+                <div class="date-selector">
+                    <button class="icon-btn" onclick="changeDate(-1)" aria-label="이전 날짜">
+                        <span class="material-symbols-outlined">chevron_left</span>
+                    </button>
+                    <button class="date-display" id="date-display" onclick="openDatePicker()">
+                        <span id="date-text">2026-02-23 (월)</span>
+                    </button>
+                    <button class="icon-btn" onclick="changeDate(1)" aria-label="다음 날짜">
+                        <span class="material-symbols-outlined">chevron_right</span>
+                    </button>
+                    <input type="date" id="date-picker" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;">
                 </div>
-                <div class="user-info">
-                    <span id="user-email" class="user-email"></span>
-                    <button class="avatar" onclick="handleLogin()" title="로그아웃">G</button>
-                </div>
+                <button class="icon-btn memo-bell" id="memo-bell" onclick="toggleMemoPanel()" style="display:none;" aria-label="메모 알림">
+                    <span class="material-symbols-outlined">mail</span>
+                    <span class="memo-badge" id="memo-badge" style="display:none;">0</span>
+                </button>
+                <span id="user-email" class="user-email"></span>
+                <button class="avatar" id="user-avatar" onclick="handleLogin()" title="로그아웃">G</button>
             </div>
         </header>
 
-        <!-- 모바일 필터 바 -->
-        <div class="mobile-filter-bar">
-            <select id="mobile-filter-branch" onchange="applyFilters()">
-                <option value="">전체</option>
-                <option value="2단지">2단지</option>
-                <option value="10단지">10단지</option>
-            </select>
-            <select id="mobile-filter-class" onchange="applyFilters()">
-                <option value="">전체 반</option>
-            </select>
-            <span id="student-count" class="student-count">0명</span>
-        </div>
+        <!-- 3-Column Layout -->
+        <div class="main-content">
 
-        <!-- PC: 가로 스크롤 테이블 -->
-        <div id="table-view" class="table-container">
-            <div class="table-scroll">
-                <table id="daily-table" class="daily-table">
-                    <thead>
-                        <tr class="section-header-row">
-                            <th class="sticky-col col-name" rowspan="2">이름</th>
-                            <th class="sticky-col col-class" rowspan="2">반</th>
-                            <th class="sticky-col col-time" rowspan="2">시간</th>
-                            <!-- 1. 출결 -->
-                            <th colspan="3" class="section-header sec-attendance">출결</th>
-                            <!-- 2. 숙제 -->
-                            <th colspan="8" class="section-header sec-homework">숙제</th>
-                            <!-- 3. 리뷰테스트 -->
-                            <th colspan="4" class="section-header sec-review-test">리뷰테스트</th>
-                            <!-- 4. ISC -->
-                            <th colspan="1" class="section-header sec-isc">ISC</th>
-                            <!-- 5. 부실 숙제 보완 -->
-                            <th colspan="8" class="section-header sec-review">부실 숙제 보완</th>
-                            <!-- 6. 재시 -->
-                            <th colspan="6" class="section-header sec-retest">재시</th>
-                            <!-- 7. 다음 숙제 -->
-                            <th colspan="7" class="section-header sec-next-hw">다음 숙제</th>
-                            <!-- 8. 전달사항 -->
-                            <th colspan="2" class="section-header sec-notes">전달사항</th>
-                            <!-- 9. 결석생 대응 -->
-                            <th colspan="2" class="section-header sec-absent">결석생 대응</th>
-                            <!-- 10. LMS -->
-                            <th colspan="1" class="section-header sec-lms">LMS</th>
-                        </tr>
-                        <tr class="sub-header-row">
-                            <!-- 1. 출결 -->
-                            <th class="sec-attendance">출결</th>
-                            <th class="sec-attendance">시간</th>
-                            <th class="sec-attendance">사유</th>
-                            <!-- 2. 숙제 -->
-                            <th class="sec-homework">독해</th>
-                            <th class="sec-homework">문법</th>
-                            <th class="sec-homework">실전</th>
-                            <th class="sec-homework">청해</th>
-                            <th class="sec-homework">추가</th>
-                            <th class="sec-homework">어휘</th>
-                            <th class="sec-homework">숙어</th>
-                            <th class="sec-homework">3단</th>
-                            <!-- 3. 리뷰테스트 -->
-                            <th class="sec-review-test">독해</th>
-                            <th class="sec-review-test">문법</th>
-                            <th class="sec-review-test">실전</th>
-                            <th class="sec-review-test">청해</th>
-                            <!-- 4. ISC -->
-                            <th class="sec-isc">ISC</th>
-                            <!-- 5. 부실 숙제 보완 -->
-                            <th class="sec-review">독해</th>
-                            <th class="sec-review">문법</th>
-                            <th class="sec-review">실전</th>
-                            <th class="sec-review">청해</th>
-                            <th class="sec-review">추가</th>
-                            <th class="sec-review">어휘</th>
-                            <th class="sec-review">숙어</th>
-                            <th class="sec-review">3단</th>
-                            <!-- 6. 재시 -->
-                            <th class="sec-retest">ISC</th>
-                            <th class="sec-retest">독해</th>
-                            <th class="sec-retest">문법</th>
-                            <th class="sec-retest">실전</th>
-                            <th class="sec-retest">청해</th>
-                            <th class="sec-retest">채점</th>
-                            <!-- 7. 다음 숙제 -->
-                            <th class="sec-next-hw">청해</th>
-                            <th class="sec-next-hw">요약</th>
-                            <th class="sec-next-hw">독해</th>
-                            <th class="sec-next-hw">문법</th>
-                            <th class="sec-next-hw">실전</th>
-                            <th class="sec-next-hw">청해2</th>
-                            <th class="sec-next-hw">추가</th>
-                            <!-- 8. 전달사항 -->
-                            <th class="sec-notes">강의실&rarr;학습실</th>
-                            <th class="sec-notes">학원&rarr;부모님</th>
-                            <!-- 9. 결석생 대응 -->
-                            <th class="sec-absent">담당</th>
-                            <th class="sec-absent">상담내용</th>
-                            <!-- 10. LMS -->
-                            <th class="sec-lms">내용</th>
-                        </tr>
-                    </thead>
-                    <tbody id="table-body">
-                        <!-- 동적 렌더링 -->
-                    </tbody>
-                </table>
+            <!-- Sidebar -->
+            <aside class="sidebar" id="sidebar">
+                <!-- 롤 선택기 -->
+                <div class="role-selector" id="role-selector" style="display:none;">
+                    <div class="role-selector-label">내 역할</div>
+                    <div class="role-chips" id="role-chips">
+                        <button class="role-chip" data-role="행정" onclick="selectRole('행정')">행정</button>
+                        <button class="role-chip" data-role="교수" onclick="selectRole('교수')">교수</button>
+                        <button class="role-chip" data-role="관리" onclick="selectRole('관리')">관리</button>
+                    </div>
+                    <!-- 메모 섹션 -->
+                    <div class="sidebar-memo-section" id="sidebar-memo-section" style="display:none;">
+                        <div class="sidebar-memo-title" onclick="toggleMemoSection()">
+                            <span class="material-symbols-outlined" style="font-size:18px;">mail</span>
+                            <span>메모</span>
+                            <span class="memo-unread-count" id="memo-unread-sidebar" style="display:none;">0</span>
+                            <span class="material-symbols-outlined expand-icon" id="memo-expand-icon">expand_more</span>
+                        </div>
+                        <div class="memo-panel" id="memo-panel" style="display:none;">
+                            <div class="memo-tabs" id="memo-tabs"></div>
+                            <div id="memo-content"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- L1 Navigation -->
+                <nav class="nav-l1-group">
+                    <div class="nav-l1 active" data-category="attendance" onclick="setCategory('attendance')">
+                        <span class="material-symbols-outlined nav-l1-icon">check_circle</span>
+                        <span class="nav-l1-text">출결</span>
+                        <span class="material-symbols-outlined nav-l1-expand">expand_more</span>
+                    </div>
+                    <div class="nav-l1" data-category="homework" onclick="setCategory('homework')">
+                        <span class="material-symbols-outlined nav-l1-icon">assignment</span>
+                        <span class="nav-l1-text">숙제</span>
+                        <span class="material-symbols-outlined nav-l1-expand">expand_more</span>
+                    </div>
+                    <div class="nav-l1" data-category="test" onclick="setCategory('test')">
+                        <span class="material-symbols-outlined nav-l1-icon">quiz</span>
+                        <span class="nav-l1-text">테스트</span>
+                        <span class="material-symbols-outlined nav-l1-expand">expand_more</span>
+                    </div>
+                    <div class="nav-l1" data-category="automation" onclick="setCategory('automation')">
+                        <span class="material-symbols-outlined nav-l1-icon">smart_toy</span>
+                        <span class="nav-l1-text">자동화</span>
+                        <span class="material-symbols-outlined nav-l1-expand">expand_more</span>
+                    </div>
+                    <div class="nav-l1" data-category="branch" onclick="setCategory('branch')">
+                        <span class="material-symbols-outlined nav-l1-icon">apartment</span>
+                        <span class="nav-l1-text">소속</span>
+                        <span class="material-symbols-outlined nav-l1-expand">expand_more</span>
+                    </div>
+                    <div class="nav-l1" data-category="class_mgmt" onclick="setCategory('class_mgmt')">
+                        <span class="material-symbols-outlined nav-l1-icon">groups</span>
+                        <span class="nav-l1-text">반 관리</span>
+                        <span class="material-symbols-outlined nav-l1-expand">expand_more</span>
+                    </div>
+                </nav>
+
+                <!-- L2 Sub-filters (동적 렌더링) -->
+                <div class="nav-l2-group" id="nav-l2-group">
+                    <!-- JS에서 카테고리 변경 시 렌더링 -->
+                </div>
+
+                <div class="sidebar-bottom">
+                    <button class="btn-temp-attendance" onclick="openTempAttendanceModal()">
+                        <span class="material-symbols-outlined" style="font-size:18px;">person_add</span>
+                        임시출석
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Sidebar overlay (모바일) -->
+            <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+            <!-- List Panel -->
+            <section class="list-panel" id="list-panel">
+                <div class="panel-header" id="panel-header">
+                    <input type="checkbox" class="select-all-checkbox" id="select-all-checkbox"
+                        onchange="toggleSelectAll(this.checked)" title="전체 선택">
+                    <div class="filter-chips" id="filter-chips"></div>
+                    <span class="count-chip" id="list-count">0명</span>
+                    <div class="panel-actions">
+                        <button class="icon-btn" onclick="refreshData()" aria-label="새로고침">
+                            <span class="material-symbols-outlined">refresh</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="list-items" id="list-items">
+                    <!-- 동적 렌더링: 각 list-item에 토글 버튼 그룹 포함 -->
+                    <div class="empty-state" id="list-empty">
+                        <span class="material-symbols-outlined">person_search</span>
+                        <p>학생 데이터를 불러오는 중...</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Detail Panel -->
+            <main class="detail-panel" id="detail-panel">
+                <div class="empty-detail" id="detail-empty">
+                    <span class="material-symbols-outlined" style="font-size:64px;color:var(--border);">assignment_ind</span>
+                    <p style="color:var(--text-sec);margin-top:12px;">학생을 선택하면 개인현황이 표시됩니다</p>
+                </div>
+                <div id="detail-content" style="display:none;">
+                    <!-- 프로필 헤더 -->
+                    <div class="profile-header" id="profile-header">
+                        <div class="profile-avatar" id="profile-avatar"></div>
+                        <div>
+                            <h2 class="detail-title" id="detail-name"></h2>
+                            <div class="profile-tags" id="profile-tags"></div>
+                        </div>
+                        <button class="icon-btn detail-close-btn" id="detail-close-btn" onclick="closeDetail()" title="닫기" aria-label="상세 패널 닫기">
+                            <span class="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
+
+                    <!-- 개인현황 카드들 (JS에서 동적 렌더링) -->
+                    <div id="detail-cards">
+                        <!-- 미완료 숙제 카드 -->
+                        <!-- 미완료 테스트 카드 -->
+                        <!-- 연기/재시 일정 카드 -->
+                        <!-- 메모 카드 -->
+                    </div>
+                </div>
+            </main>
+
+        </div><!-- /.main-content -->
+
+        <!-- Floating Batch Bar -->
+        <div class="batch-floating-bar" id="batch-bar" style="display:none;">
+            <span class="batch-count" id="batch-count">0명 선택</span>
+            <div class="batch-actions" id="batch-actions">
+                <!-- 동적 버튼 -->
             </div>
+            <button class="batch-btn-close" onclick="clearSelection()">
+                <span class="material-symbols-outlined">close</span>
+            </button>
         </div>
 
-        <!-- 모바일: 카드 리스트 -->
-        <div id="card-view" class="card-container">
-            <div id="card-list" class="card-list">
-                <!-- 동적 렌더링 -->
-            </div>
-        </div>
-
-        <!-- 저장 상태 표시 -->
-        <div id="save-indicator" class="save-indicator" style="display:none;">
-            <span class="material-symbols-outlined">cloud_upload</span>
-            <span id="save-text">저장 중...</span>
-        </div>
-
-        <!-- 연기 모달 -->
-        <div id="postpone-modal" class="modal-overlay" onclick="closePostponeModal(event)" style="display:none;">
+        <!-- 일정 지정 모달 -->
+        <div id="schedule-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="일정 지정" onclick="closeModal('schedule-modal', event)" style="display:none;">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3>연기/보강 등록</h3>
-                    <button class="modal-close" onclick="document.getElementById('postpone-modal').style.display='none'">
+                    <h3>일정 지정</h3>
+                    <button class="modal-close" onclick="document.getElementById('schedule-modal').style.display='none'">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-field">
+                        <label class="field-label">유형</label>
+                        <select id="schedule-type" class="field-input">
+                            <option value="재시">재시</option>
+                            <option value="보충">보충</option>
+                        </select>
+                    </div>
+                    <div class="form-field">
+                        <label class="field-label">과목</label>
+                        <input type="text" id="schedule-subject" class="field-input" placeholder="과목명">
+                    </div>
+                    <div class="form-field">
+                        <label class="field-label">제목</label>
+                        <input type="text" id="schedule-title" class="field-input" placeholder="예: 수학 소테스트 재시">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-field">
+                            <label class="field-label">예정 날짜</label>
+                            <input type="date" id="schedule-date" class="field-input">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="document.getElementById('schedule-modal').style.display='none'">취소</button>
+                    <button class="btn btn-primary" onclick="saveSchedule()">저장</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 숙제 추가 모달 -->
+        <div id="homework-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="숙제 추가" onclick="closeModal('homework-modal', event)" style="display:none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>숙제 추가</h3>
+                    <button class="modal-close" onclick="document.getElementById('homework-modal').style.display='none'">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-field">
+                        <label class="field-label">제목</label>
+                        <input type="text" id="hw-title" class="field-input" placeholder="숙제 제목">
+                    </div>
+                    <div class="form-field">
+                        <label class="field-label">과목</label>
+                        <select id="hw-subject" class="field-input">
+                            <!-- JS에서 동적 생성 -->
+                        </select>
+                    </div>
+                    <div class="form-field">
+                        <label class="field-label">상태</label>
+                        <select id="hw-status" class="field-input">
+                            <option value="미제출">미제출</option>
+                            <option value="제출">제출</option>
+                            <option value="확인완료">확인완료</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="document.getElementById('homework-modal').style.display='none'">취소</button>
+                    <button class="btn btn-primary" onclick="saveHomework()">추가</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 테스트 기록 모달 -->
+        <div id="test-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="테스트 기록" onclick="closeModal('test-modal', event)" style="display:none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>테스트 기록</h3>
+                    <button class="modal-close" onclick="document.getElementById('test-modal').style.display='none'">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-field">
+                        <label class="field-label">테스트명</label>
+                        <input type="text" id="test-title" class="field-input" placeholder="테스트 이름">
+                    </div>
+                    <div class="form-field">
+                        <label class="field-label">과목</label>
+                        <select id="test-subject" class="field-input">
+                            <!-- JS에서 동적 생성 -->
+                        </select>
+                    </div>
+                    <div class="form-field">
+                        <label class="field-label">유형</label>
+                        <select id="test-type" class="field-input">
+                            <option value="정기">정기</option>
+                            <option value="쪽지">쪽지</option>
+                            <option value="모의">모의</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-field">
+                            <label class="field-label">점수</label>
+                            <input type="number" id="test-score" class="field-input" placeholder="점수">
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">합격선</label>
+                            <input type="number" id="test-pass-score" class="field-input" placeholder="합격 점수" value="80">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="document.getElementById('test-modal').style.display='none'">취소</button>
+                    <button class="btn btn-primary" onclick="saveTest()">기록</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 일괄처리 확인 모달 -->
+        <div id="batch-confirm-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="일괄 처리 확인" onclick="closeModal('batch-confirm-modal', event)" style="display:none;">
+            <div class="modal-content modal-sm">
+                <div class="modal-header">
+                    <h3 id="batch-confirm-title">일괄 처리</h3>
+                    <button class="modal-close" onclick="document.getElementById('batch-confirm-modal').style.display='none'">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p id="batch-confirm-message"></p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="document.getElementById('batch-confirm-modal').style.display='none'">취소</button>
+                    <button class="btn btn-primary" id="batch-confirm-ok" onclick="executeBatchAction()">확인</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 메모 보내기 모달 -->
+        <div id="memo-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="메모 보내기" onclick="closeModal('memo-modal', event)" style="display:none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>메모 보내기</h3>
+                    <button class="modal-close" onclick="document.getElementById('memo-modal').style.display='none'">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-field">
+                        <label class="field-label">유형</label>
+                        <select id="memo-type" class="field-input" onchange="toggleMemoStudentField()">
+                            <option value="student">학생 지정</option>
+                            <option value="free">자유 메모</option>
+                        </select>
+                    </div>
+                    <div class="form-field" id="memo-student-field">
+                        <label class="field-label">학생</label>
+                        <input type="text" id="memo-student-search" class="field-input" placeholder="학생 이름 검색..." oninput="searchMemoStudent(this.value)">
+                        <div class="memo-student-dropdown" id="memo-student-dropdown" style="display:none;"></div>
+                        <input type="hidden" id="memo-student-id">
+                        <span id="memo-student-selected" class="field-value" style="margin-top:4px;"></span>
+                    </div>
+                    <div class="form-field">
+                        <label class="field-label">수신 대상</label>
+                        <div class="memo-target-checks" id="memo-target-checks">
+                            <label><input type="checkbox" value="교수" checked> 교수</label>
+                            <label><input type="checkbox" value="관리"> 관리</label>
+                        </div>
+                    </div>
+                    <div class="form-field">
+                        <label class="field-label">내용</label>
+                        <textarea id="memo-content-input" class="field-input" rows="4" placeholder="메모 내용을 입력하세요..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="document.getElementById('memo-modal').style.display='none'">취소</button>
+                    <button class="btn btn-primary" onclick="sendMemo()">보내기</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Enrollment 편집 모달 -->
+        <div id="enrollment-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="수강 정보 수정" onclick="closeModal('enrollment-modal', event)" style="display:none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>수강 정보 수정</h3>
+                    <button class="modal-close" onclick="document.getElementById('enrollment-modal').style.display='none'">
                         <span class="material-symbols-outlined">close</span>
                     </button>
                 </div>
                 <div class="modal-body">
                     <div class="form-field">
                         <label class="field-label">학생</label>
-                        <span id="postpone-student-name" class="field-value"></span>
-                    </div>
-                    <div class="form-field">
-                        <label class="field-label">미룬 내용</label>
-                        <input type="text" id="postpone-content" class="field-input" placeholder="예: 독해 리뷰테스트">
+                        <span id="enroll-student-name" class="field-value"></span>
                     </div>
                     <div class="form-row">
                         <div class="form-field">
-                            <label class="field-label">약속 날짜</label>
-                            <input type="date" id="postpone-date" class="field-input">
+                            <label class="field-label">레벨 기호</label>
+                            <input type="text" id="enroll-level" class="field-input" placeholder="H, M 등">
                         </div>
                         <div class="form-field">
-                            <label class="field-label">약속 시간</label>
-                            <input type="time" id="postpone-time" class="field-input" value="16:00">
+                            <label class="field-label">반 번호</label>
+                            <input type="text" id="enroll-class-num" class="field-input" placeholder="101, 202 등">
                         </div>
                     </div>
                     <div class="form-field">
-                        <label class="field-label">담당</label>
-                        <input type="text" id="postpone-handler" class="field-input" placeholder="담당 선생님">
+                        <label class="field-label">수업 요일</label>
+                        <div class="day-selector" id="enroll-days">
+                            <button type="button" class="day-btn" data-day="월" onclick="this.classList.toggle('active')">월</button>
+                            <button type="button" class="day-btn" data-day="화" onclick="this.classList.toggle('active')">화</button>
+                            <button type="button" class="day-btn" data-day="수" onclick="this.classList.toggle('active')">수</button>
+                            <button type="button" class="day-btn" data-day="목" onclick="this.classList.toggle('active')">목</button>
+                            <button type="button" class="day-btn" data-day="금" onclick="this.classList.toggle('active')">금</button>
+                            <button type="button" class="day-btn" data-day="토" onclick="this.classList.toggle('active')">토</button>
+                        </div>
+                    </div>
+                    <div class="form-field">
+                        <label class="field-label">수업 시작 시간</label>
+                        <input type="time" id="enroll-time" class="field-input">
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-secondary" onclick="document.getElementById('postpone-modal').style.display='none'">취소</button>
-                    <button class="btn btn-primary" onclick="savePostponedTask()">등록</button>
+                    <button class="btn btn-secondary" onclick="document.getElementById('enrollment-modal').style.display='none'">취소</button>
+                    <button class="btn btn-primary" onclick="saveEnrollment()">저장</button>
                 </div>
             </div>
         </div>
+
+        <!-- 임시출석 모달 -->
+        <div id="temp-attendance-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="임시출석" onclick="closeModal('temp-attendance-modal', event)" style="display:none;">
+            <div class="modal-content modal-sm">
+                <div class="modal-header">
+                    <h3>임시출석</h3>
+                    <button class="modal-close" onclick="document.getElementById('temp-attendance-modal').style.display='none'">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="field-row">
+                        <div class="field-group" style="flex:2;">
+                            <label class="field-label">이름</label>
+                            <input type="text" id="temp-att-name" class="field-input" placeholder="학생 이름">
+                        </div>
+                        <div class="field-group" style="flex:1;">
+                            <label class="field-label">소속</label>
+                            <select id="temp-att-branch" class="field-input">
+                                <option value="">선택</option>
+                                <option value="2단지">2단지</option>
+                                <option value="10단지">10단지</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <div class="field-group" style="flex:2;">
+                            <label class="field-label">학교</label>
+                            <input type="text" id="temp-att-school" class="field-input" placeholder="학교명">
+                        </div>
+                        <div class="field-group" style="flex:1;">
+                            <label class="field-label">학부</label>
+                            <select id="temp-att-level" class="field-input">
+                                <option value="">선택</option>
+                                <option value="초등">초등</option>
+                                <option value="중등">중등</option>
+                                <option value="고등">고등</option>
+                            </select>
+                        </div>
+                        <div class="field-group" style="flex:0.7;">
+                            <label class="field-label">학년</label>
+                            <input type="number" id="temp-att-grade" class="field-input" placeholder="1" min="1" max="6">
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <div class="field-group" style="flex:1;">
+                            <label class="field-label">학생연락처</label>
+                            <input type="tel" id="temp-att-student-phone" class="field-input" placeholder="01000000000" inputmode="numeric" pattern="[0-9]*">
+                        </div>
+                        <div class="field-group" style="flex:1;">
+                            <label class="field-label">학부모연락처</label>
+                            <input type="tel" id="temp-att-parent-phone" class="field-input" placeholder="01000000000" inputmode="numeric" pattern="[0-9]*">
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">메모 (사유)</label>
+                        <textarea id="temp-att-memo" class="field-input" rows="2" placeholder="임시출석 사유를 입력하세요"></textarea>
+                    </div>
+                    <div class="field-row">
+                        <div class="field-group" style="flex:1;">
+                            <label class="field-label">임시일</label>
+                            <input type="date" id="temp-att-date" class="field-input">
+                        </div>
+                        <div class="field-group" style="flex:1;">
+                            <label class="field-label">임시시간</label>
+                            <input type="time" id="temp-att-time" class="field-input">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="document.getElementById('temp-attendance-modal').style.display='none'">취소</button>
+                    <button class="btn btn-primary" onclick="saveTempAttendance()">저장</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 다음숙제 입력 모달 -->
+        <div id="next-hw-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="다음숙제 입력" onclick="closeModal('next-hw-modal', event)" style="display:none;">
+            <div class="modal-content modal-sm">
+                <div class="modal-header">
+                    <h3 id="next-hw-modal-title">다음숙제 입력</h3>
+                    <button class="modal-close" onclick="document.getElementById('next-hw-modal').style.display='none'">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-field">
+                        <label class="field-label" id="next-hw-modal-label">영역</label>
+                        <textarea id="next-hw-modal-text" class="field-input" rows="3" placeholder="숙제 내용을 입력하세요..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="document.getElementById('next-hw-modal').style.display='none'">취소</button>
+                    <button class="btn btn-secondary" id="next-hw-modal-none" onclick="saveNextHwNone()">숙제없음</button>
+                    <button class="btn btn-primary" id="next-hw-modal-save" onclick="saveNextHwFromModal()">입력</button>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /#main-screen -->
+
+    <!-- 저장 상태 표시 -->
+    <div id="save-indicator" class="save-indicator" style="display:none;">
+        <span class="material-symbols-outlined">cloud_upload</span>
+        <span id="save-text">저장 중...</span>
     </div>
 
-    <script type="module" src="app.js"></script>
+    <script type="module" src="daily-ops.js"></script>
+
+    <!-- 학부모 알림 모달 -->
+    <div id="parent-msg-modal" class="parent-msg-modal-overlay" role="dialog" aria-modal="true" aria-label="학부모 알림 작성" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
+        <div class="parent-msg-modal">
+            <div class="parent-msg-header">
+                <h3>학부모 알림 작성</h3>
+                <button class="icon-btn" onclick="document.getElementById('parent-msg-modal').style.display='none'" aria-label="닫기">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="parent-msg-tabs">
+                <button class="parent-msg-tab active" id="parent-msg-tab-ai" onclick="switchParentMsgTab('ai')">
+                    <span class="material-symbols-outlined" style="font-size:16px;">auto_awesome</span>
+                    AI 작성
+                </button>
+                <button class="parent-msg-tab" id="parent-msg-tab-manual" onclick="switchParentMsgTab('manual')">
+                    <span class="material-symbols-outlined" style="font-size:16px;">edit_note</span>
+                    직접 작성
+                </button>
+            </div>
+            <div class="parent-msg-body" id="parent-msg-body">
+                <!-- AI 탭 -->
+                <div id="parent-msg-ai-panel">
+                    <div class="parent-msg-loading" id="parent-msg-loading" style="display:none;">
+                        <div class="spinner"></div>
+                        Gemini가 알림 메시지를 작성하고 있습니다...
+                    </div>
+                    <div id="parent-msg-prompt-section" class="parent-msg-prompt-section">
+                        <button class="parent-msg-prompt-toggle" onclick="togglePromptEditor()">
+                            <span class="material-symbols-outlined" style="font-size:16px;">tune</span>
+                            프롬프트 설정
+                            <span class="material-symbols-outlined parent-msg-prompt-arrow" id="prompt-arrow" style="font-size:16px;">expand_more</span>
+                        </button>
+                        <div id="parent-msg-prompt-editor" style="display:none;">
+                            <textarea class="parent-msg-prompt-textarea" id="parent-msg-prompt"
+                                placeholder="AI에게 전달할 지시사항을 입력하세요..."></textarea>
+                            <div style="display:flex;gap:6px;margin-top:6px;">
+                                <button class="parent-msg-btn-small" onclick="resetPromptToDefault()">기본값 복원</button>
+                                <button class="parent-msg-btn-small primary" onclick="saveCustomPrompt()">저장</button>
+                            </div>
+                        </div>
+                    </div>
+                    <textarea class="parent-msg-textarea" id="parent-msg-text"
+                        placeholder="AI 생성 버튼을 눌러 메시지를 작성하세요..."></textarea>
+                    <div class="parent-msg-info">
+                        * AI가 생성한 내용입니다. 발송 전 반드시 확인해 주세요.
+                    </div>
+                </div>
+                <!-- 직접 작성 탭 -->
+                <div id="parent-msg-manual-panel" style="display:none;">
+                    <div class="parent-msg-template-info">
+                        학생 데이터가 자동으로 채워집니다. 내용을 수정한 후 복사하세요.
+                    </div>
+                    <textarea class="parent-msg-textarea" id="parent-msg-manual-text"
+                        placeholder="직접 메시지를 작성하세요..."></textarea>
+                </div>
+            </div>
+            <div class="parent-msg-footer">
+                <span class="parent-msg-copied" id="parent-msg-copied" style="display:none;">
+                    <span class="material-symbols-outlined" style="font-size:14px;">check</span>
+                    복사됨
+                </span>
+                <button class="parent-msg-btn-regen" onclick="regenerateParentMessage()" id="parent-msg-regen-btn">
+                    <span class="material-symbols-outlined" style="font-size:16px;">refresh</span>
+                    AI 생성
+                </button>
+                <button class="parent-msg-btn-copy" onclick="copyParentMessage()">
+                    <span class="material-symbols-outlined" style="font-size:16px;">content_copy</span>
+                    복사
+                </button>
+                <button class="parent-msg-btn-close" onclick="document.getElementById('parent-msg-modal').style.display='none'">
+                    닫기
+                </button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
