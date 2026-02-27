@@ -11,6 +11,7 @@ let currentUser = null;
 let allStudents = [];           // students 컬렉션 캐시
 let dailyRecords = {};          // studentDocId → daily_record 데이터
 let retakeSchedules = [];       // retake_schedule 전체
+let hwFailTasks = [];           // hw_fail_tasks 전체
 let selectedDate = todayStr();
 let selectedStudentId = null;
 let currentCategory = 'attendance'; // 'attendance' | 'homework' | 'test' | 'automation'
@@ -30,7 +31,7 @@ let savedL2Expanded = {};        // 카테고리별 L2 펼침 상태 기억
 const DEFAULT_DOMAINS = ['Gr', 'A/G', 'R/C'];
 
 // ─── OX Helpers ─────────────────────────────────────────────────────────────
-const OX_CYCLE = ['', 'O', 'X', '△'];
+const OX_CYCLE = ['O', '△', 'X', ''];
 
 function nextOXValue(current) {
     const idx = OX_CYCLE.indexOf(current || '');
@@ -217,6 +218,18 @@ async function loadRetakeSchedules() {
         });
     } catch (err) {
         console.error('retake_schedule 로드 실패:', err.message);
+    }
+}
+
+async function loadHwFailTasks() {
+    hwFailTasks = [];
+    try {
+        const snap = await getDocs(collection(db, 'hw_fail_tasks'));
+        snap.forEach(d => {
+            hwFailTasks.push({ docId: d.id, ...d.data() });
+        });
+    } catch (err) {
+        console.error('hw_fail_tasks 로드 실패:', err.message);
     }
 }
 
@@ -936,6 +949,16 @@ function getFilteredStudents() {
         });
     }
 
+    // hw_fail_action 등원일이 오늘인 학생 추가 포함 (정규 수업 없어도 리스트에 나타나야 함)
+    const hwVisitStudents = allStudents.filter(s => {
+        if (students.some(st => st.docId === s.docId)) return false; // 이미 포함
+        const hwFail = dailyRecords[s.docId]?.hw_fail_action || {};
+        return Object.values(hwFail).some(a => a.type === '등원' && a.scheduled_date === selectedDate);
+    });
+    if (hwVisitStudents.length > 0) {
+        students = [...students, ...hwVisitStudents];
+    }
+
     return students;
 }
 
@@ -1188,22 +1211,50 @@ function renderListPanel() {
         const dayName = getDayName(selectedDate);
         const todayEnroll = s.enrollments.find(e => e.day.includes(dayName));
         const scheduledTime = todayEnroll?.start_time;
+
+        // hw_fail_tasks 등원 예약 시간 (선택날짜 기준 pending)
+        const visitTasks = hwFailTasks.filter(t =>
+            t.student_id === s.docId &&
+            t.type === '등원' &&
+            t.scheduled_date === selectedDate &&
+            t.status === 'pending'
+        );
+
         let timeLabel = '', timeValue = '', timeClass = '';
         if (arrivalTime) {
             timeLabel = '등원'; timeValue = formatTime12h(arrivalTime); timeClass = 'arrived';
         } else if (scheduledTime) {
             timeLabel = '예정'; timeValue = formatTime12h(scheduledTime);
         }
-        const timeHtml = timeValue ? `<div class="item-time-block ${timeClass}">
-            <span class="item-time-label">${timeLabel}</span>
-            <span class="item-time-value">${esc(timeValue)}</span>
-        </div>` : '';
+        const timeHtml = [
+            timeValue ? `<div class="item-time-block ${timeClass}">
+                <span class="item-time-label">${timeLabel}</span>
+                <span class="item-time-value">${esc(timeValue)}</span>
+            </div>` : '',
+            // 정규 수업과 시간이 다른 등원 예약 시간 추가 표시
+            ...visitTasks
+                .filter(t => t.scheduled_time && t.scheduled_time !== scheduledTime)
+                .map(t => `<div class="item-time-block" style="color:var(--danger);">
+                    <span class="item-time-label" style="color:var(--danger);">보충</span>
+                    <span class="item-time-value" style="color:var(--danger);">${esc(formatTime12h(t.scheduled_time))}</span>
+                </div>`)
+        ].join('');
+
+        // hw_fail_tasks 기반 아이콘 (대체숙제/등원예약) - pending 상태만
+        const pendingTasks = hwFailTasks.filter(t => t.student_id === s.docId && t.status === 'pending');
+        const hasAltHw = pendingTasks.some(t => t.type === '대체숙제');
+        const hasVisit = pendingTasks.some(t => t.type === '등원');
+        const hwFailIconHtml = hasAltHw
+            ? `<span class="hw-fail-badge hw-fail-alt" title="대체숙제 있음"><span class="material-symbols-outlined" style="font-size:14px;">edit_note</span></span>`
+            : hasVisit
+            ? `<span class="hw-fail-badge hw-fail-visit" title="등원 예약 있음"><span class="material-symbols-outlined" style="font-size:14px;">directions_walk</span></span>`
+            : '';
 
         return `<div class="list-item ${isActive}" data-id="${s.docId}" onclick="selectStudent('${s.docId}')">
             <input type="checkbox" class="item-checkbox" ${isChecked}
                 onclick="event.stopPropagation(); toggleCheck('${s.docId}', this.checked)">
             <div class="item-info">
-                <span class="item-title">${esc(s.name)} <span class="item-class-type">${esc(todayEnroll?.class_type || '')}</span></span>
+                <span class="item-title">${esc(s.name)}${hwFailIconHtml} <span class="item-class-type">${esc(todayEnroll?.class_type || '')}</span></span>
                 <span class="item-desc">${esc(code)}${studentShortLabel(s) ? ', ' + esc(studentShortLabel(s)) : ''}</span>
             </div>
             ${timeHtml}
@@ -1564,6 +1615,324 @@ function clearClassDetail() {
     });
 }
 
+// ─── HW Fail Action Card ────────────────────────────────────────────────────
+// 2차 숙제 미통과 영역을 자동 감지하여 '등원' 또는 '대체숙제' 처리 입력 카드를 렌더링
+
+function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction) {
+    // 2차에서 X 또는 △인 영역만 미통과 처리 대상
+    // d2nd가 아예 비어있으면 (2차 미진행) 카드 숨김
+    const d2ndHasAny = Object.values(d2nd).some(v => v);
+    if (!d2ndHasAny) return '';
+
+    // d2nd에서 X 또는 △인 영역만 추출 (O·빈칸 제외)
+    const failDomains = domains.filter(d => {
+        const val = d2nd[d] || '';
+        return val === 'X' || val === '△';
+    });
+
+    if (failDomains.length === 0) {
+        // 모두 O일 때: 축하 메시지만 표시
+        return `
+            <div class="detail-card hw-fail-card">
+                <div class="detail-card-title">
+                    <span class="material-symbols-outlined" style="color:var(--success);font-size:18px;">check_circle</span>
+                    2차 숙제 처리
+                </div>
+                <div class="detail-card-empty" style="color:var(--success);">✅ 2차 모두 통과!</div>
+            </div>
+        `;
+    }
+
+    const rows = failDomains.map(domain => {
+        const action = hwFailAction[domain] || {};
+        const type = action.type || '';
+        const isVisit = type === '등원';
+        const isAlt = type === '대체숙제';
+        const escapedDomain = escAttr(domain);
+
+        return `
+            <div class="hw-fail-domain-row" data-domain="${escapedDomain}">
+                <div class="hw-fail-domain-header">
+                    <span class="hw-domain-label" style="font-weight:600;font-size:13px;">${esc(domain)}</span>
+                    <span class="hw-domain-ox hw-fail-ox ${oxDisplayClass(d2nd[domain] || '')}" style="font-size:12px;padding:2px 6px;">${esc(d2nd[domain] || '—')}</span>
+                    <div class="hw-fail-type-btns">
+                        <button class="hw-fail-type-btn ${isVisit ? 'active' : ''}"
+                            onclick="selectHwFailType('${escAttr(studentId)}', '${escapedDomain}', '등원', this)">
+                            <span class="material-symbols-outlined" style="font-size:14px;">directions_walk</span>등원
+                        </button>
+                        <button class="hw-fail-type-btn ${isAlt ? 'active' : ''}"
+                            onclick="selectHwFailType('${escAttr(studentId)}', '${escapedDomain}', '대체숙제', this)">
+                            <span class="material-symbols-outlined" style="font-size:14px;">edit_note</span>대체숙제
+                        </button>
+                        ${type ? `<button class="hw-fail-type-btn hw-fail-clear-btn"
+                            onclick="clearHwFailType('${escAttr(studentId)}', '${escapedDomain}')">취소</button>` : ''}
+                    </div>
+                </div>
+                ${isVisit ? `
+                    <div class="hw-fail-detail">
+                        <div class="hw-fail-detail-row">
+                            <label class="field-label" style="font-size:11px;color:var(--text-sec);flex-shrink:0;">등원일시</label>
+                            <input type="date" class="field-input hw-fail-input" style="flex:1;padding:4px 8px;font-size:12px;"
+                                value="${escAttr(action.scheduled_date || '')}"
+                                onchange="updateHwFailField('${escAttr(studentId)}', '${escapedDomain}', 'scheduled_date', this.value)">
+                            <input type="time" class="field-input hw-fail-input" style="width:90px;padding:4px 8px;font-size:12px;"
+                                value="${escAttr(action.scheduled_time || '16:00')}"
+                                onchange="updateHwFailField('${escAttr(studentId)}', '${escapedDomain}', 'scheduled_time', this.value)">
+                        </div>
+                        <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc((action.handler || currentUser?.email || '').split('@')[0])}</div>
+                    </div>
+                ` : isAlt ? `
+                    <div class="hw-fail-detail">
+                        <input type="text" class="field-input hw-fail-input" style="width:100%;padding:4px 8px;font-size:12px;"
+                            placeholder="대체 숙제 내용 (예: 단어장 50개)"
+                            value="${escAttr(action.alt_hw || '')}"
+                            onchange="updateHwFailField('${escAttr(studentId)}', '${escapedDomain}', 'alt_hw', this.value)">
+                        <div class="hw-fail-detail-row" style="margin-top:4px;">
+                            <label class="field-label" style="font-size:11px;color:var(--text-sec);flex-shrink:0;">제출기한</label>
+                            <input type="date" class="field-input hw-fail-input" style="flex:1;padding:4px 8px;font-size:12px;"
+                                value="${escAttr(action.scheduled_date || '')}"
+                                onchange="updateHwFailField('${escAttr(studentId)}', '${escapedDomain}', 'scheduled_date', this.value)">
+                        </div>
+                        <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc((action.handler || currentUser?.email || '').split('@')[0])}</div>
+                    </div>
+                ` : ''}
+                <div class="hw-fail-saved-tag" id="hw-fail-saved-${escAttr(studentId)}-${escapedDomain}" style="display:none;font-size:11px;color:var(--success);margin-top:4px;">✓ 저장됨</div>
+            </div>
+        `;
+    }).join('<hr style="border:none;border-top:1px solid var(--border);margin:8px 0;">');
+
+    return `
+        <div class="detail-card hw-fail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:var(--danger);font-size:18px;">assignment_late</span>
+                2차 미통과 처리 (${failDomains.length}개 영역)
+            </div>
+            <div class="hw-fail-desc" style="font-size:12px;color:var(--text-sec);margin-bottom:10px;">
+                2차 미통과 영역에 '등원 약속' 또는 '대체 숙제'를 지정하세요.
+            </div>
+            ${rows}
+        </div>
+    `;
+}
+
+// 처리 유형 선택 (등원 / 대체숙제)
+window.selectHwFailType = async function(studentId, domain, type, btnEl) {
+    if (!checkCanEditGrading(studentId)) return;
+    const rec = dailyRecords[studentId] || {};
+    const hwFailAction = { ...(rec.hw_fail_action || {}) };
+    const current = hwFailAction[domain] || {};
+
+    // 같은 버튼 클릭 시 토글 해제
+    if (current.type === type) {
+        delete hwFailAction[domain];
+    } else {
+        hwFailAction[domain] = {
+            ...current,
+            type,
+            handler: currentUser?.email || '',
+            scheduled_date: current.scheduled_date || '',
+            scheduled_time: current.scheduled_time || (type === '등원' ? '16:00' : ''),
+            alt_hw: current.alt_hw || '',
+            updated_at: new Date().toISOString(),
+        };
+    }
+
+    await saveHwFailAction(studentId, hwFailAction);
+    renderStudentDetail(studentId);
+};
+
+// 처리 유형 초기화
+window.clearHwFailType = async function(studentId, domain) {
+    if (!checkCanEditGrading(studentId)) return;
+    const rec = dailyRecords[studentId] || {};
+    const hwFailAction = { ...(rec.hw_fail_action || {}) };
+    delete hwFailAction[domain];
+    await saveHwFailAction(studentId, hwFailAction);
+    renderStudentDetail(studentId);
+};
+
+// 개별 필드 업데이트 (디바운스 저장)
+let hwFailSaveTimers = {};
+window.updateHwFailField = function(studentId, domain, field, value) {
+    if (!checkCanEditGrading(studentId)) return;
+    const rec = dailyRecords[studentId] || {};
+    if (!dailyRecords[studentId]) dailyRecords[studentId] = {};
+    if (!dailyRecords[studentId].hw_fail_action) dailyRecords[studentId].hw_fail_action = {};
+    if (!dailyRecords[studentId].hw_fail_action[domain]) dailyRecords[studentId].hw_fail_action[domain] = {};
+    dailyRecords[studentId].hw_fail_action[domain][field] = value;
+    dailyRecords[studentId].hw_fail_action[domain].updated_at = new Date().toISOString();
+
+    const timerKey = `${studentId}_${domain}`;
+    if (hwFailSaveTimers[timerKey]) clearTimeout(hwFailSaveTimers[timerKey]);
+    hwFailSaveTimers[timerKey] = setTimeout(async () => {
+        await saveHwFailAction(studentId, dailyRecords[studentId].hw_fail_action);
+        delete hwFailSaveTimers[timerKey];
+    }, 1500);
+};
+
+// Firestore에 hw_fail_action 저장 + hw_fail_tasks 컬렉션에도 동기화
+async function saveHwFailAction(studentId, hwFailAction) {
+    const docId = makeDailyRecordId(studentId, selectedDate);
+    const student = allStudents.find(s => s.docId === studentId);
+    try {
+        await setDoc(doc(db, 'daily_records', docId), {
+            student_id: studentId,
+            date: selectedDate,
+            branch: branchFromStudent(student || {}),
+            hw_fail_action: hwFailAction,
+            updated_by: currentUser.email,
+            updated_at: serverTimestamp()
+        }, { merge: true });
+        if (!dailyRecords[studentId]) dailyRecords[studentId] = { student_id: studentId, date: selectedDate };
+        dailyRecords[studentId].hw_fail_action = hwFailAction;
+
+        // hw_fail_tasks 컬렉션 동기화 (domain당 1개 doc: studentId_domain_sourceDate)
+        for (const [domain, action] of Object.entries(hwFailAction)) {
+            if (!action.type) continue;
+            const taskDocId = `${studentId}_${domain}_${selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
+            const existing = hwFailTasks.find(t => t.docId === taskDocId);
+            // 이미 완료/취소된 태스크는 덮어쓰지 않음
+            if (existing && existing.status !== 'pending') continue;
+
+            const taskData = {
+                student_id: studentId,
+                student_name: student?.name || '',
+                domain,
+                type: action.type,
+                source_date: selectedDate,
+                scheduled_date: action.scheduled_date || '',
+                scheduled_time: action.scheduled_time || '',
+                alt_hw: action.alt_hw || '',
+                handler: (action.handler || currentUser?.email || '').split('@')[0],
+                status: 'pending',
+                created_by: (currentUser?.email || '').split('@')[0],
+                created_at: existing?.created_at || new Date().toISOString(),
+                branch: branchFromStudent(student || ''),
+            };
+            await setDoc(doc(db, 'hw_fail_tasks', taskDocId), taskData, { merge: true });
+            // 로컬 캐시 갱신
+            const idx = hwFailTasks.findIndex(t => t.docId === taskDocId);
+            if (idx >= 0) {
+                hwFailTasks[idx] = { docId: taskDocId, ...taskData };
+            } else {
+                hwFailTasks.push({ docId: taskDocId, ...taskData });
+            }
+        }
+
+        // 삭제된 domain의 pending tasks: 타입 제거 시 hw_fail_tasks에서도 상태 업데이트
+        for (const t of hwFailTasks.filter(t => t.student_id === studentId && t.source_date === selectedDate && t.status === 'pending')) {
+            const action = hwFailAction[t.domain];
+            if (!action || !action.type) {
+                await updateDoc(doc(db, 'hw_fail_tasks', t.docId), {
+                    status: '취소',
+                    cancelled_by: (currentUser?.email || '').split('@')[0],
+                    cancelled_at: new Date().toISOString()
+                });
+                t.status = '취소';
+            }
+        }
+
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('hw_fail_action 저장 실패:', err);
+        showSaveIndicator('error');
+    }
+}
+
+// ─── 밀린 Task 카드 렌더링 ───────────────────────────────────────────────────
+
+function renderPendingTasksCard(studentId, tasks) {
+    if (tasks.length === 0) return '';
+
+    const taskRows = tasks.map(t => {
+        const typeIcon = t.type === '등원'
+            ? `<span class="material-symbols-outlined" style="font-size:14px;color:var(--danger);">directions_walk</span>`
+            : `<span class="material-symbols-outlined" style="font-size:14px;color:var(--primary);">edit_note</span>`;
+
+        const detail = t.type === '등원'
+            ? `${esc(t.scheduled_date || '')}${t.scheduled_time ? ' ' + esc(formatTime12h(t.scheduled_time)) : ''}`
+            : `${esc(t.alt_hw || '내용 미입력')}${t.scheduled_date ? ' (기한: ' + esc(t.scheduled_date) + ')' : ''}`;
+
+        return `
+            <div class="pending-task-card">
+                <div class="pending-task-header">
+                    <span class="pending-task-domain">${esc(t.domain)}</span>
+                    ${typeIcon}
+                    <span class="pending-task-type">${esc(t.type)}</span>
+                    <span class="pending-task-source">출처: ${esc(t.source_date || '')}</span>
+                </div>
+                <div class="pending-task-detail">${detail}</div>
+                <div class="pending-task-meta">담당: ${esc(t.handler || '')} · 입력: ${esc(t.created_by || '')}</div>
+                <div class="pending-task-actions">
+                    <button class="hw-fail-type-btn active" style="background:var(--success);border-color:var(--success);font-size:11px;"
+                        onclick="completeHwFailTask('${escAttr(t.docId)}', '${escAttr(studentId)}')">
+                        <span class="material-symbols-outlined" style="font-size:13px;">check_circle</span>완료
+                    </button>
+                    <button class="hw-fail-type-btn hw-fail-clear-btn" style="font-size:11px;"
+                        onclick="cancelHwFailTask('${escAttr(t.docId)}', '${escAttr(studentId)}')">
+                        <span class="material-symbols-outlined" style="font-size:13px;">cancel</span>취소
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <div class="detail-card" style="border-color:#fef3c7;">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:#d97706;font-size:18px;">pending_actions</span>
+                밀린 Task (${tasks.length})
+            </div>
+            <div style="font-size:12px;color:var(--text-sec);margin-bottom:10px;">완료 또는 취소 처리로 해결하세요.</div>
+            ${taskRows}
+        </div>
+    `;
+}
+
+// 밀린 Task 완료 처리
+window.completeHwFailTask = async function(taskDocId, studentId) {
+    if (!confirm('완료 처리하시겠습니까?')) return;
+    showSaveIndicator('saving');
+    try {
+        const completedBy = (currentUser?.email || '').split('@')[0];
+        await updateDoc(doc(db, 'hw_fail_tasks', taskDocId), {
+            status: '완료',
+            completed_by: completedBy,
+            completed_at: new Date().toISOString()
+        });
+        const t = hwFailTasks.find(t => t.docId === taskDocId);
+        if (t) { t.status = '완료'; t.completed_by = completedBy; }
+        renderStudentDetail(studentId);
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('완료 처리 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
+// 밀린 Task 취소 처리
+window.cancelHwFailTask = async function(taskDocId, studentId) {
+    if (!confirm('취소 처리하시겠습니까?')) return;
+    showSaveIndicator('saving');
+    try {
+        const cancelledBy = (currentUser?.email || '').split('@')[0];
+        await updateDoc(doc(db, 'hw_fail_tasks', taskDocId), {
+            status: '취소',
+            cancelled_by: cancelledBy,
+            cancelled_at: new Date().toISOString()
+        });
+        const t = hwFailTasks.find(t => t.docId === taskDocId);
+        if (t) { t.status = '취소'; t.cancelled_by = cancelledBy; }
+        renderStudentDetail(studentId);
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('취소 처리 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
 // ─── Student Detail Panel ───────────────────────────────────────────────────
 
 function renderStudentDetail(studentId) {
@@ -1602,6 +1971,7 @@ function renderStudentDetail(studentId) {
     const homework = rec.homework || [];
     const tests = rec.tests || [];
     const studentRetakes = retakeSchedules.filter(r => r.student_id === studentId && r.status === '예정');
+    const studentHwTasks = hwFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
 
     const incompleteHomework = homework.filter(h => h.status !== '확인완료');
     const incompleteTests = tests.filter(t => t.result === '재시필요');
@@ -1784,6 +2154,12 @@ function renderStudentDetail(studentId) {
             </button>
         </div>
 
+        <!-- 숙제 2차 미통과 처리 카드 -->
+        ${renderHwFailActionCard(studentId, detailDomains, d2nd, rec.hw_fail_action || {})}
+
+        <!-- 밀린 Task 카드 -->
+        ${renderPendingTasksCard(studentId, studentHwTasks)}
+
         <!-- 롤 메모 카드 -->
         ${renderStudentRoleMemoCard(studentId)}
 
@@ -1931,7 +2307,16 @@ function doesStatusMatchFilter(firestoreStatus, filterSet) {
     return false;
 }
 
+function checkCanEditGrading(studentId) {
+    const rec = dailyRecords[studentId] || {};
+    const st = rec?.attendance?.status;
+    if (st === '출석' || st === '지각' || st === '조퇴') return true;
+    alert('등원(출석, 지각, 조퇴) 상태인 학생만 입력할 수 있습니다.');
+    return false;
+}
+
 function toggleHomework(studentId, hwIndex, status) {
+    if (!checkCanEditGrading(studentId)) return;
     const rec = dailyRecords[studentId] || {};
     const homework = [...(rec.homework || [])];
     if (homework[hwIndex]) {
@@ -1957,10 +2342,19 @@ function oxFieldLabel(field) {
 function toggleHwDomainOX(studentId, field, domain) {
     // 체크된 학생이 2명 이상이면 값 선택 모달
     if (checkedItems.size >= 2 && checkedItems.has(studentId)) {
+        const invalidStudents = Array.from(checkedItems).filter(id => {
+            const st = dailyRecords[id]?.attendance?.status;
+            return !(st === '출석' || st === '지각' || st === '조퇴');
+        });
+        if (invalidStudents.length > 0) {
+            alert('선택된 학생 중 등원(출석, 지각, 조퇴) 상태가 아닌 학생이 포함되어 있습니다.\\n선택 해제 후 다시 시도해주세요.');
+            return;
+        }
         showHwDomainBatchModal(field, domain, oxFieldLabel(field));
         return;
     }
 
+    if (!checkCanEditGrading(studentId)) return;
     applyHwDomainOX(studentId, field, domain);
     renderSubFilters();
     if (selectedStudentId === studentId) renderStudentDetail(studentId);
@@ -2230,7 +2624,7 @@ function updateDateDisplay() {
 }
 
 async function reloadForDate() {
-    await Promise.all([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadRoleMemos()]);
+    await Promise.all([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadRoleMemos()]);
     updateDateDisplay();
     renderSubFilters();
     renderListPanel();
@@ -2328,6 +2722,7 @@ function openScheduleModal(studentIds) {
 }
 
 function openHomeworkModal(studentId) {
+    if (!checkCanEditGrading(studentId)) return;
     selectedStudentId = studentId;
     const domains = getStudentDomains(studentId);
     const select = document.getElementById('hw-subject');
@@ -2340,6 +2735,7 @@ function openHomeworkModal(studentId) {
 }
 
 function openTestModal(studentId) {
+    if (!checkCanEditGrading(studentId)) return;
     selectedStudentId = studentId;
     const domains = getStudentDomains(studentId);
     const select = document.getElementById('test-subject');
@@ -2986,7 +3382,7 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('user-avatar').textContent = (user.email || 'U')[0].toUpperCase();
 
         await loadStudents();
-        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadUserRole(), loadClassSettings()]);
+        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadUserRole(), loadClassSettings()]);
         await loadRoleMemos().catch(() => {});
         updateDateDisplay();
         renderBranchFilter();
@@ -3058,7 +3454,7 @@ window.renderStudentDetail = renderStudentDetail;
 window.refreshData = async () => {
     showSaveIndicator('saving');
     await loadStudents();
-    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadRoleMemos(), loadClassSettings()]);
+    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadRoleMemos(), loadClassSettings()]);
     renderBranchFilter();
     renderSubFilters();
     renderListPanel();

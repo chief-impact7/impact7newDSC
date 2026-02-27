@@ -454,7 +454,7 @@ function renderTableCell(field, value, checkId) {
 
 // ─── OX cycle ────────────────────────────────────────────────────────────────
 window.cycleOX = (td) => {
-    const cycle = ['', 'O', 'X', '\u25B3'];
+    const cycle = ['O', 'X', '△', ''];
     const current = td.dataset.value || '';
     const nextIdx = (cycle.indexOf(current) + 1) % cycle.length;
     const next = cycle[nextIdx];
