@@ -3236,11 +3236,38 @@ function renderStudentDetail(studentId) {
 
 // ─── 임의 등원 저장 ─────────────────────────────────────────────────────────
 
-function saveExtraVisit(studentId, field, value) {
+async function saveExtraVisit(studentId, field, value) {
     const rec = dailyRecords[studentId] || {};
-    const extraVisit = rec.extra_visit || {};
+    const extraVisit = { ...(rec.extra_visit || {}) };
     extraVisit[field] = value;
+
+    // 로컬 캐시 업데이트
+    if (!dailyRecords[studentId]) {
+        dailyRecords[studentId] = { student_id: studentId, date: selectedDate };
+    }
+    dailyRecords[studentId].extra_visit = extraVisit;
+
+    // 현재 날짜 레코드에 저장 (상세 패널 표시용)
     saveDailyRecord(studentId, { extra_visit: extraVisit });
+
+    // 타겟 날짜가 다르면 타겟 날짜 레코드에도 저장 (등원예정 목록 표시용)
+    const targetDate = extraVisit.date;
+    if (targetDate && targetDate !== selectedDate) {
+        const docId = makeDailyRecordId(studentId, targetDate);
+        const student = allStudents.find(s => s.docId === studentId);
+        try {
+            await setDoc(doc(db, 'daily_records', docId), {
+                student_id: studentId,
+                date: targetDate,
+                branch: branchFromStudent(student || {}),
+                extra_visit: extraVisit,
+                updated_by: currentUser.email,
+                updated_at: serverTimestamp()
+            }, { merge: true });
+        } catch (err) {
+            console.error('임의등원 미래 날짜 저장 실패:', err);
+        }
+    }
 }
 
 // ─── Toggle handlers (immediate save) ──────────────────────────────────────
@@ -4950,13 +4977,17 @@ async function saveTempAttendance() {
     try {
         await addDoc(collection(db, 'temp_attendance'), data);
         document.getElementById('temp-attendance-modal').style.display = 'none';
-        await loadTempAttendances(selectedDate);
-        renderSubFilters();
-        renderListPanel();
+        // 저장한 날짜가 현재 보고 있는 날짜면 리로드
+        const savedDate = data.temp_date;
+        if (savedDate === selectedDate) {
+            await loadTempAttendances(selectedDate);
+            renderSubFilters();
+            renderListPanel();
+        }
         showSaveIndicator('saved');
     } catch (err) {
         console.error('임시출석 저장 실패:', err);
-        alert('저장에 실패했습니다.');
+        alert(`저장에 실패했습니다.\n${err.message || err}`);
     }
 }
 
