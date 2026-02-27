@@ -542,5 +542,45 @@
     </div>
 
     <script type="module" src="daily-ops.js"></script>
+
+    <!-- 학부모 알림 모달 -->
+    <div id="parent-msg-modal" class="parent-msg-modal-overlay" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
+        <div class="parent-msg-modal">
+            <div class="parent-msg-header">
+                <h3>학부모 알림 작성</h3>
+                <button class="icon-btn" onclick="document.getElementById('parent-msg-modal').style.display='none'">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="parent-msg-body" id="parent-msg-body">
+                <div class="parent-msg-loading" id="parent-msg-loading">
+                    <div class="spinner"></div>
+                    Gemini가 알림 메시지를 작성하고 있습니다...
+                </div>
+                <textarea class="parent-msg-textarea" id="parent-msg-text" style="display:none;"
+                    placeholder="생성된 메시지가 여기에 표시됩니다..."></textarea>
+                <div class="parent-msg-info" id="parent-msg-info" style="display:none;">
+                    * AI가 생성한 내용입니다. 발송 전 반드시 확인해 주세요.
+                </div>
+            </div>
+            <div class="parent-msg-footer">
+                <span class="parent-msg-copied" id="parent-msg-copied" style="display:none;">
+                    <span class="material-symbols-outlined" style="font-size:14px;">check</span>
+                    복사됨
+                </span>
+                <button class="parent-msg-btn-regen" onclick="regenerateParentMessage()" id="parent-msg-regen-btn" style="display:none;">
+                    <span class="material-symbols-outlined" style="font-size:16px;">refresh</span>
+                    다시 작성
+                </button>
+                <button class="parent-msg-btn-copy" onclick="copyParentMessage()" id="parent-msg-copy-btn" style="display:none;">
+                    <span class="material-symbols-outlined" style="font-size:16px;">content_copy</span>
+                    복사
+                </button>
+                <button class="parent-msg-btn-close" onclick="document.getElementById('parent-msg-modal').style.display='none'">
+                    닫기
+                </button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

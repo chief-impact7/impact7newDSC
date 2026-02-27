@@ -2684,3 +2684,141 @@ textarea.field-input {
   background: var(--surface-hover);
   color: var(--text-sec);
 }
+
+/* ===== 학부모 알림 모달 ===== */
+.parent-msg-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.parent-msg-modal {
+  background: var(--surface-container);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 480px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+
+.parent-msg-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.parent-msg-header h3 {
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.parent-msg-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.parent-msg-textarea {
+  width: 100%;
+  min-height: 200px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+  color: var(--text-main);
+}
+
+.parent-msg-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.parent-msg-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 0;
+  color: var(--text-sec);
+  font-size: 13px;
+}
+
+.parent-msg-loading .spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: msg-spin 0.8s linear infinite;
+}
+
+@keyframes msg-spin {
+  to { transform: rotate(360deg); }
+}
+
+.parent-msg-footer {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  justify-content: flex-end;
+}
+
+.parent-msg-footer button {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.parent-msg-btn-copy {
+  background: var(--primary);
+  color: #fff;
+}
+
+.parent-msg-btn-copy:hover {
+  background: #0842a0;
+}
+
+.parent-msg-btn-close {
+  background: var(--surface-hover);
+  color: var(--text-main);
+}
+
+.parent-msg-btn-regen {
+  background: var(--surface-hover);
+  color: var(--text-sec);
+}
+
+.parent-msg-info {
+  font-size: 11px;
+  color: var(--text-sec);
+  margin-top: 8px;
+}
+
+.parent-msg-copied {
+  font-size: 12px;
+  color: var(--success);
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}

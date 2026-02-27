@@ -3,7 +3,7 @@ import {
     collection, getDocs, doc, setDoc, getDoc, addDoc,
     query, where, serverTimestamp, updateDoc, writeBatch, arrayUnion
 } from 'firebase/firestore';
-import { auth, db } from './firebase-config.js';
+import { auth, db, geminiModel } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -2904,6 +2904,13 @@ function renderChecklistCard(studentId) {
             </button>`;
     }
 
+    const parentMsgBtn = `
+        <button class="departure-btn not-ready" style="margin-top:6px;background:#f3e8ff;color:#7c3aed;border:1px solid #e9d5ff;"
+            onclick="event.stopPropagation(); openParentMessageModal('${escAttr(studentId)}')">
+            <span class="material-symbols-outlined" style="font-size:16px;">sms</span>
+            학부모 알림 작성
+        </button>`;
+
     return `
         <div class="checklist-card">
             <div class="checklist-progress">
@@ -2921,6 +2928,7 @@ function renderChecklistCard(studentId) {
                 `).join('')}
             </div>
             ${departureSection}
+            ${parentMsgBtn}
         </div>`;
 }
 
@@ -4576,6 +4584,132 @@ window.searchMemoStudent = searchMemoStudent;
 window.selectMemoStudent = selectMemoStudent;
 window.markMemoRead = markMemoRead;
 window.expandMemo = expandMemo;
+
+// ─── 학부모 알림 메시지 생성 ────────────────────────────────────────────────
+
+let parentMsgStudentId = null;
+
+function collectStudentDaySummary(studentId) {
+    const student = allStudents.find(s => s.docId === studentId);
+    if (!student) return null;
+
+    const rec = dailyRecords[studentId] || {};
+    const domains = getStudentDomains(studentId);
+    const { flat: testItems } = getStudentTestItems(studentId);
+    const checklist = getStudentChecklistStatus(studentId);
+
+    const summary = {
+        name: student.name,
+        date: selectedDate,
+        attendance: rec?.attendance?.status || '미확인',
+        arrival_time: rec?.arrival_time || '',
+        departure: rec?.departure || {},
+        homework_1st: {},
+        homework_2nd: {},
+        test_1st: {},
+        test_2nd: {},
+        hw_fail_actions: {},
+        test_fail_actions: {},
+        extra_visit: rec.extra_visit || {},
+        note: rec.note || '',
+        checklist: checklist.map(c => `${c.label}: ${c.done ? '완료' : '미완료'}`).join(', ')
+    };
+
+    const hw1st = rec.hw_domains_1st || {};
+    const hw2nd = rec.hw_domains_2nd || {};
+    domains.forEach(d => {
+        if (hw1st[d]) summary.homework_1st[d] = hw1st[d];
+        if (hw2nd[d]) summary.homework_2nd[d] = hw2nd[d];
+    });
+
+    const t1st = rec.test_domains_1st || {};
+    const t2nd = rec.test_domains_2nd || {};
+    testItems.forEach(t => {
+        if (t1st[t]) summary.test_1st[t] = t1st[t];
+        if (t2nd[t]) summary.test_2nd[t] = t2nd[t];
+    });
+
+    const hwAction = rec.hw_fail_action || {};
+    Object.entries(hwAction).forEach(([d, a]) => {
+        if (a.type) summary.hw_fail_actions[d] = { type: a.type, scheduled_date: a.scheduled_date, alt_hw: a.alt_hw };
+    });
+
+    const testAction = rec.test_fail_action || {};
+    Object.entries(testAction).forEach(([t, a]) => {
+        if (a.type) summary.test_fail_actions[t] = { type: a.type, scheduled_date: a.scheduled_date, alt_hw: a.alt_hw };
+    });
+
+    return summary;
+}
+
+async function generateParentMessage(studentId) {
+    const summary = collectStudentDaySummary(studentId);
+    if (!summary) return '학생 정보를 찾을 수 없습니다.';
+
+    const prompt = `당신은 한국 영어학원 "임팩트7" 선생님입니다. 아래 학생의 하루 학습 데이터를 바탕으로 학부모님께 보내는 문자 메시지를 작성해주세요.
+
+규칙:
+- 존댓말 사용, 간결하고 따뜻한 톤
+- 이모지 적절히 사용 (1-2개)
+- O는 통과, X는 미통과, △는 부분통과로 해석
+- 긍정적인 면 먼저 언급, 개선 필요한 부분은 부드럽게 전달
+- 미통과 항목이 있으면 후속 조치 안내
+- 귀가 완료면 귀가 시간 안내
+- 핵심만 담아 200자 이내
+- "안녕하세요, ${summary.name} 학부모님" 으로 시작
+- 학원명 "임팩트7"은 마지막 인사에만 포함
+
+학생 데이터:
+${JSON.stringify(summary, null, 2)}`;
+
+    const result = await geminiModel.generateContent(prompt);
+    return result.response.text();
+}
+
+async function openParentMessageModal(studentId) {
+    parentMsgStudentId = studentId;
+
+    document.getElementById('parent-msg-modal').style.display = '';
+    document.getElementById('parent-msg-loading').style.display = '';
+    document.getElementById('parent-msg-text').style.display = 'none';
+    document.getElementById('parent-msg-info').style.display = 'none';
+    document.getElementById('parent-msg-copy-btn').style.display = 'none';
+    document.getElementById('parent-msg-regen-btn').style.display = 'none';
+    document.getElementById('parent-msg-copied').style.display = 'none';
+
+    try {
+        const message = await generateParentMessage(studentId);
+        document.getElementById('parent-msg-text').value = message;
+        document.getElementById('parent-msg-loading').style.display = 'none';
+        document.getElementById('parent-msg-text').style.display = '';
+        document.getElementById('parent-msg-info').style.display = '';
+        document.getElementById('parent-msg-copy-btn').style.display = '';
+        document.getElementById('parent-msg-regen-btn').style.display = '';
+    } catch (err) {
+        console.error('메시지 생성 실패:', err);
+        document.getElementById('parent-msg-loading').innerHTML = `
+            <span class="material-symbols-outlined" style="font-size:28px;color:var(--danger);">error</span>
+            메시지 생성에 실패했습니다.<br><span style="font-size:11px;">${esc(err.message)}</span>`;
+    }
+}
+
+async function regenerateParentMessage() {
+    if (!parentMsgStudentId) return;
+    openParentMessageModal(parentMsgStudentId);
+}
+
+function copyParentMessage() {
+    const textarea = document.getElementById('parent-msg-text');
+    navigator.clipboard.writeText(textarea.value).then(() => {
+        const copied = document.getElementById('parent-msg-copied');
+        copied.style.display = '';
+        setTimeout(() => { copied.style.display = 'none'; }, 2000);
+    });
+}
+
+window.openParentMessageModal = openParentMessageModal;
+window.regenerateParentMessage = regenerateParentMessage;
+window.copyParentMessage = copyParentMessage;
 
 // ─── 등원예정 완료 처리 ────────────────────────────────────────────────────
 

@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getAI, getGenerativeModel, VertexAIBackend } from 'firebase/ai';
 
 const firebaseConfig = {
     apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
@@ -29,3 +30,6 @@ const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+const ai = getAI(app, { backend: new VertexAIBackend() });
+export const geminiModel = getGenerativeModel(ai, { model: 'gemini-2.0-flash' });
