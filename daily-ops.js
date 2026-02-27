@@ -12,6 +12,8 @@ let allStudents = [];           // students 컬렉션 캐시
 let dailyRecords = {};          // studentDocId → daily_record 데이터
 let retakeSchedules = [];       // retake_schedule 전체
 let hwFailTasks = [];           // hw_fail_tasks 전체
+let testFailTasks = [];         // test_fail_tasks 전체
+let tempAttendances = [];       // temp_attendance 전체 (해당 날짜)
 let selectedDate = todayStr();
 let selectedStudentId = null;
 let currentCategory = 'attendance'; // 'attendance' | 'homework' | 'test' | 'automation'
@@ -28,6 +30,10 @@ let selectedBranch = null;       // 소속 글로벌 필터 (null = 전체, '2�
 let selectedClassCode = null;    // 반 글로벌 필터 (null = 전체, 'ax104' 등)
 let savedSubFilters = {};        // 카테고리별 L2 선택 기억 { homework: Set['hw_1st'], ... }
 let savedL2Expanded = {};        // 카테고리별 L2 펼침 상태 기억
+let classNextHw = {};            // classCode → { domains: { "Gr": "...", ... } }
+let nextHwSaveTimers = {};       // classCode_domain → timer
+let selectedNextHwClass = null;  // 다음숙제 반별 상세에서 선택된 반 코드
+let nextHwModalTarget = { classCode: null, domain: null }; // 모달 타겟
 const DEFAULT_DOMAINS = ['Gr', 'A/G', 'R/C'];
 
 // ─── OX Helpers ─────────────────────────────────────────────────────────────
@@ -122,6 +128,63 @@ async function loadClassSettings() {
 
 function getClassDomains(classCode) {
     return classSettings[classCode]?.domains || [...DEFAULT_DOMAINS];
+}
+
+// ─── Class Next Homework (반별 다음숙제) ────────────────────────────────────
+
+async function loadClassNextHw(date) {
+    const q2 = query(collection(db, 'class_next_hw'), where('date', '==', date));
+    const snap = await getDocs(q2);
+    classNextHw = {};
+    snap.forEach(d => {
+        const data = d.data();
+        classNextHw[data.class_code] = data;
+    });
+}
+
+function saveClassNextHw(classCode, domain, text, immediate = false) {
+    const timerKey = `${classCode}_${domain}`;
+    if (nextHwSaveTimers[timerKey]) clearTimeout(nextHwSaveTimers[timerKey]);
+
+    // 로컬 상태 즉시 업데이트
+    if (!classNextHw[classCode]) {
+        classNextHw[classCode] = { class_code: classCode, date: selectedDate, domains: {} };
+    }
+    classNextHw[classCode].domains[domain] = text;
+
+    const doSave = async () => {
+        showSaveIndicator('saving');
+        try {
+            const docId = `${classCode}_${selectedDate}`;
+            await setDoc(doc(db, 'class_next_hw', docId), {
+                class_code: classCode,
+                date: selectedDate,
+                domains: classNextHw[classCode].domains,
+                updated_by: currentUser.email,
+                updated_at: serverTimestamp()
+            }, { merge: true });
+            showSaveIndicator('saved');
+        } catch (err) {
+            console.error('다음숙제 저장 실패:', err);
+            showSaveIndicator('error');
+        }
+    };
+
+    if (immediate) {
+        doSave();
+    } else {
+        nextHwSaveTimers[timerKey] = setTimeout(doSave, 2000);
+    }
+}
+
+function getNextHwStatus(classCode) {
+    const domains = getClassDomains(classCode);
+    const data = classNextHw[classCode]?.domains || {};
+    const filled = domains.filter(d => {
+        const v = (data[d] || '').trim();
+        return v === '없음' || v.length > 0;
+    }).length;
+    return { filled, total: domains.length };
 }
 
 function getStudentDomains(studentId) {
@@ -230,6 +293,29 @@ async function loadHwFailTasks() {
         });
     } catch (err) {
         console.error('hw_fail_tasks 로드 실패:', err.message);
+    }
+}
+
+async function loadTestFailTasks() {
+    testFailTasks = [];
+    try {
+        const snap = await getDocs(collection(db, 'test_fail_tasks'));
+        snap.forEach(d => {
+            testFailTasks.push({ docId: d.id, ...d.data() });
+        });
+    } catch (err) {
+        console.error('test_fail_tasks 로드 실패:', err.message);
+    }
+}
+
+async function loadTempAttendances(date) {
+    tempAttendances = [];
+    try {
+        const q = query(collection(db, 'temp_attendance'), where('temp_date', '==', date));
+        const snap = await getDocs(q);
+        snap.forEach(d => tempAttendances.push({ docId: d.id, ...d.data() }));
+    } catch (err) {
+        console.error('temp_attendance 로드 실패:', err.message);
     }
 }
 
@@ -439,6 +525,7 @@ function renderSubFilters() {
     const container = document.getElementById('nav-l2-group');
     const filters = {
         attendance: [
+            { key: 'scheduled_visit', label: '등원예정' },
             { key: 'pre_arrival', label: '등원전' },
             { key: 'present', label: '출석' },
             { key: 'late', label: '지각' },
@@ -723,6 +810,11 @@ function getSubFilterCount(filterKey) {
 
     if (currentCategory === 'attendance') {
         switch (filterKey) {
+            case 'scheduled_visit': {
+                const visits = getScheduledVisits();
+                const pending = visits.filter(v => v.status === 'pending').length;
+                return { count: pending, total: visits.length };
+            }
             case 'all': return r(total);
             case 'pre_arrival': return r(todayStudents.filter(s => {
                 const rec = dailyRecords[s.docId];
@@ -751,7 +843,14 @@ function getSubFilterCount(filterKey) {
                 const d1st = dailyRecords[s.docId]?.hw_domains_1st || {};
                 return domains.some(d => d1st[d] !== 'O');
             }).length);
-            case 'hw_next': return r(todayStudents.filter(s => (dailyRecords[s.docId]?.homework || []).length >= 3).length);
+            case 'hw_next': {
+                const classCodes = getUniqueClassCodes();
+                const filledCount = classCodes.filter(cc => {
+                    const { filled, total } = getNextHwStatus(cc);
+                    return filled > 0;
+                }).length;
+                return { count: filledCount, total: classCodes.length };
+            }
             case 'not_submitted': return r(todayStudents.filter(s => {
                 const rec = dailyRecords[s.docId];
                 return rec?.homework?.some(h => h.status === '미제출') || !rec?.homework?.length;
@@ -797,6 +896,89 @@ function getSubFilterCount(filterKey) {
     }
 
     return 0;
+}
+
+// ─── 등원예정 통합 집계 ─────────────────────────────────────────────────────
+
+function getScheduledVisits() {
+    const visits = [];
+
+    // 1) 임시출석 (temp_attendance)
+    for (const ta of tempAttendances) {
+        visits.push({
+            id: `temp_${ta.docId}`,
+            source: 'temp',
+            sourceLabel: '임시출석',
+            sourceColor: '#7c3aed',
+            studentId: null,
+            name: ta.name || '(이름 없음)',
+            time: ta.temp_time || '',
+            detail: [ta.branch, ta.school, ta.grade].filter(Boolean).join(' · ') || '',
+            status: ta.visit_status === '완료' ? 'completed' : 'pending',
+            docId: ta.docId
+        });
+    }
+
+    // 2) 숙제미통과 등원 (hwFailTasks)
+    for (const t of hwFailTasks) {
+        if (t.type !== '등원' || t.scheduled_date !== selectedDate || (t.status !== 'pending' && t.status !== '완료')) continue;
+        visits.push({
+            id: `hw_fail_${t.docId}`,
+            source: 'hw_fail',
+            sourceLabel: '숙제미통과',
+            sourceColor: '#dc2626',
+            studentId: t.student_id,
+            name: t.student_name || t.student_id,
+            time: t.scheduled_time || '',
+            detail: `${t.domain || ''} (${t.source_date || ''})`,
+            status: t.status === '완료' ? 'completed' : 'pending',
+            docId: t.docId
+        });
+    }
+
+    // 3) 테스트미통과 등원 (testFailTasks)
+    for (const t of testFailTasks) {
+        if (t.type !== '등원' || t.scheduled_date !== selectedDate || (t.status !== 'pending' && t.status !== '완료')) continue;
+        visits.push({
+            id: `test_fail_${t.docId}`,
+            source: 'test_fail',
+            sourceLabel: '테스트미통과',
+            sourceColor: '#ea580c',
+            studentId: t.student_id,
+            name: t.student_name || t.student_id,
+            time: t.scheduled_time || '',
+            detail: `${t.item || t.domain || ''} (${t.source_date || ''})`,
+            status: t.status === '완료' ? 'completed' : 'pending',
+            docId: t.docId
+        });
+    }
+
+    // 4) 임의등원 (dailyRecords[*].extra_visit)
+    for (const [sid, rec] of Object.entries(dailyRecords)) {
+        const ev = rec.extra_visit;
+        if (!ev || ev.date !== selectedDate) continue;
+        const student = allStudents.find(s => s.docId === sid);
+        visits.push({
+            id: `extra_${sid}`,
+            source: 'extra',
+            sourceLabel: '임의등원',
+            sourceColor: '#2563eb',
+            studentId: sid,
+            name: student?.name || sid,
+            time: ev.time || '',
+            detail: ev.reason || '',
+            status: ev.visit_status === '완료' ? 'completed' : 'pending',
+            docId: sid
+        });
+    }
+
+    // 시간순 정렬 (pending 먼저, 그 안에서 시간순)
+    visits.sort((a, b) => {
+        if (a.status !== b.status) return a.status === 'pending' ? -1 : 1;
+        return (a.time || '99:99').localeCompare(b.time || '99:99');
+    });
+
+    return visits;
 }
 
 // ─── Filtering ──────────────────────────────────────────────────────────────
@@ -887,7 +1069,7 @@ function getFilteredStudents() {
             students = students.filter(s => {
                 const rec = dailyRecords[s.docId];
                 for (const f of hwF) {
-                    if (f === 'hw_next' && (rec?.homework || []).length >= 3) return true;
+                    if (f === 'hw_next') return true; // 반별 UI로 전환되므로 학생 필터링 스킵
                     if (f === 'not_submitted' && (rec?.homework?.some(h => h.status === '미제출') || !rec?.homework?.length)) return true;
                     if (f === 'submitted' && rec?.homework?.some(h => h.status === '제출')) return true;
                     if (f === 'confirmed' && rec?.homework?.some(h => h.status === '확인완료')) return true;
@@ -949,14 +1131,21 @@ function getFilteredStudents() {
         });
     }
 
-    // hw_fail_action 등원일이 오늘인 학생 추가 포함 (정규 수업 없어도 리스트에 나타나야 함)
-    const hwVisitStudents = allStudents.filter(s => {
-        if (students.some(st => st.docId === s.docId)) return false; // 이미 포함
+    // hw_fail / test_fail / extra_visit 등원일이 오늘인 학생 추가 포함 (정규 수업 없어도 리스트에 나타나야 함)
+    const existingIds = new Set(students.map(s => s.docId));
+    const visitStudents = allStudents.filter(s => {
+        if (existingIds.has(s.docId)) return false;
+        // hw_fail_action 등원
         const hwFail = dailyRecords[s.docId]?.hw_fail_action || {};
-        return Object.values(hwFail).some(a => a.type === '등원' && a.scheduled_date === selectedDate);
+        if (Object.values(hwFail).some(a => a.type === '등원' && a.scheduled_date === selectedDate)) return true;
+        // test_fail 등원
+        if (testFailTasks.some(t => t.student_id === s.docId && t.type === '등원' && t.scheduled_date === selectedDate && t.status === 'pending')) return true;
+        // extra_visit 등원
+        if (dailyRecords[s.docId]?.extra_visit?.date === selectedDate) return true;
+        return false;
     });
-    if (hwVisitStudents.length > 0) {
-        students = [...students, ...hwVisitStudents];
+    if (visitStudents.length > 0) {
+        students = [...students, ...visitStudents];
     }
 
     return students;
@@ -964,7 +1153,64 @@ function getFilteredStudents() {
 
 // ─── Rendering ──────────────────────────────────────────────────────────────
 
+function renderScheduledVisitList() {
+    const visits = getScheduledVisits();
+    const container = document.getElementById('list-items');
+    const countEl = document.getElementById('list-count');
+
+    renderFilterChips();
+    countEl.textContent = `${visits.length}건`;
+
+    if (visits.length === 0) {
+        container.innerHTML = `<div class="empty-state">
+            <span class="material-symbols-outlined">event_available</span>
+            <p>등원예정 항목이 없습니다</p>
+        </div>`;
+        return;
+    }
+
+    container.innerHTML = visits.map(v => {
+        const isCompleted = v.status === 'completed';
+        const completedClass = isCompleted ? 'visit-completed' : '';
+        const clickHandler = v.studentId
+            ? `onclick="selectedStudentId='${escAttr(v.studentId)}'; renderStudentDetail('${escAttr(v.studentId)}'); document.querySelectorAll('.list-item').forEach(el=>el.classList.remove('active')); this.classList.add('active');"`
+            : '';
+        const guestBadge = !v.studentId ? '<span class="visit-guest-badge">비등록</span>' : '';
+        const timeDisplay = v.time ? formatTime12h(v.time) : '';
+        const completedTag = isCompleted ? '<span class="visit-source-badge" style="background:#059669;">완료</span>' : '';
+        const confirmBtn = !isCompleted
+            ? `<button class="toggle-btn active-present" style="padding:2px 10px;font-size:12px;min-width:auto;" onclick="event.stopPropagation(); completeScheduledVisit('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">확인</button>`
+            : '';
+
+        return `<div class="list-item visit-item ${completedClass}" ${clickHandler} style="${v.studentId ? 'cursor:pointer;' : ''}">
+            <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+                <span class="item-title" style="font-weight:500;min-width:60px;">${esc(v.name)}</span>
+                <span class="visit-source-badge" style="background:${v.sourceColor};">${esc(v.sourceLabel)}</span>
+                ${guestBadge}
+                ${completedTag}
+                <span style="font-size:12px;color:var(--text-sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(v.detail)}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                ${timeDisplay ? `<span style="font-size:12px;color:var(--text-sec);font-variant-numeric:tabular-nums;">${timeDisplay}</span>` : ''}
+                ${confirmBtn}
+            </div>
+        </div>`;
+    }).join('');
+}
+
 function renderListPanel() {
+    // 등원예정 서브필터 활성 시 통합 리스트로 전환
+    if (currentCategory === 'attendance' && currentSubFilter.has('scheduled_visit')) {
+        renderScheduledVisitList();
+        return;
+    }
+
+    // hw_next 서브필터 활성 시 반별 리스트로 전환
+    if (currentCategory === 'homework' && currentSubFilter.has('hw_next')) {
+        renderNextHwClassList();
+        return;
+    }
+
     const students = getFilteredStudents();
     const container = document.getElementById('list-items');
     const countEl = document.getElementById('list-count');
@@ -1653,16 +1899,16 @@ function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction) {
         return `
             <div class="hw-fail-domain-row" data-domain="${escapedDomain}">
                 <div class="hw-fail-domain-header">
-                    <span class="hw-domain-label" style="font-weight:600;font-size:13px;">${esc(domain)}</span>
-                    <span class="hw-domain-ox hw-fail-ox ${oxDisplayClass(d2nd[domain] || '')}" style="font-size:12px;padding:2px 6px;">${esc(d2nd[domain] || '—')}</span>
+                    <span style="font-size:12px;font-weight:600;color:var(--text-main);">${esc(domain)}</span>
+                    <span class="hw-fail-ox-badge ${oxDisplayClass(d2nd[domain] || '')}">${esc(d2nd[domain] || '—')}</span>
                     <div class="hw-fail-type-btns">
                         <button class="hw-fail-type-btn ${isVisit ? 'active' : ''}"
                             onclick="selectHwFailType('${escAttr(studentId)}', '${escapedDomain}', '등원', this)">
-                            <span class="material-symbols-outlined" style="font-size:14px;">directions_walk</span>등원
+                            <span class="material-symbols-outlined" style="font-size:13px;">directions_walk</span>등원
                         </button>
                         <button class="hw-fail-type-btn ${isAlt ? 'active' : ''}"
                             onclick="selectHwFailType('${escAttr(studentId)}', '${escapedDomain}', '대체숙제', this)">
-                            <span class="material-symbols-outlined" style="font-size:14px;">edit_note</span>대체숙제
+                            <span class="material-symbols-outlined" style="font-size:13px;">edit_note</span>대체숙제
                         </button>
                         ${type ? `<button class="hw-fail-type-btn hw-fail-clear-btn"
                             onclick="clearHwFailType('${escAttr(studentId)}', '${escapedDomain}')">취소</button>` : ''}
@@ -1705,7 +1951,7 @@ function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction) {
         <div class="detail-card hw-fail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--danger);font-size:18px;">assignment_late</span>
-                2차 미통과 처리 (${failDomains.length}개 영역)
+                숙제 미통과 (${failDomains.length}개 영역)
             </div>
             <div class="hw-fail-desc" style="font-size:12px;color:var(--text-sec);margin-bottom:10px;">
                 2차 미통과 영역에 '등원 약속' 또는 '대체 숙제'를 지정하세요.
@@ -1807,7 +2053,7 @@ async function saveHwFailAction(studentId, hwFailAction) {
                 status: 'pending',
                 created_by: (currentUser?.email || '').split('@')[0],
                 created_at: existing?.created_at || new Date().toISOString(),
-                branch: branchFromStudent(student || ''),
+                branch: branchFromStudent(student || {}),
             };
             await setDoc(doc(db, 'hw_fail_tasks', taskDocId), taskData, { merge: true });
             // 로컬 캐시 갱신
@@ -1845,6 +2091,11 @@ function renderPendingTasksCard(studentId, tasks) {
     if (tasks.length === 0) return '';
 
     const taskRows = tasks.map(t => {
+        const isTest = t.source === 'test';
+        const completeFunc = isTest ? 'completeTestFailTask' : 'completeHwFailTask';
+        const cancelFunc = isTest ? 'cancelTestFailTask' : 'cancelHwFailTask';
+        const sourceLabel = isTest ? '테스트' : '숙제';
+
         const typeIcon = t.type === '등원'
             ? `<span class="material-symbols-outlined" style="font-size:14px;color:var(--danger);">directions_walk</span>`
             : `<span class="material-symbols-outlined" style="font-size:14px;color:var(--primary);">edit_note</span>`;
@@ -1859,17 +2110,17 @@ function renderPendingTasksCard(studentId, tasks) {
                     <span class="pending-task-domain">${esc(t.domain)}</span>
                     ${typeIcon}
                     <span class="pending-task-type">${esc(t.type)}</span>
-                    <span class="pending-task-source">출처: ${esc(t.source_date || '')}</span>
+                    <span class="pending-task-source">${esc(sourceLabel)} · ${esc(t.source_date || '')}</span>
                 </div>
                 <div class="pending-task-detail">${detail}</div>
                 <div class="pending-task-meta">담당: ${esc(t.handler || '')} · 입력: ${esc(t.created_by || '')}</div>
                 <div class="pending-task-actions">
                     <button class="hw-fail-type-btn active" style="background:var(--success);border-color:var(--success);font-size:11px;"
-                        onclick="completeHwFailTask('${escAttr(t.docId)}', '${escAttr(studentId)}')">
+                        onclick="${completeFunc}('${escAttr(t.docId)}', '${escAttr(studentId)}')">
                         <span class="material-symbols-outlined" style="font-size:13px;">check_circle</span>완료
                     </button>
                     <button class="hw-fail-type-btn hw-fail-clear-btn" style="font-size:11px;"
-                        onclick="cancelHwFailTask('${escAttr(t.docId)}', '${escAttr(studentId)}')">
+                        onclick="${cancelFunc}('${escAttr(t.docId)}', '${escAttr(studentId)}')">
                         <span class="material-symbols-outlined" style="font-size:13px;">cancel</span>취소
                     </button>
                 </div>
@@ -1933,6 +2184,521 @@ window.cancelHwFailTask = async function(taskDocId, studentId) {
     }
 };
 
+// ─── Test Fail Action (테스트 2차 미통과 처리) ────────────────────────────────
+
+function renderTestFailActionCard(studentId, testSections, t2nd, testFailAction) {
+    const t2ndHasAny = Object.values(t2nd).some(v => v);
+    if (!t2ndHasAny) return '';
+
+    const allItems = Object.values(testSections).flat();
+    const failItems = allItems.filter(t => {
+        const val = t2nd[t] || '';
+        return val === 'X' || val === '△';
+    });
+
+    if (failItems.length === 0) {
+        return `
+            <div class="detail-card hw-fail-card">
+                <div class="detail-card-title">
+                    <span class="material-symbols-outlined" style="color:var(--success);font-size:18px;">check_circle</span>
+                    2차 테스트 처리
+                </div>
+                <div class="detail-card-empty" style="color:var(--success);">✅ 2차 모두 통과!</div>
+            </div>
+        `;
+    }
+
+    const rows = failItems.map(item => {
+        const action = testFailAction[item] || {};
+        const type = action.type || '';
+        const isVisit = type === '등원';
+        const isAlt = type === '대체숙제';
+        const escapedItem = escAttr(item);
+
+        return `
+            <div class="hw-fail-domain-row" data-domain="${escapedItem}">
+                <div class="hw-fail-domain-header">
+                    <span style="font-size:12px;font-weight:600;color:var(--text-main);">${esc(item)}</span>
+                    <span class="hw-fail-ox-badge ${oxDisplayClass(t2nd[item] || '')}">${esc(t2nd[item] || '—')}</span>
+                    <div class="hw-fail-type-btns">
+                        <button class="hw-fail-type-btn ${isVisit ? 'active' : ''}"
+                            onclick="selectTestFailType('${escAttr(studentId)}', '${escapedItem}', '등원', this)">
+                            <span class="material-symbols-outlined" style="font-size:13px;">directions_walk</span>등원
+                        </button>
+                        <button class="hw-fail-type-btn ${isAlt ? 'active' : ''}"
+                            onclick="selectTestFailType('${escAttr(studentId)}', '${escapedItem}', '대체숙제', this)">
+                            <span class="material-symbols-outlined" style="font-size:13px;">edit_note</span>대체숙제
+                        </button>
+                        ${type ? `<button class="hw-fail-type-btn hw-fail-clear-btn"
+                            onclick="clearTestFailType('${escAttr(studentId)}', '${escapedItem}')">취소</button>` : ''}
+                    </div>
+                </div>
+                ${isVisit ? `
+                    <div class="hw-fail-detail">
+                        <div class="hw-fail-detail-row">
+                            <label class="field-label" style="font-size:11px;color:var(--text-sec);flex-shrink:0;">등원일시</label>
+                            <input type="date" class="field-input hw-fail-input" style="flex:1;padding:4px 8px;font-size:12px;"
+                                value="${escAttr(action.scheduled_date || '')}"
+                                onchange="updateTestFailField('${escAttr(studentId)}', '${escapedItem}', 'scheduled_date', this.value)">
+                            <input type="time" class="field-input hw-fail-input" style="width:90px;padding:4px 8px;font-size:12px;"
+                                value="${escAttr(action.scheduled_time || '16:00')}"
+                                onchange="updateTestFailField('${escAttr(studentId)}', '${escapedItem}', 'scheduled_time', this.value)">
+                        </div>
+                        <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc((action.handler || currentUser?.email || '').split('@')[0])}</div>
+                    </div>
+                ` : isAlt ? `
+                    <div class="hw-fail-detail">
+                        <input type="text" class="field-input hw-fail-input" style="width:100%;padding:4px 8px;font-size:12px;"
+                            placeholder="대체 숙제 내용 (예: 단어장 50개)"
+                            value="${escAttr(action.alt_hw || '')}"
+                            onchange="updateTestFailField('${escAttr(studentId)}', '${escapedItem}', 'alt_hw', this.value)">
+                        <div class="hw-fail-detail-row" style="margin-top:4px;">
+                            <label class="field-label" style="font-size:11px;color:var(--text-sec);flex-shrink:0;">제출기한</label>
+                            <input type="date" class="field-input hw-fail-input" style="flex:1;padding:4px 8px;font-size:12px;"
+                                value="${escAttr(action.scheduled_date || '')}"
+                                onchange="updateTestFailField('${escAttr(studentId)}', '${escapedItem}', 'scheduled_date', this.value)">
+                        </div>
+                        <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc((action.handler || currentUser?.email || '').split('@')[0])}</div>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('<hr style="border:none;border-top:1px solid var(--border);margin:8px 0;">');
+
+    return `
+        <div class="detail-card hw-fail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:var(--danger);font-size:18px;">quiz</span>
+                테스트 미통과 (${failItems.length}개)
+            </div>
+            <div class="hw-fail-desc" style="font-size:12px;color:var(--text-sec);margin-bottom:10px;">
+                2차 미통과 항목에 '등원 약속' 또는 '대체 숙제'를 지정하세요.
+            </div>
+            ${rows}
+        </div>
+    `;
+}
+
+window.selectTestFailType = async function(studentId, item, type, btnEl) {
+    if (!checkCanEditGrading(studentId)) return;
+    const rec = dailyRecords[studentId] || {};
+    const testFailAction = { ...(rec.test_fail_action || {}) };
+    const current = testFailAction[item] || {};
+
+    if (current.type === type) {
+        delete testFailAction[item];
+    } else {
+        testFailAction[item] = {
+            ...current,
+            type,
+            handler: currentUser?.email || '',
+            scheduled_date: current.scheduled_date || '',
+            scheduled_time: current.scheduled_time || (type === '등원' ? '16:00' : ''),
+            alt_hw: current.alt_hw || '',
+            updated_at: new Date().toISOString(),
+        };
+    }
+
+    await saveTestFailAction(studentId, testFailAction);
+    renderStudentDetail(studentId);
+};
+
+window.clearTestFailType = async function(studentId, item) {
+    if (!checkCanEditGrading(studentId)) return;
+    const rec = dailyRecords[studentId] || {};
+    const testFailAction = { ...(rec.test_fail_action || {}) };
+    delete testFailAction[item];
+    await saveTestFailAction(studentId, testFailAction);
+    renderStudentDetail(studentId);
+};
+
+let testFailSaveTimers = {};
+window.updateTestFailField = function(studentId, item, field, value) {
+    if (!checkCanEditGrading(studentId)) return;
+    if (!dailyRecords[studentId]) dailyRecords[studentId] = {};
+    if (!dailyRecords[studentId].test_fail_action) dailyRecords[studentId].test_fail_action = {};
+    if (!dailyRecords[studentId].test_fail_action[item]) dailyRecords[studentId].test_fail_action[item] = {};
+    dailyRecords[studentId].test_fail_action[item][field] = value;
+    dailyRecords[studentId].test_fail_action[item].updated_at = new Date().toISOString();
+
+    const timerKey = `test_${studentId}_${item}`;
+    if (testFailSaveTimers[timerKey]) clearTimeout(testFailSaveTimers[timerKey]);
+    testFailSaveTimers[timerKey] = setTimeout(async () => {
+        await saveTestFailAction(studentId, dailyRecords[studentId].test_fail_action);
+        delete testFailSaveTimers[timerKey];
+    }, 1500);
+};
+
+async function saveTestFailAction(studentId, testFailAction) {
+    const docId = makeDailyRecordId(studentId, selectedDate);
+    const student = allStudents.find(s => s.docId === studentId);
+    try {
+        await setDoc(doc(db, 'daily_records', docId), {
+            student_id: studentId,
+            date: selectedDate,
+            branch: branchFromStudent(student || {}),
+            test_fail_action: testFailAction,
+            updated_by: currentUser.email,
+            updated_at: serverTimestamp()
+        }, { merge: true });
+        if (!dailyRecords[studentId]) dailyRecords[studentId] = { student_id: studentId, date: selectedDate };
+        dailyRecords[studentId].test_fail_action = testFailAction;
+
+        // test_fail_tasks 컬렉션 동기화
+        for (const [item, action] of Object.entries(testFailAction)) {
+            if (!action.type) continue;
+            const taskDocId = `test_${studentId}_${item}_${selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
+            const existing = testFailTasks.find(t => t.docId === taskDocId);
+            if (existing && existing.status !== 'pending') continue;
+
+            const taskData = {
+                student_id: studentId,
+                student_name: student?.name || '',
+                domain: item,
+                type: action.type,
+                source: 'test',
+                source_date: selectedDate,
+                scheduled_date: action.scheduled_date || '',
+                scheduled_time: action.scheduled_time || '',
+                alt_hw: action.alt_hw || '',
+                handler: (action.handler || currentUser?.email || '').split('@')[0],
+                status: 'pending',
+                created_by: (currentUser?.email || '').split('@')[0],
+                created_at: existing?.created_at || new Date().toISOString(),
+                branch: branchFromStudent(student || {}),
+            };
+            await setDoc(doc(db, 'test_fail_tasks', taskDocId), taskData, { merge: true });
+            const idx = testFailTasks.findIndex(t => t.docId === taskDocId);
+            if (idx >= 0) {
+                testFailTasks[idx] = { docId: taskDocId, ...taskData };
+            } else {
+                testFailTasks.push({ docId: taskDocId, ...taskData });
+            }
+        }
+
+        // 삭제된 item의 pending tasks 취소
+        for (const t of testFailTasks.filter(t => t.student_id === studentId && t.source_date === selectedDate && t.status === 'pending')) {
+            const action = testFailAction[t.domain];
+            if (!action || !action.type) {
+                await updateDoc(doc(db, 'test_fail_tasks', t.docId), {
+                    status: '취소',
+                    cancelled_by: (currentUser?.email || '').split('@')[0],
+                    cancelled_at: new Date().toISOString()
+                });
+                t.status = '취소';
+            }
+        }
+
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('test_fail_action 저장 실패:', err);
+        showSaveIndicator('error');
+    }
+}
+
+window.completeTestFailTask = async function(taskDocId, studentId) {
+    if (!confirm('완료 처리하시겠습니까?')) return;
+    showSaveIndicator('saving');
+    try {
+        const completedBy = (currentUser?.email || '').split('@')[0];
+        await updateDoc(doc(db, 'test_fail_tasks', taskDocId), {
+            status: '완료',
+            completed_by: completedBy,
+            completed_at: new Date().toISOString()
+        });
+        const t = testFailTasks.find(t => t.docId === taskDocId);
+        if (t) { t.status = '완료'; t.completed_by = completedBy; }
+        renderStudentDetail(studentId);
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('완료 처리 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
+window.cancelTestFailTask = async function(taskDocId, studentId) {
+    if (!confirm('취소 처리하시겠습니까?')) return;
+    showSaveIndicator('saving');
+    try {
+        const cancelledBy = (currentUser?.email || '').split('@')[0];
+        await updateDoc(doc(db, 'test_fail_tasks', taskDocId), {
+            status: '취소',
+            cancelled_by: cancelledBy,
+            cancelled_at: new Date().toISOString()
+        });
+        const t = testFailTasks.find(t => t.docId === taskDocId);
+        if (t) { t.status = '취소'; t.cancelled_by = cancelledBy; }
+        renderStudentDetail(studentId);
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('취소 처리 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
+// ─── Next Homework Class List ────────────────────────────────────────────────
+
+function renderNextHwClassList() {
+    const container = document.getElementById('list-items');
+    const countEl = document.getElementById('list-count');
+
+    renderFilterChips();
+
+    const classCodes = getUniqueClassCodes();
+    countEl.textContent = `${classCodes.length}개 반`;
+
+    // 전체 선택 체크박스 숨기기
+    const selectAllCb = document.getElementById('select-all-checkbox');
+    if (selectAllCb) selectAllCb.style.display = 'none';
+
+    if (classCodes.length === 0) {
+        container.innerHTML = `<div class="empty-state">
+            <span class="material-symbols-outlined">school</span>
+            <p>오늘 수업이 있는 반이 없습니다</p>
+        </div>`;
+        return;
+    }
+
+    container.innerHTML = classCodes.map(cc => {
+        const { filled, total } = getNextHwStatus(cc);
+        const isActive = cc === selectedNextHwClass ? 'active' : '';
+        const statusClass = filled === total ? 'next-hw-complete' : filled > 0 ? 'next-hw-partial' : '';
+        const domains = getClassDomains(cc);
+        const data = classNextHw[cc]?.domains || {};
+
+        return `<div class="list-item next-hw-class-card ${isActive} ${statusClass}" data-class="${escAttr(cc)}" onclick="selectNextHwClass('${escAttr(cc)}')">
+            <div class="next-hw-class-header">
+                <span class="next-hw-class-code">${esc(cc)}</span>
+                <span class="next-hw-class-status">${filled}/${total}</span>
+            </div>
+            <div class="next-hw-domain-chips">
+                ${domains.map(d => {
+                    const val = (data[d] || '').trim();
+                    const isNone = val === '없음';
+                    const isFilled = val && !isNone;
+                    const stateClass = isFilled ? 'filled' : isNone ? 'none' : '';
+                    return `<button class="next-hw-chip ${stateClass}" onclick="event.stopPropagation(); openNextHwModal('${escAttr(cc)}', '${escAttr(d)}')" title="${escAttr(val || '미입력')}">${esc(d)}</button>`;
+                }).join('')}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function selectNextHwClass(classCode) {
+    selectedNextHwClass = classCode;
+    renderNextHwClassList();
+    renderNextHwClassDetail(classCode);
+    // 모바일: 디테일 패널 보이기
+    document.getElementById('detail-panel').classList.add('mobile-visible');
+}
+
+function openNextHwModal(classCode, domain) {
+    nextHwModalTarget = { classCode, domain };
+    const data = classNextHw[classCode]?.domains || {};
+    const currentVal = (data[domain] || '').trim();
+
+    document.getElementById('next-hw-modal-title').textContent = `${classCode} · ${domain} 다음숙제`;
+    document.getElementById('next-hw-modal-label').textContent = domain;
+
+    const textarea = document.getElementById('next-hw-modal-text');
+    const saveBtn = document.getElementById('next-hw-modal-save');
+
+    if (currentVal && currentVal !== '없음') {
+        textarea.value = currentVal;
+        saveBtn.textContent = '수정';
+    } else {
+        textarea.value = '';
+        saveBtn.textContent = '입력';
+    }
+
+    // 핸들러를 반별 용으로 설정
+    saveBtn.onclick = saveNextHwFromModal;
+    document.getElementById('next-hw-modal-none').onclick = saveNextHwNone;
+
+    document.getElementById('next-hw-modal').style.display = '';
+    setTimeout(() => textarea.focus(), 100);
+}
+
+function saveNextHwFromModal() {
+    const { classCode, domain } = nextHwModalTarget;
+    if (!classCode || !domain) return;
+
+    const text = document.getElementById('next-hw-modal-text').value.trim();
+    if (!text) { alert('내용을 입력하세요'); return; }
+
+    saveClassNextHw(classCode, domain, text, true);
+    document.getElementById('next-hw-modal').style.display = 'none';
+    refreshNextHwViews(classCode);
+}
+
+function saveNextHwNone() {
+    const { classCode, domain } = nextHwModalTarget;
+    if (!classCode || !domain) return;
+
+    saveClassNextHw(classCode, domain, '없음', true);
+    document.getElementById('next-hw-modal').style.display = 'none';
+    refreshNextHwViews(classCode);
+}
+
+// ─── 개인별 다음숙제 모달 (학생 상세 패널에서 사용) ─────────────────────────
+let personalNextHwTarget = { studentId: null, classCode: null, domain: null };
+
+function openPersonalNextHwModal(studentId, classCode, domain) {
+    personalNextHwTarget = { studentId, classCode, domain };
+    const rec = dailyRecords[studentId] || {};
+    const personalNextHw = rec.personal_next_hw || {};
+    const pKey = `${classCode}_${domain}`;
+    const personalVal = personalNextHw[pKey];
+    const classVal = (classNextHw[classCode]?.domains?.[domain] || '').trim();
+
+    // 개인값이 있으면 개인값, 없으면 반값 표시
+    const hasPersonal = personalVal != null && personalVal !== '';
+    const currentVal = hasPersonal ? personalVal : classVal;
+
+    document.getElementById('next-hw-modal-title').textContent = `${classCode} · ${domain} 개인 다음숙제`;
+    document.getElementById('next-hw-modal-label').textContent = domain;
+
+    const textarea = document.getElementById('next-hw-modal-text');
+    const saveBtn = document.getElementById('next-hw-modal-save');
+
+    if (currentVal && currentVal !== '없음') {
+        textarea.value = currentVal;
+        saveBtn.textContent = '수정';
+    } else {
+        textarea.value = '';
+        saveBtn.textContent = '입력';
+    }
+
+    // 모달 저장 버튼을 개인용으로 연결
+    saveBtn.onclick = savePersonalNextHwFromModal;
+    document.getElementById('next-hw-modal-none').onclick = savePersonalNextHwNone;
+
+    document.getElementById('next-hw-modal').style.display = '';
+    setTimeout(() => textarea.focus(), 100);
+}
+
+function savePersonalNextHwFromModal() {
+    const { studentId, classCode, domain } = personalNextHwTarget;
+    if (!studentId || !classCode || !domain) return;
+
+    const text = document.getElementById('next-hw-modal-text').value.trim();
+    if (!text) { alert('내용을 입력하세요'); return; }
+
+    const rec = dailyRecords[studentId] || {};
+    const personalNextHw = rec.personal_next_hw || {};
+    const pKey = `${classCode}_${domain}`;
+    personalNextHw[pKey] = text;
+
+    saveDailyRecord(studentId, { personal_next_hw: personalNextHw });
+    document.getElementById('next-hw-modal').style.display = 'none';
+    restoreModalHandlers();
+    if (selectedStudentId === studentId) renderStudentDetail(studentId);
+}
+
+function savePersonalNextHwNone() {
+    const { studentId, classCode, domain } = personalNextHwTarget;
+    if (!studentId || !classCode || !domain) return;
+
+    const rec = dailyRecords[studentId] || {};
+    const personalNextHw = rec.personal_next_hw || {};
+    const pKey = `${classCode}_${domain}`;
+    personalNextHw[pKey] = '없음';
+
+    saveDailyRecord(studentId, { personal_next_hw: personalNextHw });
+    document.getElementById('next-hw-modal').style.display = 'none';
+    restoreModalHandlers();
+    if (selectedStudentId === studentId) renderStudentDetail(studentId);
+}
+
+// 모달 핸들러를 반별 용으로 복원
+function restoreModalHandlers() {
+    document.getElementById('next-hw-modal-save').onclick = saveNextHwFromModal;
+    document.getElementById('next-hw-modal-none').onclick = saveNextHwNone;
+}
+
+function refreshNextHwViews(classCode) {
+    // 반별 다음숙제 뷰가 열려있으면 리렌더
+    if (currentCategory === 'homework' && currentSubFilter.has('next_hw')) {
+        renderNextHwClassList();
+        if (selectedNextHwClass === classCode) renderNextHwClassDetail(classCode);
+    }
+    // 학생 상세가 열려있으면 리렌더
+    if (selectedStudentId) renderStudentDetail(selectedStudentId);
+}
+
+function renderNextHwClassDetail(classCode) {
+    document.getElementById('detail-empty').style.display = 'none';
+    document.getElementById('detail-content').style.display = '';
+
+    const domains = getClassDomains(classCode);
+    const data = classNextHw[classCode]?.domains || {};
+
+    // 프로필 영역
+    document.getElementById('profile-avatar').textContent = classCode[0] || '?';
+    document.getElementById('detail-name').textContent = classCode;
+
+    const { filled, total } = getNextHwStatus(classCode);
+    const statusTag = filled === total ? 'tag-present' : filled > 0 ? 'tag-late' : 'tag-pending';
+    document.getElementById('profile-tags').innerHTML = `
+        <span class="tag">다음숙제</span>
+        <span class="tag tag-status ${statusTag}">${filled}/${total} 입력</span>
+    `;
+
+    // 반 소속 학생 목록
+    const dayName = getDayName(selectedDate);
+    let classStudents = allStudents.filter(s =>
+        s.status !== '퇴원' && s.enrollments.some(e => e.day.includes(dayName) && enrollmentCode(e) === classCode)
+    );
+    if (selectedBranch) classStudents = classStudents.filter(s => branchFromStudent(s) === selectedBranch);
+
+    const cardsContainer = document.getElementById('detail-cards');
+    cardsContainer.innerHTML = `
+        <!-- 다음숙제 입력 카드 -->
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">edit_note</span>
+                다음숙제 입력
+            </div>
+            <div class="next-hw-domain-chips" style="margin-bottom:12px;">
+                ${domains.map(d => {
+                    const val = (data[d] || '').trim();
+                    const isNone = val === '없음';
+                    const isFilled = val && !isNone;
+                    const stateClass = isFilled ? 'filled' : isNone ? 'none' : '';
+                    return `<button class="next-hw-chip ${stateClass}" onclick="openNextHwModal('${escAttr(classCode)}', '${escAttr(d)}')" title="${escAttr(val || '미입력')}">${esc(d)}</button>`;
+                }).join('')}
+            </div>
+            ${domains.map(d => {
+                const val = (data[d] || '').trim();
+                if (!val) return '';
+                const isNone = val === '없음';
+                return `<div class="next-hw-detail-row">
+                    <span class="next-hw-detail-label">${esc(d)}</span>
+                    <span style="font-size:13px;color:${isNone ? 'var(--text-sec)' : 'var(--text-main)'};">${isNone ? '숙제 없음' : esc(val)}</span>
+                </div>`;
+            }).join('')}
+        </div>
+
+        <!-- 학생 목록 카드 -->
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:var(--text-sec);font-size:18px;">group</span>
+                소속 학생 (${classStudents.length}명)
+            </div>
+            ${classStudents.length === 0
+                ? '<div class="detail-card-empty">소속 학생 없음</div>'
+                : classStudents.map(s => `<div class="detail-item" style="cursor:pointer;" onclick="selectStudent('${s.docId}')">
+                    <span>${esc(s.name)}</span>
+                    <span class="tag" style="font-size:11px;">${esc(studentShortLabel(s))}</span>
+                </div>`).join('')
+            }
+        </div>
+    `;
+}
+
+
 // ─── Student Detail Panel ───────────────────────────────────────────────────
 
 function renderStudentDetail(studentId) {
@@ -1954,27 +2720,24 @@ function renderStudentDetail(studentId) {
 
     const rec = dailyRecords[studentId] || {};
     const attStatus = rec?.attendance?.status || '미확인';
-    const code = student.enrollments.map(e => enrollmentCode(e)).join(', ');
-    const branch = branchFromStudent(student);
+    const arrivalTime = rec?.arrival_time || '';
+    const displayStatus = attStatus === '미확인' ? '등원전' : attStatus;
 
     const tagClass = attStatus === '출석' ? 'tag-present' :
                      attStatus === '결석' ? 'tag-absent' :
                      attStatus === '지각' ? 'tag-late' : 'tag-pending';
 
+    const showTime = (attStatus === '출석' || attStatus === '지각') && arrivalTime;
+    const tagText = showTime ? `${displayStatus} ${formatTime12h(arrivalTime)}` : displayStatus;
+
     document.getElementById('profile-tags').innerHTML = `
-        <span class="tag">${esc(student.level || '')} · ${esc(code)} · ${esc(branch)}</span>
-        <span class="tag tag-status ${tagClass}">${esc(attStatus)}</span>
+        <span class="tag tag-status ${tagClass}">${esc(tagText)}</span>
     `;
 
     // 카드들 렌더링
     const cardsContainer = document.getElementById('detail-cards');
-    const homework = rec.homework || [];
-    const tests = rec.tests || [];
-    const studentRetakes = retakeSchedules.filter(r => r.student_id === studentId && r.status === '예정');
     const studentHwTasks = hwFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
-
-    const incompleteHomework = homework.filter(h => h.status !== '확인완료');
-    const incompleteTests = tests.filter(t => t.result === '재시필요');
+    const studentTestTasks = testFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
 
     // 출결 사유 카드 (지각/결석/기타일 때만 표시)
     const showReason = ['지각', '결석'].includes(attStatus) ||
@@ -2002,6 +2765,8 @@ function renderStudentDetail(studentId) {
     const d1st = rec.hw_domains_1st || {};
     const d2nd = rec.hw_domains_2nd || {};
     const hasAnyDomain = Object.values(d1st).some(v => v) || Object.values(d2nd).some(v => v);
+    const has1stHw = Object.values(d1st).some(v => v);
+    const has2ndHw = Object.values(d2nd).some(v => v);
     const domainHwHtml = `
         <div class="detail-card">
             <div class="detail-card-title">
@@ -2009,29 +2774,31 @@ function renderStudentDetail(studentId) {
                 영역별 숙제
             </div>
             ${!hasAnyDomain ? '<div class="detail-card-empty">영역 숙제 미입력</div>' : `
-                <div style="margin-bottom:8px;">
-                    <div style="font-size:12px;font-weight:500;color:var(--text-sec);margin-bottom:4px;">1차</div>
-                    <div class="hw-domain-group">
-                        ${detailDomains.map(d => {
-                            const val = d1st[d] || '';
-                            return `<div class="hw-domain-item">
-                                <span class="hw-domain-label">${esc(d)}</span>
-                                <span class="hw-domain-ox readonly ${oxDisplayClass(val)}">${esc(val || '—')}</span>
-                            </div>`;
-                        }).join('')}
-                    </div>
-                </div>
-                <div>
-                    <div style="font-size:12px;font-weight:500;color:var(--text-sec);margin-bottom:4px;">2차</div>
-                    <div class="hw-domain-group">
-                        ${detailDomains.map(d => {
-                            const val = d2nd[d] || '';
-                            return `<div class="hw-domain-item">
-                                <span class="hw-domain-label">${esc(d)}</span>
-                                <span class="hw-domain-ox readonly ${oxDisplayClass(val)}">${esc(val || '—')}</span>
-                            </div>`;
-                        }).join('')}
-                    </div>
+                <div class="detail-round-row">
+                    ${has1stHw ? `<div class="detail-round-col">
+                        <div class="detail-round-label">1차</div>
+                        <div class="hw-domain-group">
+                            ${detailDomains.map(d => {
+                                const val = d1st[d] || '';
+                                return `<div class="hw-domain-item">
+                                    <span class="hw-domain-label">${esc(d)}</span>
+                                    <span class="hw-domain-ox readonly ${oxDisplayClass(val)}">${esc(val || '—')}</span>
+                                </div>`;
+                            }).join('')}
+                        </div>
+                    </div>` : ''}
+                    ${has2ndHw ? `<div class="detail-round-col">
+                        <div class="detail-round-label">2차</div>
+                        <div class="hw-domain-group">
+                            ${detailDomains.map(d => {
+                                const val = d2nd[d] || '';
+                                return `<div class="hw-domain-item">
+                                    <span class="hw-domain-label">${esc(d)}</span>
+                                    <span class="hw-domain-ox readonly ${oxDisplayClass(val)}">${esc(val || '—')}</span>
+                                </div>`;
+                            }).join('')}
+                        </div>
+                    </div>` : ''}
                 </div>
             `}
         </div>
@@ -2042,6 +2809,8 @@ function renderStudentDetail(studentId) {
     const t1st = rec.test_domains_1st || {};
     const t2nd = rec.test_domains_2nd || {};
     const hasAnyTest = Object.values(t1st).some(v => v) || Object.values(t2nd).some(v => v);
+    const has1stTest = Object.values(t1st).some(v => v);
+    const has2ndTest = Object.values(t2nd).some(v => v);
     const domainTestHtml = `
         <div class="detail-card">
             <div class="detail-card-title">
@@ -2049,28 +2818,98 @@ function renderStudentDetail(studentId) {
                 테스트 현황
             </div>
             ${!hasAnyTest ? '<div class="detail-card-empty">테스트 미입력</div>' : `
-                ${['1차', '2차'].map((round, ri) => {
-                    const data = ri === 0 ? t1st : t2nd;
-                    if (!Object.values(data).some(v => v)) return '';
-                    return `<div style="margin-bottom:8px;">
-                        <div style="font-size:12px;font-weight:500;color:var(--text-sec);margin-bottom:4px;">${round}</div>
-                        ${Object.entries(detailTestSections).map(([secName, items]) => {
-                            const hasAny = items.some(t => data[t]);
-                            if (!hasAny) return '';
-                            return `<span style="font-size:10px;color:var(--text-sec);">${esc(secName)}</span>
-                                <div class="hw-domain-group" style="margin-bottom:4px;">
-                                    ${items.map(t => {
-                                        const val = data[t] || '';
-                                        return `<div class="hw-domain-item">
-                                            <span class="hw-domain-label">${esc(t)}</span>
-                                            <span class="hw-domain-ox readonly ${oxDisplayClass(val)}">${esc(val || '—')}</span>
-                                        </div>`;
-                                    }).join('')}
+                <div class="detail-round-row">
+                    ${['1차', '2차'].map((round, ri) => {
+                        const data = ri === 0 ? t1st : t2nd;
+                        const hasData = ri === 0 ? has1stTest : has2ndTest;
+                        if (!hasData) return '';
+                        return `<div class="detail-round-col">
+                            <div class="detail-round-label">${round}</div>
+                            ${Object.entries(detailTestSections).map(([secName, items]) => {
+                                const hasAny = items.some(t => data[t]);
+                                if (!hasAny) return '';
+                                return `<div style="margin-bottom:6px;">
+                                    <span style="font-size:10px;color:var(--text-sec);">${esc(secName)}</span>
+                                    <div class="hw-domain-group" style="margin-bottom:2px;">
+                                        ${items.map(t => {
+                                            const val = data[t] || '';
+                                            return `<div class="hw-domain-item">
+                                                <span class="hw-domain-label">${esc(t)}</span>
+                                                <span class="hw-domain-ox readonly ${oxDisplayClass(val)}">${esc(val || '—')}</span>
+                                            </div>`;
+                                        }).join('')}
+                                    </div>
                                 </div>`;
-                        }).join('')}
-                    </div>`;
-                }).join('')}
+                            }).join('')}
+                        </div>`;
+                    }).join('')}
+                </div>
             `}
+        </div>
+    `;
+
+    // 다음숙제 카드 (반별 내용 표시 + 개인별 오버라이드 편집)
+    const dayName2 = getDayName(selectedDate);
+    const studentClasses = student.enrollments
+        .filter(e => e.day.includes(dayName2))
+        .map(e => enrollmentCode(e))
+        .filter(Boolean);
+    const uniqueClasses = [...new Set(studentClasses)];
+    const personalNextHw = rec.personal_next_hw || {};
+    const nextHwHtml = uniqueClasses.length === 0 ? '' : `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">assignment</span>
+                다음숙제
+            </div>
+            ${uniqueClasses.map(cc => {
+                const domains = getClassDomains(cc);
+                const classData = classNextHw[cc]?.domains || {};
+                return `<div style="margin-bottom:10px;">
+                    <div style="font-size:12px;font-weight:500;color:var(--text-sec);margin-bottom:6px;">${esc(cc)}</div>
+                    ${domains.map(d => {
+                        const pKey = `${cc}_${d}`;
+                        const hasPersonal = personalNextHw[pKey] != null && personalNextHw[pKey] !== '';
+                        const classVal = (classData[d] || '').trim();
+                        const val = hasPersonal ? personalNextHw[pKey] : classVal;
+                        const isNone = val === '없음';
+                        const displayText = !val ? '미입력' : isNone ? '숙제 없음' : val;
+                        const color = !val ? 'var(--outline)' : isNone ? 'var(--text-sec)' : 'var(--text-main)';
+                        return `<div class="next-hw-detail-row" style="margin-bottom:4px;cursor:pointer;" onclick="openPersonalNextHwModal('${escAttr(studentId)}', '${escAttr(cc)}', '${escAttr(d)}')">
+                            <span class="next-hw-detail-label" style="min-width:40px;">${esc(d)}</span>
+                            <span style="font-size:13px;color:${color};flex:1;">${esc(displayText)}</span>
+                            ${hasPersonal ? '<span style="font-size:10px;color:var(--primary);">개인</span>' : ''}
+                            <span class="material-symbols-outlined" style="font-size:14px;color:var(--outline);">edit</span>
+                        </div>`;
+                    }).join('')}
+                </div>`;
+            }).join('')}
+        </div>
+    `;
+
+    // 임의 등원 카드
+    const extraVisit = rec.extra_visit || {};
+    const extraVisitHtml = `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">schedule</span>
+                임의 등원
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+                <div style="display:flex;gap:6px;">
+                    <input type="date" class="field-input" style="flex:1;padding:4px 8px;font-size:12px;"
+                        value="${escAttr(extraVisit.date || '')}"
+                        placeholder="날짜"
+                        onchange="saveExtraVisit('${escAttr(studentId)}', 'date', this.value)">
+                    <input type="time" class="field-input" style="width:100px;padding:4px 8px;font-size:12px;"
+                        value="${escAttr(extraVisit.time || '')}"
+                        onchange="saveExtraVisit('${escAttr(studentId)}', 'time', this.value)">
+                </div>
+                <input type="text" class="field-input" style="width:100%;padding:4px 8px;font-size:12px;"
+                    placeholder="사유 (예: 보충수업, 재시험 등)"
+                    value="${escAttr(extraVisit.reason || '')}"
+                    onchange="saveExtraVisit('${escAttr(studentId)}', 'reason', this.value)">
+            </div>
         </div>
     `;
 
@@ -2083,85 +2922,20 @@ function renderStudentDetail(studentId) {
         <!-- 테스트 현황 카드 -->
         ${domainTestHtml}
 
-        <!-- 미완료 숙제 카드 -->
-        <div class="detail-card">
-            <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--warning);font-size:18px;">assignment_late</span>
-                미완료 숙제 (${incompleteHomework.length})
-            </div>
-            ${incompleteHomework.length === 0
-                ? '<div class="detail-card-empty">모든 숙제 완료!</div>'
-                : incompleteHomework.map((h, i) => {
-                    const origIdx = homework.indexOf(h);
-                    return `<div class="detail-item">
-                        <span>${esc(h.title || '숙제')} · ${esc(h.subject || '')}</span>
-                        <select class="field-input" style="width:auto;padding:2px 8px;font-size:12px;"
-                            onchange="handleHomeworkStatusChange('${studentId}', ${origIdx}, this.value); renderStudentDetail('${studentId}');">
-                            <option value="미제출" ${h.status === '미제출' ? 'selected' : ''}>미제출</option>
-                            <option value="제출" ${h.status === '제출' ? 'selected' : ''}>제출</option>
-                            <option value="확인완료" ${h.status === '확인완료' ? 'selected' : ''}>확인완료</option>
-                        </select>
-                    </div>`;
-                }).join('')
-            }
-            <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="openHomeworkModal('${studentId}')">
-                <span class="material-symbols-outlined" style="font-size:16px;">add</span> 숙제 추가
-            </button>
-        </div>
+        <!-- 다음숙제 카드 -->
+        ${nextHwHtml}
 
-        <!-- 미완료 테스트 카드 -->
-        <div class="detail-card">
-            <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--danger);font-size:18px;">quiz</span>
-                재시 필요 테스트 (${incompleteTests.length})
-            </div>
-            ${incompleteTests.length === 0
-                ? '<div class="detail-card-empty">재시 필요 테스트 없음</div>'
-                : incompleteTests.map(t => `<div class="detail-item">
-                    <div>
-                        <div>${esc(t.title || '테스트')}</div>
-                        <div style="font-size:11px;color:var(--text-sec);">${t.score != null ? t.score + '점' : '-'} / ${t.pass_score || '-'}점</div>
-                    </div>
-                    <span class="tag tag-absent">재시필요</span>
-                </div>`).join('')
-            }
-            <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="openTestModal('${studentId}')">
-                <span class="material-symbols-outlined" style="font-size:16px;">add</span> 테스트 기록
-            </button>
-        </div>
-
-        <!-- 연기/재시 일정 카드 -->
-        <div class="detail-card">
-            <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">event_repeat</span>
-                예정 일정 (${studentRetakes.length})
-            </div>
-            ${studentRetakes.length === 0
-                ? '<div class="detail-card-empty">예정된 일정 없음</div>'
-                : studentRetakes.map(r => `<div class="detail-item">
-                    <div>
-                        <div>${esc(r.title || '')}</div>
-                        <div style="font-size:11px;color:var(--text-sec);">${esc(r.scheduled_date || '')} · ${esc(r.subject || '')}</div>
-                    </div>
-                    <div style="display:flex;gap:4px;">
-                        <button class="btn btn-primary btn-sm" onclick="completeRetake('${r.docId}')">완료</button>
-                        <button class="btn btn-secondary btn-sm" onclick="cancelRetake('${r.docId}')">취소</button>
-                    </div>
-                </div>`).join('')
-            }
-            <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="openScheduleModal(['${studentId}'])">
-                <span class="material-symbols-outlined" style="font-size:16px;">add</span> 일정 추가
-            </button>
-        </div>
-
-        <!-- 숙제 2차 미통과 처리 카드 -->
+        <!-- 숙제 미통과 카드 -->
         ${renderHwFailActionCard(studentId, detailDomains, d2nd, rec.hw_fail_action || {})}
 
-        <!-- 밀린 Task 카드 -->
-        ${renderPendingTasksCard(studentId, studentHwTasks)}
+        <!-- 테스트 미통과 카드 -->
+        ${renderTestFailActionCard(studentId, detailTestSections, t2nd, rec.test_fail_action || {})}
 
-        <!-- 롤 메모 카드 -->
-        ${renderStudentRoleMemoCard(studentId)}
+        <!-- 밀린 Task 카드 (숙제 + 테스트) -->
+        ${renderPendingTasksCard(studentId, [...studentHwTasks, ...studentTestTasks])}
+
+        <!-- 임의 등원 카드 -->
+        ${extraVisitHtml}
 
         <!-- 메모 카드 -->
         <div class="detail-card">
@@ -2177,6 +2951,15 @@ function renderStudentDetail(studentId) {
 
     // 모바일에서 패널 보이기
     document.getElementById('detail-panel').classList.add('mobile-visible');
+}
+
+// ─── 임의 등원 저장 ─────────────────────────────────────────────────────────
+
+function saveExtraVisit(studentId, field, value) {
+    const rec = dailyRecords[studentId] || {};
+    const extraVisit = rec.extra_visit || {};
+    extraVisit[field] = value;
+    saveDailyRecord(studentId, { extra_visit: extraVisit });
 }
 
 // ─── Toggle handlers (immediate save) ──────────────────────────────────────
@@ -2624,7 +3407,8 @@ function updateDateDisplay() {
 }
 
 async function reloadForDate() {
-    await Promise.all([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadRoleMemos()]);
+    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadRoleMemos(), loadClassNextHw(selectedDate)]);
+    selectedNextHwClass = null;
     updateDateDisplay();
     renderSubFilters();
     renderListPanel();
@@ -3382,7 +4166,7 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('user-avatar').textContent = (user.email || 'U')[0].toUpperCase();
 
         await loadStudents();
-        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadUserRole(), loadClassSettings()]);
+        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate)]);
         await loadRoleMemos().catch(() => {});
         updateDateDisplay();
         renderBranchFilter();
@@ -3454,7 +4238,7 @@ window.renderStudentDetail = renderStudentDetail;
 window.refreshData = async () => {
     showSaveIndicator('saving');
     await loadStudents();
-    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadRoleMemos(), loadClassSettings()]);
+    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadRoleMemos(), loadClassSettings(), loadClassNextHw(selectedDate)]);
     renderBranchFilter();
     renderSubFilters();
     renderListPanel();
@@ -3490,6 +4274,12 @@ window.saveEnrollment = saveEnrollment;
 window.saveStudentScheduledTime = saveStudentScheduledTime;
 window.saveClassScheduledTimes = saveClassScheduledTimes;
 window.clearClassDetail = clearClassDetail;
+window.selectNextHwClass = selectNextHwClass;
+window.openNextHwModal = openNextHwModal;
+window.saveNextHwFromModal = saveNextHwFromModal;
+window.saveNextHwNone = saveNextHwNone;
+window.openPersonalNextHwModal = openPersonalNextHwModal;
+window.saveExtraVisit = saveExtraVisit;
 window.addClassDomain = addClassDomain;
 window.removeClassDomain = removeClassDomain;
 window.resetClassDomains = resetClassDomains;
@@ -3514,10 +4304,64 @@ window.selectMemoStudent = selectMemoStudent;
 window.markMemoRead = markMemoRead;
 window.expandMemo = expandMemo;
 
+// ─── 등원예정 완료 처리 ────────────────────────────────────────────────────
+
+async function completeScheduledVisit(source, docId, studentId) {
+    showSaveIndicator('saving');
+    try {
+        const completedBy = (currentUser?.email || '').split('@')[0];
+
+        if (source === 'temp') {
+            await updateDoc(doc(db, 'temp_attendance', docId), { visit_status: '완료' });
+            const ta = tempAttendances.find(t => t.docId === docId);
+            if (ta) ta.visit_status = '완료';
+        } else if (source === 'hw_fail') {
+            await updateDoc(doc(db, 'hw_fail_tasks', docId), {
+                status: '완료',
+                completed_by: completedBy,
+                completed_at: new Date().toISOString()
+            });
+            const t = hwFailTasks.find(t => t.docId === docId);
+            if (t) { t.status = '완료'; t.completed_by = completedBy; }
+        } else if (source === 'test_fail') {
+            await updateDoc(doc(db, 'test_fail_tasks', docId), {
+                status: '완료',
+                completed_by: completedBy,
+                completed_at: new Date().toISOString()
+            });
+            const t = testFailTasks.find(t => t.docId === docId);
+            if (t) { t.status = '완료'; t.completed_by = completedBy; }
+        } else if (source === 'extra') {
+            // docId is studentId for extra_visit
+            const rec = dailyRecords[docId] || {};
+            const ev = rec.extra_visit || {};
+            ev.visit_status = '완료';
+            await saveImmediately(docId, { extra_visit: ev });
+            if (dailyRecords[docId]) dailyRecords[docId].extra_visit = ev;
+        }
+
+        // 자동 출석 처리
+        if (studentId) {
+            applyAttendance(studentId, '출석', true, true);
+        }
+
+        renderSubFilters();
+        renderListPanel();
+        if (selectedStudentId) renderStudentDetail(selectedStudentId);
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('등원예정 완료 처리 실패:', err);
+        showSaveIndicator('error');
+    }
+}
+
+window.completeScheduledVisit = completeScheduledVisit;
+
 // ─── 임시출석 ──────────────────────────────────────────────────────────────
 
 function openTempAttendanceModal() {
     document.getElementById('temp-att-name').value = '';
+    document.getElementById('temp-att-branch').value = '';
     document.getElementById('temp-att-school').value = '';
     document.getElementById('temp-att-level').value = '';
     document.getElementById('temp-att-grade').value = '';
@@ -3535,6 +4379,7 @@ async function saveTempAttendance() {
 
     const data = {
         name,
+        branch: document.getElementById('temp-att-branch').value,
         school: document.getElementById('temp-att-school').value.trim(),
         level: document.getElementById('temp-att-level').value,
         grade: document.getElementById('temp-att-grade').value.trim(),
@@ -3550,6 +4395,9 @@ async function saveTempAttendance() {
     try {
         await addDoc(collection(db, 'temp_attendance'), data);
         document.getElementById('temp-attendance-modal').style.display = 'none';
+        await loadTempAttendances(selectedDate);
+        renderSubFilters();
+        renderListPanel();
         showSaveIndicator('saved');
     } catch (err) {
         console.error('임시출석 저장 실패:', err);

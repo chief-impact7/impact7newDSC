@@ -288,10 +288,9 @@ body {
 
 /* --- L1 Nav Group --- */
 .nav-l1-group {
-  flex: 1;
+  flex: 1 0 auto;
   display: flex;
   flex-direction: column;
-  min-height: 0;
 }
 
 /* --- L1 Nav Items --- */
@@ -360,10 +359,17 @@ body {
   padding: 4px 0 4px 0;
   margin-left: 28px;
   border-left: 2px solid var(--border);
-  max-height: 40vh;
-  overflow-y: auto;
   min-height: 0;
 }
+
+#nav-class-l2 {
+  max-height: 40vh;
+  overflow-y: auto;
+}
+#nav-class-l2::-webkit-scrollbar { width: 3px; }
+#nav-class-l2::-webkit-scrollbar-track { background: transparent; }
+#nav-class-l2::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+#nav-class-l2::-webkit-scrollbar-thumb:hover { background: var(--outline); }
 
 .nav-l2 {
   height: 32px;
@@ -499,7 +505,7 @@ body {
   font-weight: 600;
   color: var(--text-sec);
   flex-shrink: 0;
-  background: var(--bg-sub);
+  background: var(--surface);
   padding: 2px 8px;
   border-radius: 10px;
 }
@@ -826,9 +832,11 @@ body {
   width: 380px;
   min-width: 380px;
   border-left: 1px solid var(--border);
-  overflow-y: auto;
-  padding: 24px 20px;
+  overflow-y: hidden;
+  padding: 0;
   background: var(--surface);
+  display: flex;
+  flex-direction: column;
 }
 
 .detail-panel.empty {
@@ -861,7 +869,23 @@ body {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-bottom: 20px;
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+#detail-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+#detail-cards {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
 }
 
 .detail-close-btn {
@@ -971,7 +995,7 @@ body {
 /* ===== HW Fail Action Card ===== */
 .hw-fail-card {
     border-color: #fde8e8;
-    background: #fffafafa;
+    background: #fffafa;
 }
 
 .hw-fail-domain-row {
@@ -981,7 +1005,7 @@ body {
 .hw-fail-domain-header {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     flex-wrap: wrap;
     margin-bottom: 6px;
 }
@@ -989,19 +1013,18 @@ body {
 .hw-fail-type-btns {
     display: flex;
     gap: 4px;
-    flex-wrap: wrap;
     margin-left: auto;
 }
 
 .hw-fail-type-btn {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    padding: 3px 10px;
-    border-radius: 14px;
+    gap: 2px;
+    padding: 2px 8px;
+    border-radius: 12px;
     border: 1px solid var(--border);
     background: white;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 500;
     cursor: pointer;
     color: var(--text-sec);
@@ -1060,7 +1083,28 @@ body {
 .hw-fail-ox {
     border-radius: 4px;
     font-weight: 700;
+    width: 22px;
+    height: 20px;
+    font-size: 11px;
 }
+
+.hw-fail-ox-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 18px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid var(--border);
+    background: white;
+    flex-shrink: 0;
+}
+.hw-fail-ox-badge.ox-green { background: #e6f4ea; color: var(--success); border-color: var(--success); }
+.hw-fail-ox-badge.ox-red { background: #fce8e6; color: var(--danger); border-color: var(--danger); }
+.hw-fail-ox-badge.ox-yellow { background: #fef7e0; color: var(--warning); border-color: var(--warning); }
+.hw-fail-ox-badge.ox-empty { background: white; color: var(--border); border-color: var(--border); }
 
 /* ===== HW Fail 아이콘 배지 (리스트 이름 옆) ===== */
 .hw-fail-badge {
@@ -1497,26 +1541,26 @@ textarea.field-input {
 /* ===== Scrollbar ===== */
 .sidebar::-webkit-scrollbar,
 .list-items::-webkit-scrollbar,
-.detail-panel::-webkit-scrollbar {
+#detail-cards::-webkit-scrollbar {
   width: 6px;
 }
 
 .sidebar::-webkit-scrollbar-track,
 .list-items::-webkit-scrollbar-track,
-.detail-panel::-webkit-scrollbar-track {
+#detail-cards::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .sidebar::-webkit-scrollbar-thumb,
 .list-items::-webkit-scrollbar-thumb,
-.detail-panel::-webkit-scrollbar-thumb {
+#detail-cards::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 3px;
 }
 
 .sidebar::-webkit-scrollbar-thumb:hover,
 .list-items::-webkit-scrollbar-thumb:hover,
-.detail-panel::-webkit-scrollbar-thumb:hover {
+#detail-cards::-webkit-scrollbar-thumb:hover {
   background: var(--outline);
 }
 
@@ -1596,12 +1640,12 @@ textarea.field-input {
     z-index: 160;
     width: 100%;
     min-width: 0;
-    padding: 20px 16px;
+    padding: 0;
     border-left: none;
   }
 
   .detail-panel.mobile-visible {
-    display: block;
+    display: flex;
   }
 
   /* Floating batch bar */
@@ -1668,6 +1712,7 @@ textarea.field-input {
 .sidebar-bottom {
   border-top: 1px solid var(--border);
   margin-top: auto;
+  padding: 12px;
 }
 
 .sidebar-bottom-title {
@@ -2199,6 +2244,22 @@ textarea.field-input {
   color: var(--primary);
 }
 
+/* ===== Detail Round Layout (1차 | 2차 나란히) ===== */
+.detail-round-row {
+  display: flex;
+  gap: 16px;
+}
+.detail-round-col {
+  flex: 1;
+  min-width: 0;
+}
+.detail-round-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-sec);
+  margin-bottom: 4px;
+}
+
 /* ===== Homework Domain OX ===== */
 .hw-domain-group {
   display: flex;
@@ -2272,6 +2333,10 @@ textarea.field-input {
 .hw-domain-ox.readonly {
   cursor: default;
   opacity: 0.85;
+  width: 22px;
+  height: 20px;
+  font-size: 11px;
+  border-radius: 4px;
 }
 
 .hw-domain-ox.readonly:hover {
@@ -2314,3 +2379,136 @@ textarea.field-input {
 }
 
 /* ===== Class Code Global Filter Chip ===== */
+
+/* ===== Next Homework (반별 다음숙제) ===== */
+
+.next-hw-class-card {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.next-hw-class-card:hover {
+  background: var(--hover-bg);
+}
+
+.next-hw-class-card.active {
+  background: var(--active-bg);
+}
+
+.next-hw-class-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.next-hw-class-code {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-main);
+}
+
+.next-hw-class-status {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-sec);
+  background: var(--surface);
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.next-hw-complete .next-hw-class-status {
+  color: var(--success);
+  background: #e6f4ea;
+  border-color: var(--success);
+}
+
+.next-hw-partial .next-hw-class-status {
+  color: var(--warning);
+  background: #fef7e0;
+  border-color: var(--warning);
+}
+
+.next-hw-domain-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.next-hw-chip {
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-body);
+  cursor: pointer;
+  border: 1.5px solid var(--border);
+  background: white;
+  color: var(--text-sec);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.next-hw-chip:hover {
+  background: var(--hover-bg);
+}
+
+/* 입력 완료 — 초록 */
+.next-hw-chip.filled {
+  background: #e6f4ea;
+  border-color: var(--success);
+  color: var(--success);
+}
+
+/* 숙제없음 — 회색 */
+.next-hw-chip.none {
+  background: var(--surface-hover);
+  border-color: var(--outline);
+  color: var(--outline);
+}
+
+/* Detail panel next-hw rows */
+.next-hw-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.next-hw-detail-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-sec);
+  min-width: 48px;
+  flex-shrink: 0;
+}
+
+/* ===== 등원예정 리스트 ===== */
+.visit-source-badge {
+  font-size: 10px;
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.visit-guest-badge {
+  font-size: 10px;
+  color: var(--text-sec);
+  background: var(--surface-hover);
+  padding: 1px 6px;
+  border-radius: 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.visit-item.visit-completed {
+  opacity: 0.5;
+}
+
+.visit-item.visit-completed .item-title {
+  text-decoration: line-through;
+}
