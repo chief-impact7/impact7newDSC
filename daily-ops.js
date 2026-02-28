@@ -1151,11 +1151,16 @@ function getFilteredStudents() {
 
     // 검색어 필터
     if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        students = students.filter(s =>
-            s.name?.toLowerCase().includes(q) ||
-            s.enrollments.some(e => enrollmentCode(e).toLowerCase().includes(q))
-        );
+        const q = searchQuery.trim().toLowerCase();
+        const chosungMode = isChosungOnly(q);
+        students = students.filter(s => {
+            if (chosungMode) return matchChosung(s.name, q) || matchChosung(s.school, q);
+            return (s.name?.toLowerCase().includes(q)) ||
+                (s.school?.toLowerCase().includes(q)) ||
+                (s.student_phone?.includes(q)) ||
+                (s.parent_phone_1?.includes(q)) ||
+                s.enrollments.some(e => enrollmentCode(e).toLowerCase().includes(q));
+        });
     }
 
     // 모든 카테고리 필터를 AND로 적용
@@ -4574,7 +4579,7 @@ onAuthStateChanged(auth, async (user) => {
         await loadStudents();
         buildSiblingMap();
         buildSemesterFilter();
-        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate)]);
+        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate)]);
         await loadRoleMemos().catch(() => {});
         updateDateDisplay();
         renderBranchFilter();
@@ -4591,7 +4596,7 @@ onAuthStateChanged(auth, async (user) => {
 // ─── Keyboard shortcut: ESC closes modals ───────────────────────────────────
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-        ['schedule-modal', 'homework-modal', 'test-modal', 'enrollment-modal', 'memo-modal', 'next-hw-modal', 'parent-msg-modal', 'temp-attendance-modal'].forEach(id => {
+        ['schedule-modal', 'homework-modal', 'test-modal', 'enrollment-modal', 'memo-modal', 'next-hw-modal', 'parent-msg-modal', 'temp-attendance-modal', 'bulk-confirm-modal'].forEach(id => {
             const modal = document.getElementById(id);
             if (modal?.style.display !== 'none') {
                 modal.style.display = 'none';

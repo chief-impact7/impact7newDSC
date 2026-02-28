@@ -870,8 +870,14 @@ body {
   background: var(--surface-container);
   border-radius: 12px;
   padding: 12px;
-  margin-bottom: 8px;
+  margin-bottom: -12px;
   border: 1px solid #e8eaed;
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 3px 9px rgba(0,0,0,0.15);
+}
+#detail-cards > :last-child {
+  margin-bottom: 16px;
 }
 
 .detail-card-title {
@@ -2441,7 +2447,10 @@ textarea.field-input {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 14px 16px;
-  margin-bottom: 12px;
+  margin-bottom: -12px;
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 3px 9px rgba(0,0,0,0.15);
 }
 
 .checklist-progress {
