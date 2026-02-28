@@ -173,6 +173,16 @@
                         <input type="checkbox" id="bulk-select-all-cb" onchange="toggleSelectAll(this.checked)">
                         <span id="bulk-selected-count">0명 선택</span>
                     </label>
+                    <div class="bulk-action-btns">
+                        <button class="bulk-memo-btn" onclick="openBulkMemo()">
+                            <span class="material-symbols-outlined" style="font-size:16px;">edit_note</span>
+                            메모
+                        </button>
+                        <button class="bulk-notify-btn" onclick="openBulkNotify()">
+                            <span class="material-symbols-outlined" style="font-size:16px;">notifications</span>
+                            알림
+                        </button>
+                    </div>
                     <button class="bulk-exit-btn" onclick="exitBulkMode()">취소</button>
                 </div>
                 <div class="list-items" id="list-items">
@@ -190,6 +200,7 @@
                     <span class="material-symbols-outlined" style="font-size:64px;color:var(--border);">assignment_ind</span>
                     <p style="color:var(--text-sec);margin-top:12px;">학생을 선택하면 개인현황이 표시됩니다</p>
                 </div>
+                <div id="bulk-summary" class="bulk-summary" style="display:none;"></div>
                 <div id="detail-content" style="display:none;">
                     <!-- 프로필 헤더 -->
                     <div class="profile-header" id="profile-header">
@@ -613,6 +624,52 @@
                 <button class="parent-msg-btn-close" onclick="document.getElementById('parent-msg-modal').style.display='none'">
                     닫기
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 일괄 메모 모달 -->
+    <div id="bulk-memo-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="일괄 메모" onclick="closeModal('bulk-memo-modal', event)" style="display:none;">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h3>일괄 메모</h3>
+                <button class="modal-close" onclick="document.getElementById('bulk-memo-modal').style.display='none'">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p id="bulk-memo-desc" style="font-size:13px;color:var(--text-sec);margin-bottom:12px;"></p>
+                <div class="form-field">
+                    <label class="field-label">메모 내용</label>
+                    <textarea id="bulk-memo-text" class="field-input" rows="4" placeholder="선택된 학생들에게 추가할 메모를 입력하세요..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="document.getElementById('bulk-memo-modal').style.display='none'">취소</button>
+                <button class="btn btn-primary" onclick="saveBulkMemo()">저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 일괄 알림 모달 -->
+    <div id="bulk-notify-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="일괄 학부모 알림" onclick="closeModal('bulk-notify-modal', event)" style="display:none;">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h3>일괄 학부모 알림</h3>
+                <button class="modal-close" onclick="document.getElementById('bulk-notify-modal').style.display='none'">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p id="bulk-notify-desc" style="font-size:13px;color:var(--text-sec);margin-bottom:12px;"></p>
+                <div class="form-field">
+                    <label class="field-label">알림 메시지</label>
+                    <textarea id="bulk-notify-text" class="field-input" rows="4" placeholder="학부모에게 전송할 알림 메시지를 입력하세요..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="document.getElementById('bulk-notify-modal').style.display='none'">취소</button>
+                <button class="btn btn-primary" onclick="saveBulkNotify()">복사</button>
             </div>
         </div>
     </div>

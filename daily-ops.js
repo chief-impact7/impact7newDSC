@@ -31,7 +31,7 @@ let selectedSemester = null;     // 학기 글로벌 필터 (null = 전체, '202
 let siblingMap = {};             // docId → Set of sibling docIds
 let bulkMode = false;
 let selectedStudentIds = new Set();
-let groupViewMode = 'none'; // 'none' | 'branch' | 'class'
+let groupViewMode = localStorage.getItem('dsc_groupViewMode') || 'none'; // 'none' | 'branch' | 'class'
 let savedSubFilters = {};        // 카테고리별 L2 선택 기억 { homework: Set['hw_1st'], ... }
 let savedL2Expanded = {};        // 카테고리별 L2 펼침 상태 기억
 let classNextHw = {};            // classCode → { domains: { "Gr": "...", ... } }
@@ -4586,6 +4586,18 @@ onAuthStateChanged(auth, async (user) => {
         renderSubFilters();
         updateL1ExpandIcons();
         renderListPanel();
+
+        // Restore group view button state
+        if (groupViewMode !== 'none') {
+            const btn = document.getElementById('group-view-btn');
+            const labels = { none: 'view_agenda', branch: 'location_city', class: 'school' };
+            const titles = { none: '그룹 뷰 (소속별)', branch: '그룹 뷰: 소속별 → 반별로 전환', class: '그룹 뷰: 반별 → 해제' };
+            if (btn) {
+                btn.querySelector('.material-symbols-outlined').textContent = labels[groupViewMode];
+                btn.title = titles[groupViewMode];
+                btn.classList.add('active');
+            }
+        }
     } else {
         currentUser = null;
         document.getElementById('login-screen').style.display = '';
@@ -4663,6 +4675,17 @@ function exitBulkMode() {
     document.querySelectorAll('.list-item-checkbox').forEach(cb => cb.checked = false);
     const selectAllCb = document.getElementById('bulk-select-all-cb');
     if (selectAllCb) selectAllCb.checked = false;
+    // 벌크 요약 패널 숨기고 기존 상세 패널 복원
+    const summaryEl = document.getElementById('bulk-summary');
+    if (summaryEl) summaryEl.style.display = 'none';
+    if (selectedStudentId) {
+        document.getElementById('detail-empty').style.display = 'none';
+        document.getElementById('detail-content').style.display = '';
+        renderStudentDetail(selectedStudentId);
+    } else {
+        document.getElementById('detail-empty').style.display = '';
+        document.getElementById('detail-content').style.display = 'none';
+    }
 }
 window.exitBulkMode = exitBulkMode;
 
@@ -4674,7 +4697,134 @@ function updateBulkBar() {
     const allChecked = visibleCbs.length > 0 && [...visibleCbs].every(cb => cb.checked);
     const selectAllCb = document.getElementById('bulk-select-all-cb');
     if (selectAllCb) selectAllCb.checked = allChecked;
+    renderBulkSummary();
 }
+
+function renderBulkSummary() {
+    const summaryEl = document.getElementById('bulk-summary');
+    if (!summaryEl) return;
+
+    if (!bulkMode || selectedStudentIds.size < 2) {
+        summaryEl.style.display = 'none';
+        // 기존 상세 패널 복원
+        if (selectedStudentId) {
+            document.getElementById('detail-empty').style.display = 'none';
+            document.getElementById('detail-content').style.display = '';
+        } else {
+            document.getElementById('detail-empty').style.display = '';
+            document.getElementById('detail-content').style.display = 'none';
+        }
+        return;
+    }
+
+    // 벌크 요약 표시, 기존 패널 숨김
+    document.getElementById('detail-empty').style.display = 'none';
+    document.getElementById('detail-content').style.display = 'none';
+    summaryEl.style.display = '';
+
+    const ids = [...selectedStudentIds];
+    const students = ids.map(id => allStudents.find(s => s.docId === id)).filter(Boolean);
+    const count = students.length;
+
+    // 이름 목록 (최대 10명)
+    const nameList = count <= 10
+        ? students.map(s => esc(s.name)).join(', ')
+        : students.slice(0, 10).map(s => esc(s.name)).join(', ') + ` 외 ${count - 10}명`;
+
+    // 공통 소속
+    const branches = [...new Set(students.map(s => branchFromStudent(s)).filter(Boolean))];
+    const commonBranch = branches.length === 1 ? branches[0] : null;
+
+    summaryEl.innerHTML = `
+        <div class="bulk-summary-header">
+            <div class="bulk-summary-avatar">
+                <span class="material-symbols-outlined">groups</span>
+            </div>
+            <div class="bulk-summary-info">
+                <h2 class="bulk-summary-title">${count}명 선택됨</h2>
+                ${commonBranch ? `<span class="tag">${esc(commonBranch)}</span>` : ''}
+            </div>
+            <button class="icon-btn detail-close-btn" onclick="exitBulkMode()" title="벌크 모드 종료" aria-label="벌크 모드 종료">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+        <div class="bulk-summary-names">${nameList}</div>
+        <div class="bulk-summary-actions">
+            <button class="btn btn-secondary bulk-summary-action-btn" onclick="openBulkAttendanceFromSummary()">
+                <span class="material-symbols-outlined" style="font-size:18px;">event_available</span>
+                일괄 출결
+            </button>
+            <button class="btn btn-secondary bulk-summary-action-btn" onclick="openBulkOXFromSummary('hw')">
+                <span class="material-symbols-outlined" style="font-size:18px;">menu_book</span>
+                일괄 숙제OX
+            </button>
+            <button class="btn btn-secondary bulk-summary-action-btn" onclick="openBulkOXFromSummary('test')">
+                <span class="material-symbols-outlined" style="font-size:18px;">quiz</span>
+                일괄 테스트OX
+            </button>
+        </div>`;
+}
+
+window.openBulkAttendanceFromSummary = () => {
+    if (selectedStudentIds.size < 2) return;
+    openBulkModal('attendance');
+};
+
+window.openBulkOXFromSummary = (type) => {
+    if (selectedStudentIds.size < 2) return;
+    const field = type === 'test'
+        ? (currentSubFilter.has('test_2nd') ? 'test_domains_2nd' : 'test_domains_1st')
+        : (currentSubFilter.has('hw_2nd') ? 'hw_domains_2nd' : 'hw_domains_1st');
+    // 도메인 선택 없이 모달 열기 - 사용자가 목록에서 OX 버튼을 눌러 도메인 지정
+    // 여기서는 첫 번째 학생의 도메인 목록을 보여주는 선택 UI 표시
+    const firstId = [...selectedStudentIds][0];
+    let domains = [];
+    if (type === 'test') {
+        const { sections } = getStudentTestItems(firstId);
+        domains = Object.values(sections).flat();
+    } else {
+        domains = getStudentDomains(firstId);
+    }
+    if (domains.length === 0) {
+        showToast('해당 항목이 없습니다.');
+        return;
+    }
+    if (domains.length === 1) {
+        openBulkModal('ox', field, domains[0]);
+        return;
+    }
+    // 여러 도메인: 도메인 선택 모달 표시
+    openBulkDomainPicker(type, field, domains);
+};
+
+function openBulkDomainPicker(type, field, domains) {
+    const modal = document.getElementById('bulk-confirm-modal');
+    const titleEl = document.getElementById('bulk-confirm-title');
+    const descEl = document.getElementById('bulk-confirm-desc');
+    const namesEl = document.getElementById('bulk-confirm-names');
+    const bodyEl = document.getElementById('bulk-modal-body');
+    const saveBtn = document.getElementById('bulk-modal-save-btn');
+
+    titleEl.textContent = type === 'test' ? '테스트 영역 선택' : '숙제 영역 선택';
+    descEl.textContent = 'OX를 변경할 영역을 선택하세요.';
+    namesEl.textContent = '';
+    saveBtn.style.display = 'none';
+
+    bodyEl.innerHTML = `<div class="bulk-domain-picker">${domains.map(d =>
+        `<button class="btn btn-secondary bulk-domain-pick-btn" onclick="pickBulkDomain('${escAttr(field)}', '${escAttr(d)}')">${esc(d)}</button>`
+    ).join('')}</div>`;
+
+    // 임시로 취소 버튼만 활성화
+    _bulkModalType = 'domain-picker';
+    modal.style.display = 'flex';
+}
+
+window.pickBulkDomain = (field, domain) => {
+    document.getElementById('bulk-confirm-modal').style.display = 'none';
+    document.getElementById('bulk-modal-save-btn').style.display = '';
+    _bulkModalType = null;
+    openBulkModal('ox', field, domain);
+};
 
 window.toggleSelectAll = (checked) => {
     if (!bulkMode) enterBulkMode();
@@ -4698,6 +4848,25 @@ window.toggleStudentCheckbox = (docId, checked) => {
     updateBulkBar();
 };
 
+// ─── Toast Notification ─────────────────────────────────────────────────────
+function showToast(message) {
+    let container = document.querySelector('.toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = message;
+    container.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add('show'));
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.addEventListener('transitionend', () => toast.remove());
+    }, 3000);
+}
+
 // ─── Group View ──────────────────────────────────────────────────────────────
 window.toggleGroupView = () => {
     const modes = ['none', 'branch', 'class'];
@@ -4705,6 +4874,7 @@ window.toggleGroupView = () => {
     const titles = { none: '그룹 뷰 (소속별)', branch: '그룹 뷰: 소속별 → 반별로 전환', class: '그룹 뷰: 반별 → 해제' };
     const idx = modes.indexOf(groupViewMode);
     groupViewMode = modes[(idx + 1) % modes.length];
+    localStorage.setItem('dsc_groupViewMode', groupViewMode);
     const btn = document.getElementById('group-view-btn');
     if (btn) {
         btn.querySelector('.material-symbols-outlined').textContent = labels[groupViewMode];
@@ -4777,6 +4947,7 @@ window.resetBulkModal = () => {
     }
     renderSubFilters();
     renderListPanel();
+    showToast(`${selectedStudentIds.size}명 초기화 완료`);
     _bulkModalType = null;
 };
 
@@ -4794,6 +4965,7 @@ window.confirmBulkAction = () => {
         renderSubFilters();
         renderListPanel();
     }
+    showToast(`${selectedStudentIds.size}명 일괄 처리 완료`);
     _bulkModalType = null;
 };
 
@@ -5289,5 +5461,80 @@ async function saveTempAttendance() {
 
 window.openTempAttendanceModal = openTempAttendanceModal;
 window.saveTempAttendance = saveTempAttendance;
+
+// ─── 일괄 메모 ──────────────────────────────────────────────────────────────
+
+function openBulkMemo() {
+    if (selectedStudentIds.size === 0) { alert('학생을 선택하세요.'); return; }
+    const count = selectedStudentIds.size;
+    const names = [...selectedStudentIds].map(id => allStudents.find(s => s.docId === id)?.name).filter(Boolean);
+    const nameList = names.length <= 5 ? names.join(', ') : names.slice(0, 5).join(', ') + ` 외 ${names.length - 5}명`;
+    document.getElementById('bulk-memo-desc').textContent = `${count}명 선택: ${nameList}`;
+    document.getElementById('bulk-memo-text').value = '';
+    document.getElementById('bulk-memo-modal').style.display = 'flex';
+}
+
+async function saveBulkMemo() {
+    const text = document.getElementById('bulk-memo-text').value.trim();
+    if (!text) { alert('메모 내용을 입력하세요.'); return; }
+
+    showSaveIndicator('saving');
+    try {
+        const ids = [...selectedStudentIds];
+        for (const studentId of ids) {
+            const rec = dailyRecords[studentId] || {};
+            const existing = rec.note || '';
+            const newNote = existing ? `${existing}\n${text}` : text;
+            await saveImmediately(studentId, { note: newNote });
+        }
+        document.getElementById('bulk-memo-modal').style.display = 'none';
+        showSaveIndicator('saved');
+        if (selectedStudentId) renderStudentDetail(selectedStudentId);
+    } catch (err) {
+        console.error('일괄 메모 저장 실패:', err);
+        showSaveIndicator('error');
+    }
+}
+
+window.openBulkMemo = openBulkMemo;
+window.saveBulkMemo = saveBulkMemo;
+
+// ─── 일괄 학부모 알림 ───────────────────────────────────────────────────────
+
+function openBulkNotify() {
+    if (selectedStudentIds.size === 0) { alert('학생을 선택하세요.'); return; }
+    const count = selectedStudentIds.size;
+    const names = [...selectedStudentIds].map(id => allStudents.find(s => s.docId === id)?.name).filter(Boolean);
+    const nameList = names.length <= 5 ? names.join(', ') : names.slice(0, 5).join(', ') + ` 외 ${names.length - 5}명`;
+    document.getElementById('bulk-notify-desc').textContent = `${count}명 선택: ${nameList}`;
+    document.getElementById('bulk-notify-text').value = '';
+    document.getElementById('bulk-notify-modal').style.display = 'flex';
+}
+
+async function saveBulkNotify() {
+    const text = document.getElementById('bulk-notify-text').value.trim();
+    if (!text) { alert('알림 메시지를 입력하세요.'); return; }
+
+    const ids = [...selectedStudentIds];
+    const lines = [];
+    for (const studentId of ids) {
+        const student = allStudents.find(s => s.docId === studentId);
+        if (!student) continue;
+        lines.push(`[${student.name}] ${text}`);
+    }
+    const fullMessage = lines.join('\n');
+
+    try {
+        await navigator.clipboard.writeText(fullMessage);
+        document.getElementById('bulk-notify-modal').style.display = 'none';
+        alert(`${ids.length}명의 알림 메시지가 클립보드에 복사되었습니다.`);
+    } catch (err) {
+        console.error('클립보드 복사 실패:', err);
+        alert('클립보드 복사에 실패했습니다. 직접 복사해주세요.\n\n' + fullMessage);
+    }
+}
+
+window.openBulkNotify = openBulkNotify;
+window.saveBulkNotify = saveBulkNotify;
 
 console.log('[DailyOps] App initialized.');
