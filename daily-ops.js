@@ -4608,7 +4608,7 @@ onAuthStateChanged(auth, async (user) => {
 // ─── Keyboard shortcut: ESC closes modals ───────────────────────────────────
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-        ['schedule-modal', 'homework-modal', 'test-modal', 'enrollment-modal', 'memo-modal', 'next-hw-modal', 'parent-msg-modal', 'temp-attendance-modal', 'bulk-confirm-modal'].forEach(id => {
+        ['schedule-modal', 'homework-modal', 'test-modal', 'enrollment-modal', 'memo-modal', 'next-hw-modal', 'parent-msg-modal', 'temp-attendance-modal', 'bulk-confirm-modal', 'bulk-memo-modal', 'bulk-notify-modal'].forEach(id => {
             const modal = document.getElementById(id);
             if (modal?.style.display !== 'none') {
                 modal.style.display = 'none';
