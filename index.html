@@ -33,12 +33,16 @@
                 <button class="icon-btn" id="sidebar-toggle" onclick="toggleSidebar()" aria-label="사이드바 열기/닫기">
                     <span class="material-symbols-outlined">menu</span>
                 </button>
+                <img src="https://i.imgur.com/a4XeF5x.png" alt="logo" style="height:30px;width:auto;">
                 <span class="app-title">DSC</span>
             </div>
             <div class="app-bar-center">
                 <div class="search-pill">
                     <span class="material-symbols-outlined">search</span>
-                    <input type="text" id="search-input" placeholder="학생 검색..." oninput="handleSearch(this.value)">
+                    <input type="text" id="search-input" placeholder="이름, 학교, 전화번호 또는 초성(ㄱㄴㄷ)으로 검색..." oninput="handleSearch(this.value)">
+                    <button class="search-clear" id="search-clear" onclick="clearSearch()" style="display:none" aria-label="검색 지우기">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
                 </div>
             </div>
             <div class="app-bar-right">
@@ -70,7 +74,6 @@
             <aside class="sidebar" id="sidebar">
                 <!-- 롤 선택기 -->
                 <div class="role-selector" id="role-selector" style="display:none;">
-                    <div class="role-selector-label">내 역할</div>
                     <div class="role-chips" id="role-chips">
                         <button class="role-chip" data-role="행정" onclick="selectRole('행정')">행정</button>
                         <button class="role-chip" data-role="교수" onclick="selectRole('교수')">교수</button>
@@ -89,6 +92,13 @@
                             <div id="memo-content"></div>
                         </div>
                     </div>
+                </div>
+
+                <div class="semester-selector" id="semester-selector">
+                    <select id="semester-filter" class="semester-select"
+                            onchange="handleSemesterFilter(this.value)" aria-label="학기 필터">
+                        <option value="">전체 학기</option>
+                    </select>
                 </div>
 
                 <!-- L1 Navigation -->
@@ -144,15 +154,26 @@
             <!-- List Panel -->
             <section class="list-panel" id="list-panel">
                 <div class="panel-header" id="panel-header">
-                    <input type="checkbox" class="select-all-checkbox" id="select-all-checkbox"
-                        onchange="toggleSelectAll(this.checked)" title="전체 선택">
                     <div class="filter-chips" id="filter-chips"></div>
                     <span class="count-chip" id="list-count">0명</span>
                     <div class="panel-actions">
+                        <button class="icon-btn" id="bulk-mode-btn" onclick="toggleBulkMode()" title="일괄 선택 모드" aria-label="일괄 선택 모드">
+                            <span class="material-symbols-outlined">checklist</span>
+                        </button>
+                        <button class="icon-btn" id="group-view-btn" onclick="toggleGroupView()" title="그룹 뷰 (소속별)" aria-label="그룹 뷰">
+                            <span class="material-symbols-outlined">view_agenda</span>
+                        </button>
                         <button class="icon-btn" onclick="refreshData()" aria-label="새로고침">
                             <span class="material-symbols-outlined">refresh</span>
                         </button>
                     </div>
+                </div>
+                <div id="bulk-action-bar" class="bulk-action-bar" style="display:none;">
+                    <label class="bulk-select-all">
+                        <input type="checkbox" id="bulk-select-all-cb" onchange="toggleSelectAll(this.checked)">
+                        <span id="bulk-selected-count">0명 선택</span>
+                    </label>
+                    <button class="bulk-exit-btn" onclick="exitBulkMode()">취소</button>
                 </div>
                 <div class="list-items" id="list-items">
                     <!-- 동적 렌더링: 각 list-item에 토글 버튼 그룹 포함 -->
@@ -173,9 +194,13 @@
                     <!-- 프로필 헤더 -->
                     <div class="profile-header" id="profile-header">
                         <div class="profile-avatar" id="profile-avatar"></div>
-                        <div>
-                            <h2 class="detail-title" id="detail-name"></h2>
+                        <div class="profile-info">
+                            <div class="profile-name-row">
+                                <h2 class="detail-title" id="detail-name"></h2>
+                                <div class="profile-phones" id="profile-phones"></div>
+                            </div>
                             <div class="profile-tags" id="profile-tags"></div>
+                            <div class="profile-stay-stats" id="profile-stay-stats"></div>
                         </div>
                         <button class="icon-btn detail-close-btn" id="detail-close-btn" onclick="closeDetail()" title="닫기" aria-label="상세 패널 닫기">
                             <span class="material-symbols-outlined">close</span>
@@ -194,16 +219,6 @@
 
         </div><!-- /.main-content -->
 
-        <!-- Floating Batch Bar -->
-        <div class="batch-floating-bar" id="batch-bar" style="display:none;">
-            <span class="batch-count" id="batch-count">0명 선택</span>
-            <div class="batch-actions" id="batch-actions">
-                <!-- 동적 버튼 -->
-            </div>
-            <button class="batch-btn-close" onclick="clearSelection()">
-                <span class="material-symbols-outlined">close</span>
-            </button>
-        </div>
 
         <!-- 일정 지정 모달 -->
         <div id="schedule-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="일정 지정" onclick="closeModal('schedule-modal', event)" style="display:none;">
@@ -327,23 +342,6 @@
         </div>
 
         <!-- 일괄처리 확인 모달 -->
-        <div id="batch-confirm-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="일괄 처리 확인" onclick="closeModal('batch-confirm-modal', event)" style="display:none;">
-            <div class="modal-content modal-sm">
-                <div class="modal-header">
-                    <h3 id="batch-confirm-title">일괄 처리</h3>
-                    <button class="modal-close" onclick="document.getElementById('batch-confirm-modal').style.display='none'">
-                        <span class="material-symbols-outlined">close</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <p id="batch-confirm-message"></p>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" onclick="document.getElementById('batch-confirm-modal').style.display='none'">취소</button>
-                    <button class="btn btn-primary" id="batch-confirm-ok" onclick="executeBatchAction()">확인</button>
-                </div>
-            </div>
-        </div>
 
         <!-- 메모 보내기 모달 -->
         <div id="memo-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="메모 보내기" onclick="closeModal('memo-modal', event)" style="display:none;">
@@ -615,6 +613,28 @@
                 <button class="parent-msg-btn-close" onclick="document.getElementById('parent-msg-modal').style.display='none'">
                     닫기
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 일괄처리 모달 -->
+    <div id="bulk-confirm-modal" class="modal-overlay" role="dialog" aria-modal="true" onclick="if(event.target===this) cancelBulkAction()" style="display:none;">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h3 id="bulk-confirm-title">일괄 변경</h3>
+                <button class="modal-close" onclick="cancelBulkAction()">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p id="bulk-confirm-desc" style="font-size:14px;color:var(--text-main);margin-bottom:4px;"></p>
+                <p id="bulk-confirm-names" style="font-size:12px;color:var(--text-sec);line-height:1.5;margin-bottom:16px;"></p>
+                <div id="bulk-modal-body"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="cancelBulkAction()">취소</button>
+                <button class="btn btn-secondary" onclick="resetBulkModal()">초기화</button>
+                <button class="btn btn-primary" id="bulk-modal-save-btn" onclick="confirmBulkAction()" disabled>일괄저장</button>
             </div>
         </div>
     </div>

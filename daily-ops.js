@@ -19,7 +19,6 @@ let selectedStudentId = null;
 let currentCategory = 'attendance'; // 'attendance' | 'homework' | 'test' | 'automation'
 let currentSubFilter = new Set();    // L2 복수 선택 (빈 Set = 전체)
 let l2Expanded = false;             // L2 서브필터 펼침 상태
-let checkedItems = new Set();
 let saveTimers = {};
 let searchQuery = '';
 let currentRole = null;
@@ -28,6 +27,11 @@ let memoTab = 'inbox';
 let classSettings = {};          // classCode → { domains: [...] }
 let selectedBranch = null;       // 소속 글로벌 필터 (null = 전체, '2단지' | '10단지')
 let selectedClassCode = null;    // 반 글로벌 필터 (null = 전체, 'ax104' 등)
+let selectedSemester = null;     // 학기 글로벌 필터 (null = 전체, '2026-Winter' 등)
+let siblingMap = {};             // docId → Set of sibling docIds
+let bulkMode = false;
+let selectedStudentIds = new Set();
+let groupViewMode = 'none'; // 'none' | 'branch' | 'class'
 let savedSubFilters = {};        // 카테고리별 L2 선택 기억 { homework: Set['hw_1st'], ... }
 let savedL2Expanded = {};        // 카테고리별 L2 펼침 상태 기억
 let classNextHw = {};            // classCode → { domains: { "Gr": "...", ... } }
@@ -49,6 +53,51 @@ function oxDisplayClass(value) {
     if (value === 'X') return 'ox-red';
     if (value === '△') return 'ox-yellow';
     return 'ox-empty';
+}
+
+// ─── 한글 초성 검색 헬퍼 ───────────────────────────────────────────────────
+const CHO = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+const getChosung = (str) => [...(str || '')].map(ch => {
+    const code = ch.charCodeAt(0);
+    if (code >= 0xAC00 && code <= 0xD7A3) return CHO[Math.floor((code - 0xAC00) / 588)];
+    return ch;
+}).join('');
+const isChosungOnly = (str) => str && [...str].every(ch => CHO.includes(ch));
+const matchChosung = (target, term) => {
+    if (!target || !term) return false;
+    return getChosung(target).includes(term);
+};
+
+// ─── 형제 맵 빌드 ──────────────────────────────────────────────────────────
+function buildSiblingMap() {
+    siblingMap = {};
+    const idToStudent = new Map(allStudents.map(s => [s.docId, s]));
+    const phoneToIds = {};
+    allStudents.forEach(s => {
+        const phones = [...new Set([s.parent_phone_1, s.parent_phone_2]
+            .map(p => (p || '').replace(/\D/g, '')).filter(p => p.length >= 9))];
+        phones.forEach(p => {
+            if (!phoneToIds[p]) phoneToIds[p] = [];
+            phoneToIds[p].push(s.docId);
+        });
+    });
+    Object.values(phoneToIds).forEach(ids => {
+        const uniqueIds = [...new Set(ids)];
+        if (uniqueIds.length < 2) return;
+        uniqueIds.forEach(id => {
+            const student = idToStudent.get(id);
+            if (!student) return;
+            const siblings = uniqueIds.filter(sid => {
+                if (sid === id) return false;
+                const other = idToStudent.get(sid);
+                return other && other.name !== student.name;
+            });
+            if (siblings.length > 0) {
+                if (!siblingMap[id]) siblingMap[id] = new Set();
+                siblings.forEach(sid => siblingMap[id].add(sid));
+            }
+        });
+    });
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -104,6 +153,7 @@ function branchFromStudent(s) {
 function enrollmentCode(e) {
     return `${e.level_symbol || ''}${e.class_number || ''}`;
 }
+const allClassCodes = (s) => (s.enrollments || []).map(e => enrollmentCode(e)).filter(Boolean);
 
 // 학교+학부앞글자+학년앞글자 조합 (예: 대일고1, 진명여고1)
 function studentShortLabel(s) {
@@ -432,6 +482,7 @@ function getUniqueClassCodes() {
         if (selectedBranch && branchFromStudent(s) !== selectedBranch) return;
         s.enrollments.forEach(e => {
             if (!e.day.includes(dayName)) return;
+            if (selectedSemester && e.semester !== selectedSemester) return;
             const code = enrollmentCode(e);
             if (code) codes.add(code);
         });
@@ -442,12 +493,17 @@ function getUniqueClassCodes() {
 function getClassMgmtCount(filterKey) {
     const dayName = getDayName(selectedDate);
     let students = allStudents.filter(s =>
-        s.status !== '퇴원' && s.enrollments.some(e => e.day.includes(dayName))
+        s.status !== '퇴원' && s.enrollments.some(e =>
+            e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
+        )
     );
     if (selectedBranch) students = students.filter(s => branchFromStudent(s) === selectedBranch);
     if (filterKey === 'all') return students.length;
     return students.filter(s =>
-        s.enrollments.some(e => e.day.includes(dayName) && enrollmentCode(e) === filterKey)
+        s.enrollments.some(e =>
+            e.day.includes(dayName) && enrollmentCode(e) === filterKey &&
+            (!selectedSemester || e.semester === selectedSemester)
+        )
     ).length;
 }
 
@@ -498,7 +554,7 @@ function setCategory(category) {
         l2Expanded = true;
         savedL2Expanded[category] = true;
     }
-    checkedItems.clear();
+
 
     // L1 active 토글 (branch, class_mgmt 제외 — 글로벌 필터)
     document.querySelectorAll('.nav-l1').forEach(el => {
@@ -509,7 +565,7 @@ function setCategory(category) {
     // L2 서브필터 렌더링
     renderSubFilters();
     updateL1ExpandIcons();
-    updateBatchBar();
+
     renderListPanel();
 }
 
@@ -593,7 +649,12 @@ function renderBranchFilter() {
         { key: '2단지', label: '2단지' },
         { key: '10단지', label: '10단지' }
     ];
-    const active = allStudents.filter(s => s.status !== '퇴원');
+    const dayName = getDayName(selectedDate);
+    const active = allStudents.filter(s =>
+        s.status !== '퇴원' && s.enrollments.some(e =>
+            e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
+        )
+    );
 
     container.innerHTML = branches.map(b => {
         const isActive = selectedBranch === b.key ? 'active' : '';
@@ -633,7 +694,10 @@ function renderClassCodeFilter() {
     container.innerHTML = classCodes.map(code => {
         const isActive = selectedClassCode === code ? 'active' : '';
         const count = allStudents.filter(s =>
-            s.enrollments.some(e => e.day.includes(dayName) && enrollmentCode(e) === code)
+            s.enrollments.some(e =>
+                e.day.includes(dayName) && enrollmentCode(e) === code &&
+                (!selectedSemester || e.semester === selectedSemester)
+            )
         ).length;
         return `<div class="nav-l2 ${isActive}" data-filter="${code}" onclick="setClassCode('${escAttr(code)}')">
             ${esc(code)}
@@ -653,11 +717,11 @@ function renderClassCodeFilter() {
 function setClassCode(code) {
     selectedClassCode = selectedClassCode === code ? null : code;
     selectedStudentId = null; // 반 변경 시 학생 선택 해제
-    checkedItems.clear();
+
     renderClassCodeFilter();
     renderFilterChips();
     renderSubFilters();
-    updateBatchBar();
+
     renderListPanel();
     // 반 해제 시 디테일 초기화
     if (!selectedClassCode) {
@@ -667,12 +731,50 @@ function setClassCode(code) {
 
 function setBranch(branchKey) {
     selectedBranch = selectedBranch === branchKey ? null : branchKey;
-    checkedItems.clear();
+
     renderBranchFilter();
     renderSubFilters();
-    updateBatchBar();
+
     renderListPanel();
 }
+
+// ─── 학기 필터 ──────────────────────────────────────────────────────────────
+
+function buildSemesterFilter() {
+    const sel = document.getElementById('semester-filter');
+    if (!sel) return;
+    const semesters = new Set();
+    allStudents.forEach(s =>
+        (s.enrollments || []).forEach(e => { if (e.semester) semesters.add(e.semester); })
+    );
+    const sorted = [...semesters].sort().reverse();
+    // 전역 변수 → DOM → localStorage 순으로 보존된 값 복원
+    const saved = selectedSemester || sel.value || localStorage.getItem('dsc_semester_filter') || '';
+    sel.innerHTML = '<option value="">전체 학기</option>' +
+        sorted.map(s => `<option value="${s}">${s}</option>`).join('');
+    if (saved && sorted.includes(saved)) {
+        sel.value = saved;
+        selectedSemester = saved;
+    } else {
+        sel.value = '';
+        selectedSemester = null;
+    }
+}
+
+function handleSemesterFilter(val) {
+    selectedSemester = val || null;
+    if (val) {
+        localStorage.setItem('dsc_semester_filter', val);
+    } else {
+        localStorage.removeItem('dsc_semester_filter');
+    }
+
+
+    renderFilterChips();
+    renderSubFilters();
+    renderListPanel();
+}
+window.handleSemesterFilter = handleSemesterFilter;
 
 function renderFilterChips() {
     const container = document.getElementById('filter-chips');
@@ -709,6 +811,8 @@ function renderFilterChips() {
         chips.push({ label: `반: ${selectedClassCode}`, onRemove: 'clearClassCode' });
     }
 
+    // 학기는 사이드바 드롭다운에서 제어 — 칩에 표시하지 않음
+
     if (chips.length === 0) {
         container.innerHTML = '<span class="filter-chips-empty">전체</span>';
     } else {
@@ -743,10 +847,9 @@ function removeFilterChip(action) {
         renderClassCodeFilter();
         // 디테일 패널 초기화
         selectedStudentId = null;
-        renderStudentDetail(null);
     }
-    checkedItems.clear();
-    updateBatchBar();
+
+
     renderFilterChips();
     renderListPanel();
 }
@@ -759,7 +862,7 @@ function clearAllFilters() {
         savedL2Expanded[cat] = false;
     }
     l2Expanded = false;
-    // 글로벌 필터 해제
+    // 글로벌 필터 해제 (학기는 사이드바 드롭다운에서만 제어 — 유지)
     selectedBranch = null;
     selectedClassCode = null;
     document.querySelector('.nav-l1[data-category="branch"]')?.classList.remove('expanded');
@@ -767,12 +870,12 @@ function clearAllFilters() {
     // UI 동기화
     selectedStudentId = null;
     renderStudentDetail(null);
-    checkedItems.clear();
+
     renderBranchFilter();
     renderClassCodeFilter();
     renderSubFilters();
     updateL1ExpandIcons();
-    updateBatchBar();
+
     renderFilterChips();
     renderListPanel();
 }
@@ -788,7 +891,7 @@ function setSubFilter(filterKey) {
         currentSubFilter.clear();
         currentSubFilter.add(filterKey);
     }
-    checkedItems.clear();
+
 
     document.querySelectorAll('.nav-l2').forEach(el => {
         el.classList.toggle('active', currentSubFilter.has(el.dataset.filter));
@@ -797,17 +900,21 @@ function setSubFilter(filterKey) {
     // 현재 카테고리의 L2 상태 저장
     savedSubFilters[currentCategory] = new Set(currentSubFilter);
 
-    updateBatchBar();
+
     renderListPanel();
 }
 
 function getSubFilterCount(filterKey) {
     const dayName = getDayName(selectedDate);
     let todayStudents = allStudents.filter(s =>
-        s.enrollments.some(e => e.day.includes(dayName))
+        s.status !== '퇴원' && s.enrollments.some(e =>
+            e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
+        )
     );
     if (selectedBranch) todayStudents = todayStudents.filter(s => branchFromStudent(s) === selectedBranch);
-    if (selectedClassCode) todayStudents = todayStudents.filter(s => s.enrollments.some(e => enrollmentCode(e) === selectedClassCode));
+    if (selectedClassCode) todayStudents = todayStudents.filter(s => s.enrollments.some(e =>
+        e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === selectedClassCode
+    ));
 
     const total = todayStudents.length;
     const r = (count) => ({ count, total });
@@ -996,19 +1103,28 @@ function getFilteredStudents() {
     if (currentCategory === 'class_mgmt') {
         const dayName = getDayName(selectedDate);
         let students = allStudents.filter(s =>
-            s.status !== '퇴원' && s.enrollments.some(e => e.day.includes(dayName))
+            s.status !== '퇴원' && s.enrollments.some(e =>
+                e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
+            )
         );
         if (selectedBranch) students = students.filter(s => branchFromStudent(s) === selectedBranch);
         if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            students = students.filter(s =>
-                s.name?.toLowerCase().includes(q) ||
-                s.enrollments.some(e => enrollmentCode(e).toLowerCase().includes(q))
-            );
+            const q = searchQuery.trim().toLowerCase();
+            const chosungMode = isChosungOnly(q);
+            students = students.filter(s => {
+                if (chosungMode) return matchChosung(s.name, q) || matchChosung(s.school, q);
+                return (s.name?.toLowerCase().includes(q)) ||
+                    (s.school?.toLowerCase().includes(q)) ||
+                    (s.student_phone?.includes(q)) ||
+                    (s.parent_phone_1?.includes(q)) ||
+                    s.enrollments.some(e => enrollmentCode(e).toLowerCase().includes(q));
+            });
         }
         if (currentSubFilter.size > 0 && !currentSubFilter.has('all')) {
             students = students.filter(s =>
-                s.enrollments.some(e => currentSubFilter.has(enrollmentCode(e)))
+                s.enrollments.some(e =>
+                    e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && currentSubFilter.has(enrollmentCode(e))
+                )
             );
         }
         return students;
@@ -1016,7 +1132,9 @@ function getFilteredStudents() {
 
     const dayName = getDayName(selectedDate);
     let students = allStudents.filter(s =>
-        s.enrollments.some(e => e.day.includes(dayName))
+        s.status !== '퇴원' && s.enrollments.some(e =>
+            e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
+        )
     );
 
     // 소속 글로벌 필터
@@ -1025,7 +1143,9 @@ function getFilteredStudents() {
     // 반 글로벌 필터
     if (selectedClassCode) {
         students = students.filter(s =>
-            s.enrollments.some(e => enrollmentCode(e) === selectedClassCode)
+            s.enrollments.some(e =>
+                e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === selectedClassCode
+            )
         );
     }
 
@@ -1209,10 +1329,14 @@ function renderScheduledVisitList() {
 function renderDepartureCheckList() {
     const dayName = getDayName(selectedDate);
     let students = allStudents.filter(s =>
-        s.enrollments.some(e => e.day.includes(dayName))
+        s.status !== '퇴원' && s.enrollments.some(e =>
+            e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
+        )
     );
     if (selectedBranch) students = students.filter(s => branchFromStudent(s) === selectedBranch);
-    if (selectedClassCode) students = students.filter(s => s.enrollments.some(e => enrollmentCode(e) === selectedClassCode));
+    if (selectedClassCode) students = students.filter(s => s.enrollments.some(e =>
+        e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === selectedClassCode
+    ));
     if (searchQuery) {
         const q = searchQuery.toLowerCase();
         students = students.filter(s =>
@@ -1304,14 +1428,20 @@ function renderListPanel() {
     // 필터 칩 렌더링
     renderFilterChips();
 
-    countEl.textContent = `${students.length}명`;
-
-    // 전체 선택 체크박스 상태 동기화
-    const selectAllCb = document.getElementById('select-all-checkbox');
-    if (selectAllCb) {
-        selectAllCb.checked = students.length > 0 && students.every(s => checkedItems.has(s.docId));
-        selectAllCb.indeterminate = students.some(s => checkedItems.has(s.docId)) && !selectAllCb.checked;
+    // 벌크 모드: 현재 목록에 없는 학생 선택 해제, 0명이면 벌크모드 종료
+    if (bulkMode) {
+        const visibleIds = new Set(students.map(s => s.docId));
+        for (const id of [...selectedStudentIds]) {
+            if (!visibleIds.has(id)) selectedStudentIds.delete(id);
+        }
+        if (selectedStudentIds.size === 0) {
+            exitBulkMode();
+        } else {
+            updateBulkBar();
+        }
     }
+
+    countEl.textContent = `${students.length}명`;
 
     if (students.length === 0) {
         container.innerHTML = `<div class="empty-state">
@@ -1321,10 +1451,10 @@ function renderListPanel() {
         return;
     }
 
-    container.innerHTML = students.map(s => {
+    const renderItemHtml = (s) => {
         const isActive = s.docId === selectedStudentId ? 'active' : '';
-        const isChecked = checkedItems.has(s.docId) ? 'checked' : '';
-        const code = (s.enrollments || []).map(e => enrollmentCode(e)).join(', ');
+        const dayN = getDayName(selectedDate);
+        const code = (s.enrollments || []).filter(e => e.day.includes(dayN) && (!selectedSemester || e.semester === selectedSemester)).map(e => enrollmentCode(e)).join(', ') || (s.enrollments || []).map(e => enrollmentCode(e)).join(', ');
         const branch = branchFromStudent(s);
 
         let toggleHtml = '';
@@ -1582,17 +1712,45 @@ function renderListPanel() {
             ? `<span class="hw-fail-badge hw-fail-visit" title="등원 예약 있음"><span class="material-symbols-outlined" style="font-size:14px;">directions_walk</span></span>`
             : '';
 
-        return `<div class="list-item ${isActive}" data-id="${escAttr(s.docId)}" onclick="selectStudent('${escAttr(s.docId)}')">
-            <input type="checkbox" class="item-checkbox" ${isChecked}
-                onclick="event.stopPropagation(); toggleCheck('${escAttr(s.docId)}', this.checked)">
+        // 형제 아이콘
+        const hasSibling = siblingMap[s.docId]?.size > 0;
+        const siblingNames = hasSibling ? [...siblingMap[s.docId]].map(sid => allStudents.find(x => x.docId === sid)?.name).filter(Boolean).join(', ') : '';
+        const siblingIcon = hasSibling ? `<span class="item-icon item-icon-sibling" title="형제: ${esc(siblingNames)}"><span class="material-symbols-outlined">group</span></span>` : '';
+
+        return `<div class="list-item ${isActive}${bulkMode ? ' bulk-mode' : ''}${selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}" onclick="handleListItemClick(event, '${escAttr(s.docId)}')">
+            <input type="checkbox" class="list-item-checkbox" ${selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">
             <div class="item-info">
-                <span class="item-title">${esc(s.name)}${hwFailIconHtml} <span class="item-class-type">${esc(todayEnroll?.class_type || '')}</span></span>
+                <span class="item-title">${esc(s.name)}${siblingIcon}${hwFailIconHtml} <span class="item-class-type">${esc(todayEnroll?.class_type || '')}</span></span>
                 <span class="item-desc">${esc(code)}${studentShortLabel(s) ? ', ' + esc(studentShortLabel(s)) : ''}</span>
             </div>
             ${timeHtml}
             <div class="item-actions">${toggleHtml}</div>
         </div>`;
-    }).join('');
+    };
+
+    // 그룹 뷰 or 일반 렌더링
+    if (groupViewMode !== 'none') {
+        const groups = {};
+        students.forEach(s => {
+            if (groupViewMode === 'branch') {
+                const key = branchFromStudent(s) || '미지정';
+                if (!groups[key]) groups[key] = [];
+                groups[key].push(s);
+            } else {
+                const codes = allClassCodes(s);
+                const key = codes.length ? codes[0] : '미지정';
+                if (!groups[key]) groups[key] = [];
+                groups[key].push(s);
+            }
+        });
+        const sortedKeys = Object.keys(groups).sort((a, b) => a.localeCompare(b, 'ko'));
+        container.innerHTML = sortedKeys.map(key => {
+            const headerHtml = `<div class="group-header"><span class="group-label">${esc(key)}</span><span class="group-count">${groups[key].length}명</span></div>`;
+            return headerHtml + groups[key].map(renderItemHtml).join('');
+        }).join('');
+    } else {
+        container.innerHTML = students.map(renderItemHtml).join('');
+    }
 
     // 반 상세 표시: 반(+소속)만 선택되고, 콘텐츠 서브필터 없을 때
     const allFilters = { ...savedSubFilters };
@@ -1634,7 +1792,7 @@ function renderClassDetail(classCode) {
     const dayName = getDayName(selectedDate);
     let classStudents = allStudents.filter(s =>
         s.status !== '퇴원' &&
-        s.enrollments.some(e => enrollmentCode(e) === classCode && e.day.includes(dayName))
+        s.enrollments.some(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode)
     );
     if (selectedBranch) {
         classStudents = classStudents.filter(s => branchFromStudent(s) === selectedBranch);
@@ -1653,7 +1811,7 @@ function renderClassDetail(classCode) {
 
     // ① 등원예정시간 (enrollment start_time — 영구 저장)
     const arrivalRows = classStudents.map(s => {
-        const todayEnroll = s.enrollments.find(e => enrollmentCode(e) === classCode && e.day.includes(dayName));
+        const todayEnroll = s.enrollments.find(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode);
         const currentTime = todayEnroll?.start_time || '';
         return `<div class="arrival-time-row">
             <span class="arrival-student-name">${esc(s.name)}</span>
@@ -1878,7 +2036,7 @@ async function applyClassArrivalTimeDetail(classCode) {
     const dayName = getDayName(selectedDate);
     let classStudents = allStudents.filter(s =>
         s.status !== '퇴원' &&
-        s.enrollments.some(e => enrollmentCode(e) === classCode && e.day.includes(dayName))
+        s.enrollments.some(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode)
     );
     if (selectedBranch) {
         classStudents = classStudents.filter(s => branchFromStudent(s) === selectedBranch);
@@ -1889,7 +2047,7 @@ async function applyClassArrivalTimeDetail(classCode) {
         const batch = writeBatch(db);
         classStudents.forEach(s => {
             const enrollments = [...s.enrollments];
-            const idx = enrollments.findIndex(e => enrollmentCode(e) === classCode && e.day.includes(dayName));
+            const idx = enrollments.findIndex(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode);
             if (idx !== -1) {
                 enrollments[idx] = { ...enrollments[idx], start_time: time };
                 batch.update(doc(db, 'students', s.docId), { enrollments });
@@ -1921,7 +2079,7 @@ async function saveClassScheduledTimes(classCode) {
             if (!student) return;
 
             const enrollments = [...student.enrollments];
-            const idx = enrollments.findIndex(e => enrollmentCode(e) === classCode && e.day.includes(dayName));
+            const idx = enrollments.findIndex(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode);
             if (idx !== -1) {
                 enrollments[idx] = { ...enrollments[idx], start_time: time };
                 batch.update(doc(db, 'students', studentId), { enrollments });
@@ -2570,10 +2728,6 @@ function renderNextHwClassList() {
     const classCodes = getUniqueClassCodes();
     countEl.textContent = `${classCodes.length}개 반`;
 
-    // 전체 선택 체크박스 숨기기
-    const selectAllCb = document.getElementById('select-all-checkbox');
-    if (selectAllCb) selectAllCb.style.display = 'none';
-
     if (classCodes.length === 0) {
         container.innerHTML = `<div class="empty-state">
             <span class="material-symbols-outlined">school</span>
@@ -2770,7 +2924,7 @@ function renderNextHwClassDetail(classCode) {
     // 반 소속 학생 목록
     const dayName = getDayName(selectedDate);
     let classStudents = allStudents.filter(s =>
-        s.status !== '퇴원' && s.enrollments.some(e => e.day.includes(dayName) && enrollmentCode(e) === classCode)
+        s.status !== '퇴원' && s.enrollments.some(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode)
     );
     if (selectedBranch) classStudents = classStudents.filter(s => branchFromStudent(s) === selectedBranch);
 
@@ -3090,6 +3244,62 @@ window.renderTempAttendanceDetail = renderTempAttendanceDetail;
 
 // ─── Student Detail Panel ───────────────────────────────────────────────────
 
+function buildStayStatsHtml(student) {
+    const enrollments = (student.enrollments || []).filter(e => e.level_symbol || e.start_date);
+    if (!enrollments.length) return '';
+
+    // 재원기간 (start_date 없거나 2020 이전이면 2026-01-01 기본값)
+    const startDates = enrollments.map(e => e.start_date)
+        .filter(d => d && d !== '?' && /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= '2020-01-01')
+        .sort();
+    const firstDate = startDates.length ? startDates[0] : '2026-01-01';
+    let periodHtml = '—';
+    {
+        const start = new Date(firstDate);
+        const now = new Date();
+        const totalMonths = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+        const years = Math.floor(totalMonths / 12);
+        const months = totalMonths % 12;
+        const duration = totalMonths <= 0 ? '등원예정'
+            : years > 0 ? `${years}년${months > 0 ? ' ' + months + '개월' : ''}`
+            : `${totalMonths}개월`;
+        periodHtml = `${firstDate} 부터 &nbsp;&middot;&nbsp; <strong>${duration}</strong>`;
+    }
+
+    // 레벨 이력
+    const levelMap = {};
+    for (const e of enrollments) {
+        const sym = e.level_symbol;
+        if (!sym) continue;
+        if (!levelMap[sym]) levelMap[sym] = { semesters: new Set(), firstDate: '' };
+        if (e.semester) levelMap[sym].semesters.add(e.semester);
+        if (e.start_date && (!levelMap[sym].firstDate || e.start_date < levelMap[sym].firstDate))
+            levelMap[sym].firstDate = e.start_date;
+    }
+
+    const levelRows = Object.entries(levelMap)
+        .sort((a, b) => (a[1].firstDate || '').localeCompare(b[1].firstDate || ''))
+        .map(([sym, data]) => {
+            const sems = [...data.semesters].sort();
+            const semStr = sems.length ? sems.join(' \u00b7 ') : '—';
+            const cnt = sems.length;
+            return `<div class="stay-level-row">
+                <span class="stay-level-tag">${esc(sym)}</span>
+                <span class="stay-level-sems">${esc(semStr)}</span>
+                <span class="stay-level-count">${cnt}학기</span>
+            </div>`;
+        }).join('');
+
+    return `
+        <div class="stay-period">
+            <span class="stay-period-value">${periodHtml}</span>
+        </div>
+        ${levelRows ? `<div class="stay-levels">
+            <div class="stay-level-list">${levelRows}</div>
+        </div>` : ''}
+    `;
+}
+
 function renderStudentDetail(studentId) {
     if (!studentId) {
         document.getElementById('detail-empty').style.display = '';
@@ -3107,6 +3317,14 @@ function renderStudentDetail(studentId) {
     document.getElementById('profile-avatar').textContent = (student.name || '?')[0];
     document.getElementById('detail-name').textContent = student.name || '';
 
+    // 연락처 표시 (이름 옆, 학생/학부모 각 줄)
+    const phonesEl = document.getElementById('profile-phones');
+    if (phonesEl) {
+        phonesEl.innerHTML =
+            `<div class="profile-phone"><span class="phone-label">학생</span>${student.student_phone ? esc(student.student_phone) : ''}</div>` +
+            `<div class="profile-phone"><span class="phone-label">학부모</span>${student.parent_phone_1 ? esc(student.parent_phone_1) : ''}</div>`;
+    }
+
     const rec = dailyRecords[studentId] || {};
     const attStatus = rec?.attendance?.status || '미확인';
     const arrivalTime = rec?.arrival_time || '';
@@ -3119,9 +3337,18 @@ function renderStudentDetail(studentId) {
     const showTime = (attStatus === '출석' || attStatus === '지각') && arrivalTime;
     const tagText = showTime ? `${displayStatus} ${formatTime12h(arrivalTime)}` : displayStatus;
 
+    const hasSibling = siblingMap[studentId]?.size > 0;
+    const siblingNames = hasSibling ? [...new Set([...siblingMap[studentId]].map(sid => allStudents.find(x => x.docId === sid)?.name).filter(Boolean))].join(', ') : '';
+    const siblingHtml = hasSibling ? `<span class="tag tag-sibling"><span class="material-symbols-outlined" style="font-size:13px;">group</span> ${esc(siblingNames)}</span>` : '';
+
     document.getElementById('profile-tags').innerHTML = `
         <span class="tag tag-status ${tagClass}">${esc(tagText)}</span>
+        ${siblingHtml}
     `;
+
+    // 재원현황 (프로필 내 표시)
+    const stayStatsEl = document.getElementById('profile-stay-stats');
+    if (stayStatsEl) stayStatsEl.innerHTML = buildStayStatsHtml(student);
 
     // 카드들 렌더링
     const cardsContainer = document.getElementById('detail-cards');
@@ -3240,7 +3467,7 @@ function renderStudentDetail(studentId) {
     // 다음숙제 카드 (반별 내용 표시 + 개인별 오버라이드 편집)
     const dayName2 = getDayName(selectedDate);
     const studentClasses = student.enrollments
-        .filter(e => e.day.includes(dayName2))
+        .filter(e => e.day.includes(dayName2) && (!selectedSemester || e.semester === selectedSemester))
         .map(e => enrollmentCode(e))
         .filter(Boolean);
     const uniqueClasses = [...new Set(studentClasses)];
@@ -3382,9 +3609,8 @@ async function saveExtraVisit(studentId, field, value) {
 // ─── Toggle handlers (immediate save) ──────────────────────────────────────
 
 function toggleAttendance(studentId, displayStatus) {
-    // 2명 이상 체크된 경우 일괄입력 모달 표시
-    if (checkedItems.size >= 2 && checkedItems.has(studentId)) {
-        showAttendanceBatchModal(displayStatus);
+    if (bulkMode && selectedStudentIds.size >= 2 && selectedStudentIds.has(studentId)) {
+        openBulkModal('attendance');
         return;
     }
     applyAttendance(studentId, displayStatus);
@@ -3456,44 +3682,6 @@ function applyAttendance(studentId, displayStatus, force = false, silent = false
     if (selectedStudentId === studentId) renderStudentDetail(studentId);
 }
 
-function showAttendanceBatchModal(displayStatus) {
-    const statuses = ['출석', '지각', '결석', '조퇴'];
-    document.getElementById('batch-confirm-title').textContent = '출결 일괄입력';
-    document.getElementById('batch-confirm-message').innerHTML =
-        `<div style="text-align:center;color:var(--text-sec);font-size:13px;margin-bottom:12px;">${checkedItems.size}명 일괄입력 — 값을 선택하세요</div>` +
-        `<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">` +
-        statuses.map(st => {
-            const cls = st === '출석' ? 'active-present' : st === '지각' ? 'active-late' : st === '결석' ? 'active-absent' : 'active-other';
-            return `<button class="toggle-btn ${cls}" style="font-size:14px;padding:8px 16px;" onclick="confirmBatchAttendance('${st}')">${st}</button>`;
-        }).join('') +
-        `</div>`;
-    document.getElementById('batch-confirm-ok').style.display = 'none';
-    document.getElementById('batch-confirm-modal').style.display = 'flex';
-}
-
-function confirmBatchAttendance(status) {
-    document.getElementById('batch-confirm-title').textContent = '출결 일괄입력 확인';
-    document.getElementById('batch-confirm-message').innerHTML =
-        `<p>${checkedItems.size}명을 <b style="font-size:16px;">${esc(status)}</b>(으)로 처리하시겠습니까?</p>`;
-    const okBtn = document.getElementById('batch-confirm-ok');
-    okBtn.style.display = '';
-    okBtn.textContent = '일괄입력';
-    okBtn.onclick = () => executeBatchAttendance(status);
-}
-
-function executeBatchAttendance(status) {
-    document.getElementById('batch-confirm-modal').style.display = 'none';
-    const okBtn = document.getElementById('batch-confirm-ok');
-    okBtn.textContent = '확인';
-    okBtn.onclick = executeBatchAction;
-
-    for (const sid of checkedItems) {
-        applyAttendance(sid, status, true, true); // force + silent
-    }
-    renderSubFilters();
-    renderListPanel();
-    if (selectedStudentId) renderStudentDetail(selectedStudentId);
-}
 
 // 학생의 출결 상태가 현재 L2 필터에 매칭되는지 판별
 function doesStatusMatchFilter(firestoreStatus, filterSet) {
@@ -3540,68 +3728,16 @@ function oxFieldLabel(field) {
 }
 
 function toggleHwDomainOX(studentId, field, domain) {
-    // 체크된 학생이 2명 이상이면 값 선택 모달
-    if (checkedItems.size >= 2 && checkedItems.has(studentId)) {
-        const invalidStudents = Array.from(checkedItems).filter(id => {
-            const st = dailyRecords[id]?.attendance?.status;
-            return !(st === '출석' || st === '지각' || st === '조퇴');
-        });
-        if (invalidStudents.length > 0) {
-            alert('선택된 학생 중 등원(출석, 지각, 조퇴) 상태가 아닌 학생이 포함되어 있습니다.\\n선택 해제 후 다시 시도해주세요.');
-            return;
-        }
-        showHwDomainBatchModal(field, domain, oxFieldLabel(field));
+    if (!checkCanEditGrading(studentId)) return;
+    if (bulkMode && selectedStudentIds.size >= 2 && selectedStudentIds.has(studentId)) {
+        openBulkModal('ox', field, domain);
         return;
     }
-
-    if (!checkCanEditGrading(studentId)) return;
     applyHwDomainOX(studentId, field, domain);
     renderSubFilters();
     if (selectedStudentId === studentId) renderStudentDetail(studentId);
 }
 
-function showHwDomainBatchModal(field, domain, label) {
-    // 1단계: 값 선택
-    document.getElementById('batch-confirm-title').textContent = `${label} · ${domain}`;
-    document.getElementById('batch-confirm-message').innerHTML =
-        `<div style="text-align:center;color:var(--text-sec);font-size:13px;margin-bottom:12px;">${checkedItems.size}명 일괄입력 — 값을 선택하세요</div>` +
-        `<div style="display:flex;gap:10px;justify-content:center;">` +
-            `<button class="hw-domain-ox ox-green" style="width:52px;height:44px;font-size:18px;" onclick="confirmBatchHwDomainOX('${field}','${escAttr(domain)}','O')">O</button>` +
-            `<button class="hw-domain-ox ox-yellow" style="width:52px;height:44px;font-size:18px;" onclick="confirmBatchHwDomainOX('${field}','${escAttr(domain)}','△')">△</button>` +
-            `<button class="hw-domain-ox ox-red" style="width:52px;height:44px;font-size:18px;" onclick="confirmBatchHwDomainOX('${field}','${escAttr(domain)}','X')">X</button>` +
-            `<button class="hw-domain-ox ox-empty" style="width:52px;height:44px;font-size:18px;" onclick="confirmBatchHwDomainOX('${field}','${escAttr(domain)}','')">—</button>` +
-        `</div>`;
-    document.getElementById('batch-confirm-ok').style.display = 'none';
-    document.getElementById('batch-confirm-modal').style.display = 'flex';
-}
-
-function confirmBatchHwDomainOX(field, domain, value) {
-    // 2단계: 확인
-    const label = oxFieldLabel(field);
-    const displayVal = value || '취소(빈값)';
-    document.getElementById('batch-confirm-title').textContent = '일괄입력 확인';
-    document.getElementById('batch-confirm-message').innerHTML =
-        `<p>${checkedItems.size}명의 <b>${esc(label)} · ${esc(domain)}</b> 영역을 <b style="font-size:16px;">${esc(displayVal)}</b>(으)로 저장하시겠습니까?</p>`;
-    const okBtn = document.getElementById('batch-confirm-ok');
-    okBtn.style.display = '';
-    okBtn.textContent = '일괄입력';
-    okBtn.onclick = () => executeBatchHwDomainOX(field, domain, value);
-}
-
-function executeBatchHwDomainOX(field, domain, value) {
-    document.getElementById('batch-confirm-modal').style.display = 'none';
-    // 확인 버튼 원복
-    const okBtn = document.getElementById('batch-confirm-ok');
-    okBtn.textContent = '확인';
-    okBtn.onclick = executeBatchAction;
-
-    for (const sid of checkedItems) {
-        applyHwDomainOX(sid, field, domain, value);
-    }
-    renderSubFilters();
-    renderListPanel();
-    if (selectedStudentId) renderStudentDetail(selectedStudentId);
-}
 
 function applyHwDomainOX(studentId, field, domain, forceValue) {
     const rec = dailyRecords[studentId] || {};
@@ -3661,173 +3797,6 @@ function handleHomeworkStatusChange(studentId, hwIndex, value) {
     }
 }
 
-// ─── Checkbox & Batch ───────────────────────────────────────────────────────
-
-function toggleCheck(studentId, checked) {
-    if (checked) checkedItems.add(studentId);
-    else checkedItems.delete(studentId);
-    updateBatchBar();
-}
-
-function updateBatchBar() {
-    const bar = document.getElementById('batch-bar');
-    const countEl = document.getElementById('batch-count');
-    const actionsEl = document.getElementById('batch-actions');
-
-    if (checkedItems.size === 0) {
-        bar.style.display = 'none';
-        return;
-    }
-
-    bar.style.display = 'flex';
-    countEl.textContent = `${checkedItems.size}명 선택`;
-
-    let buttons = '';
-    if (currentCategory === 'attendance') {
-        buttons = ''; // 출결 일괄입력은 토글버튼 직접 클릭 방식 사용
-    } else if (currentCategory === 'homework') {
-        const isHwDomain = currentSubFilter.has('hw_1st') || currentSubFilter.has('hw_2nd');
-        if (isHwDomain) {
-            // 1차/2차: OX 버튼 직접 클릭으로 일괄 입력 — 배치 바는 선택 인원만 표시
-            buttons = '';
-        } else {
-            buttons = `
-                <button class="batch-btn" onclick="confirmBatchAction('homework_status', '제출')">제출 확인</button>
-                <button class="batch-btn" onclick="confirmBatchAction('homework_status', '확인완료')">확인완료</button>
-                <button class="batch-btn" onclick="confirmBatchAction('homework_notify', '미제출 통보')">미제출 통보</button>`;
-        }
-    } else if (currentCategory === 'test') {
-        const isTestDomain = currentSubFilter.has('test_1st') || currentSubFilter.has('test_2nd');
-        if (isTestDomain) {
-            buttons = '';
-        } else {
-            buttons = `
-                <button class="batch-btn" onclick="confirmBatchAction('test_result', '통과')">통과 처리</button>
-                <button class="batch-btn" onclick="confirmBatchAction('test_result', '재시필요')">재시 지정</button>`;
-        }
-    } else if (currentCategory === 'automation') {
-        buttons = `
-            <button class="batch-btn" onclick="confirmBatchAction('attendance', '출석')">출석 처리</button>
-            <button class="batch-btn" onclick="confirmBatchAction('homework_notify', '미제출 통보')">미제출 통보</button>`;
-    }
-
-    actionsEl.innerHTML = buttons;
-}
-
-let _pendingBatchAction = null;
-
-function confirmBatchAction(action, value) {
-    _pendingBatchAction = { action, value };
-    document.getElementById('batch-confirm-title').textContent = '일괄 처리 확인';
-    document.getElementById('batch-confirm-message').textContent =
-        `${checkedItems.size}명에게 "${value}" 처리를 적용하시겠습니까?`;
-    document.getElementById('batch-confirm-modal').style.display = 'flex';
-}
-
-async function executeBatchAction() {
-    document.getElementById('batch-confirm-modal').style.display = 'none';
-    if (!_pendingBatchAction) return;
-
-    const { action, value } = _pendingBatchAction;
-    _pendingBatchAction = null;
-
-    await handleBatchAction(action, value);
-}
-
-async function handleBatchAction(action, value) {
-    if (checkedItems.size === 0) return;
-    const ids = Array.from(checkedItems);
-    const BATCH_SIZE = 200;
-
-    showSaveIndicator('saving');
-
-    try {
-        // 먼저 모든 ops를 수집한 뒤 BATCH_SIZE 단위로 커밋
-        const ops = []; // { type: 'set'|'update', ref, data, options? }
-
-        for (const studentId of ids) {
-            const docId = makeDailyRecordId(studentId, selectedDate);
-            const ref = doc(db, 'daily_records', docId);
-            const student = allStudents.find(s => s.docId === studentId);
-
-            const baseData = {
-                student_id: studentId,
-                date: selectedDate,
-                branch: branchFromStudent(student || {}),
-                updated_by: currentUser.email,
-                updated_at: serverTimestamp()
-            };
-
-            if (action === 'attendance') {
-                ops.push({ type: 'set', ref, data: { ...baseData, attendance: { status: value } }, options: { merge: true } });
-                if (!dailyRecords[studentId]) {
-                    dailyRecords[studentId] = { docId, student_id: studentId, date: selectedDate };
-                }
-                dailyRecords[studentId].attendance = { ...(dailyRecords[studentId].attendance || {}), status: value };
-            } else if (action === 'homework_status') {
-                const rec = dailyRecords[studentId] || {};
-                const homework = (rec.homework || []).map(h => ({ ...h, status: value }));
-                ops.push({ type: 'set', ref, data: { ...baseData, homework }, options: { merge: true } });
-                if (dailyRecords[studentId]) dailyRecords[studentId].homework = homework;
-            } else if (action === 'homework_notify') {
-                // TODO: 실제 알림 발송 로직 연동 (현재는 로그만 남김)
-                console.log(`[NOTIFY] ${studentId} 학생에게 숙제 미제출 통보`);
-            } else if (action === 'test_result') {
-                const rec = dailyRecords[studentId] || {};
-                const tests = (rec.tests || []).map(t => ({ ...t, result: value }));
-                ops.push({ type: 'set', ref, data: { ...baseData, tests }, options: { merge: true } });
-                if (dailyRecords[studentId]) dailyRecords[studentId].tests = tests;
-            } else if (action === 'retake_status') {
-                const retakes = retakeSchedules.filter(r => r.student_id === studentId && r.status === '예정');
-                for (const r of retakes) {
-                    ops.push({ type: 'update', ref: doc(db, 'retake_schedule', r.docId), data: { status: value, updated_at: serverTimestamp() } });
-                    r.status = value;
-                }
-            }
-        }
-
-        // BATCH_SIZE 단위로 분할 커밋
-        for (let i = 0; i < ops.length; i += BATCH_SIZE) {
-            const chunk = ops.slice(i, i + BATCH_SIZE);
-            const batch = writeBatch(db);
-            for (const op of chunk) {
-                if (op.type === 'set') {
-                    batch.set(op.ref, op.data, op.options || {});
-                } else {
-                    batch.update(op.ref, op.data);
-                }
-            }
-            await batch.commit();
-        }
-
-        checkedItems.clear();
-        updateBatchBar();
-        renderSubFilters();
-        renderListPanel();
-        if (selectedStudentId) renderStudentDetail(selectedStudentId);
-        showSaveIndicator('saved');
-    } catch (err) {
-        console.error('일괄 처리 실패:', err);
-        showSaveIndicator('error');
-    }
-}
-
-function toggleSelectAll(checked) {
-    const students = getFilteredStudents();
-    checkedItems.clear();
-    if (checked) {
-        students.forEach(s => checkedItems.add(s.docId));
-    }
-    updateBatchBar();
-    renderListPanel();
-}
-
-function clearSelection() {
-    checkedItems.clear();
-    updateBatchBar();
-    renderListPanel();
-}
-
 // ─── Date navigation ────────────────────────────────────────────────────────
 
 function updateDateDisplay() {
@@ -3878,12 +3847,15 @@ async function completeRetake(retakeDocId) {
     if (!confirm('이 일정을 완료 처리하시겠습니까?')) return;
     showSaveIndicator('saving');
     try {
+        const completedBy = (currentUser?.email || '').split('@')[0];
         await updateDoc(doc(db, 'retake_schedule', retakeDocId), {
             status: '완료',
+            completed_by: completedBy,
+            completed_at: new Date().toISOString(),
             updated_at: serverTimestamp()
         });
         const r = retakeSchedules.find(r => r.docId === retakeDocId);
-        if (r) r.status = '완료';
+        if (r) { r.status = '완료'; r.completed_by = completedBy; }
         renderSubFilters();
         if (selectedStudentId) renderStudentDetail(selectedStudentId);
         showSaveIndicator('saved');
@@ -3897,12 +3869,15 @@ async function cancelRetake(retakeDocId) {
     if (!confirm('이 일정을 취소하시겠습니까?')) return;
     showSaveIndicator('saving');
     try {
+        const cancelledBy = (currentUser?.email || '').split('@')[0];
         await updateDoc(doc(db, 'retake_schedule', retakeDocId), {
             status: '취소',
+            cancelled_by: cancelledBy,
+            cancelled_at: new Date().toISOString(),
             updated_at: serverTimestamp()
         });
         const r = retakeSchedules.find(r => r.docId === retakeDocId);
-        if (r) r.status = '취소';
+        if (r) { r.status = '취소'; r.cancelled_by = cancelledBy; }
         renderSubFilters();
         if (selectedStudentId) renderStudentDetail(selectedStudentId);
         showSaveIndicator('saved');
@@ -4059,7 +4034,7 @@ async function saveStudentScheduledTime(studentId, classCode, time) {
 
     const dayName = getDayName(selectedDate);
     const enrollments = [...student.enrollments];
-    const idx = enrollments.findIndex(e => enrollmentCode(e) === classCode && e.day.includes(dayName));
+    const idx = enrollments.findIndex(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode);
     if (idx === -1) return;
 
     enrollments[idx] = { ...enrollments[idx], start_time: time };
@@ -4597,6 +4572,8 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('user-avatar').textContent = (user.email || 'U')[0].toUpperCase();
 
         await loadStudents();
+        buildSiblingMap();
+        buildSemesterFilter();
         await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate)]);
         await loadRoleMemos().catch(() => {});
         updateDateDisplay();
@@ -4614,7 +4591,7 @@ onAuthStateChanged(auth, async (user) => {
 // ─── Keyboard shortcut: ESC closes modals ───────────────────────────────────
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-        ['schedule-modal', 'homework-modal', 'test-modal', 'batch-confirm-modal', 'enrollment-modal', 'memo-modal', 'next-hw-modal', 'parent-msg-modal', 'temp-attendance-modal'].forEach(id => {
+        ['schedule-modal', 'homework-modal', 'test-modal', 'enrollment-modal', 'memo-modal', 'next-hw-modal', 'parent-msg-modal', 'temp-attendance-modal'].forEach(id => {
             const modal = document.getElementById(id);
             if (modal?.style.display !== 'none') {
                 modal.style.display = 'none';
@@ -4642,8 +4619,194 @@ window.handleLogin = async () => {
 let _searchTimer = null;
 window.handleSearch = (value) => {
     searchQuery = value;
+    const clearBtn = document.getElementById('search-clear');
+    if (clearBtn) clearBtn.style.display = value ? 'flex' : 'none';
     if (_searchTimer) clearTimeout(_searchTimer);
     _searchTimer = setTimeout(() => renderListPanel(), 150);
+};
+window.clearSearch = () => {
+    searchQuery = '';
+    const input = document.getElementById('search-input');
+    if (input) input.value = '';
+    const clearBtn = document.getElementById('search-clear');
+    if (clearBtn) clearBtn.style.display = 'none';
+    renderListPanel();
+};
+
+// ─── Bulk Mode (일괄 선택) ──────────────────────────────────────────────────
+window.toggleBulkMode = () => {
+    if (bulkMode) exitBulkMode();
+    else enterBulkMode();
+};
+
+function enterBulkMode() {
+    bulkMode = true;
+    const btn = document.getElementById('bulk-mode-btn');
+    if (btn) btn.classList.add('active');
+    document.getElementById('bulk-action-bar').style.display = 'flex';
+    document.querySelectorAll('.list-item').forEach(el => el.classList.add('bulk-mode'));
+    updateBulkBar();
+}
+
+function exitBulkMode() {
+    bulkMode = false;
+    selectedStudentIds.clear();
+    const btn = document.getElementById('bulk-mode-btn');
+    if (btn) btn.classList.remove('active');
+    document.getElementById('bulk-action-bar').style.display = 'none';
+    document.querySelectorAll('.list-item').forEach(el => el.classList.remove('bulk-mode', 'bulk-selected'));
+    document.querySelectorAll('.list-item-checkbox').forEach(cb => cb.checked = false);
+    const selectAllCb = document.getElementById('bulk-select-all-cb');
+    if (selectAllCb) selectAllCb.checked = false;
+}
+window.exitBulkMode = exitBulkMode;
+
+function updateBulkBar() {
+    const count = selectedStudentIds.size;
+    const countEl = document.getElementById('bulk-selected-count');
+    if (countEl) countEl.textContent = `${count}명 선택`;
+    const visibleCbs = document.querySelectorAll('.list-item-checkbox');
+    const allChecked = visibleCbs.length > 0 && [...visibleCbs].every(cb => cb.checked);
+    const selectAllCb = document.getElementById('bulk-select-all-cb');
+    if (selectAllCb) selectAllCb.checked = allChecked;
+}
+
+window.toggleSelectAll = (checked) => {
+    if (!bulkMode) enterBulkMode();
+    document.querySelectorAll('.list-item-checkbox').forEach(cb => {
+        cb.checked = checked;
+        const item = cb.closest('.list-item');
+        const id = item?.dataset.id;
+        if (id) {
+            if (checked) { selectedStudentIds.add(id); item.classList.add('bulk-selected'); }
+            else { selectedStudentIds.delete(id); item.classList.remove('bulk-selected'); }
+        }
+    });
+    updateBulkBar();
+};
+
+window.toggleStudentCheckbox = (docId, checked) => {
+    if (checked) selectedStudentIds.add(docId);
+    else selectedStudentIds.delete(docId);
+    const item = document.querySelector(`.list-item[data-id="${docId}"]`);
+    if (item) item.classList.toggle('bulk-selected', checked);
+    updateBulkBar();
+};
+
+// ─── Group View ──────────────────────────────────────────────────────────────
+window.toggleGroupView = () => {
+    const modes = ['none', 'branch', 'class'];
+    const labels = { none: 'view_agenda', branch: 'location_city', class: 'school' };
+    const titles = { none: '그룹 뷰 (소속별)', branch: '그룹 뷰: 소속별 → 반별로 전환', class: '그룹 뷰: 반별 → 해제' };
+    const idx = modes.indexOf(groupViewMode);
+    groupViewMode = modes[(idx + 1) % modes.length];
+    const btn = document.getElementById('group-view-btn');
+    if (btn) {
+        btn.querySelector('.material-symbols-outlined').textContent = labels[groupViewMode];
+        btn.title = titles[groupViewMode];
+        btn.classList.toggle('active', groupViewMode !== 'none');
+    }
+    renderListPanel();
+};
+
+// ─── Bulk Action Modal ───────────────────────────────────────────────────────
+let _bulkModalType = null;   // 'attendance' | 'ox'
+let _bulkModalField = null;  // hw_domains_1st etc.
+let _bulkModalDomain = null; // 'Gr' etc.
+let _bulkModalValue = null;  // 선택된 값
+
+function openBulkModal(type, field, domain) {
+    _bulkModalType = type;
+    _bulkModalField = field;
+    _bulkModalDomain = domain;
+    _bulkModalValue = null;
+
+    const count = selectedStudentIds.size;
+    const names = [...selectedStudentIds].map(id => allStudents.find(s => s.docId === id)?.name).filter(Boolean);
+    const nameList = names.length <= 5 ? names.join(', ') : names.slice(0, 5).join(', ') + ` 외 ${names.length - 5}명`;
+
+    const modal = document.getElementById('bulk-confirm-modal');
+    const titleEl = document.getElementById('bulk-confirm-title');
+    const descEl = document.getElementById('bulk-confirm-desc');
+    const namesEl = document.getElementById('bulk-confirm-names');
+    const bodyEl = document.getElementById('bulk-modal-body');
+
+    descEl.textContent = `선택된 ${count}명에게 동일하게 적용합니다.`;
+    namesEl.textContent = nameList;
+
+    if (type === 'attendance') {
+        titleEl.textContent = '일괄 출결 변경';
+        const statuses = ['등원전', '출석', '지각', '결석', '조퇴', '기타'];
+        bodyEl.innerHTML = `<div class="bulk-modal-toggle-group">${statuses.map(st =>
+            `<button class="bulk-modal-toggle-btn" data-value="${esc(st)}" onclick="selectBulkValue(this, '${esc(st)}')">${esc(st)}</button>`
+        ).join('')}</div>`;
+    } else if (type === 'ox') {
+        const label = oxFieldLabel(field);
+        titleEl.textContent = `일괄 ${label} 변경`;
+        const values = ['O', '△', 'X', ''];
+        bodyEl.innerHTML = `<div class="bulk-modal-domain-label">${esc(domain)}</div>
+            <div class="bulk-modal-toggle-group">${values.map(v =>
+                `<button class="bulk-modal-toggle-btn ${oxDisplayClass(v)}" data-value="${v}" onclick="selectBulkValue(this, '${v}')">${v || '—'}</button>`
+            ).join('')}</div>`;
+    }
+
+    document.getElementById('bulk-modal-save-btn').disabled = true;
+    modal.style.display = 'flex';
+}
+
+window.selectBulkValue = (btn, value) => {
+    _bulkModalValue = value;
+    btn.closest('.bulk-modal-toggle-group').querySelectorAll('.bulk-modal-toggle-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    document.getElementById('bulk-modal-save-btn').disabled = false;
+};
+
+window.resetBulkModal = () => {
+    const modal = document.getElementById('bulk-confirm-modal');
+    modal.style.display = 'none';
+
+    if (_bulkModalType === 'attendance') {
+        [...selectedStudentIds].forEach(id => applyAttendance(id, '등원전', true, true));
+    } else if (_bulkModalType === 'ox') {
+        [...selectedStudentIds].forEach(id => applyHwDomainOX(id, _bulkModalField, _bulkModalDomain, ''));
+    }
+    renderSubFilters();
+    renderListPanel();
+    _bulkModalType = null;
+};
+
+window.confirmBulkAction = () => {
+    if (_bulkModalValue === null) return;
+    const modal = document.getElementById('bulk-confirm-modal');
+    modal.style.display = 'none';
+
+    if (_bulkModalType === 'attendance') {
+        [...selectedStudentIds].forEach(id => applyAttendance(id, _bulkModalValue, true, true));
+        renderSubFilters();
+        renderListPanel();
+    } else if (_bulkModalType === 'ox') {
+        [...selectedStudentIds].forEach(id => applyHwDomainOX(id, _bulkModalField, _bulkModalDomain, _bulkModalValue));
+        renderSubFilters();
+        renderListPanel();
+    }
+    _bulkModalType = null;
+};
+
+window.cancelBulkAction = () => {
+    document.getElementById('bulk-confirm-modal').style.display = 'none';
+    _bulkModalType = null;
+};
+
+window.handleListItemClick = (e, docId) => {
+    if (bulkMode) {
+        const cb = e.currentTarget.querySelector('.list-item-checkbox');
+        if (cb && e.target !== cb) {
+            cb.checked = !cb.checked;
+            window.toggleStudentCheckbox(docId, cb.checked);
+        }
+        return;
+    }
+    selectStudent(docId);
 };
 
 window.changeDate = changeDate;
@@ -4653,15 +4816,9 @@ window.setCategory = setCategory;
 window.setSubFilter = setSubFilter;
 window.setBranch = setBranch;
 window.toggleAttendance = toggleAttendance;
-window.confirmBatchAttendance = confirmBatchAttendance;
-window.executeBatchAttendance = executeBatchAttendance;
 window.toggleHomework = toggleHomework;
 window.toggleHwDomainOX = toggleHwDomainOX;
-window.confirmBatchHwDomainOX = confirmBatchHwDomainOX;
-window.executeBatchHwDomainOX = executeBatchHwDomainOX;
 window.setClassCode = setClassCode;
-window.confirmBatchAction = confirmBatchAction;
-window.executeBatchAction = executeBatchAction;
 window.closeSidebar = closeSidebar;
 window.closeDetail = closeDetail;
 window.renderStudentDetail = renderStudentDetail;
@@ -4669,6 +4826,7 @@ window.renderStudentDetail = renderStudentDetail;
 window.refreshData = async () => {
     showSaveIndicator('saving');
     await loadStudents();
+    buildSemesterFilter();
     await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadRoleMemos(), loadClassSettings(), loadClassNextHw(selectedDate)]);
     renderBranchFilter();
     renderSubFilters();
@@ -4676,9 +4834,6 @@ window.refreshData = async () => {
     if (selectedStudentId) renderStudentDetail(selectedStudentId);
     showSaveIndicator('saved');
 };
-
-window.toggleSelectAll = toggleSelectAll;
-window.clearSelection = clearSelection;
 
 window.selectStudent = (id) => {
     selectedStudentId = id;
@@ -4691,7 +4846,6 @@ window.saveSchedule = saveScheduleFromModal;
 window.saveHomework = saveHomeworkFromModal;
 window.saveTest = saveTestFromModal;
 window.saveDailyRecord = saveDailyRecord;
-window.toggleCheck = toggleCheck;
 window.handleAttendanceChange = handleAttendanceChange;
 window.handleHomeworkStatusChange = handleHomeworkStatusChange;
 window.openScheduleModal = openScheduleModal;
@@ -4699,7 +4853,6 @@ window.openHomeworkModal = openHomeworkModal;
 window.openTestModal = openTestModal;
 window.completeRetake = completeRetake;
 window.cancelRetake = cancelRetake;
-window.handleBatchAction = handleBatchAction;
 window.openEnrollmentModal = openEnrollmentModal;
 window.saveEnrollment = saveEnrollment;
 window.saveStudentScheduledTime = saveStudentScheduledTime;

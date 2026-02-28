@@ -1,377 +1,407 @@
 rules_version = '2';
 
-  service cloud.firestore {
-    match /databases/{database}/documents {
+service cloud.firestore {
+  match /databases/{database}/documents {
 
-      // =========================================================================
-      // 인증: gw.impact7.kr 또는 impact7.kr 도메인의 인증된 Google 계정만 허용
-      // =========================================================================
-      function isAuthorized() {
-        return request.auth != null
-          && request.auth.token.email_verified == true
-          && (request.auth.token.email.matches('.*@gw[.]impact7[.]kr$')
-              || request.auth.token.email.matches('.*@impact7[.]kr$'));
+    // =========================================================================
+    // 인증 헬퍼
+    // =========================================================================
+    function isLoggedIn() {
+      return request.auth != null;
+    }
+
+    function isAuthorized() {
+      return isLoggedIn()
+        && request.auth.token.email_verified == true
+        && (request.auth.token.email.matches('.*@gw\\.impact7\\.kr$')
+            || request.auth.token.email.matches('.*@impact7\\.kr$'));
+    }
+
+    function withinFieldLimit(max) {
+      return request.resource.data.keys().size() <= max;
+    }
+
+    // =========================================================================
+    // 학생 마스터 컬렉션
+    // =========================================================================
+    match /students/{docId} {
+
+      function hasRequiredStudentFields() {
+        let data = request.resource.data;
+        return data.keys().hasAll(['name', 'parent_phone_1', 'branch', 'status', 'enrollments'])
+          && data.name is string
+          && data.name.size() > 0
+          && data.parent_phone_1 is string
+          && data.parent_phone_1.size() > 0
+          && data.branch is string
+          && data.status is string
+          && data.status in ['등원예정', '재원', '실휴원', '가휴원', '퇴원']
+          && data.enrollments is list;
       }
 
-      // =========================================================================
-      // 공통: 문서 크기 제한
-      // =========================================================================
-      function withinFieldLimit(max) {
-        return request.resource.data.keys().size() <= max;
+      function hasOnlyAllowedStudentFields() {
+        let allowed = [
+          'name', 'level', 'school', 'grade',
+          'student_phone', 'parent_phone_1', 'parent_phone_2',
+          'branch', 'status', 'enrollments',
+          'pause_start_date', 'pause_end_date',
+          'day', 'class_type', 'level_code', 'level_symbol', 'class_number',
+          'start_date', 'special_start_date', 'special_end_date'
+        ];
+        return request.resource.data.keys().hasOnly(allowed);
       }
 
-      // =========================================================================
-      // 학생 마스터 컬렉션
-      // =========================================================================
-      match /students/{docId} {
+      allow read: if isAuthorized();
 
-        function hasRequiredStudentFields() {
+      allow create: if isAuthorized()
+        && hasRequiredStudentFields()
+        && hasOnlyAllowedStudentFields()
+        && withinFieldLimit(20);
+
+      allow update: if isAuthorized()
+        && hasRequiredStudentFields()
+        && hasOnlyAllowedStudentFields()
+        && withinFieldLimit(20);
+
+      allow delete: if isAuthorized();
+
+      // 메모 서브컬렉션
+      match /memos/{memoId} {
+
+        function hasRequiredMemoFields() {
           let data = request.resource.data;
-          return data.keys().hasAll(['name', 'parent_phone_1', 'branch', 'status', 'enrollments'])
-            && data.name is string
-            && data.name.size() > 0
-            && data.parent_phone_1 is string
-            && data.parent_phone_1.size() > 0
-            && data.branch is string
-            && data.status is string
-            && data.status in ['등원예정', '재원', '실휴원', '가휴원', '퇴원']
-            && data.enrollments is list;
+          return data.keys().hasAll(['text', 'author', 'created_at'])
+            && data.text is string
+            && data.text.size() > 0
+            && data.text.size() <= 2000
+            && data.author is string;
         }
 
-        function hasOnlyAllowedStudentFields() {
-          let allowed = [
-            'name', 'level', 'school', 'grade',
-            'student_phone', 'parent_phone_1', 'parent_phone_2',
-            'branch', 'status', 'enrollments',
-            'pause_start_date', 'pause_end_date',
-            'day', 'class_type', 'level_code', 'level_symbol', 'class_number',
-            'start_date', 'special_start_date', 'special_end_date'
-          ];
-          return request.resource.data.keys().hasOnly(allowed);
+        function hasOnlyAllowedMemoFields() {
+          return request.resource.data.keys().hasOnly(['text', 'author', 'created_at']);
         }
 
         allow read: if isAuthorized();
 
         allow create: if isAuthorized()
-          && hasRequiredStudentFields()
-          && hasOnlyAllowedStudentFields()
-          && withinFieldLimit(20);
+          && hasRequiredMemoFields()
+          && hasOnlyAllowedMemoFields();
 
-        allow update: if isAuthorized()
-          && hasRequiredStudentFields()
-          && hasOnlyAllowedStudentFields()
-          && withinFieldLimit(20);
-
+        allow update: if false;
         allow delete: if isAuthorized();
-
-        match /memos/{memoId} {
-
-          function hasRequiredMemoFields() {
-            let data = request.resource.data;
-            return data.keys().hasAll(['text', 'author', 'created_at'])
-              && data.text is string
-              && data.text.size() > 0
-              && data.text.size() <= 2000
-              && data.author is string;
-          }
-
-          function hasOnlyAllowedMemoFields() {
-            return request.resource.data.keys().hasOnly(['text', 'author', 'created_at']);
-          }
-
-          allow read: if isAuthorized();
-
-          allow create: if isAuthorized()
-            && hasRequiredMemoFields()
-            && hasOnlyAllowedMemoFields();
-
-          allow update: if false;
-
-          allow delete: if isAuthorized();
-        }
-      }
-
-      // =========================================================================
-      // 이력 로그
-      // =========================================================================
-      match /history_logs/{logId} {
-
-        function hasRequiredLogFields() {
-          let data = request.resource.data;
-          return data.keys().hasAll(['doc_id', 'change_type', 'before', 'after', 'google_login_id', 'timestamp'])
-            && data.doc_id is string
-            && data.doc_id.size() > 0
-            && data.change_type is string
-            && data.change_type in ['ENROLL', 'UPDATE', 'WITHDRAW']
-            && data.before is string
-            && data.after is string
-            && data.google_login_id is string
-            && data.google_login_id.size() > 0;
-        }
-
-        function hasOnlyAllowedLogFields() {
-          return request.resource.data.keys().hasOnly([
-            'doc_id', 'change_type', 'before', 'after', 'google_login_id', 'timestamp'
-          ]);
-        }
-
-        allow read: if isAuthorized();
-
-        allow create: if isAuthorized()
-          && hasRequiredLogFields()
-          && hasOnlyAllowedLogFields();
-
-        allow update, delete: if false;
-      }
-
-      // =========================================================================
-      // Daily Records (daily-ops 일일 기록)
-      // - merge:true로 부분 업데이트되므로 hasAll 대신 크기제한만 적용
-      // =========================================================================
-      match /daily_records/{docId} {
-        allow read: if isAuthorized();
-
-        allow create, update: if isAuthorized()
-          && withinFieldLimit(30);
-
-        allow delete: if isAuthorized();
-      }
-
-      // =========================================================================
-      // Retake Schedule (재시/보충 일정)
-      // =========================================================================
-      match /retake_schedule/{docId} {
-        allow read: if isAuthorized();
-
-        allow create, update: if isAuthorized()
-          && request.resource.data.keys().hasOnly([
-            'student_id', 'student_name', 'branch', 'class_code',
-            'type', 'domain', 'scheduled_date', 'scheduled_time',
-            'status', 'created_by', 'created_at', 'completed_by', 'completed_at'
-          ])
-          && withinFieldLimit(15);
-
-        allow delete: if isAuthorized();
-      }
-
-      // =========================================================================
-      // HW Fail Tasks (2차 미통과 밀린 숙제)
-      // =========================================================================
-      match /hw_fail_tasks/{docId} {
-        allow read: if isAuthorized();
-
-        allow create, update: if isAuthorized()
-          && request.resource.data.keys().hasOnly([
-            'student_id', 'student_name', 'domain', 'type', 'source',
-            'source_date', 'scheduled_date', 'scheduled_time',
-            'alt_hw', 'handler', 'status', 'created_by', 'created_at',
-            'completed_by', 'completed_at', 'cancelled_by', 'cancelled_at', 'branch'
-          ])
-          && request.resource.data.status is string
-          && request.resource.data.status in ['pending', '완료', '취소']
-          && withinFieldLimit(20);
-
-        allow delete: if isAuthorized();
-      }
-
-      // =========================================================================
-      // Test Fail Tasks (2차 미통과 밀린 테스트)
-      // =========================================================================
-      match /test_fail_tasks/{docId} {
-        allow read: if isAuthorized();
-
-        allow create, update: if isAuthorized()
-          && request.resource.data.keys().hasOnly([
-            'student_id', 'student_name', 'domain', 'type', 'source',
-            'source_date', 'scheduled_date', 'scheduled_time',
-            'alt_hw', 'handler', 'status', 'created_by', 'created_at',
-            'completed_by', 'completed_at', 'cancelled_by', 'cancelled_at', 'branch'
-          ])
-          && request.resource.data.status is string
-          && request.resource.data.status in ['pending', '완료', '취소']
-          && withinFieldLimit(20);
-
-        allow delete: if isAuthorized();
-      }
-
-      // =========================================================================
-      // User Settings (역할 설정)
-      // =========================================================================
-      match /user_settings/{email} {
-
-        function hasOnlyAllowedUserSettingsFields() {
-          return request.resource.data.keys().hasOnly([
-            'role', 'updated_at'
-          ]);
-        }
-
-        allow read: if isAuthorized();
-
-        allow create, update: if isAuthorized()
-          && hasOnlyAllowedUserSettingsFields()
-          && withinFieldLimit(10);
-
-        allow delete: if isAuthorized();
-      }
-
-      // =========================================================================
-      // Role Memos (역할별 메모)
-      // =========================================================================
-      match /role_memos/{docId} {
-
-        function hasOnlyAllowedRoleMemoFields() {
-          return request.resource.data.keys().hasOnly([
-            'type', 'student_id', 'student_name', 'content',
-            'sender_email', 'sender_role', 'target_roles',
-            'date', 'read_by', 'created_at', 'updated_at'
-          ]);
-        }
-
-        allow read: if isAuthorized();
-
-        allow create, update: if isAuthorized()
-          && hasOnlyAllowedRoleMemoFields()
-          && withinFieldLimit(15);
-
-        allow delete: if isAuthorized();
-      }
-
-      // =========================================================================
-      // Class Settings (반별 설정: 영역, 테스트 등)
-      // =========================================================================
-      match /class_settings/{classCode} {
-
-        function hasOnlyAllowedClassSettingsFields() {
-          return request.resource.data.keys().hasOnly([
-            'domains', 'test_sections'
-          ]);
-        }
-
-        allow read: if isAuthorized();
-
-        allow create, update: if isAuthorized()
-          && hasOnlyAllowedClassSettingsFields()
-          && withinFieldLimit(15);
-
-        allow delete: if isAuthorized();
-      }
-
-      // =========================================================================
-      // Class Next Homework (반별 다음숙제)
-      // =========================================================================
-      match /class_next_hw/{docId} {
-
-        function hasOnlyAllowedClassNextHwFields() {
-          return request.resource.data.keys().hasOnly([
-            'class_code', 'date', 'domains',
-            'updated_by', 'updated_at'
-          ]);
-        }
-
-        allow read: if isAuthorized();
-
-        allow create, update: if isAuthorized()
-          && hasOnlyAllowedClassNextHwFields()
-          && withinFieldLimit(15);
-
-        allow delete: if isAuthorized();
-      }
-
-      // =========================================================================
-      // Daily Checks (메인 대시보드 일일 체크)
-      // - merge:true로 부분 업데이트되므로 hasAll 대신 hasOnly만 적용
-      // =========================================================================
-      match /daily_checks/{docId} {
-
-        function hasOnlyAllowedDailyCheckFields() {
-          return request.resource.data.keys().hasOnly([
-            // 메타데이터
-            'date', 'student_id', 'enrollment_index', 'class_code',
-            'student_name', 'branch', 'updated_by', 'updated_at',
-            // 출결
-            'attendance', 'attendance_time', 'attendance_reason',
-            // 숙제
-            'hw_reading', 'hw_grammar', 'hw_practice', 'hw_listening',
-            'hw_extra', 'hw_vocab', 'hw_idiom', 'hw_verb3',
-            // 리뷰테스트
-            'test_reading', 'test_grammar', 'test_practice', 'test_listening',
-            // ISC
-            'isc',
-            // 부실 숙제 보완
-            'review_reading', 'review_grammar', 'review_practice', 'review_listening',
-            'review_extra', 'review_vocab', 'review_idiom', 'review_verb3',
-            // 재시
-            'retest_isc', 'retest_reading', 'retest_grammar', 'retest_practice',
-            'retest_listening', 'retest_grading',
-            // 다음 숙제
-            'next_listening', 'next_summary', 'next_reading', 'next_grammar',
-            'next_practice', 'next_listening2', 'next_extra',
-            // 전달사항
-            'note_class_to_study', 'note_to_parent',
-            // 결석생 대응
-            'absent_handler', 'absent_consultation',
-            // LMS
-            'lms_content'
-          ]);
-        }
-
-        allow read: if isAuthorized();
-
-        allow create, update: if isAuthorized()
-          && hasOnlyAllowedDailyCheckFields()
-          && withinFieldLimit(50);
-
-        allow delete: if isAuthorized();
-      }
-
-      // =========================================================================
-      // Postponed Tasks (연기/보강 작업)
-      // =========================================================================
-      match /postponed_tasks/{docId} {
-
-        function hasOnlyAllowedPostponedFields() {
-          return request.resource.data.keys().hasOnly([
-            'student_id', 'student_name', 'original_date',
-            'scheduled_date', 'scheduled_time', 'content', 'handler',
-            'status', 'result',
-            'created_by', 'created_at', 'updated_by', 'updated_at'
-          ]);
-        }
-
-        allow read: if isAuthorized();
-
-        allow create, update: if isAuthorized()
-          && hasOnlyAllowedPostponedFields()
-          && withinFieldLimit(15);
-
-        allow delete: if isAuthorized();
-      }
-
-      // =========================================================================
-      // Temp Attendance (임시출석)
-      // =========================================================================
-      match /temp_attendance/{docId} {
-        allow read: if isAuthorized();
-
-        allow create, update: if isAuthorized()
-          && request.resource.data.keys().hasOnly([
-            'name', 'branch', 'school', 'level', 'grade',
-            'student_phone', 'parent_phone_1', 'memo',
-            'temp_date', 'temp_time', 'visit_status',
-            'created_at', 'created_by'
-          ])
-          && request.resource.data.name is string
-          && request.resource.data.name.size() > 0
-          && withinFieldLimit(15);
-
-        allow delete: if isAuthorized();
-      }
-
-      // =========================================================================
-      // 기본 거부: 위에 매칭되지 않는 모든 경로 차단
-      // =========================================================================
-      match /{document=**} {
-        allow read, write: if false;
       }
     }
+
+    // =========================================================================
+    // 이력 로그: 읽기 + 생성만, 수정/삭제 불가
+    // =========================================================================
+    match /history_logs/{logId} {
+
+      function hasRequiredLogFields() {
+        let data = request.resource.data;
+        return data.keys().hasAll(['doc_id', 'change_type', 'before', 'after', 'google_login_id', 'timestamp'])
+          && data.doc_id is string
+          && data.doc_id.size() > 0
+          && data.change_type is string
+          && data.change_type in ['ENROLL', 'UPDATE', 'WITHDRAW']
+          && data.before is string
+          && data.after is string
+          && data.google_login_id is string
+          && data.google_login_id.size() > 0;
+      }
+
+      function hasOnlyAllowedLogFields() {
+        return request.resource.data.keys().hasOnly([
+          'doc_id', 'change_type', 'before', 'after', 'google_login_id', 'timestamp'
+        ]);
+      }
+
+      allow read: if isAuthorized();
+
+      allow create: if isAuthorized()
+        && hasRequiredLogFields()
+        && hasOnlyAllowedLogFields();
+
+      allow update, delete: if false;
+    }
+
+    // =========================================================================
+    // [DB] 사용자 역할: 자기 문서만 읽기, 생성/수정/삭제는 콘솔에서만
+    // =========================================================================
+    match /users/{userEmail} {
+      allow read: if isAuthorized()
+        && request.auth.token.email == userEmail;
+
+      allow create, update, delete: if false;
+    }
+
+    // =========================================================================
+    // [DB] 일별 통계 스냅샷
+    // =========================================================================
+    match /daily_stats/{dateId} {
+
+      allow read: if isAuthorized();
+
+      allow create: if isAuthorized()
+        && request.resource.data.keys().hasAll(['date', 'generated_at', 'generated_by', 'total', 'active_total', 'by_status'])
+        && request.resource.data.keys().hasOnly([
+             'date', 'generated_at', 'generated_by', 'total', 'active_total',
+             'by_status', 'by_branch', 'by_level', 'by_class_code',
+             'by_status_branch', 'by_level_symbol_branch'
+           ]);
+
+      allow update, delete: if false;
+    }
+
+    // =========================================================================
+    // [DSC] Daily Records (일일 기록)
+    // =========================================================================
+    match /daily_records/{docId} {
+      allow read: if isAuthorized();
+
+      allow create, update: if isAuthorized()
+        && withinFieldLimit(30);
+
+      allow delete: if isAuthorized();
+    }
+
+    // =========================================================================
+    // [DSC] Retake Schedule (재시/보충 일정)
+    // =========================================================================
+    match /retake_schedule/{docId} {
+      allow read: if isAuthorized();
+
+      allow create, update: if isAuthorized()
+        && request.resource.data.keys().hasOnly([
+          'student_id', 'student_name', 'branch', 'class_code',
+          'type', 'domain', 'subject', 'title', 'original_date',
+          'scheduled_date', 'scheduled_time', 'result_score',
+          'status', 'created_by', 'created_at',
+          'completed_by', 'completed_at', 'cancelled_by', 'cancelled_at',
+          'updated_by', 'updated_at'
+        ])
+        && withinFieldLimit(25);
+
+      allow delete: if isAuthorized();
+    }
+
+    // =========================================================================
+    // [DSC] HW Fail Tasks (2차 미통과 밀린 숙제)
+    // =========================================================================
+    match /hw_fail_tasks/{docId} {
+      allow read: if isAuthorized();
+
+      allow create, update: if isAuthorized()
+        && request.resource.data.keys().hasOnly([
+          'student_id', 'student_name', 'domain', 'type', 'source',
+          'source_date', 'scheduled_date', 'scheduled_time',
+          'alt_hw', 'handler', 'status', 'created_by', 'created_at',
+          'completed_by', 'completed_at', 'cancelled_by', 'cancelled_at', 'branch'
+        ])
+        && request.resource.data.status is string
+        && request.resource.data.status in ['pending', '완료', '취소']
+        && withinFieldLimit(20);
+
+      allow delete: if isAuthorized();
+    }
+
+    // =========================================================================
+    // [DSC] Test Fail Tasks (2차 미통과 밀린 테스트)
+    // =========================================================================
+    match /test_fail_tasks/{docId} {
+      allow read: if isAuthorized();
+
+      allow create, update: if isAuthorized()
+        && request.resource.data.keys().hasOnly([
+          'student_id', 'student_name', 'domain', 'type', 'source',
+          'source_date', 'scheduled_date', 'scheduled_time',
+          'alt_hw', 'handler', 'status', 'created_by', 'created_at',
+          'completed_by', 'completed_at', 'cancelled_by', 'cancelled_at', 'branch'
+        ])
+        && request.resource.data.status is string
+        && request.resource.data.status in ['pending', '완료', '취소']
+        && withinFieldLimit(20);
+
+      allow delete: if isAuthorized();
+    }
+
+    // =========================================================================
+    // [DSC] User Settings (역할 설정)
+    // =========================================================================
+    match /user_settings/{email} {
+
+      function hasOnlyAllowedUserSettingsFields() {
+        return request.resource.data.keys().hasOnly([
+          'role', 'updated_at'
+        ]);
+      }
+
+      allow read: if isAuthorized();
+
+      allow create, update: if isAuthorized()
+        && hasOnlyAllowedUserSettingsFields()
+        && withinFieldLimit(10);
+
+      allow delete: if isAuthorized();
+    }
+
+    // =========================================================================
+    // [DSC] Role Memos (역할별 메모)
+    // =========================================================================
+    match /role_memos/{docId} {
+
+      function hasOnlyAllowedRoleMemoFields() {
+        return request.resource.data.keys().hasOnly([
+          'type', 'student_id', 'student_name', 'content',
+          'sender_email', 'sender_role', 'target_roles',
+          'date', 'read_by', 'created_at', 'updated_at'
+        ]);
+      }
+
+      allow read: if isAuthorized();
+
+      allow create, update: if isAuthorized()
+        && hasOnlyAllowedRoleMemoFields()
+        && withinFieldLimit(15);
+
+      allow delete: if isAuthorized();
+    }
+
+    // =========================================================================
+    // [DSC] Class Settings (반별 설정: 영역, 테스트 등)
+    // =========================================================================
+    match /class_settings/{classCode} {
+
+      function hasOnlyAllowedClassSettingsFields() {
+        return request.resource.data.keys().hasOnly([
+          'domains', 'test_sections'
+        ]);
+      }
+
+      allow read: if isAuthorized();
+
+      allow create, update: if isAuthorized()
+        && hasOnlyAllowedClassSettingsFields()
+        && withinFieldLimit(15);
+
+      allow delete: if isAuthorized();
+    }
+
+    // =========================================================================
+    // [DSC] Class Next Homework (반별 다음숙제)
+    // =========================================================================
+    match /class_next_hw/{docId} {
+
+      function hasOnlyAllowedClassNextHwFields() {
+        return request.resource.data.keys().hasOnly([
+          'class_code', 'date', 'domains',
+          'updated_by', 'updated_at'
+        ]);
+      }
+
+      allow read: if isAuthorized();
+
+      allow create, update: if isAuthorized()
+        && hasOnlyAllowedClassNextHwFields()
+        && withinFieldLimit(15);
+
+      allow delete: if isAuthorized();
+    }
+
+    // =========================================================================
+    // [DSC] Daily Checks (일일 체크)
+    // =========================================================================
+    match /daily_checks/{docId} {
+
+      function hasOnlyAllowedDailyCheckFields() {
+        return request.resource.data.keys().hasOnly([
+          // 메타데이터
+          'date', 'student_id', 'enrollment_index', 'class_code',
+          'student_name', 'branch', 'updated_by', 'updated_at',
+          // 출결
+          'attendance', 'attendance_time', 'attendance_reason',
+          // 숙제
+          'hw_reading', 'hw_grammar', 'hw_practice', 'hw_listening',
+          'hw_extra', 'hw_vocab', 'hw_idiom', 'hw_verb3',
+          // 리뷰테스트
+          'test_reading', 'test_grammar', 'test_practice', 'test_listening',
+          // ISC
+          'isc',
+          // 부실 숙제 보완
+          'review_reading', 'review_grammar', 'review_practice', 'review_listening',
+          'review_extra', 'review_vocab', 'review_idiom', 'review_verb3',
+          // 재시
+          'retest_isc', 'retest_reading', 'retest_grammar', 'retest_practice',
+          'retest_listening', 'retest_grading',
+          // 다음 숙제
+          'next_listening', 'next_summary', 'next_reading', 'next_grammar',
+          'next_practice', 'next_listening2', 'next_extra',
+          // 전달사항
+          'note_class_to_study', 'note_to_parent',
+          // 결석생 대응
+          'absent_handler', 'absent_consultation',
+          // LMS
+          'lms_content'
+        ]);
+      }
+
+      allow read: if isAuthorized();
+
+      allow create, update: if isAuthorized()
+        && hasOnlyAllowedDailyCheckFields()
+        && withinFieldLimit(50);
+
+      allow delete: if isAuthorized();
+    }
+
+    // =========================================================================
+    // [DSC] Postponed Tasks (연기/보강 작업)
+    // =========================================================================
+    match /postponed_tasks/{docId} {
+
+      function hasOnlyAllowedPostponedFields() {
+        return request.resource.data.keys().hasOnly([
+          'student_id', 'student_name', 'original_date',
+          'scheduled_date', 'scheduled_time', 'content', 'handler',
+          'status', 'result',
+          'created_by', 'created_at', 'updated_by', 'updated_at'
+        ]);
+      }
+
+      allow read: if isAuthorized();
+
+      allow create, update: if isAuthorized()
+        && hasOnlyAllowedPostponedFields()
+        && withinFieldLimit(15);
+
+      allow delete: if isAuthorized();
+    }
+
+    // =========================================================================
+    // [DSC] Temp Attendance (임시출석)
+    // =========================================================================
+    match /temp_attendance/{docId} {
+      allow read: if isAuthorized();
+
+      allow create, update: if isAuthorized()
+        && request.resource.data.keys().hasOnly([
+          'name', 'branch', 'school', 'level', 'grade',
+          'student_phone', 'parent_phone_1', 'memo',
+          'temp_date', 'temp_time', 'visit_status',
+          'created_at', 'created_by'
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && withinFieldLimit(15);
+
+      allow delete: if isAuthorized();
+    }
+
+    // =========================================================================
+    // 기본 거부: 위에 매칭되지 않는 모든 경로 차단
+    // =========================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
+}
