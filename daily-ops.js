@@ -4729,12 +4729,20 @@ function loadPickerApi() {
 function pickDriveFolder() {
     return new Promise((resolve) => {
         const token = getGoogleAccessToken();
-        const folderView = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+        // 내 드라이브 폴더
+        const myDriveView = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
             .setSelectFolderEnabled(true)
-            .setMimeTypes('application/vnd.google-apps.folder');
+            .setOwnedByMe(true)
+            .setParent('root');
+        // 공유 드라이브
+        const sharedDriveView = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+            .setSelectFolderEnabled(true)
+            .setEnableDrives(true);
         const picker = new google.picker.PickerBuilder()
             .setTitle('저장할 폴더를 선택하세요')
-            .addView(folderView)
+            .addView(myDriveView)
+            .addView(sharedDriveView)
+            .enableFeature(google.picker.Feature.SUPPORT_DRIVES)
             .setOAuthToken(token)
             .setCallback((data) => {
                 if (data.action === google.picker.Action.PICKED) {
@@ -4831,7 +4839,7 @@ async function exportDailyReport() {
         const sid = created.sheets[0].properties.sheetId;
 
         // 2. 선택한 폴더로 이동
-        await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?addParents=${folderId}&removeParents=root&fields=id`, {
+        await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?addParents=${folderId}&removeParents=root&supportsAllDrives=true&fields=id`, {
             method: 'PATCH',
             headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
         }).catch(e => console.warn('폴더 이동 실패:', e));
