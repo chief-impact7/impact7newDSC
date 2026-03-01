@@ -1,8 +1,6 @@
 /* ── Help Guide Modal ─────────────────────────────────────────────────── */
-(function () {
-  'use strict';
 
-  const TABS = [
+const TABS = [
     { id: 'basics', label: '기본 사용법', icon: 'play_circle' },
     { id: 'data', label: '데이터 관리', icon: 'database' },
     { id: 'sidebar', label: '사이드바/필터', icon: 'filter_list' },
@@ -731,9 +729,10 @@
     bindHelpButton();
   }
 
+export function initHelpGuide() {
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
   }
-})();
+}

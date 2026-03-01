@@ -5,6 +5,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db, geminiModel } from './firebase-config.js';
 import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
+import { initHelpGuide } from './help-guide.js';
 
 // ─── State ──────────────────────────────────────────────────────────────────
 let currentUser = null;
@@ -3938,6 +3939,7 @@ document.addEventListener('DOMContentLoaded', () => {
             reloadForDate();
         }
     });
+    initHelpGuide();
 });
 
 // ─── Retake actions ─────────────────────────────────────────────────────────
@@ -4757,10 +4759,14 @@ function pickDriveFolder() {
 }
 
 async function exportDailyReport() {
-    const token = getGoogleAccessToken();
+    let token = getGoogleAccessToken();
     if (!token) {
-        alert('구글 드라이브 접근 권한이 필요합니다.\n로그아웃 후 다시 로그인해주세요.');
-        return;
+        if (!confirm('구글 드라이브 접근 토큰이 만료되었습니다.\n다시 로그인하시겠습니까?')) return;
+        try {
+            await signInWithGoogle();
+            token = getGoogleAccessToken();
+        } catch { return; }
+        if (!token) { alert('로그인에 실패했습니다. 다시 시도해주세요.'); return; }
     }
 
     const dayName = getDayName(selectedDate);
