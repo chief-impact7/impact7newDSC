@@ -3366,9 +3366,32 @@ function buildStayStatsHtml(student) {
         periodHtml = `${firstDate} 부터 &nbsp;&middot;&nbsp; <strong>${duration}</strong>`;
     }
 
-    // 레벨 이력
+    // 현재 활성 enrollment 구하기 (class_type별 가장 최근 시작된 enrollment)
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const byType = {};
+    for (const e of enrollments) {
+        const ct = e.class_type || '정규';
+        if (!byType[ct]) byType[ct] = [];
+        byType[ct].push(e);
+    }
+    const activeSet = new Set();
+    for (const [, list] of Object.entries(byType)) {
+        const validDate = (v) => v && /^\d{4}-/.test(v);
+        const started = list
+            .filter(e => !validDate(e.start_date) || e.start_date <= today)
+            .sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''));
+        if (started.length > 0) activeSet.add(started[0]);
+        else {
+            const sorted = [...list].sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''));
+            activeSet.add(sorted[0]);
+        }
+    }
+
+    // 레벨 이력 (현재 활성 enrollment 제외, 과거 학기만)
     const levelMap = {};
     for (const e of enrollments) {
+        if (activeSet.has(e)) continue;
         const sym = e.level_symbol;
         if (!sym) continue;
         if (!levelMap[sym]) levelMap[sym] = { semesters: new Set(), firstDate: '' };
