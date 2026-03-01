@@ -4,7 +4,7 @@ import {
     query, where, serverTimestamp, updateDoc, writeBatch, arrayUnion
 } from 'firebase/firestore';
 import { auth, db, geminiModel } from './firebase-config.js';
-import { signInWithGoogle, logout } from './auth.js';
+import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
 
 // ─── State ──────────────────────────────────────────────────────────────────
 let currentUser = null;
@@ -24,7 +24,8 @@ let searchQuery = '';
 let currentRole = null;
 let roleMemos = [];
 let memoTab = 'inbox';
-let classSettings = {};          // classCode → { domains: [...] }
+let classSettings = {};          // classCode → { domains: [...], teacher, sub_teacher }
+let teachersList = [];           // teachers 컬렉션 캐시 [{ email, display_name }]
 let selectedBranch = null;       // 소속 글로벌 필터 (null = 전체, '2단지' | '10단지')
 let selectedClassCode = null;    // 반 글로벌 필터 (null = 전체, 'ax104' 등)
 let selectedSemester = null;     // 학기 글로벌 필터 (null = 전체, '2026-Winter' 등)
@@ -178,6 +179,35 @@ async function loadClassSettings() {
 
 function getClassDomains(classCode) {
     return classSettings[classCode]?.domains || [...DEFAULT_DOMAINS];
+}
+
+// ─── Teachers (선생님 목록) ─────────────────────────────────────────────────
+
+async function loadTeachers() {
+    const snap = await getDocs(collection(db, 'teachers'));
+    teachersList = [];
+    snap.forEach(d => teachersList.push({ email: d.id, ...d.data() }));
+    teachersList.sort((a, b) => (a.display_name || a.email).localeCompare(b.display_name || b.email, 'ko'));
+}
+
+async function trackTeacherLogin(user) {
+    if (!user?.email) return;
+    try {
+        await setDoc(doc(db, 'teachers', user.email), {
+            email: user.email,
+            display_name: user.displayName || user.email.split('@')[0],
+            photo_url: user.photoURL || '',
+            last_login: serverTimestamp()
+        }, { merge: true });
+    } catch (err) {
+        console.warn('Teacher login tracking failed:', err);
+    }
+}
+
+function getTeacherName(email) {
+    if (!email) return '';
+    const t = teachersList.find(t => t.email === email);
+    return t?.display_name || email.split('@')[0];
 }
 
 // ─── Class Next Homework (반별 다음숙제) ────────────────────────────────────
@@ -747,6 +777,11 @@ function buildSemesterFilter() {
     allStudents.forEach(s =>
         (s.enrollments || []).forEach(e => { if (e.semester) semesters.add(e.semester); })
     );
+    // Spring1/Spring2는 Spring으로 통합되었으므로 필터에서 제외
+    semesters.delete('2026-Spring1');
+    semesters.delete('2026-Spring2');
+    semesters.delete('2027-Spring1');
+    semesters.delete('2027-Spring2');
     const sorted = [...semesters].sort().reverse();
     // 전역 변수 → DOM → localStorage 순으로 보존된 값 복원
     const saved = selectedSemester || sel.value || localStorage.getItem('dsc_semester_filter') || '';
@@ -1117,7 +1152,8 @@ function getFilteredStudents() {
                     (s.school?.toLowerCase().includes(q)) ||
                     (s.student_phone?.includes(q)) ||
                     (s.parent_phone_1?.includes(q)) ||
-                    s.enrollments.some(e => enrollmentCode(e).toLowerCase().includes(q));
+                    s.enrollments.some(e => enrollmentCode(e).toLowerCase().includes(q)) ||
+                    s.enrollments.some(e => { const t = classSettings[enrollmentCode(e)]?.teacher; return t && getTeacherName(t).toLowerCase().includes(q); });
             });
         }
         if (currentSubFilter.size > 0 && !currentSubFilter.has('all')) {
@@ -1159,7 +1195,8 @@ function getFilteredStudents() {
                 (s.school?.toLowerCase().includes(q)) ||
                 (s.student_phone?.includes(q)) ||
                 (s.parent_phone_1?.includes(q)) ||
-                s.enrollments.some(e => enrollmentCode(e).toLowerCase().includes(q));
+                s.enrollments.some(e => enrollmentCode(e).toLowerCase().includes(q)) ||
+                s.enrollments.some(e => { const t = classSettings[enrollmentCode(e)]?.teacher; return t && getTeacherName(t).toLowerCase().includes(q); });
         });
     }
 
@@ -1722,11 +1759,17 @@ function renderListPanel() {
         const siblingNames = hasSibling ? [...siblingMap[s.docId]].map(sid => allStudents.find(x => x.docId === sid)?.name).filter(Boolean).join(', ') : '';
         const siblingIcon = hasSibling ? `<span class="item-icon item-icon-sibling" title="형제: ${esc(siblingNames)}"><span class="material-symbols-outlined">group</span></span>` : '';
 
+        // 담당 뱃지 (첫 번째 반코드 기준)
+        const todayCodes = (s.enrollments || []).filter(e => e.day.includes(dayN) && (!selectedSemester || e.semester === selectedSemester)).map(e => enrollmentCode(e));
+        const primaryCode = todayCodes[0] || allClassCodes(s)[0] || '';
+        const teacherEmail = classSettings[primaryCode]?.teacher;
+        const teacherBadge = teacherEmail ? `<span class="teacher-badge" title="담당: ${esc(getTeacherName(teacherEmail))}">${esc(getTeacherName(teacherEmail))}</span>` : '';
+
         return `<div class="list-item ${isActive}${bulkMode ? ' bulk-mode' : ''}${selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}" onclick="handleListItemClick(event, '${escAttr(s.docId)}')">
             <input type="checkbox" class="list-item-checkbox" ${selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">
             <div class="item-info">
                 <span class="item-title">${esc(s.name)}${siblingIcon}${hwFailIconHtml} <span class="item-class-type">${esc(todayEnroll?.class_type || '')}</span></span>
-                <span class="item-desc">${esc(code)}${studentShortLabel(s) ? ', ' + esc(studentShortLabel(s)) : ''}</span>
+                <span class="item-desc">${esc(code)}${teacherBadge}${studentShortLabel(s) ? ', ' + esc(studentShortLabel(s)) : ''}</span>
             </div>
             ${timeHtml}
             <div class="item-actions">${toggleHtml}</div>
@@ -1805,9 +1848,11 @@ function renderClassDetail(classCode) {
     const domains = getClassDomains(classCode);
     const testSections = getClassTestSections(classCode);
 
-    // 프로필 헤더를 반 정보로 교체
+    // 프로필 헤더를 반 정보로 교체 (학생 상세에서 남은 데이터 클리어)
     document.getElementById('profile-avatar').textContent = classCode[0] || '?';
     document.getElementById('detail-name').textContent = classCode;
+    document.getElementById('profile-phones').innerHTML = '';
+    document.getElementById('profile-stay-stats').innerHTML = '';
     document.getElementById('profile-tags').innerHTML = `
         <span class="tag">${classStudents.length}명</span>
     `;
@@ -1859,7 +1904,42 @@ function renderClassDetail(classCode) {
         `;
     }).join('');
 
+    // ④ 담당/부담당 배정
+    const currentTeacher = classSettings[classCode]?.teacher || '';
+    const currentSubTeacher = classSettings[classCode]?.sub_teacher || '';
+    const teacherOptions = teachersList.map(t => {
+        const name = t.display_name || t.email.split('@')[0];
+        return `<option value="${escAttr(t.email)}" ${t.email === currentTeacher ? 'selected' : ''}>${esc(name)}</option>`;
+    }).join('');
+    const subTeacherOptions = teachersList.map(t => {
+        const name = t.display_name || t.email.split('@')[0];
+        return `<option value="${escAttr(t.email)}" ${t.email === currentSubTeacher ? 'selected' : ''}>${esc(name)}</option>`;
+    }).join('');
+
     cardsContainer.innerHTML = `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined">person</span>
+                담당 배정
+            </div>
+            <div class="teacher-assign-grid">
+                <div class="teacher-assign-row">
+                    <label class="teacher-assign-label">담당</label>
+                    <select class="field-input teacher-assign-select" id="teacher-select" onchange="saveTeacherAssign('${escAttr(classCode)}')">
+                        <option value="">미지정</option>
+                        ${teacherOptions}
+                    </select>
+                </div>
+                <div class="teacher-assign-row">
+                    <label class="teacher-assign-label">부담당</label>
+                    <select class="field-input teacher-assign-select" id="sub-teacher-select" onchange="saveTeacherAssign('${escAttr(classCode)}')">
+                        <option value="">미지정</option>
+                        ${subTeacherOptions}
+                    </select>
+                </div>
+            </div>
+        </div>
+
         <div class="detail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined">schedule</span>
@@ -1917,6 +1997,20 @@ function renderClassDetail(classCode) {
 }
 
 // ─── Class Detail 핸들러 ────────────────────────────────────────────────────
+
+async function saveTeacherAssign(classCode) {
+    const teacher = document.getElementById('teacher-select')?.value || '';
+    const subTeacher = document.getElementById('sub-teacher-select')?.value || '';
+    try {
+        showSaveIndicator('saving');
+        await saveClassSettings(classCode, { teacher, sub_teacher: subTeacher });
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('담당 저장 실패:', err);
+        showSaveIndicator('error');
+    }
+}
+window.saveTeacherAssign = saveTeacherAssign;
 
 async function addClassDomain(classCode) {
     const input = document.getElementById('domain-add-input');
@@ -3812,7 +3906,7 @@ function updateDateDisplay() {
 }
 
 async function reloadForDate() {
-    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadRoleMemos(), loadClassNextHw(selectedDate)]);
+    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadRoleMemos(), loadClassNextHw(selectedDate), loadClassSettings(), loadTeachers()]);
     selectedNextHwClass = null;
     updateDateDisplay();
     renderSubFilters();
@@ -4189,8 +4283,14 @@ function toggleMemoSection() {
 
 function toggleMemoPanel() {
     const panel = document.getElementById('memo-panel');
-    const section = document.getElementById('sidebar-memo-section');
     const icon = document.getElementById('memo-expand-icon');
+
+    // 이미 열려있으면 닫기
+    if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+        icon.textContent = 'expand_more';
+        return;
+    }
 
     // 사이드바가 모바일에서 닫혀있으면 열기
     if (window.innerWidth <= 768) {
@@ -4201,11 +4301,9 @@ function toggleMemoPanel() {
     }
 
     // 패널 열기
-    if (panel.style.display === 'none') {
-        panel.style.display = '';
-        icon.textContent = 'expand_less';
-        renderMemoPanel();
-    }
+    panel.style.display = '';
+    icon.textContent = 'expand_less';
+    renderMemoPanel();
 }
 
 function setMemoTab(tab) {
@@ -4579,7 +4677,8 @@ onAuthStateChanged(auth, async (user) => {
         await loadStudents();
         buildSiblingMap();
         buildSemesterFilter();
-        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate)]);
+        await trackTeacherLogin(user);
+        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers()]);
         await loadRoleMemos().catch(() => {});
         updateDateDisplay();
         renderBranchFilter();
@@ -4616,6 +4715,145 @@ document.addEventListener('keydown', (e) => {
         });
     }
 });
+
+// ─── 일일현황표 구글시트 다운로드 ─────────────────────────────────────────────
+
+let _pickerApiLoaded = false;
+function loadPickerApi() {
+    return new Promise((resolve) => {
+        if (_pickerApiLoaded) { resolve(); return; }
+        gapi.load('picker', () => { _pickerApiLoaded = true; resolve(); });
+    });
+}
+
+function pickDriveFolder() {
+    return new Promise((resolve) => {
+        const token = getGoogleAccessToken();
+        const folderView = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+            .setSelectFolderEnabled(true)
+            .setMimeTypes('application/vnd.google-apps.folder');
+        const picker = new google.picker.PickerBuilder()
+            .setTitle('저장할 폴더를 선택하세요')
+            .addView(folderView)
+            .setOAuthToken(token)
+            .setCallback((data) => {
+                if (data.action === google.picker.Action.PICKED) {
+                    resolve(data.docs[0].id);
+                } else if (data.action === google.picker.Action.CANCEL) {
+                    resolve(null);
+                }
+            })
+            .build();
+        picker.setVisible(true);
+    });
+}
+
+async function exportDailyReport() {
+    const token = getGoogleAccessToken();
+    if (!token) {
+        alert('구글 드라이브 접근 권한이 필요합니다.\n로그아웃 후 다시 로그인해주세요.');
+        return;
+    }
+
+    const dayName = getDayName(selectedDate);
+    let students = allStudents.filter(s =>
+        s.status !== '퇴원' &&
+        s.enrollments.some(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester))
+    );
+    if (selectedBranch) students = students.filter(s => branchFromStudent(s) === selectedBranch);
+    if (selectedClassCode) {
+        students = students.filter(s =>
+            s.enrollments.some(e =>
+                e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === selectedClassCode
+            )
+        );
+    }
+
+    if (students.length === 0) {
+        alert('다운로드할 데이터가 없습니다.');
+        return;
+    }
+
+    // 폴더 선택
+    await loadPickerApi();
+    const folderId = await pickDriveFolder();
+    if (!folderId) return; // 취소
+
+    // 반별 정렬
+    students.sort((a, b) => {
+        const cA = allClassCodes(a)[0] || '';
+        const cB = allClassCodes(b)[0] || '';
+        return cA.localeCompare(cB, 'ko') || a.name.localeCompare(b.name, 'ko');
+    });
+
+    const HEADERS = ['반', '담당', '이름', '소속', '학교', '학년', '등원시간', '출결', '실제등원', '결석사유'];
+
+    const dataRows = students.map(s => {
+        const todayEnroll = s.enrollments.find(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester));
+        const code = todayEnroll ? enrollmentCode(todayEnroll) : '';
+        const rec = dailyRecords[s.docId] || {};
+        const teacher = classSettings[code]?.teacher ? getTeacherName(classSettings[code].teacher) : '';
+        return [code, teacher, s.name, branchFromStudent(s), s.school || '', s.grade || '',
+            todayEnroll?.start_time || '', rec.attendance || '', rec.attendance_time || '', rec.attendance_reason || ''];
+    });
+
+    showSaveIndicator('saving');
+    try {
+        const headerRow = {
+            values: HEADERS.map(h => ({
+                userEnteredValue: { stringValue: h },
+                userEnteredFormat: {
+                    textFormat: { bold: true, foregroundColorStyle: { rgbColor: { red: 1, green: 1, blue: 1 } } },
+                    backgroundColorStyle: { rgbColor: { red: 0.263, green: 0.522, blue: 0.957 } }
+                }
+            }))
+        };
+        const bodyRows = dataRows.map(row => ({
+            values: row.map(cell => ({ userEnteredValue: { stringValue: String(cell) } }))
+        }));
+
+        // 1. 구글시트 생성
+        const createResp = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                properties: { title: `일일현황표_${selectedDate}` },
+                sheets: [{
+                    properties: { title: '일일현황', gridProperties: { frozenRowCount: 1 } },
+                    data: [{ startRow: 0, startColumn: 0, rowData: [headerRow, ...bodyRows] }]
+                }]
+            })
+        });
+
+        if (!createResp.ok) throw new Error(await createResp.text());
+        const created = await createResp.json();
+        const fileId = created.spreadsheetId;
+        const sid = created.sheets[0].properties.sheetId;
+
+        // 2. 선택한 폴더로 이동
+        await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?addParents=${folderId}&removeParents=root&fields=id`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+        }).catch(e => console.warn('폴더 이동 실패:', e));
+
+        // 3. 필터 + 열 자동 맞춤
+        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${fileId}:batchUpdate`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requests: [
+                { setBasicFilter: { filter: { range: { sheetId: sid, startRowIndex: 0, endRowIndex: dataRows.length + 1, startColumnIndex: 0, endColumnIndex: HEADERS.length } } } },
+                { autoResizeDimensions: { dimensions: { sheetId: sid, dimension: 'COLUMNS', startIndex: 0, endIndex: HEADERS.length } } }
+            ]})
+        }).catch(e => console.warn('서식 설정 실패:', e));
+
+        showSaveIndicator('saved');
+        window.open(created.spreadsheetUrl, '_blank');
+    } catch (e) {
+        showSaveIndicator('error');
+        alert('구글시트 생성 실패: ' + e.message + '\n\n로그아웃 후 다시 로그인하면 해결될 수 있습니다.');
+    }
+}
+window.exportDailyReport = exportDailyReport;
 
 // ─── Window global exposure ─────────────────────────────────────────────────
 
@@ -5004,7 +5242,7 @@ window.refreshData = async () => {
     showSaveIndicator('saving');
     await loadStudents();
     buildSemesterFilter();
-    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadRoleMemos(), loadClassSettings(), loadClassNextHw(selectedDate)]);
+    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadRoleMemos(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers()]);
     renderBranchFilter();
     renderSubFilters();
     renderListPanel();
