@@ -1657,8 +1657,12 @@ function renderListPanel() {
         const branch = branchFromStudent(s);
 
         let toggleHtml = '';
+        const isLeave = LEAVE_STATUSES.includes(s.status);
 
-        if (currentCategory === 'attendance') {
+        if (isLeave) {
+            // 휴원 학생은 모든 카테고리에서 입력 버튼 숨김
+            toggleHtml = '';
+        } else if (currentCategory === 'attendance') {
             const rec = dailyRecords[s.docId];
             const attStatus = rec?.attendance?.status || '미확인';
             const statuses = ['등원전', '출석', '지각', '결석', '조퇴', '기타'];
