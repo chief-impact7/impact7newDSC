@@ -5620,11 +5620,14 @@ async function generateParentMessage(studentId) {
     const summary = collectStudentDaySummary(studentId);
     if (!summary) return '학생 정보를 찾을 수 없습니다.';
 
-    // PII 제거: 이름만 유지, 전화번호 등 개인정보 제외
+    // PII 제거 + 후속 조치는 데이터 템플릿에서만 표시 (AI 서술에서 제외)
     const safeSummary = { ...summary };
     delete safeSummary.student_phone;
     delete safeSummary.parent_phone_1;
     delete safeSummary.parent_phone_2;
+    delete safeSummary.hw_fail_actions;
+    delete safeSummary.test_fail_actions;
+    delete safeSummary.extra_visit;
 
     const customPrompt = getCustomPrompt().replace('{name}', summary.name);
     const noteSection = summary.note ? `\n\n선생님 메모:\n${summary.note}` : '';
