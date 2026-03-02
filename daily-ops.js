@@ -5619,26 +5619,26 @@ function generateDataTemplate(studentId) {
 
     // 출결
     const att = summary.attendance === '미확인' ? '등원전' : summary.attendance;
-    lines.push(`▸ 출결: ${att}`);
+    lines.push(`# 출결: ${att}`);
 
     // 숙제
     const hw1 = Object.entries(summary.homework_1st);
     if (hw1.length > 0) {
-        lines.push(`▸ 숙제 1차: ${hw1.map(([d, v]) => domainFullName(d) + ' ' + v).join(', ')}`);
+        lines.push(`# 숙제 1차: ${hw1.map(([d, v]) => domainFullName(d) + ' ' + v).join(', ')}`);
     }
     const hw2 = Object.entries(summary.homework_2nd);
     if (hw2.length > 0) {
-        lines.push(`▸ 숙제 2차: ${hw2.map(([d, v]) => domainFullName(d) + ' ' + v).join(', ')}`);
+        lines.push(`# 숙제 2차: ${hw2.map(([d, v]) => domainFullName(d) + ' ' + v).join(', ')}`);
     }
 
     // 테스트
     const t1 = Object.entries(summary.test_1st);
     if (t1.length > 0) {
-        lines.push(`▸ 테스트 1차: ${t1.map(([t, v]) => domainFullName(t) + ' ' + v).join(', ')}`);
+        lines.push(`# 테스트 1차: ${t1.map(([t, v]) => domainFullName(t) + ' ' + v).join(', ')}`);
     }
     const t2 = Object.entries(summary.test_2nd);
     if (t2.length > 0) {
-        lines.push(`▸ 테스트 2차: ${t2.map(([t, v]) => domainFullName(t) + ' ' + v).join(', ')}`);
+        lines.push(`# 테스트 2차: ${t2.map(([t, v]) => domainFullName(t) + ' ' + v).join(', ')}`);
     }
 
     // 미통과 후속 조치
@@ -5646,7 +5646,7 @@ function generateDataTemplate(studentId) {
     const testActions = Object.entries(summary.test_fail_actions);
     if (hwActions.length > 0 || testActions.length > 0) {
         lines.push('');
-        lines.push('▸ 후속 조치:');
+        lines.push('# 후속 조치:');
         hwActions.forEach(([d, a]) => {
             if (a.type === '등원') lines.push(`  - ${domainFullName(d)}: ${a.scheduled_date} 등원 예정`);
             else if (a.type === '대체숙제') lines.push(`  - ${domainFullName(d)}: 대체숙제 "${a.alt_hw || ''}"`);
@@ -5680,7 +5680,7 @@ function generateDataTemplate(studentId) {
         });
         if (nextHwEntries.length > 0) {
             lines.push('');
-            lines.push('▸ 다음 숙제:');
+            lines.push('# 다음 숙제:');
             nextHwEntries.forEach(entry => lines.push(`  - ${entry}`));
         }
     }
