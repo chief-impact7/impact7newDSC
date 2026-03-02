@@ -1343,17 +1343,27 @@ function getFilteredStudents() {
         return false;
     });
     if (visitStudents.length > 0) {
+        let filtered = visitStudents;
+        // 출결 필터 활성 시 동일 필터 적용
         const attF = allFilters['attendance'];
         if (attF?.size > 0) {
-            // 출결 필터 활성 시 visitStudents도 동일 필터 적용
-            const filtered = visitStudents.filter(s => {
+            filtered = filtered.filter(s => {
                 const st = dailyRecords[s.docId]?.attendance?.status || '미확인';
                 return doesStatusMatchFilter(st, attF);
             });
-            students = [...students, ...filtered];
-        } else {
-            students = [...students, ...visitStudents];
         }
+        // 검색어 필터 적용
+        if (searchQuery) {
+            const q = searchQuery.trim().toLowerCase();
+            const chosungMode = isChosungOnly(q);
+            filtered = filtered.filter(s => {
+                if (chosungMode) return matchChosung(s.name, q) || matchChosung(s.school, q);
+                return (s.name?.toLowerCase().includes(q)) ||
+                    (s.school?.toLowerCase().includes(q)) ||
+                    s.enrollments.some(e => enrollmentCode(e).toLowerCase().includes(q));
+            });
+        }
+        students = [...students, ...filtered];
     }
 
     return students;
