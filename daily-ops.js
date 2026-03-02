@@ -5592,28 +5592,30 @@ function collectStudentDaySummary(studentId) {
     });
 
     const hwAction = rec.hw_fail_action || {};
+    console.log('[ParentMsg] hw_fail_action:', JSON.stringify(hwAction));
     Object.entries(hwAction).forEach(([d, a]) => {
         if (a.type) summary.hw_fail_actions[d] = { type: a.type, scheduled_date: a.scheduled_date, alt_hw: a.alt_hw };
     });
 
     const testAction = rec.test_fail_action || {};
+    console.log('[ParentMsg] test_fail_action:', JSON.stringify(testAction));
     Object.entries(testAction).forEach(([t, a]) => {
         if (a.type) summary.test_fail_actions[t] = { type: a.type, scheduled_date: a.scheduled_date, alt_hw: a.alt_hw };
     });
 
     // hw_fail_tasks / test_fail_tasks 컬렉션에서 pending 태스크 보완
     // source_date(미통과 발생일) 또는 scheduled_date(등원 예정일)가 오늘인 태스크 포함
-    hwFailTasks.filter(t => t.student_id === studentId && t.status === 'pending'
-        && (t.source_date === selectedDate || t.scheduled_date === selectedDate)
-    ).forEach(t => {
+    const matchedHwTasks = hwFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
+    const matchedTestTasks = testFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
+    console.log('[ParentMsg] hwFailTasks(pending):', JSON.stringify(matchedHwTasks));
+    console.log('[ParentMsg] testFailTasks(pending):', JSON.stringify(matchedTestTasks));
+    matchedHwTasks.filter(t => t.source_date === selectedDate || t.scheduled_date === selectedDate).forEach(t => {
         const key = t.domain || t.type || 'etc';
         if (!summary.hw_fail_actions[key]) {
             summary.hw_fail_actions[key] = { type: t.type, scheduled_date: t.scheduled_date, alt_hw: t.alt_hw };
         }
     });
-    testFailTasks.filter(t => t.student_id === studentId && t.status === 'pending'
-        && (t.source_date === selectedDate || t.scheduled_date === selectedDate)
-    ).forEach(t => {
+    matchedTestTasks.filter(t => t.source_date === selectedDate || t.scheduled_date === selectedDate).forEach(t => {
         const key = t.domain || t.type || 'etc';
         if (!summary.test_fail_actions[key]) {
             summary.test_fail_actions[key] = { type: t.type, scheduled_date: t.scheduled_date, alt_hw: t.alt_hw };
