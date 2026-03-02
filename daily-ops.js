@@ -4120,7 +4120,7 @@ async function cancelRetake(retakeDocId) {
 // ─── Modal helpers ──────────────────────────────────────────────────────────
 
 function closeModal(id, event) {
-    if (event.target === event.currentTarget) {
+    if (!event || event.target === event.currentTarget) {
         document.getElementById(id).style.display = 'none';
     }
 }
