@@ -160,7 +160,8 @@ const allClassCodes = (s) => (s.enrollments || []).map(e => enrollmentCode(e)).f
 
 // 학생 등원시간: 개별 시간 → 반 기본 시간 fallback
 function getStudentStartTime(enrollment) {
-    return enrollment?.start_time || classSettings[enrollmentCode(enrollment)]?.default_time || '';
+    if (!enrollment) return '';
+    return enrollment.start_time || classSettings[enrollmentCode(enrollment)]?.default_time || '';
 }
 
 // 학교+학부앞글자+학년앞글자 조합 (예: 대일고1, 진명여고1)
@@ -1318,8 +1319,8 @@ function getFilteredStudents() {
     if (allF['attendance']?.size > 0 || currentCategory === 'attendance') {
         const dayName = getDayName(selectedDate);
         students.sort((a, b) => {
-            const timeA = getStudentStartTime(a.enrollments.find(e => e.day.includes(dayName))) || '99:99';
-            const timeB = getStudentStartTime(b.enrollments.find(e => e.day.includes(dayName))) || '99:99';
+            const timeA = getStudentStartTime(a.enrollments.find(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester))) || '99:99';
+            const timeB = getStudentStartTime(b.enrollments.find(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester))) || '99:99';
             return timeA.localeCompare(timeB);
         });
     }
@@ -1736,7 +1737,7 @@ function renderListPanel() {
         const rec = dailyRecords[s.docId];
         const arrivalTime = rec?.arrival_time;
         const dayName = getDayName(selectedDate);
-        const todayEnroll = s.enrollments.find(e => e.day.includes(dayName));
+        const todayEnroll = s.enrollments.find(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester));
         const scheduledTime = getStudentStartTime(todayEnroll);
 
         // hw_fail_tasks 등원 예약 시간 (선택날짜 기준 pending)
