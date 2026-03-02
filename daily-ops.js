@@ -3743,7 +3743,7 @@ function applyAttendance(studentId, displayStatus, force = false, silent = false
     if (!dailyRecords[studentId]) {
         dailyRecords[studentId] = { student_id: studentId, date: selectedDate };
     }
-    dailyRecords[studentId].attendance = attendance;
+    Object.assign(dailyRecords[studentId], updates);
 
     if (silent) return;
 
