@@ -398,6 +398,21 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // [DSC] Teachers (선생님 목록 — 로그인 시 자동 등록)
+    // =========================================================================
+    match /teachers/{email} {
+      allow read: if isAuthorized();
+
+      allow create, update: if isAuthorized()
+        && request.resource.data.keys().hasOnly([
+          'email', 'display_name', 'photo_url', 'last_login'
+        ])
+        && withinFieldLimit(10);
+
+      allow delete: if isAuthorized();
+    }
+
+    // =========================================================================
     // 기본 거부: 위에 매칭되지 않는 모든 경로 차단
     // =========================================================================
     match /{document=**} {
