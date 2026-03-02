@@ -207,8 +207,7 @@ async function trackTeacherLogin(user) {
 
 function getTeacherName(email) {
     if (!email) return '';
-    const t = teachersList.find(t => t.email === email);
-    return t?.display_name || email.split('@')[0];
+    return email.split('@')[0];
 }
 
 // ─── Class Next Homework (반별 다음숙제) ────────────────────────────────────
@@ -1909,11 +1908,11 @@ function renderClassDetail(classCode) {
     const currentTeacher = classSettings[classCode]?.teacher || '';
     const currentSubTeacher = classSettings[classCode]?.sub_teacher || '';
     const teacherOptions = teachersList.map(t => {
-        const name = t.display_name || t.email.split('@')[0];
+        const name = getTeacherName(t.email);
         return `<option value="${escAttr(t.email)}" ${t.email === currentTeacher ? 'selected' : ''}>${esc(name)}</option>`;
     }).join('');
     const subTeacherOptions = teachersList.map(t => {
-        const name = t.display_name || t.email.split('@')[0];
+        const name = getTeacherName(t.email);
         return `<option value="${escAttr(t.email)}" ${t.email === currentSubTeacher ? 'selected' : ''}>${esc(name)}</option>`;
     }).join('');
 
@@ -5345,18 +5344,19 @@ window.expandMemo = expandMemo;
 let parentMsgStudentId = null;
 let parentMsgMode = 'ai'; // 'ai' | 'manual'
 
-const DEFAULT_PARENT_MSG_PROMPT = `당신은 한국 영어학원 "임팩트7" 선생님입니다. 아래 학생의 하루 학습 데이터를 바탕으로 학부모님께 보내는 문자 메시지를 작성해주세요.
+const DEFAULT_PARENT_MSG_PROMPT = `당신은 한국 영어학원 "임팩트7"에서 학생을 직접 가르치는 담당 선생님입니다. 아래 학생의 하루 학습 데이터를 바탕으로 학부모님께 보내는 따뜻한 총평 코멘트를 작성해주세요.
 
 규칙:
-- 존댓말 사용, 간결하고 따뜻한 톤
-- 이모지 적절히 사용 (1-2개)
+- 존댓말 사용, 학생을 아끼는 담임선생님의 따뜻하고 다정한 톤
+- 이모지는 절대 사용 금지
 - O는 통과, X는 미통과, △는 부분통과로 해석
-- 긍정적인 면 먼저 언급, 개선 필요한 부분은 부드럽게 전달
-- 미통과 항목이 있으면 후속 조치 안내
-- 귀가 완료면 귀가 시간 안내
-- 핵심만 담아 200자 이내
-- "안녕하세요, {name} 학부모님" 으로 시작
-- 학원명 "임팩트7"은 마지막 인사에만 포함`;
+- 잘한 부분은 구체적으로 칭찬하고 격려하기
+- 미통과 항목이 있으면 "다음에는 잘 해낼 수 있다"는 응원과 함께 부드럽게 전달
+- 선생님 메모가 있으면 반드시 참고하여 코멘트에 반영 (조퇴, 컨디션 등)
+- "안녕하세요, {name} 학부모님." 으로 시작
+- 상세 데이터는 아래에 별도로 첨부되므로 개별 숙제/테스트 항목명을 나열하지 말 것
+- 오늘 하루 학습 태도와 성과에 대한 총평을 4-5문장으로 정성껏 작성 (150~250자)
+- 마지막에 "감사합니다. 임팩트7"로 끝낼 것`;
 
 function getCustomPrompt() {
     try {
@@ -5458,19 +5458,23 @@ async function generateParentMessage(studentId) {
     delete safeSummary.parent_phone_2;
 
     const customPrompt = getCustomPrompt().replace('{name}', summary.name);
-    const fullPrompt = `${customPrompt}\n\n학생 데이터:\n${JSON.stringify(safeSummary, null, 2)}`;
+    const noteSection = summary.note ? `\n\n선생님 메모:\n${summary.note}` : '';
+    const fullPrompt = `${customPrompt}${noteSection}\n\n학생 데이터:\n${JSON.stringify(safeSummary, null, 2)}`;
 
     const result = await geminiModel.generateContent(fullPrompt);
-    return result.response.text();
+    const aiComment = result.response.text().trim();
+
+    // AI 코멘트 + 구분선 + 데이터 합치기
+    const dataTemplate = generateDataTemplate(studentId);
+    return `${aiComment}\n\n────────────────\n${dataTemplate}`;
 }
 
-function generateManualTemplate(studentId) {
+function generateDataTemplate(studentId) {
     const summary = collectStudentDaySummary(studentId);
     if (!summary) return '';
 
-    const lines = [`안녕하세요, ${summary.name} 학부모님.`];
-    lines.push(`[${summary.date}] 수업 결과를 안내드립니다.`);
-    lines.push('');
+    const lines = [];
+    lines.push(`[${summary.date}] 수업 결과`);
 
     // 출결
     const att = summary.attendance === '미확인' ? '등원전' : summary.attendance;
@@ -5518,10 +5522,18 @@ function generateManualTemplate(studentId) {
         lines.push(`▸ 귀가: ${formatTime12h(summary.departure.time || '')}`);
     }
 
-    lines.push('');
-    lines.push('감사합니다. 임팩트7');
-
     return lines.join('\n');
+}
+
+function generateManualTemplate(studentId) {
+    const summary = collectStudentDaySummary(studentId);
+    if (!summary) return '';
+
+    const header = `안녕하세요, ${summary.name} 학부모님.\n`;
+    const data = generateDataTemplate(studentId);
+    const footer = '\n\n감사합니다. 임팩트7';
+
+    return header + data + footer;
 }
 
 function switchParentMsgTab(mode) {

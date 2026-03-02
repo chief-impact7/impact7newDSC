@@ -32,4 +32,4 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 
 const ai = getAI(app, { backend: new VertexAIBackend() });
-export const geminiModel = getGenerativeModel(ai, { model: 'gemini-2.5-flash' });
+export const geminiModel = getGenerativeModel(ai, { model: 'gemini-2.0-flash' });
