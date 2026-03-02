@@ -47,7 +47,6 @@ const DEFAULT_DOMAINS = ['Gr', 'A/G', 'R/C'];
 
 // ─── OX Helpers ─────────────────────────────────────────────────────────────
 const OX_CYCLE = ['O', '△', 'X', ''];
-const OX_CYCLE_2ND = ['O', '△', 'X', 'S', ''];
 
 function nextOXValue(current) {
     const idx = OX_CYCLE.indexOf(current || '');
@@ -58,7 +57,6 @@ function oxDisplayClass(value) {
     if (value === 'O') return 'ox-green';
     if (value === 'X') return 'ox-red';
     if (value === '△') return 'ox-yellow';
-    if (value === 'S') return 'ox-skip';
     return 'ox-empty';
 }
 
@@ -2315,7 +2313,7 @@ function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction) {
     // 미통과 대상: 2차에서 X/△/S이거나, 1차 미통과+2차 미입력
     const failDomains = domains.filter(d => {
         const v2 = d2nd[d] || '';
-        if (v2 === 'X' || v2 === '△' || v2 === 'S') return true;
+        if (v2 === 'X' || v2 === '△') return true;
         // 1차 미통과 + 2차 미입력 → 후속조치 대상
         const v1 = d1st[d] || '';
         if (v1 && v1 !== 'O' && !v2) return true;
@@ -2657,7 +2655,7 @@ function renderTestFailActionCard(studentId, testSections, t2nd, testFailAction)
     // 미통과 대상: 2차에서 X/△/S이거나, 1차 미통과+2차 미입력
     const failItems = allItems.filter(t => {
         const v2 = t2nd[t] || '';
-        if (v2 === 'X' || v2 === '△' || v2 === 'S') return true;
+        if (v2 === 'X' || v2 === '△') return true;
         const v1 = t1st[t] || '';
         if (v1 && v1 !== 'O' && !v2) return true;
         return false;
@@ -4018,10 +4016,7 @@ function applyHwDomainOX(studentId, field, domain, forceValue) {
     const rec = dailyRecords[studentId] || {};
     const domainData = { ...(rec[field] || {}) };
     const currentVal = domainData[domain] || '';
-    const is2nd = field === 'hw_domains_2nd' || field === 'test_domains_2nd';
-    const cycle = is2nd ? OX_CYCLE_2ND : OX_CYCLE;
-    const idx = cycle.indexOf(currentVal || '');
-    const newVal = forceValue !== undefined ? forceValue : cycle[(idx + 1) % cycle.length];
+    const newVal = forceValue !== undefined ? forceValue : nextOXValue(currentVal);
     domainData[domain] = newVal;
 
     // 즉시 저장
