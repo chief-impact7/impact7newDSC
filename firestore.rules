@@ -274,7 +274,7 @@ service cloud.firestore {
 
       function hasOnlyAllowedClassSettingsFields() {
         return request.resource.data.keys().hasOnly([
-          'domains', 'test_sections'
+          'domains', 'test_sections', 'default_time', 'teacher', 'sub_teacher'
         ]);
       }
 
