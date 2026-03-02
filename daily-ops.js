@@ -112,6 +112,14 @@ const esc = (str) => {
     return d.innerHTML;
 };
 
+// HTML 엔티티 디코딩 (&amp; → &, &#39; → ', &quot; → " 등)
+const decodeHtmlEntities = (str) => {
+    if (!str) return str;
+    const ta = document.createElement('textarea');
+    ta.innerHTML = str;
+    return ta.value;
+};
+
 // HTML 속성(특히 onclick 내부 문자열 리터럴)에서 안전하게 사용하기 위한 이스케이프
 const escAttr = (str) => {
     return esc(str).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
@@ -5591,7 +5599,7 @@ async function generateParentMessage(studentId) {
 
     // AI 코멘트 + 구분선 + 데이터 합치기
     const dataTemplate = generateDataTemplate(studentId);
-    return `${aiComment}\n\n────────────────\n${dataTemplate}`;
+    return decodeHtmlEntities(`${aiComment}\n\n────────────────\n${dataTemplate}`);
 }
 
 // 약어 → 학부모용 풀네임 변환
@@ -5688,7 +5696,7 @@ function generateManualTemplate(studentId) {
     const data = generateDataTemplate(studentId);
     const footer = '\n\n감사합니다. 임팩트7';
 
-    return header + data + footer;
+    return decodeHtmlEntities(header + data + footer);
 }
 
 function switchParentMsgTab(mode) {
@@ -5765,7 +5773,7 @@ function copyParentMessage() {
         ? document.getElementById('parent-msg-text')
         : document.getElementById('parent-msg-manual-text');
     if (!textEl) return;
-    navigator.clipboard.writeText(textEl.value).then(() => {
+    navigator.clipboard.writeText(decodeHtmlEntities(textEl.value)).then(() => {
         const copied = document.getElementById('parent-msg-copied');
         if (copied) {
             copied.style.display = '';
@@ -6003,12 +6011,13 @@ async function saveBulkNotify() {
     const fullMessage = lines.join('\n');
 
     try {
-        await navigator.clipboard.writeText(fullMessage);
+        const decoded = decodeHtmlEntities(fullMessage);
+        await navigator.clipboard.writeText(decoded);
         document.getElementById('bulk-notify-modal').style.display = 'none';
         alert(`${ids.length}명의 알림 메시지가 클립보드에 복사되었습니다.`);
     } catch (err) {
         console.error('클립보드 복사 실패:', err);
-        alert('클립보드 복사에 실패했습니다. 직접 복사해주세요.\n\n' + fullMessage);
+        alert('클립보드 복사에 실패했습니다. 직접 복사해주세요.\n\n' + decodeHtmlEntities(fullMessage));
     }
 }
 
