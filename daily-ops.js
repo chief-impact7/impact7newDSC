@@ -5528,7 +5528,7 @@ function switchParentMsgTab(mode) {
     }
 }
 
-async function openParentMessageModal(studentId) {
+function openParentMessageModal(studentId) {
     parentMsgStudentId = studentId;
     parentMsgMode = 'ai';
 
@@ -5537,8 +5537,9 @@ async function openParentMessageModal(studentId) {
     document.getElementById('parent-msg-tab-manual').classList.remove('active');
     document.getElementById('parent-msg-ai-panel').style.display = '';
     document.getElementById('parent-msg-manual-panel').style.display = 'none';
-    document.getElementById('parent-msg-loading').style.display = '';
-    document.getElementById('parent-msg-text').style.display = 'none';
+    document.getElementById('parent-msg-loading').style.display = 'none';
+    document.getElementById('parent-msg-text').style.display = '';
+    document.getElementById('parent-msg-text').value = '';
     document.getElementById('parent-msg-copied').style.display = 'none';
 
     // 프롬프트 에디터 접기
@@ -5552,20 +5553,6 @@ async function openParentMessageModal(studentId) {
     if (noteInput) noteInput.value = '';
     const manualText = document.getElementById('parent-msg-manual-text');
     if (manualText) manualText.value = '';
-
-    try {
-        const message = await generateParentMessage(studentId);
-        const msgTextEl = document.getElementById('parent-msg-text');
-        const loadingEl = document.getElementById('parent-msg-loading');
-        if (msgTextEl) { msgTextEl.value = message; msgTextEl.style.display = ''; }
-        if (loadingEl) loadingEl.style.display = 'none';
-    } catch (err) {
-        console.error('메시지 생성 실패:', err);
-        const loadingEl = document.getElementById('parent-msg-loading');
-        if (loadingEl) loadingEl.innerHTML = `
-            <span class="material-symbols-outlined" style="font-size:28px;color:var(--danger);">error</span>
-            메시지 생성에 실패했습니다.<br><span style="font-size:11px;">${esc(err.message)}</span>`;
-    }
 }
 
 async function regenerateParentMessage() {
