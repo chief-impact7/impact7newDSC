@@ -5591,14 +5591,32 @@ function collectStudentDaySummary(studentId) {
         if (t2nd[t]) summary.test_2nd[t] = t2nd[t];
     });
 
+    // 1차 미통과 + 2차 미입력 → 자동 후속조치 항목 추가
+    const chkHw1 = rec.hw_domains_1st || {};
+    const chkHw2 = rec.hw_domains_2nd || {};
+    domains.forEach(d => {
+        if (chkHw1[d] && chkHw1[d] !== 'O' && !chkHw2[d]) {
+            if (!summary.hw_fail_actions[d]) {
+                summary.hw_fail_actions[d] = { type: '미통과', auto: true };
+            }
+        }
+    });
+    const chkT1 = rec.test_domains_1st || {};
+    const chkT2 = rec.test_domains_2nd || {};
+    testItems.forEach(t => {
+        if (chkT1[t] && chkT1[t] !== 'O' && !chkT2[t]) {
+            if (!summary.test_fail_actions[t]) {
+                summary.test_fail_actions[t] = { type: '미통과', auto: true };
+            }
+        }
+    });
+
     const hwAction = rec.hw_fail_action || {};
-    console.log('[ParentMsg] hw_fail_action:', JSON.stringify(hwAction));
     Object.entries(hwAction).forEach(([d, a]) => {
         if (a.type) summary.hw_fail_actions[d] = { type: a.type, scheduled_date: a.scheduled_date, alt_hw: a.alt_hw };
     });
 
     const testAction = rec.test_fail_action || {};
-    console.log('[ParentMsg] test_fail_action:', JSON.stringify(testAction));
     Object.entries(testAction).forEach(([t, a]) => {
         if (a.type) summary.test_fail_actions[t] = { type: a.type, scheduled_date: a.scheduled_date, alt_hw: a.alt_hw };
     });
@@ -5607,8 +5625,6 @@ function collectStudentDaySummary(studentId) {
     // source_date(미통과 발생일) 또는 scheduled_date(등원 예정일)가 오늘인 태스크 포함
     const matchedHwTasks = hwFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
     const matchedTestTasks = testFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
-    console.log('[ParentMsg] hwFailTasks(pending):', JSON.stringify(matchedHwTasks));
-    console.log('[ParentMsg] testFailTasks(pending):', JSON.stringify(matchedTestTasks));
     matchedHwTasks.filter(t => t.source_date === selectedDate || t.scheduled_date === selectedDate).forEach(t => {
         const key = t.domain || t.type || 'etc';
         if (!summary.hw_fail_actions[key]) {
@@ -5700,6 +5716,7 @@ function generateDataTemplate(studentId) {
             return `  - ${label}: ${a.scheduled_date || ''}${time} 등원 예정`;
         }
         if (a.type === '대체숙제') return `  - ${label}: 대체숙제 "${a.alt_hw || ''}"`;
+        if (a.type === '미통과') return `  - ${label}: 미통과 (보충 예정)`;
         return `  - ${label}: ${a.type}`;
     };
     if (hwActions.length > 0 || testActions.length > 0) {
