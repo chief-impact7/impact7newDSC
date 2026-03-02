@@ -5602,13 +5602,18 @@ function collectStudentDaySummary(studentId) {
     });
 
     // hw_fail_tasks / test_fail_tasks 컬렉션에서 pending 태스크 보완
-    hwFailTasks.filter(t => t.student_id === studentId && t.source_date === selectedDate && t.status === 'pending').forEach(t => {
+    // source_date(미통과 발생일) 또는 scheduled_date(등원 예정일)가 오늘인 태스크 포함
+    hwFailTasks.filter(t => t.student_id === studentId && t.status === 'pending'
+        && (t.source_date === selectedDate || t.scheduled_date === selectedDate)
+    ).forEach(t => {
         const key = t.domain || t.type || 'etc';
         if (!summary.hw_fail_actions[key]) {
             summary.hw_fail_actions[key] = { type: t.type, scheduled_date: t.scheduled_date, alt_hw: t.alt_hw };
         }
     });
-    testFailTasks.filter(t => t.student_id === studentId && t.source_date === selectedDate && t.status === 'pending').forEach(t => {
+    testFailTasks.filter(t => t.student_id === studentId && t.status === 'pending'
+        && (t.source_date === selectedDate || t.scheduled_date === selectedDate)
+    ).forEach(t => {
         const key = t.domain || t.type || 'etc';
         if (!summary.test_fail_actions[key]) {
             summary.test_fail_actions[key] = { type: t.type, scheduled_date: t.scheduled_date, alt_hw: t.alt_hw };
@@ -5687,17 +5692,19 @@ function generateDataTemplate(studentId) {
     // 미통과 후속 조치
     const hwActions = Object.entries(summary.hw_fail_actions);
     const testActions = Object.entries(summary.test_fail_actions);
+    const formatAction = (label, a) => {
+        if (a.type === '등원') {
+            const time = a.scheduled_time ? ` ${formatTime12h(a.scheduled_time)}` : '';
+            return `  - ${label}: ${a.scheduled_date || ''}${time} 등원 예정`;
+        }
+        if (a.type === '대체숙제') return `  - ${label}: 대체숙제 "${a.alt_hw || ''}"`;
+        return `  - ${label}: ${a.type}`;
+    };
     if (hwActions.length > 0 || testActions.length > 0) {
         lines.push('');
         lines.push('* 후속 조치:');
-        hwActions.forEach(([d, a]) => {
-            if (a.type === '등원') lines.push(`  - ${domainFullName(d)}: ${a.scheduled_date} 등원 예정`);
-            else if (a.type === '대체숙제') lines.push(`  - ${domainFullName(d)}: 대체숙제 "${a.alt_hw || ''}"`);
-        });
-        testActions.forEach(([t, a]) => {
-            if (a.type === '등원') lines.push(`  - ${domainFullName(t)}: ${a.scheduled_date} 등원 예정`);
-            else if (a.type === '대체숙제') lines.push(`  - ${domainFullName(t)}: 대체숙제 "${a.alt_hw || ''}"`);
-        });
+        hwActions.forEach(([d, a]) => lines.push(formatAction(domainFullName(d), a)));
+        testActions.forEach(([t, a]) => lines.push(formatAction(domainFullName(t), a)));
     }
 
     // 다음 숙제
