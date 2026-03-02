@@ -1,7 +1,7 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import {
     collection, getDocs, doc, setDoc, getDoc, addDoc,
-    query, where, serverTimestamp, updateDoc, writeBatch, arrayUnion, deleteField
+    query, where, serverTimestamp, updateDoc, writeBatch, arrayUnion, deleteField, Timestamp
 } from 'firebase/firestore';
 import { auth, db, geminiModel } from './firebase-config.js';
 import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
@@ -192,7 +192,9 @@ function getClassDomains(classCode) {
 // ─── Teachers (선생님 목록) ─────────────────────────────────────────────────
 
 async function loadTeachers() {
-    const snap = await getDocs(collection(db, 'teachers'));
+    const oneWeekAgo = Timestamp.fromDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+    const q = query(collection(db, 'teachers'), where('last_login', '>=', oneWeekAgo));
+    const snap = await getDocs(q);
     teachersList = [];
     snap.forEach(d => teachersList.push({ email: d.id, ...d.data() }));
     teachersList.sort((a, b) => (a.display_name || a.email).localeCompare(b.display_name || b.email, 'ko'));
