@@ -5595,7 +5595,7 @@ function collectStudentDaySummary(studentId) {
     const chkHw1 = rec.hw_domains_1st || {};
     const chkHw2 = rec.hw_domains_2nd || {};
     domains.forEach(d => {
-        if (chkHw1[d] && chkHw1[d] !== 'O' && !chkHw2[d]) {
+        if (chkHw1[d] && chkHw1[d] !== 'O' && chkHw2[d] !== 'O') {
             if (!summary.hw_fail_actions[d]) {
                 summary.hw_fail_actions[d] = { type: '미통과', auto: true };
             }
@@ -5604,7 +5604,7 @@ function collectStudentDaySummary(studentId) {
     const chkT1 = rec.test_domains_1st || {};
     const chkT2 = rec.test_domains_2nd || {};
     testItems.forEach(t => {
-        if (chkT1[t] && chkT1[t] !== 'O' && !chkT2[t]) {
+        if (chkT1[t] && chkT1[t] !== 'O' && chkT2[t] !== 'O') {
             if (!summary.test_fail_actions[t]) {
                 summary.test_fail_actions[t] = { type: '미통과', auto: true };
             }
