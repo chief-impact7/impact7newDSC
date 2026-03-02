@@ -5599,6 +5599,20 @@ function collectStudentDaySummary(studentId) {
         if (a.type) summary.test_fail_actions[t] = { type: a.type, scheduled_date: a.scheduled_date, alt_hw: a.alt_hw };
     });
 
+    // hw_fail_tasks / test_fail_tasks 컬렉션에서 pending 태스크 보완
+    hwFailTasks.filter(t => t.student_id === studentId && t.source_date === selectedDate && t.status === 'pending').forEach(t => {
+        const key = t.domain || t.type || 'etc';
+        if (!summary.hw_fail_actions[key]) {
+            summary.hw_fail_actions[key] = { type: t.type, scheduled_date: t.scheduled_date, alt_hw: t.alt_hw };
+        }
+    });
+    testFailTasks.filter(t => t.student_id === studentId && t.source_date === selectedDate && t.status === 'pending').forEach(t => {
+        const key = t.domain || t.type || 'etc';
+        if (!summary.test_fail_actions[key]) {
+            summary.test_fail_actions[key] = { type: t.type, scheduled_date: t.scheduled_date, alt_hw: t.alt_hw };
+        }
+    });
+
     return summary;
 }
 
