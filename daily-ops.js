@@ -1,7 +1,7 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import {
     collection, getDocs, doc, setDoc, getDoc, addDoc,
-    query, where, serverTimestamp, updateDoc, writeBatch, arrayUnion, deleteField, Timestamp
+    query, where, serverTimestamp, updateDoc, writeBatch, arrayUnion, deleteField, Timestamp, deleteDoc
 } from 'firebase/firestore';
 import { auth, db, geminiModel } from './firebase-config.js';
 import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
@@ -30,6 +30,9 @@ let teachersList = [];           // teachers 컬렉션 캐시 [{ email, display_
 let selectedBranch = null;       // 소속 글로벌 필터 (null = 전체, '2단지' | '10단지')
 let selectedClassCode = null;    // 반 글로벌 필터 (null = 전체, 'ax104' 등)
 let selectedSemester = null;     // 학기 글로벌 필터 (null = 전체, '2026-Winter' 등)
+let latestSemester = null;       // 가장 최신 학기 (읽기전용 판별용)
+let semesterSettings = {};       // semester → { start_date }
+let currentSemester = null;      // 오늘 기준 현재 학기
 let siblingMap = {};             // docId → Set of sibling docIds
 let bulkMode = false;
 let selectedStudentIds = new Set();
@@ -412,6 +415,7 @@ async function loadTempAttendances(date) {
 }
 
 function saveDailyRecord(studentId, updates) {
+    if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     if (saveTimers[studentId]) clearTimeout(saveTimers[studentId]);
     showSaveIndicator('saving');
 
@@ -486,6 +490,7 @@ function showSaveIndicator(status) {
 // ─── Immediate Save (for toggles) ──────────────────────────────────────────
 
 async function saveImmediately(studentId, updates) {
+    if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     showSaveIndicator('saving');
     try {
         const docId = makeDailyRecordId(studentId, selectedDate);
@@ -779,6 +784,38 @@ function setBranch(branchKey) {
 
 // ─── 학기 필터 ──────────────────────────────────────────────────────────────
 
+// ─── 학기 설정 (시작일) ──────────────────────────────────────────────────
+async function loadSemesterSettings() {
+    const snap = await getDocs(collection(db, 'semester_settings'));
+    semesterSettings = {};
+    snap.forEach(d => { semesterSettings[d.id] = d.data(); });
+}
+
+function getCurrentSemester() {
+    const today = todayStr(); // 'YYYY-MM-DD'
+    const entries = Object.entries(semesterSettings)
+        .filter(([, v]) => v.start_date)
+        .sort((a, b) => a[1].start_date.localeCompare(b[1].start_date));
+
+    // 오늘 이하인 가장 최근 start_date의 학기가 현재 학기
+    let result = null;
+    for (const [semester, { start_date }] of entries) {
+        if (start_date <= today) result = semester;
+    }
+    currentSemester = result;
+    return result;
+}
+
+function isPastSemester() {
+    if (!currentSemester) return false;
+    // 1) 학기 필터가 과거 학기인 경우
+    if (selectedSemester && selectedSemester !== currentSemester) return true;
+    // 2) 선택된 날짜가 현재 학기 시작일 이전인 경우
+    const startDate = semesterSettings[currentSemester]?.start_date;
+    if (startDate && selectedDate < startDate) return true;
+    return false;
+}
+
 function buildSemesterFilter() {
     const sel = document.getElementById('semester-filter');
     if (!sel) return;
@@ -792,8 +829,10 @@ function buildSemesterFilter() {
     semesters.delete('2027-Spring1');
     semesters.delete('2027-Spring2');
     const sorted = [...semesters].sort().reverse();
+    latestSemester = sorted[0] || null;
     // 전역 변수 → DOM → localStorage 순으로 보존된 값 복원
-    const saved = selectedSemester || sel.value || localStorage.getItem('dsc_semester_filter') || '';
+    // currentSemester가 있으면 기본값으로 사용
+    const saved = selectedSemester || sel.value || localStorage.getItem('dsc_semester_filter') || currentSemester || '';
     sel.innerHTML = '<option value="">전체 학기</option>' +
         sorted.map(s => `<option value="${s}">${s}</option>`).join('');
     if (saved && sorted.includes(saved)) {
@@ -813,12 +852,73 @@ function handleSemesterFilter(val) {
         localStorage.removeItem('dsc_semester_filter');
     }
 
-
+    updateReadonlyBanner();
     renderFilterChips();
     renderSubFilters();
     renderListPanel();
 }
 window.handleSemesterFilter = handleSemesterFilter;
+
+function updateReadonlyBanner() {
+    const banner = document.getElementById('semester-readonly-banner');
+    if (banner) banner.style.display = isPastSemester() ? '' : 'none';
+}
+
+// ─── 학기 시작일 설정 모달 ──────────────────────────────────────────────────
+function openSemesterSettingsModal() {
+    const modal = document.getElementById('semester-settings-modal');
+    const body = document.getElementById('semester-settings-body');
+    if (!modal || !body) return;
+
+    // 학기 목록: enrollment에서 추출된 학기들
+    const semesters = new Set();
+    allStudents.forEach(s =>
+        (s.enrollments || []).forEach(e => { if (e.semester) semesters.add(e.semester); })
+    );
+    semesters.delete('2026-Spring1');
+    semesters.delete('2026-Spring2');
+    semesters.delete('2027-Spring1');
+    semesters.delete('2027-Spring2');
+    const sorted = [...semesters].sort();
+
+    if (sorted.length === 0) {
+        body.innerHTML = '<p style="color:var(--text-sec);font-size:13px;">등록된 학기가 없습니다.</p>';
+    } else {
+        body.innerHTML = sorted.map(sem => {
+            const setting = semesterSettings[sem] || {};
+            const isCurrent = sem === currentSemester;
+            return `<div class="semester-setting-row">
+                <span class="semester-setting-label">${sem}${isCurrent ? '<span class="current-badge">현재</span>' : ''}</span>
+                <input type="date" class="semester-setting-date" value="${setting.start_date || ''}"
+                    onchange="saveSemesterStartDate('${sem}', this.value)">
+            </div>`;
+        }).join('');
+    }
+
+    modal.style.display = 'flex';
+}
+window.openSemesterSettingsModal = openSemesterSettingsModal;
+
+async function saveSemesterStartDate(semester, startDate) {
+    try {
+        if (startDate) {
+            await setDoc(doc(db, 'semester_settings', semester), { start_date: startDate });
+            semesterSettings[semester] = { start_date: startDate };
+        } else {
+            await deleteDoc(doc(db, 'semester_settings', semester));
+            delete semesterSettings[semester];
+        }
+        getCurrentSemester();
+        updateReadonlyBanner();
+        // 모달 내 현재 배지 업데이트
+        openSemesterSettingsModal();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('학기 시작일 저장 실패:', err);
+        showSaveIndicator('error');
+    }
+}
+window.saveSemesterStartDate = saveSemesterStartDate;
 
 function renderFilterChips() {
     const container = document.getElementById('filter-chips');
@@ -3193,6 +3293,7 @@ function renderChecklistCard(studentId) {
 }
 
 async function confirmDeparture(studentId) {
+    if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     const rec = dailyRecords[studentId] || {};
     const items = getStudentChecklistStatus(studentId);
     const pendingItems = items.filter(i => !i.done && i.key !== 'departure');
@@ -3696,6 +3797,7 @@ function renderStudentDetail(studentId) {
 // ─── 임의 등원 저장 ─────────────────────────────────────────────────────────
 
 async function saveExtraVisit(studentId, field, value) {
+    if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     const rec = dailyRecords[studentId] || {};
     const extraVisit = { ...(rec.extra_visit || {}) };
     extraVisit[field] = value;
@@ -3732,6 +3834,7 @@ async function saveExtraVisit(studentId, field, value) {
 // ─── Toggle handlers (immediate save) ──────────────────────────────────────
 
 function toggleAttendance(studentId, displayStatus) {
+    if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     if (bulkMode && selectedStudentIds.size >= 2 && selectedStudentIds.has(studentId)) {
         openBulkModal('attendance');
         return;
@@ -3851,6 +3954,7 @@ function oxFieldLabel(field) {
 }
 
 function toggleHwDomainOX(studentId, field, domain) {
+    if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     if (!checkCanEditGrading(studentId)) return;
     if (bulkMode && selectedStudentIds.size >= 2 && selectedStudentIds.has(studentId)) {
         openBulkModal('ox', field, domain);
@@ -3890,6 +3994,7 @@ function applyHwDomainOX(studentId, field, domain, forceValue) {
 // ─── Field change handlers ──────────────────────────────────────────────────
 
 function handleAttendanceChange(studentId, field, value) {
+    if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     const rec = dailyRecords[studentId] || {};
     const attendance = { ...(rec.attendance || {}), [field]: value };
     saveDailyRecord(studentId, { attendance });
@@ -3933,6 +4038,7 @@ async function reloadForDate() {
     await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadRoleMemos(), loadClassNextHw(selectedDate), loadClassSettings(), loadTeachers()]);
     selectedNextHwClass = null;
     updateDateDisplay();
+    updateReadonlyBanner();
     renderSubFilters();
     renderListPanel();
     if (selectedStudentId) renderStudentDetail(selectedStudentId);
@@ -4153,6 +4259,7 @@ async function saveTestFromModal() {
 // ─── 등원예정시간 (학생 상세 패널에서 사용, students 컬렉션에 영구 저장) ──────
 
 async function saveStudentScheduledTime(studentId, classCode, time) {
+    if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     const student = allStudents.find(s => s.docId === studentId);
     if (!student) return;
 
@@ -4709,11 +4816,14 @@ onAuthStateChanged(auth, async (user) => {
 
         await loadStudents();
         buildSiblingMap();
+        await loadSemesterSettings();
+        getCurrentSemester();
         buildSemesterFilter();
         await trackTeacherLogin(user);
         await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers()]);
         await loadRoleMemos().catch(() => {});
         updateDateDisplay();
+        updateReadonlyBanner();
         renderBranchFilter();
         renderSubFilters();
         updateL1ExpandIcons();
@@ -5286,6 +5396,8 @@ window.renderStudentDetail = renderStudentDetail;
 window.refreshData = async () => {
     showSaveIndicator('saving');
     await loadStudents();
+    await loadSemesterSettings();
+    getCurrentSemester();
     buildSemesterFilter();
     await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadRoleMemos(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers()]);
     renderBranchFilter();

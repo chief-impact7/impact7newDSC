@@ -413,6 +413,19 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // [DSC] Semester Settings (학기 시작일 설정)
+    // =========================================================================
+    match /semester_settings/{semester} {
+      allow read: if isAuthorized();
+
+      allow create, update: if isAuthorized()
+        && request.resource.data.keys().hasOnly(['start_date'])
+        && withinFieldLimit(5);
+
+      allow delete: if isAuthorized();
+    }
+
+    // =========================================================================
     // 기본 거부: 위에 매칭되지 않는 모든 경로 차단
     // =========================================================================
     match /{document=**} {

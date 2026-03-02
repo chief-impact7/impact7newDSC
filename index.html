@@ -103,6 +103,13 @@
                             onchange="handleSemesterFilter(this.value)" aria-label="학기 필터">
                         <option value="">전체 학기</option>
                     </select>
+                    <button class="semester-settings-btn" onclick="openSemesterSettingsModal()" title="학기 시작일 설정">
+                        <span class="material-symbols-outlined" style="font-size:18px;">settings</span>
+                    </button>
+                </div>
+                <div class="semester-readonly-banner" id="semester-readonly-banner" style="display:none;">
+                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">lock</span>
+                    과거 학기입니다 (읽기 전용)
                 </div>
 
                 <!-- L1 Navigation -->
@@ -701,6 +708,21 @@
                 <button class="btn btn-secondary" onclick="cancelBulkAction()">취소</button>
                 <button class="btn btn-secondary" onclick="resetBulkModal()">초기화</button>
                 <button class="btn btn-primary" id="bulk-modal-save-btn" onclick="confirmBulkAction()" disabled>일괄저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 학기 시작일 설정 모달 -->
+    <div id="semester-settings-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="학기 시작일 설정" onclick="closeModal('semester-settings-modal', event)" style="display:none;">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h3>학기 시작일 설정</h3>
+                <button class="modal-close" onclick="closeModal('semester-settings-modal')">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="modal-body" id="semester-settings-body">
+                <!-- JS에서 렌더링 -->
             </div>
         </div>
     </div>
