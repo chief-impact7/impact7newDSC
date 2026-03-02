@@ -1871,10 +1871,10 @@ function renderListPanel() {
         // 등원시간 (휴원 학생은 미표시)
         let timeHtml = '';
         const rec = dailyRecords[s.docId];
+        const dayName = getDayName(selectedDate);
+        const todayEnroll = s.enrollments.find(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester));
         if (!isLeave) {
             const arrivalTime = rec?.arrival_time;
-            const dayName = getDayName(selectedDate);
-            const todayEnroll = s.enrollments.find(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester));
             const scheduledTime = getStudentStartTime(todayEnroll);
 
             // hw_fail_tasks 등원 예약 시간 (선택날짜 기준 pending)
