@@ -1341,7 +1341,17 @@ function getFilteredStudents() {
         return false;
     });
     if (visitStudents.length > 0) {
-        students = [...students, ...visitStudents];
+        const attF = allFilters['attendance'];
+        if (attF?.size > 0) {
+            // 출결 필터 활성 시 visitStudents도 동일 필터 적용
+            const filtered = visitStudents.filter(s => {
+                const st = dailyRecords[s.docId]?.attendance?.status || '미확인';
+                return doesStatusMatchFilter(st, attF);
+            });
+            students = [...students, ...filtered];
+        } else {
+            students = [...students, ...visitStudents];
+        }
     }
 
     return students;
@@ -1885,17 +1895,8 @@ function renderClassDetail(classCode) {
 
     const cardsContainer = document.getElementById('detail-cards');
 
-    // ① 등원예정시간 — 반 기본 시간만 설정, 학생별은 읽기전용 표시
+    // ① 등원예정시간 — 반 기본 시간만 설정 (학생별 개별시간은 학생 상세패널에서)
     const defaultTime = classSettings[classCode]?.default_time || '';
-    const arrivalRows = classStudents.map(s => {
-        const todayEnroll = s.enrollments.find(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode);
-        const currentTime = getStudentStartTime(todayEnroll);
-        const isIndividual = todayEnroll?.start_time && todayEnroll.start_time !== defaultTime;
-        return `<div class="arrival-time-row">
-            <span class="arrival-student-name">${esc(s.name)}</span>
-            <span style="font-size:13px;color:var(--text-sec);">${currentTime ? formatTime12h(currentTime) : '-'}${isIndividual ? ' (개별)' : ''}</span>
-        </div>`;
-    }).join('');
 
     // ② 영역숙제관리
     const domainChips = domains.map((d, i) => `
@@ -1974,10 +1975,10 @@ function renderClassDetail(classCode) {
                 등원예정시간
             </div>
             <div class="arrival-bulk-row">
-                <input type="time" id="arrival-bulk-time-detail" class="arrival-time-input" value="${defaultTime}">
-                <button class="btn btn-primary btn-sm" onclick="applyClassArrivalTimeDetail('${escAttr(classCode)}')">전체 적용</button>
+                <input type="time" class="arrival-time-input" value="${defaultTime}"
+                    onchange="saveClassDefaultTime('${escAttr(classCode)}', this.value)">
             </div>
-            <div class="arrival-student-list">${arrivalRows || '<span class="detail-card-empty">학생 없음</span>'}</div>
+            <div style="font-size:11px;color:var(--text-sec);margin-top:4px;">변경 시 자동 저장</div>
         </div>
 
         <div class="detail-card">
@@ -2147,40 +2148,15 @@ async function resetTestSection(classCode, sectionName) {
     }
 }
 
-async function applyClassArrivalTimeDetail(classCode) {
-    const timeInput = document.getElementById('arrival-bulk-time-detail');
-    const time = timeInput?.value;
-    if (!time) { alert('시간을 먼저 입력하세요.'); return; }
-
-    const dayName = getDayName(selectedDate);
-    let classStudents = allStudents.filter(s =>
-        s.status !== '퇴원' &&
-        s.enrollments.some(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode)
-    );
-    if (selectedBranch) {
-        classStudents = classStudents.filter(s => branchFromStudent(s) === selectedBranch);
-    }
-
+async function saveClassDefaultTime(classCode, time) {
+    if (!time) return;
     showSaveIndicator('saving');
     try {
-        // class_settings에 반 기본 시간 저장
         await saveClassSettings(classCode, { default_time: time });
-
-        const batch = writeBatch(db);
-        classStudents.forEach(s => {
-            const enrollments = [...s.enrollments];
-            const idx = enrollments.findIndex(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode);
-            if (idx !== -1) {
-                enrollments[idx] = { ...enrollments[idx], start_time: time };
-                batch.update(doc(db, 'students', s.docId), { enrollments });
-                s.enrollments = enrollments;
-            }
-        });
-        await batch.commit();
         showSaveIndicator('saved');
-        renderClassDetail(classCode);
+        if (selectedStudentId) renderStudentDetail(selectedStudentId);
     } catch (err) {
-        console.error('등원예정시간 저장 실패:', err);
+        console.error('반 기본 시간 저장 실패:', err);
         showSaveIndicator('error');
     }
 }
@@ -3458,6 +3434,35 @@ function renderStudentDetail(studentId) {
     const studentHwTasks = hwFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
     const studentTestTasks = testFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
 
+    // 개별 등원시간 카드 — 오늘 수업이 있는 enrollment별 시간 입력
+    const dayNameForDetail = getDayName(selectedDate);
+    const todayEnrollments = student.enrollments.filter(e =>
+        e.day.includes(dayNameForDetail) && (!selectedSemester || e.semester === selectedSemester)
+    );
+    const arrivalTimeHtml = todayEnrollments.length > 0 ? `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">schedule</span>
+                개별 등원시간
+            </div>
+            ${todayEnrollments.map(e => {
+                const code = enrollmentCode(e);
+                const classDefault = classSettings[code]?.default_time || '';
+                const individual = e.start_time || '';
+                const isDefault = !individual || individual === classDefault;
+                const displayValue = isDefault ? classDefault : individual;
+                return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                    <span style="font-size:13px;font-weight:500;min-width:40px;">${esc(code)}</span>
+                    <input type="time" class="arrival-time-input" style="flex:1;"
+                        value="${escAttr(displayValue)}"
+                        onchange="saveStudentScheduledTime('${escAttr(studentId)}', '${escAttr(code)}', this.value)">
+                    ${isDefault ? '<span style="font-size:11px;color:var(--text-sec);">(반 기본)</span>' : ''}
+                </div>`;
+            }).join('')}
+            <div style="font-size:11px;color:var(--text-sec);margin-top:4px;">변경 시 자동 저장 · 반 기본시간과 동일하면 자동 초기화</div>
+        </div>
+    ` : '';
+
     // 출결 사유 카드 (지각/결석/기타일 때만 표시)
     const showReason = ['지각', '결석'].includes(attStatus) ||
         (attStatus && !['미확인', '출석'].includes(attStatus));
@@ -3635,6 +3640,9 @@ function renderStudentDetail(studentId) {
     cardsContainer.innerHTML = `
         ${renderChecklistCard(studentId)}
         ${reasonHtml}
+
+        <!-- 개별 등원시간 카드 -->
+        ${arrivalTimeHtml}
 
         <!-- 영역별 숙제 카드 -->
         ${domainHwHtml}
@@ -4130,7 +4138,7 @@ async function saveTestFromModal() {
     renderStudentDetail(selectedStudentId);
 }
 
-// ─── 등원예정시간 (반 상세 패널에서 사용, students 컬렉션에 영구 저장) ──────
+// ─── 등원예정시간 (학생 상세 패널에서 사용, students 컬렉션에 영구 저장) ──────
 
 async function saveStudentScheduledTime(studentId, classCode, time) {
     const student = allStudents.find(s => s.docId === studentId);
@@ -4141,13 +4149,21 @@ async function saveStudentScheduledTime(studentId, classCode, time) {
     const idx = enrollments.findIndex(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode);
     if (idx === -1) return;
 
-    enrollments[idx] = { ...enrollments[idx], start_time: time };
+    // 반 기본시간과 동일하거나 빈값이면 개별시간 제거 (fallback 사용)
+    const classDefault = classSettings[classCode]?.default_time || '';
+    if (!time || time === classDefault) {
+        const { start_time, ...rest } = enrollments[idx];
+        enrollments[idx] = rest;
+    } else {
+        enrollments[idx] = { ...enrollments[idx], start_time: time };
+    }
 
     showSaveIndicator('saving');
     try {
         await updateDoc(doc(db, 'students', studentId), { enrollments });
         student.enrollments = enrollments;
         showSaveIndicator('saved');
+        renderStudentDetail(studentId);
     } catch (err) {
         console.error('등원예정시간 저장 실패:', err);
         showSaveIndicator('error');
@@ -5303,7 +5319,7 @@ window.addTestSection = addTestSection;
 window.removeTestSection = removeTestSection;
 window.resetTestSections = resetTestSections;
 window.resetTestSection = resetTestSection;
-window.applyClassArrivalTimeDetail = applyClassArrivalTimeDetail;
+window.saveClassDefaultTime = saveClassDefaultTime;
 
 // 롤/메모 관련
 window.selectRole = selectRole;
