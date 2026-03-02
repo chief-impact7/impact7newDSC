@@ -153,6 +153,7 @@ function branchFromStudent(s) {
 }
 
 function enrollmentCode(e) {
+    if (!e) return '';
     return `${e.level_symbol || ''}${e.class_number || ''}`;
 }
 const allClassCodes = (s) => (s.enrollments || []).map(e => enrollmentCode(e)).filter(Boolean);
