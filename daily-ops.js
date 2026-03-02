@@ -5341,19 +5341,17 @@ window.expandMemo = expandMemo;
 let parentMsgStudentId = null;
 let parentMsgMode = 'ai'; // 'ai' | 'manual'
 
-const DEFAULT_PARENT_MSG_PROMPT = `당신은 한국 영어학원 "임팩트7"에서 학생을 직접 가르치는 담당 선생님입니다. 아래 학생의 하루 학습 데이터를 바탕으로 학부모님께 보내는 따뜻한 총평 코멘트를 작성해주세요.
+const DEFAULT_PARENT_MSG_PROMPT = `영어학원 "임팩트7" 담당 선생님이 학부모님께 보내는 총평 코멘트를 작성하세요.
 
 규칙:
-- 존댓말 사용, 학생을 아끼는 담임선생님의 따뜻하고 다정한 톤
-- 이모지는 절대 사용 금지
-- O는 통과, X는 미통과, △는 부분통과로 해석
-- 잘한 부분은 구체적으로 칭찬하고 격려하기
-- 미통과 항목이 있으면 "다음에는 잘 해낼 수 있다"는 응원과 함께 부드럽게 전달
-- 선생님 메모가 있으면 반드시 참고하여 코멘트에 반영 (조퇴, 컨디션 등)
+- 존댓말, 따뜻한 톤. 이모지 금지
+- O=통과, X=미통과, △=부분통과
+- 잘한 점 칭찬, 미통과는 부드럽게 응원
+- 선생님 메모가 있으면 반영
 - "안녕하세요, {name} 학부모님." 으로 시작
-- 상세 데이터는 아래에 별도로 첨부되므로 개별 숙제/테스트 항목명을 나열하지 말 것
-- 오늘 하루 학습 태도와 성과에 대한 총평을 4-5문장으로 정성껏 작성 (150~250자)
-- 마지막에 "감사합니다. 임팩트7"로 끝낼 것`;
+- 개별 항목명 나열 금지 (데이터는 별도 첨부됨)
+- 3-4문장, 150자 내외로 간결하게
+- "감사합니다. 임팩트7"로 끝낼 것`;
 
 function getCustomPrompt() {
     try {
@@ -5468,6 +5466,14 @@ async function generateParentMessage(studentId) {
     return `${aiComment}\n\n────────────────\n${dataTemplate}`;
 }
 
+// 약어 → 학부모용 풀네임 변환
+const DOMAIN_FULL_NAMES = {
+    'Gr': 'Grammar', 'A/G': 'Applied Grammar', 'R/C': 'Reading Comprehension',
+    'Vo': 'Vocabulary', 'Id': 'Idiom', 'V3': 'Verb 3형식',
+    'L/C': 'Listening and Comprehension'
+};
+function domainFullName(abbr) { return DOMAIN_FULL_NAMES[abbr] || abbr; }
+
 function generateDataTemplate(studentId) {
     const summary = collectStudentDaySummary(studentId);
     if (!summary) return '';
@@ -5482,21 +5488,21 @@ function generateDataTemplate(studentId) {
     // 숙제
     const hw1 = Object.entries(summary.homework_1st);
     if (hw1.length > 0) {
-        lines.push(`▸ 숙제 1차: ${hw1.map(([d, v]) => d + ' ' + v).join(', ')}`);
+        lines.push(`▸ 숙제 1차: ${hw1.map(([d, v]) => domainFullName(d) + ' ' + v).join(', ')}`);
     }
     const hw2 = Object.entries(summary.homework_2nd);
     if (hw2.length > 0) {
-        lines.push(`▸ 숙제 2차: ${hw2.map(([d, v]) => d + ' ' + v).join(', ')}`);
+        lines.push(`▸ 숙제 2차: ${hw2.map(([d, v]) => domainFullName(d) + ' ' + v).join(', ')}`);
     }
 
     // 테스트
     const t1 = Object.entries(summary.test_1st);
     if (t1.length > 0) {
-        lines.push(`▸ 테스트 1차: ${t1.map(([t, v]) => t + ' ' + v).join(', ')}`);
+        lines.push(`▸ 테스트 1차: ${t1.map(([t, v]) => domainFullName(t) + ' ' + v).join(', ')}`);
     }
     const t2 = Object.entries(summary.test_2nd);
     if (t2.length > 0) {
-        lines.push(`▸ 테스트 2차: ${t2.map(([t, v]) => t + ' ' + v).join(', ')}`);
+        lines.push(`▸ 테스트 2차: ${t2.map(([t, v]) => domainFullName(t) + ' ' + v).join(', ')}`);
     }
 
     // 미통과 후속 조치
@@ -5506,16 +5512,36 @@ function generateDataTemplate(studentId) {
         lines.push('');
         lines.push('▸ 후속 조치:');
         hwActions.forEach(([d, a]) => {
-            if (a.type === '등원') lines.push(`  - ${d}: ${a.scheduled_date} 등원 예정`);
-            else if (a.type === '대체숙제') lines.push(`  - ${d}: 대체숙제 "${a.alt_hw || ''}"`);
+            if (a.type === '등원') lines.push(`  - ${domainFullName(d)}: ${a.scheduled_date} 등원 예정`);
+            else if (a.type === '대체숙제') lines.push(`  - ${domainFullName(d)}: 대체숙제 "${a.alt_hw || ''}"`);
         });
         testActions.forEach(([t, a]) => {
-            if (a.type === '등원') lines.push(`  - ${t}: ${a.scheduled_date} 등원 예정`);
-            else if (a.type === '대체숙제') lines.push(`  - ${t}: 대체숙제 "${a.alt_hw || ''}"`);
+            if (a.type === '등원') lines.push(`  - ${domainFullName(t)}: ${a.scheduled_date} 등원 예정`);
+            else if (a.type === '대체숙제') lines.push(`  - ${domainFullName(t)}: 대체숙제 "${a.alt_hw || ''}"`);
         });
     }
 
-    // 귀가 시간 삭제 — 학부모 알림에 불필요
+    // 다음 숙제
+    const student = allStudents.find(s => s.docId === studentId);
+    if (student) {
+        const dayName = getDayName(selectedDate);
+        const todayEnrolls = student.enrollments.filter(e =>
+            e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
+        );
+        const nextHwEntries = [];
+        todayEnrolls.forEach(e => {
+            const code = enrollmentCode(e);
+            const data = classNextHw[code]?.domains || {};
+            Object.entries(data).forEach(([d, v]) => {
+                if (v && v.trim() && v.trim() !== '없음') nextHwEntries.push(`${domainFullName(d)}: ${v.trim()}`);
+            });
+        });
+        if (nextHwEntries.length > 0) {
+            lines.push('');
+            lines.push('▸ 다음 숙제:');
+            nextHwEntries.forEach(entry => lines.push(`  - ${entry}`));
+        }
+    }
 
     return lines.join('\n');
 }
