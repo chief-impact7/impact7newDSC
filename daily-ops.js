@@ -5528,12 +5528,18 @@ function generateDataTemplate(studentId) {
         const todayEnrolls = student.enrollments.filter(e =>
             e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
         );
+        const NEXT_HW_NAMES = {
+            'Gr': '문법', 'A/G': '실전문법', 'R/C': '독해',
+            'Vo': 'Vocabulary', 'Id': 'Idiom', 'V3': 'Verb 3형식',
+            'L/C': '청해', 'Su': '써머리', 'Sm': '써머리'
+        };
+        const nextHwName = (abbr) => NEXT_HW_NAMES[abbr] || abbr;
         const nextHwEntries = [];
         todayEnrolls.forEach(e => {
             const code = enrollmentCode(e);
             const data = classNextHw[code]?.domains || {};
             Object.entries(data).forEach(([d, v]) => {
-                if (v && v.trim() && v.trim() !== '없음') nextHwEntries.push(`${domainFullName(d)}: ${v.trim()}`);
+                if (v && v.trim() && v.trim() !== '없음') nextHwEntries.push(`${nextHwName(d)}: ${v.trim()}`);
             });
         });
         if (nextHwEntries.length > 0) {
