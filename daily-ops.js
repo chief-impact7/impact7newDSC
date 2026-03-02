@@ -1622,6 +1622,7 @@ function renderListPanel() {
     const students = getFilteredStudents();
     const container = document.getElementById('list-items');
     const countEl = document.getElementById('list-count');
+    const LEAVE_STATUSES = ['가휴원', '실휴원'];
 
     // 필터 칩 렌더링
     renderFilterChips();
@@ -1921,10 +1922,13 @@ function renderListPanel() {
         const teacherEmail = classSettings[primaryCode]?.teacher;
         const teacherBadge = teacherEmail ? `<span class="teacher-badge" title="담당: ${esc(getTeacherName(teacherEmail))}">${esc(getTeacherName(teacherEmail))}</span>` : '';
 
+        const leaveBadge = LEAVE_STATUSES.includes(s.status)
+            ? `<span class="tag tag-leave">${esc(s.status)}</span>` : '';
+
         return `<div class="list-item ${isActive}${bulkMode ? ' bulk-mode' : ''}${selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}" onclick="handleListItemClick(event, '${escAttr(s.docId)}')">
             <input type="checkbox" class="list-item-checkbox" ${selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">
             <div class="item-info">
-                <span class="item-title">${esc(s.name)}${siblingIcon}${hwFailIconHtml} ${teacherBadge}</span>
+                <span class="item-title">${esc(s.name)}${leaveBadge}${siblingIcon}${hwFailIconHtml} ${teacherBadge}</span>
                 <span class="item-desc">${esc(code)}${todayEnroll?.class_type ? ' · ' + esc(todayEnroll.class_type) : ''}${studentShortLabel(s) ? ' · ' + esc(studentShortLabel(s)) : ''}</span>
             </div>
             ${timeHtml}
@@ -1932,10 +1936,14 @@ function renderListPanel() {
         </div>`;
     };
 
+    // 휴원 학생 분리
+    const activeStudents = students.filter(s => !LEAVE_STATUSES.includes(s.status));
+    const leaveStudents = students.filter(s => LEAVE_STATUSES.includes(s.status));
+
     // 그룹 뷰 or 일반 렌더링
     if (groupViewMode !== 'none') {
         const groups = {};
-        students.forEach(s => {
+        activeStudents.forEach(s => {
             if (groupViewMode === 'branch') {
                 const key = branchFromStudent(s) || '미지정';
                 if (!groups[key]) groups[key] = [];
@@ -1948,12 +1956,22 @@ function renderListPanel() {
             }
         });
         const sortedKeys = Object.keys(groups).sort((a, b) => a.localeCompare(b, 'ko'));
-        container.innerHTML = sortedKeys.map(key => {
+        let html = sortedKeys.map(key => {
             const headerHtml = `<div class="group-header"><span class="group-label">${esc(key)}</span><span class="group-count">${groups[key].length}명</span></div>`;
             return headerHtml + groups[key].map(renderItemHtml).join('');
         }).join('');
+        if (leaveStudents.length > 0) {
+            html += `<div class="leave-section-divider"><span>휴원 학생 (${leaveStudents.length}명)</span></div>`;
+            html += leaveStudents.map(renderItemHtml).join('');
+        }
+        container.innerHTML = html;
     } else {
-        container.innerHTML = students.map(renderItemHtml).join('');
+        let html = activeStudents.map(renderItemHtml).join('');
+        if (leaveStudents.length > 0) {
+            html += `<div class="leave-section-divider"><span>휴원 학생 (${leaveStudents.length}명)</span></div>`;
+            html += leaveStudents.map(renderItemHtml).join('');
+        }
+        container.innerHTML = html;
     }
 
     // 반 상세 표시: 반(+소속)만 선택되고, 콘텐츠 서브필터 없을 때

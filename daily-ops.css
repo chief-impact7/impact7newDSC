@@ -923,6 +923,33 @@ body {
   background: #f1f3f4;
   color: var(--text-sec);
 }
+.tag-leave {
+  background: #fce4ec;
+  color: #c62828;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: 4px;
+  font-weight: 600;
+}
+
+/* ===== Leave Section Divider ===== */
+.leave-section-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px 6px;
+  color: #c62828;
+  font-size: 12px;
+  font-weight: 600;
+}
+.leave-section-divider::before,
+.leave-section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #ef9a9a;
+}
 
 /* ===== Detail Cards ===== */
 .detail-card {
