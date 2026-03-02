@@ -5477,7 +5477,7 @@ function generateDataTemplate(studentId) {
 
     // 출결
     const att = summary.attendance === '미확인' ? '등원전' : summary.attendance;
-    lines.push(`▸ 출결: ${att}${summary.arrival_time ? ' (' + formatTime12h(summary.arrival_time) + ')' : ''}`);
+    lines.push(`▸ 출결: ${att}`);
 
     // 숙제
     const hw1 = Object.entries(summary.homework_1st);
@@ -5515,11 +5515,7 @@ function generateDataTemplate(studentId) {
         });
     }
 
-    // 귀가
-    if (summary.departure?.status === '귀가') {
-        lines.push('');
-        lines.push(`▸ 귀가: ${formatTime12h(summary.departure.time || '')}`);
-    }
+    // 귀가 시간 삭제 — 학부모 알림에 불필요
 
     return lines.join('\n');
 }
