@@ -1,7 +1,7 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import {
     collection, getDocs, doc, setDoc, getDoc, addDoc,
-    query, where, serverTimestamp, updateDoc, writeBatch, arrayUnion
+    query, where, serverTimestamp, updateDoc, writeBatch, arrayUnion, deleteField
 } from 'firebase/firestore';
 import { auth, db, geminiModel } from './firebase-config.js';
 import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
@@ -156,6 +156,11 @@ function enrollmentCode(e) {
     return `${e.level_symbol || ''}${e.class_number || ''}`;
 }
 const allClassCodes = (s) => (s.enrollments || []).map(e => enrollmentCode(e)).filter(Boolean);
+
+// 학생 등원시간: 개별 시간 → 반 기본 시간 fallback
+function getStudentStartTime(enrollment) {
+    return enrollment?.start_time || classSettings[enrollmentCode(enrollment)]?.default_time || '';
+}
 
 // 학교+학부앞글자+학년앞글자 조합 (예: 대일고1, 진명여고1)
 function studentShortLabel(s) {
@@ -1122,6 +1127,23 @@ function getScheduledVisits() {
         });
     }
 
+    // 5) DB 등원예정 학생 (status === '등원예정')
+    for (const s of allStudents) {
+        if (s.status !== '등원예정') continue;
+        visits.push({
+            id: `enroll_${s.docId}`,
+            source: 'enroll_pending',
+            sourceLabel: '등원예정',
+            sourceColor: '#059669',
+            studentId: s.docId,
+            name: s.name || s.docId,
+            time: '',
+            detail: s.enrollments?.map(e => `${e.level_symbol || ''}${e.class_number || ''}`).filter(Boolean).join(', ') || '',
+            status: 'pending',
+            docId: s.docId
+        });
+    }
+
     // 시간순 정렬 (pending 먼저, 그 안에서 시간순)
     visits.sort((a, b) => {
         if (a.status !== b.status) return a.status === 'pending' ? -1 : 1;
@@ -1295,8 +1317,8 @@ function getFilteredStudents() {
     if (allF['attendance']?.size > 0 || currentCategory === 'attendance') {
         const dayName = getDayName(selectedDate);
         students.sort((a, b) => {
-            const timeA = a.enrollments.find(e => e.day.includes(dayName))?.start_time || '99:99';
-            const timeB = b.enrollments.find(e => e.day.includes(dayName))?.start_time || '99:99';
+            const timeA = getStudentStartTime(a.enrollments.find(e => e.day.includes(dayName))) || '99:99';
+            const timeB = getStudentStartTime(b.enrollments.find(e => e.day.includes(dayName))) || '99:99';
             return timeA.localeCompare(timeB);
         });
     }
@@ -1350,7 +1372,7 @@ function renderScheduledVisitList() {
         const completedTag = isCompleted ? '<span class="visit-source-badge" style="background:#059669;">완료</span>' : '';
         const confirmBtn = !isCompleted
             ? `<button class="toggle-btn active-present" style="padding:2px 10px;font-size:12px;min-width:auto;" onclick="event.stopPropagation(); completeScheduledVisit('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">확인</button>`
-            : '';
+            : `<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;color:var(--text-sec);border-color:var(--border);" onclick="event.stopPropagation(); resetScheduledVisit('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">초기화</button>`;
 
         return `<div class="list-item visit-item ${completedClass}" ${clickHandler} style="${(v.studentId || v.source === 'temp') ? 'cursor:pointer;' : ''}">
             <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
@@ -1701,7 +1723,7 @@ function renderListPanel() {
         } else if (currentCategory === 'class_mgmt') {
             toggleHtml = s.enrollments.map((e, idx) => {
                 const days = e.day?.join('\u00B7') || '';
-                const time = e.start_time ? formatTime12h(e.start_time) : '';
+                const time = getStudentStartTime(e) ? formatTime12h(getStudentStartTime(e)) : '';
                 return `<div style="margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                     <span style="font-size:12px;color:var(--text-sec);">${esc(enrollmentCode(e))} ${days} ${time}</span>
                     <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openEnrollmentModal('${escAttr(s.docId)}', ${idx})">편집</button>
@@ -1714,7 +1736,7 @@ function renderListPanel() {
         const arrivalTime = rec?.arrival_time;
         const dayName = getDayName(selectedDate);
         const todayEnroll = s.enrollments.find(e => e.day.includes(dayName));
-        const scheduledTime = todayEnroll?.start_time;
+        const scheduledTime = getStudentStartTime(todayEnroll);
 
         // hw_fail_tasks 등원 예약 시간 (선택날짜 기준 pending)
         const visitTasks = hwFailTasks.filter(t =>
@@ -1859,13 +1881,15 @@ function renderClassDetail(classCode) {
 
     const cardsContainer = document.getElementById('detail-cards');
 
-    // ① 등원예정시간 (enrollment start_time — 영구 저장)
+    // ① 등원예정시간 — 반 기본 시간만 설정, 학생별은 읽기전용 표시
+    const defaultTime = classSettings[classCode]?.default_time || '';
     const arrivalRows = classStudents.map(s => {
         const todayEnroll = s.enrollments.find(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode);
-        const currentTime = todayEnroll?.start_time || '';
+        const currentTime = getStudentStartTime(todayEnroll);
+        const isIndividual = todayEnroll?.start_time && todayEnroll.start_time !== defaultTime;
         return `<div class="arrival-time-row">
             <span class="arrival-student-name">${esc(s.name)}</span>
-            <input type="time" class="arrival-time-input" data-student-id="${s.docId}" value="${currentTime}">
+            <span style="font-size:13px;color:var(--text-sec);">${currentTime ? formatTime12h(currentTime) : '-'}${isIndividual ? ' (개별)' : ''}</span>
         </div>`;
     }).join('');
 
@@ -1946,7 +1970,7 @@ function renderClassDetail(classCode) {
                 등원예정시간
             </div>
             <div class="arrival-bulk-row">
-                <input type="time" id="arrival-bulk-time-detail" class="arrival-time-input">
+                <input type="time" id="arrival-bulk-time-detail" class="arrival-time-input" value="${defaultTime}">
                 <button class="btn btn-primary btn-sm" onclick="applyClassArrivalTimeDetail('${escAttr(classCode)}')">전체 적용</button>
             </div>
             <div class="arrival-student-list">${arrivalRows || '<span class="detail-card-empty">학생 없음</span>'}</div>
@@ -1980,14 +2004,6 @@ function renderClassDetail(classCode) {
             <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="resetTestSections('${escAttr(classCode)}')">기본값 복원</button>
         </div>
 
-        <div class="class-detail-actions">
-            <button class="btn btn-primary" onclick="saveClassScheduledTimes('${escAttr(classCode)}')">
-                <span class="material-symbols-outlined" style="font-size:18px;">save</span> 반에 저장
-            </button>
-            <button class="btn btn-secondary" onclick="clearClassDetail()">
-                <span class="material-symbols-outlined" style="font-size:18px;">delete_sweep</span> 클리어
-            </button>
-        </div>
     `;
 
     // 모바일에서 디테일 패널 표시
@@ -2143,6 +2159,9 @@ async function applyClassArrivalTimeDetail(classCode) {
 
     showSaveIndicator('saving');
     try {
+        // class_settings에 반 기본 시간 저장
+        await saveClassSettings(classCode, { default_time: time });
+
         const batch = writeBatch(db);
         classStudents.forEach(s => {
             const enrollments = [...s.enrollments];
@@ -2160,48 +2179,6 @@ async function applyClassArrivalTimeDetail(classCode) {
         console.error('등원예정시간 저장 실패:', err);
         showSaveIndicator('error');
     }
-}
-
-async function saveClassScheduledTimes(classCode) {
-    const dayName = getDayName(selectedDate);
-    const inputs = document.querySelectorAll('.arrival-time-input[data-student-id]');
-
-    showSaveIndicator('saving');
-    try {
-        const batch = writeBatch(db);
-        let hasChanges = false;
-
-        inputs.forEach(input => {
-            const studentId = input.dataset.studentId;
-            const time = input.value;
-            const student = allStudents.find(s => s.docId === studentId);
-            if (!student) return;
-
-            const enrollments = [...student.enrollments];
-            const idx = enrollments.findIndex(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode);
-            if (idx !== -1) {
-                enrollments[idx] = { ...enrollments[idx], start_time: time };
-                batch.update(doc(db, 'students', studentId), { enrollments });
-                student.enrollments = enrollments;
-                hasChanges = true;
-            }
-        });
-
-        if (hasChanges) {
-            await batch.commit();
-        }
-        showSaveIndicator('saved');
-        renderListPanel();
-    } catch (err) {
-        console.error('등원예정시간 일괄 저장 실패:', err);
-        showSaveIndicator('error');
-    }
-}
-
-function clearClassDetail() {
-    document.querySelectorAll('.arrival-time-input').forEach(input => {
-        input.value = '';
-    });
 }
 
 // ─── HW Fail Action Card ────────────────────────────────────────────────────
@@ -4830,7 +4807,7 @@ async function exportDailyReport() {
         const rec = dailyRecords[s.docId] || {};
         const teacher = classSettings[code]?.teacher ? getTeacherName(classSettings[code].teacher) : '';
         return [code, teacher, s.name, branchFromStudent(s), s.school || '', s.grade || '',
-            todayEnroll?.start_time || '', rec.attendance || '', rec.attendance_time || '', rec.attendance_reason || ''];
+            getStudentStartTime(todayEnroll), rec.attendance || '', rec.attendance_time || '', rec.attendance_reason || ''];
     });
 
     showSaveIndicator('saving');
@@ -5307,8 +5284,6 @@ window.cancelRetake = cancelRetake;
 window.openEnrollmentModal = openEnrollmentModal;
 window.saveEnrollment = saveEnrollment;
 window.saveStudentScheduledTime = saveStudentScheduledTime;
-window.saveClassScheduledTimes = saveClassScheduledTimes;
-window.clearClassDetail = clearClassDetail;
 window.selectNextHwClass = selectNextHwClass;
 window.openNextHwModal = openNextHwModal;
 window.saveNextHwFromModal = saveNextHwFromModal;
@@ -5459,7 +5434,9 @@ async function generateParentMessage(studentId) {
 
     const customPrompt = getCustomPrompt().replace('{name}', summary.name);
     const noteSection = summary.note ? `\n\n선생님 메모:\n${summary.note}` : '';
-    const fullPrompt = `${customPrompt}${noteSection}\n\n학생 데이터:\n${JSON.stringify(safeSummary, null, 2)}`;
+    const teacherNote = document.getElementById('parent-msg-note')?.value?.trim();
+    const teacherNoteSection = teacherNote ? `\n\n선생님 특이사항:\n${teacherNote}` : '';
+    const fullPrompt = `${customPrompt}${noteSection}${teacherNoteSection}\n\n학생 데이터:\n${JSON.stringify(safeSummary, null, 2)}`;
 
     const result = await geminiModel.generateContent(fullPrompt);
     const aiComment = result.response.text().trim();
@@ -5570,7 +5547,9 @@ async function openParentMessageModal(studentId) {
     const arrow = document.getElementById('prompt-arrow');
     if (arrow) arrow.classList.remove('expanded');
 
-    // Manual 초기화
+    // 특이사항 & Manual 초기화
+    const noteInput = document.getElementById('parent-msg-note');
+    if (noteInput) noteInput.value = '';
     const manualText = document.getElementById('parent-msg-manual-text');
     if (manualText) manualText.value = '';
 
@@ -5692,7 +5671,54 @@ async function completeScheduledVisit(source, docId, studentId) {
     }
 }
 
+async function resetScheduledVisit(source, docId, studentId) {
+    showSaveIndicator('saving');
+    try {
+        if (source === 'temp') {
+            await updateDoc(doc(db, 'temp_attendance', docId), { visit_status: 'pending' });
+            const ta = tempAttendances.find(t => t.docId === docId);
+            if (ta) ta.visit_status = 'pending';
+        } else if (source === 'hw_fail') {
+            await updateDoc(doc(db, 'hw_fail_tasks', docId), {
+                status: 'pending',
+                completed_by: deleteField(),
+                completed_at: deleteField()
+            });
+            const t = hwFailTasks.find(t => t.docId === docId);
+            if (t) { t.status = 'pending'; delete t.completed_by; }
+        } else if (source === 'test_fail') {
+            await updateDoc(doc(db, 'test_fail_tasks', docId), {
+                status: 'pending',
+                completed_by: deleteField(),
+                completed_at: deleteField()
+            });
+            const t = testFailTasks.find(t => t.docId === docId);
+            if (t) { t.status = 'pending'; delete t.completed_by; }
+        } else if (source === 'extra') {
+            const rec = dailyRecords[docId] || {};
+            const ev = rec.extra_visit || {};
+            ev.visit_status = 'pending';
+            await saveImmediately(docId, { extra_visit: ev });
+            if (dailyRecords[docId]) dailyRecords[docId].extra_visit = ev;
+        }
+
+        // 출석도 초기화
+        if (studentId) {
+            applyAttendance(studentId, '미확인', true, true);
+        }
+
+        renderSubFilters();
+        renderListPanel();
+        if (selectedStudentId) renderStudentDetail(selectedStudentId);
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('등원예정 초기화 실패:', err);
+        showSaveIndicator('error');
+    }
+}
+
 window.completeScheduledVisit = completeScheduledVisit;
+window.resetScheduledVisit = resetScheduledVisit;
 
 // ─── 임시출석 ──────────────────────────────────────────────────────────────
 

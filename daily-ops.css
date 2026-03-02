@@ -2514,6 +2514,27 @@ textarea.field-input {
   flex: 1;
 }
 
+.parent-msg-note-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: none;
+  color: var(--text-main);
+  margin-bottom: 8px;
+  background: var(--bg-card);
+}
+.parent-msg-note-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+.parent-msg-note-input::placeholder {
+  color: var(--text-sec);
+}
+
 .parent-msg-textarea {
   width: 100%;
   min-height: 200px;
