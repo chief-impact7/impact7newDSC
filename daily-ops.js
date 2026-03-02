@@ -1622,8 +1622,6 @@ function renderListPanel() {
     const students = getFilteredStudents();
     const container = document.getElementById('list-items');
     const countEl = document.getElementById('list-count');
-    const LEAVE_STATUSES = ['가휴원', '실휴원'];
-
     // 필터 칩 렌더링
     renderFilterChips();
 
@@ -1870,40 +1868,43 @@ function renderListPanel() {
             }).join('');
         }
 
-        // 등원시간
+        // 등원시간 (휴원 학생은 미표시)
+        let timeHtml = '';
         const rec = dailyRecords[s.docId];
-        const arrivalTime = rec?.arrival_time;
-        const dayName = getDayName(selectedDate);
-        const todayEnroll = s.enrollments.find(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester));
-        const scheduledTime = getStudentStartTime(todayEnroll);
+        if (!isLeave) {
+            const arrivalTime = rec?.arrival_time;
+            const dayName = getDayName(selectedDate);
+            const todayEnroll = s.enrollments.find(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester));
+            const scheduledTime = getStudentStartTime(todayEnroll);
 
-        // hw_fail_tasks 등원 예약 시간 (선택날짜 기준 pending)
-        const visitTasks = hwFailTasks.filter(t =>
-            t.student_id === s.docId &&
-            t.type === '등원' &&
-            t.scheduled_date === selectedDate &&
-            t.status === 'pending'
-        );
+            // hw_fail_tasks 등원 예약 시간 (선택날짜 기준 pending)
+            const visitTasks = hwFailTasks.filter(t =>
+                t.student_id === s.docId &&
+                t.type === '등원' &&
+                t.scheduled_date === selectedDate &&
+                t.status === 'pending'
+            );
 
-        let timeLabel = '', timeValue = '', timeClass = '';
-        if (arrivalTime) {
-            timeLabel = '등원'; timeValue = formatTime12h(arrivalTime); timeClass = 'arrived';
-        } else if (scheduledTime) {
-            timeLabel = '예정'; timeValue = formatTime12h(scheduledTime);
+            let timeLabel = '', timeValue = '', timeClass = '';
+            if (arrivalTime) {
+                timeLabel = '등원'; timeValue = formatTime12h(arrivalTime); timeClass = 'arrived';
+            } else if (scheduledTime) {
+                timeLabel = '예정'; timeValue = formatTime12h(scheduledTime);
+            }
+            timeHtml = [
+                timeValue ? `<div class="item-time-block ${timeClass}">
+                    <span class="item-time-label">${timeLabel}</span>
+                    <span class="item-time-value">${esc(timeValue)}</span>
+                </div>` : '',
+                // 정규 수업과 시간이 다른 등원 예약 시간 추가 표시
+                ...visitTasks
+                    .filter(t => t.scheduled_time && t.scheduled_time !== scheduledTime)
+                    .map(t => `<div class="item-time-block" style="color:var(--danger);">
+                        <span class="item-time-label" style="color:var(--danger);">보충</span>
+                        <span class="item-time-value" style="color:var(--danger);">${esc(formatTime12h(t.scheduled_time))}</span>
+                    </div>`)
+            ].join('');
         }
-        const timeHtml = [
-            timeValue ? `<div class="item-time-block ${timeClass}">
-                <span class="item-time-label">${timeLabel}</span>
-                <span class="item-time-value">${esc(timeValue)}</span>
-            </div>` : '',
-            // 정규 수업과 시간이 다른 등원 예약 시간 추가 표시
-            ...visitTasks
-                .filter(t => t.scheduled_time && t.scheduled_time !== scheduledTime)
-                .map(t => `<div class="item-time-block" style="color:var(--danger);">
-                    <span class="item-time-label" style="color:var(--danger);">보충</span>
-                    <span class="item-time-value" style="color:var(--danger);">${esc(formatTime12h(t.scheduled_time))}</span>
-                </div>`)
-        ].join('');
 
         // hw_fail_tasks 기반 아이콘 (대체숙제/등원예약) - pending 상태만
         const pendingTasks = hwFailTasks.filter(t => t.student_id === s.docId && t.status === 'pending');
@@ -3186,25 +3187,26 @@ function getStudentChecklistStatus(studentId) {
 
     // 1. 출석
     const attStatus = rec?.attendance?.status || '미확인';
+    const isAttended = isAttendedStatus(attStatus);
     items.push({
         key: 'attendance',
         label: '출석',
         done: attStatus !== '미확인'
     });
 
-    // 2. 숙제 1차
-    const domains = getStudentDomains(studentId);
+    // 2. 숙제 1차 (미출석이면 데이터가 있어도 미완료 처리)
+    const domains = isAttended ? getStudentDomains(studentId) : [];
     const hw1st = rec.hw_domains_1st || {};
-    const hw1stFilled = domains.some(d => hw1st[d]);
+    const hw1stFilled = isAttended && domains.some(d => hw1st[d]);
     items.push({
         key: 'hw_1st',
         label: '숙제 1차',
         done: hw1stFilled
     });
 
-    // 3. 숙제 2차 (1차에서 미통과 있을 때만)
+    // 3. 숙제 2차 (1차에서 미통과 있을 때만, 미출석이면 미완료)
     const hw1stFails = domains.filter(d => hw1st[d] && hw1st[d] !== 'O');
-    if (hw1stFails.length > 0) {
+    if (isAttended && hw1stFails.length > 0) {
         const hw2nd = rec.hw_domains_2nd || {};
         const hw2ndFilled = hw1stFails.every(d => hw2nd[d]);
         items.push({
@@ -3214,10 +3216,10 @@ function getStudentChecklistStatus(studentId) {
         });
     }
 
-    // 4. 테스트 1차
-    const { flat: testItems } = getStudentTestItems(studentId);
+    // 4. 테스트 1차 (미출석이면 미완료)
+    const { flat: testItems } = isAttended ? getStudentTestItems(studentId) : { flat: [] };
     const t1st = rec.test_domains_1st || {};
-    const t1stFilled = testItems.some(t => t1st[t]);
+    const t1stFilled = isAttended && testItems.some(t => t1st[t]);
     if (testItems.length > 0) {
         items.push({
             key: 'test_1st',
@@ -3226,9 +3228,9 @@ function getStudentChecklistStatus(studentId) {
         });
     }
 
-    // 5. 테스트 2차 (1차에서 미통과 있을 때만)
+    // 5. 테스트 2차 (1차에서 미통과 있을 때만, 미출석이면 미완료)
     const t1stFails = testItems.filter(t => t1st[t] && t1st[t] !== 'O');
-    if (t1stFails.length > 0) {
+    if (isAttended && t1stFails.length > 0) {
         const t2nd = rec.test_domains_2nd || {};
         const t2ndFilled = t1stFails.every(t => t2nd[t]);
         items.push({
@@ -3238,30 +3240,32 @@ function getStudentChecklistStatus(studentId) {
         });
     }
 
-    // 6. 미통과 처리 (2차 X/△/S 또는 1차 미통과+2차 미입력)
-    const hw2nd = rec.hw_domains_2nd || {};
-    const hwFailDomains = domains.filter(d => {
-        const v2 = hw2nd[d] || '';
-        if (v2 && v2 !== 'O') return true;
-        if (hw1st[d] && hw1st[d] !== 'O' && !v2) return true;
-        return false;
-    });
-    const t2nd = rec.test_domains_2nd || {};
-    const testFailItems = testItems.filter(t => {
-        const v2 = t2nd[t] || '';
-        if (v2 && v2 !== 'O') return true;
-        if (t1st[t] && t1st[t] !== 'O' && !v2) return true;
-        return false;
-    });
-    if (hwFailDomains.length > 0 || testFailItems.length > 0) {
-        const hwAction = rec.hw_fail_action || {};
-        const testAction = rec.test_fail_action || {};
-        const allHandled = hwFailDomains.every(d => hwAction[d]?.type) && testFailItems.every(t => testAction[t]?.type);
-        items.push({
-            key: 'fail_action',
-            label: '미통과 처리',
-            done: allHandled
+    // 6. 미통과 처리 (2차 X/△/S 또는 1차 미통과+2차 미입력, 출석 학생만)
+    if (isAttended) {
+        const hw2nd = rec.hw_domains_2nd || {};
+        const hwFailDomains = domains.filter(d => {
+            const v2 = hw2nd[d] || '';
+            if (v2 && v2 !== 'O') return true;
+            if (hw1st[d] && hw1st[d] !== 'O' && !v2) return true;
+            return false;
         });
+        const t2nd = rec.test_domains_2nd || {};
+        const testFailItems = testItems.filter(t => {
+            const v2 = t2nd[t] || '';
+            if (v2 && v2 !== 'O') return true;
+            if (t1st[t] && t1st[t] !== 'O' && !v2) return true;
+            return false;
+        });
+        if (hwFailDomains.length > 0 || testFailItems.length > 0) {
+            const hwAction = rec.hw_fail_action || {};
+            const testAction = rec.test_fail_action || {};
+            const allHandled = hwFailDomains.every(d => hwAction[d]?.type) && testFailItems.every(t => testAction[t]?.type);
+            items.push({
+                key: 'fail_action',
+                label: '미통과 처리',
+                done: allHandled
+            });
+        }
     }
 
     // 7. 귀가
@@ -3566,14 +3570,23 @@ function renderStudentDetail(studentId) {
     const rec = dailyRecords[studentId] || {};
     const attStatus = rec?.attendance?.status || '미확인';
     const arrivalTime = rec?.arrival_time || '';
-    const displayStatus = attStatus === '미확인' ? '등원전' : attStatus;
+    const isLeaveStudent = LEAVE_STATUSES.includes(student.status);
 
-    const tagClass = attStatus === '출석' ? 'tag-present' :
-                     attStatus === '결석' ? 'tag-absent' :
-                     attStatus === '지각' ? 'tag-late' : 'tag-pending';
-
-    const showTime = (attStatus === '출석' || attStatus === '지각') && arrivalTime;
-    const tagText = showTime ? `${displayStatus} ${formatTime12h(arrivalTime)}` : displayStatus;
+    let tagClass, tagText;
+    if (isLeaveStudent) {
+        tagClass = 'tag-leave';
+        const pauseStart = student.pause_start_date || '';
+        const pauseEnd = student.pause_end_date || '';
+        const period = pauseStart && pauseEnd ? ` (${pauseStart} ~ ${pauseEnd})` : pauseStart ? ` (${pauseStart} ~)` : '';
+        tagText = `${student.status}${period}`;
+    } else {
+        const displayStatus = attStatus === '미확인' ? '등원전' : attStatus;
+        tagClass = attStatus === '출석' ? 'tag-present' :
+                   attStatus === '결석' ? 'tag-absent' :
+                   attStatus === '지각' ? 'tag-late' : 'tag-pending';
+        const showTime = (attStatus === '출석' || attStatus === '지각') && arrivalTime;
+        tagText = showTime ? `${displayStatus} ${formatTime12h(arrivalTime)}` : displayStatus;
+    }
 
     const hasSibling = siblingMap[studentId]?.size > 0;
     const siblingNames = hasSibling ? [...new Set([...siblingMap[studentId]].map(sid => allStudents.find(x => x.docId === sid)?.name).filter(Boolean))].join(', ') : '';
@@ -3593,12 +3606,12 @@ function renderStudentDetail(studentId) {
     const studentHwTasks = hwFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
     const studentTestTasks = testFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
 
-    // 개별 등원시간 카드 — 오늘 수업이 있는 enrollment별 시간 입력
+    // 개별 등원시간 카드 — 오늘 수업이 있는 enrollment별 시간 입력 (휴원 학생 미표시)
     const dayNameForDetail = getDayName(selectedDate);
     const todayEnrollments = student.enrollments.filter(e =>
         e.day.includes(dayNameForDetail) && (!selectedSemester || e.semester === selectedSemester)
     );
-    const arrivalTimeHtml = todayEnrollments.length > 0 ? `
+    const arrivalTimeHtml = isLeaveStudent ? '' : todayEnrollments.length > 0 ? `
         <div class="detail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">schedule</span>
@@ -3644,13 +3657,14 @@ function renderStudentDetail(studentId) {
     ` : '';
 
     // 영역 숙제 현황 카드
-    const detailDomains = getStudentDomains(studentId);
-    const d1st = rec.hw_domains_1st || {};
-    const d2nd = rec.hw_domains_2nd || {};
-    const hasAnyDomain = Object.values(d1st).some(v => v) || Object.values(d2nd).some(v => v);
-    const has1stHw = Object.values(d1st).some(v => v);
-    const has2ndHw = Object.values(d2nd).some(v => v);
-    const domainHwHtml = `
+    const isAttended = isAttendedStatus(attStatus);
+    const detailDomains = isAttended ? getStudentDomains(studentId) : [];
+    const d1st = isAttended ? (rec.hw_domains_1st || {}) : {};
+    const d2nd = isAttended ? (rec.hw_domains_2nd || {}) : {};
+    const hasAnyDomain = isAttended && (Object.values(d1st).some(v => v) || Object.values(d2nd).some(v => v));
+    const has1stHw = isAttended && Object.values(d1st).some(v => v);
+    const has2ndHw = isAttended && Object.values(d2nd).some(v => v);
+    const domainHwHtml = !isAttended ? '' : `
         <div class="detail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">domain_verification</span>
@@ -3688,13 +3702,13 @@ function renderStudentDetail(studentId) {
     `;
 
     // 테스트 OX 현황 카드
-    const { sections: detailTestSections } = getStudentTestItems(studentId);
-    const t1st = rec.test_domains_1st || {};
-    const t2nd = rec.test_domains_2nd || {};
-    const hasAnyTest = Object.values(t1st).some(v => v) || Object.values(t2nd).some(v => v);
-    const has1stTest = Object.values(t1st).some(v => v);
-    const has2ndTest = Object.values(t2nd).some(v => v);
-    const domainTestHtml = `
+    const { sections: detailTestSections } = isAttended ? getStudentTestItems(studentId) : { sections: {} };
+    const t1st = isAttended ? (rec.test_domains_1st || {}) : {};
+    const t2nd = isAttended ? (rec.test_domains_2nd || {}) : {};
+    const hasAnyTest = isAttended && (Object.values(t1st).some(v => v) || Object.values(t2nd).some(v => v));
+    const has1stTest = isAttended && Object.values(t1st).some(v => v);
+    const has2ndTest = isAttended && Object.values(t2nd).some(v => v);
+    const domainTestHtml = !isAttended ? '' : `
         <div class="detail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">quiz</span>
@@ -3812,11 +3826,11 @@ function renderStudentDetail(studentId) {
         <!-- 다음숙제 카드 -->
         ${nextHwHtml}
 
-        <!-- 숙제 미통과 카드 -->
-        ${renderHwFailActionCard(studentId, detailDomains, d2nd, rec.hw_fail_action || {})}
+        <!-- 숙제 미통과 카드 (출석 학생만) -->
+        ${isAttended ? renderHwFailActionCard(studentId, detailDomains, d2nd, rec.hw_fail_action || {}) : ''}
 
-        <!-- 테스트 미통과 카드 -->
-        ${renderTestFailActionCard(studentId, detailTestSections, t2nd, rec.test_fail_action || {})}
+        <!-- 테스트 미통과 카드 (출석 학생만) -->
+        ${isAttended ? renderTestFailActionCard(studentId, detailTestSections, t2nd, rec.test_fail_action || {}) : ''}
 
         <!-- 밀린 Task 카드 (숙제 + 테스트) -->
         ${renderPendingTasksCard(studentId, [...studentHwTasks, ...studentTestTasks])}
@@ -3967,10 +3981,15 @@ function doesStatusMatchFilter(firestoreStatus, filterSet) {
     return false;
 }
 
+const LEAVE_STATUSES = ['가휴원', '실휴원'];
+
+function isAttendedStatus(status) {
+    return status === '출석' || status === '지각' || status === '조퇴';
+}
+
 function checkCanEditGrading(studentId) {
     const rec = dailyRecords[studentId] || {};
-    const st = rec?.attendance?.status;
-    if (st === '출석' || st === '지각' || st === '조퇴') return true;
+    if (isAttendedStatus(rec?.attendance?.status)) return true;
     alert('등원(출석, 지각, 조퇴) 상태인 학생만 입력할 수 있습니다.');
     return false;
 }
@@ -4987,15 +5006,94 @@ async function exportDailyReport() {
         return cA.localeCompare(cB, 'ko') || a.name.localeCompare(b.name, 'ko');
     });
 
-    const HEADERS = ['반', '담당', '이름', '소속', '학교', '학년', '등원시간', '출결', '실제등원', '결석사유'];
+    const HEADERS = [
+        '반', '담당', '이름', '소속', '학교', '학년', '상태',
+        '예정시간', '출결', '실제등원', '출결사유',
+        '숙제1차', '숙제2차', '테스트1차', '테스트2차',
+        '후속조치', '다음숙제',
+        '귀가', '귀가시간',
+        '수업→자습 전달', '학부모 전달'
+    ];
+
+    const formatOxMap = (domainData, domains) => {
+        if (!domains?.length) return '';
+        const parts = domains.map(d => domainData[d] ? `${d}:${domainData[d]}` : '').filter(Boolean);
+        return parts.join(', ');
+    };
+
+    const formatActions = (hwAction, testAction, domains, testItems) => {
+        const parts = [];
+        const pushAction = (key, actionMap) => {
+            const a = actionMap[key];
+            if (!a?.type) return;
+            if (a.type === '등원') parts.push(`${key}:등원 ${a.scheduled_date || ''} ${a.scheduled_time ? formatTime12h(a.scheduled_time) : ''}`);
+            else if (a.type === '대체숙제') parts.push(`${key}:대체숙제 "${a.alt_hw || ''}"`);
+            else parts.push(`${key}:${a.type}`);
+        };
+        domains.forEach(d => pushAction(d, hwAction));
+        testItems.forEach(t => pushAction(t, testAction));
+        return parts.join(', ');
+    };
 
     const dataRows = students.map(s => {
         const todayEnroll = s.enrollments.find(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester));
         const code = todayEnroll ? enrollmentCode(todayEnroll) : '';
         const rec = dailyRecords[s.docId] || {};
         const teacher = classSettings[code]?.teacher ? getTeacherName(classSettings[code].teacher) : '';
-        return [code, teacher, s.name, branchFromStudent(s), s.school || '', s.grade || '',
-            getStudentStartTime(todayEnroll), rec.attendance || '', rec.attendance_time || '', rec.attendance_reason || ''];
+        const domains = getStudentDomains(s.docId);
+        const { flat: testItems } = getStudentTestItems(s.docId);
+
+        // 출결
+        const attStatus = rec?.attendance?.status || '미확인';
+        const displayAtt = attStatus === '미확인' ? '등원전' : attStatus;
+        const arrTime = rec?.arrival_time ? formatTime12h(rec.arrival_time) : '';
+        const attReason = rec?.attendance?.reason || '';
+
+        // 상태 (휴원이면 기간 포함)
+        let statusText = s.status || '재원';
+        if (LEAVE_STATUSES.includes(s.status)) {
+            const p1 = s.pause_start_date || '';
+            const p2 = s.pause_end_date || '';
+            if (p1 || p2) statusText += ` (${p1}~${p2})`;
+        }
+
+        // 숙제/테스트 OX
+        const hw1st = formatOxMap(rec.hw_domains_1st || {}, domains);
+        const hw2nd = formatOxMap(rec.hw_domains_2nd || {}, domains);
+        const test1st = formatOxMap(rec.test_domains_1st || {}, testItems);
+        const test2nd = formatOxMap(rec.test_domains_2nd || {}, testItems);
+
+        // 후속조치
+        const actions = formatActions(rec.hw_fail_action || {}, rec.test_fail_action || {}, domains, testItems);
+
+        // 다음숙제
+        const classData = classNextHw[code]?.domains || {};
+        const personalNh = rec.personal_next_hw || {};
+        const nextHwParts = domains.map(d => {
+            const pKey = `${code}_${d}`;
+            const val = personalNh[pKey] != null && personalNh[pKey] !== '' ? personalNh[pKey] : (classData[d] || '');
+            return val ? `${d}:${val}` : '';
+        }).filter(Boolean);
+        const nextHw = nextHwParts.join(', ');
+
+        // 귀가
+        const dep = rec.departure || {};
+        const depStatus = dep.status === '귀가' ? '귀가' : '';
+        const depTime = dep.time ? formatTime12h(dep.time) : '';
+
+        // 전달사항
+        const noteClass = rec.note_class_to_study || '';
+        const noteParent = rec.note_to_parent || '';
+
+        const startTime = getStudentStartTime(todayEnroll);
+        return [
+            code, teacher, s.name, branchFromStudent(s), s.school || '', s.grade || '', statusText,
+            startTime ? formatTime12h(startTime) : '', displayAtt, arrTime, attReason,
+            hw1st, hw2nd, test1st, test2nd,
+            actions, nextHw,
+            depStatus, depTime,
+            noteClass, noteParent
+        ];
     });
 
     showSaveIndicator('saving');
@@ -5375,6 +5473,13 @@ window.selectBulkValue = (btn, value) => {
     document.getElementById('bulk-modal-save-btn').disabled = false;
 };
 
+function bulkApplyOxToAttended(value) {
+    const attendedIds = [...selectedStudentIds].filter(id => isAttendedStatus(dailyRecords[id]?.attendance?.status));
+    attendedIds.forEach(id => applyHwDomainOX(id, _bulkModalField, _bulkModalDomain, value));
+    const skipped = selectedStudentIds.size - attendedIds.length;
+    if (skipped > 0) showToast(`미출석 ${skipped}명 제외`);
+}
+
 window.resetBulkModal = () => {
     const modal = document.getElementById('bulk-confirm-modal');
     modal.style.display = 'none';
@@ -5382,7 +5487,7 @@ window.resetBulkModal = () => {
     if (_bulkModalType === 'attendance') {
         [...selectedStudentIds].forEach(id => applyAttendance(id, '등원전', true, true));
     } else if (_bulkModalType === 'ox') {
-        [...selectedStudentIds].forEach(id => applyHwDomainOX(id, _bulkModalField, _bulkModalDomain, ''));
+        bulkApplyOxToAttended('');
     }
     renderSubFilters();
     renderListPanel();
@@ -5400,7 +5505,7 @@ window.confirmBulkAction = () => {
         renderSubFilters();
         renderListPanel();
     } else if (_bulkModalType === 'ox') {
-        [...selectedStudentIds].forEach(id => applyHwDomainOX(id, _bulkModalField, _bulkModalDomain, _bulkModalValue));
+        bulkApplyOxToAttended(_bulkModalValue);
         renderSubFilters();
         renderListPanel();
     }
