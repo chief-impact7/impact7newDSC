@@ -47,6 +47,7 @@ const DEFAULT_DOMAINS = ['Gr', 'A/G', 'R/C'];
 
 // ─── OX Helpers ─────────────────────────────────────────────────────────────
 const OX_CYCLE = ['O', '△', 'X', ''];
+const OX_CYCLE_2ND = ['O', '△', 'X', 'S', ''];
 
 function nextOXValue(current) {
     const idx = OX_CYCLE.indexOf(current || '');
@@ -57,6 +58,7 @@ function oxDisplayClass(value) {
     if (value === 'O') return 'ox-green';
     if (value === 'X') return 'ox-red';
     if (value === '△') return 'ox-yellow';
+    if (value === 'S') return 'ox-skip';
     return 'ox-empty';
 }
 
@@ -2307,15 +2309,17 @@ async function saveClassDefaultTime(classCode, time) {
 // 2차 숙제 미통과 영역을 자동 감지하여 '등원' 또는 '대체숙제' 처리 입력 카드를 렌더링
 
 function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction) {
-    // 2차에서 X 또는 △인 영역만 미통과 처리 대상
-    // d2nd가 아예 비어있으면 (2차 미진행) 카드 숨김
-    const d2ndHasAny = Object.values(d2nd).some(v => v);
-    if (!d2ndHasAny) return '';
+    const rec = dailyRecords[studentId] || {};
+    const d1st = rec.hw_domains_1st || {};
 
-    // d2nd에서 X 또는 △인 영역만 추출 (O·빈칸 제외)
+    // 미통과 대상: 2차에서 X/△/S이거나, 1차 미통과+2차 미입력
     const failDomains = domains.filter(d => {
-        const val = d2nd[d] || '';
-        return val === 'X' || val === '△';
+        const v2 = d2nd[d] || '';
+        if (v2 === 'X' || v2 === '△' || v2 === 'S') return true;
+        // 1차 미통과 + 2차 미입력 → 후속조치 대상
+        const v1 = d1st[d] || '';
+        if (v1 && v1 !== 'O' && !v2) return true;
+        return false;
     });
 
     if (failDomains.length === 0) {
@@ -2646,13 +2650,17 @@ window.cancelHwFailTask = async function(taskDocId, studentId) {
 // ─── Test Fail Action (테스트 2차 미통과 처리) ────────────────────────────────
 
 function renderTestFailActionCard(studentId, testSections, t2nd, testFailAction) {
-    const t2ndHasAny = Object.values(t2nd).some(v => v);
-    if (!t2ndHasAny) return '';
+    const rec = dailyRecords[studentId] || {};
+    const t1st = rec.test_domains_1st || {};
 
     const allItems = Object.values(testSections).flat();
+    // 미통과 대상: 2차에서 X/△/S이거나, 1차 미통과+2차 미입력
     const failItems = allItems.filter(t => {
-        const val = t2nd[t] || '';
-        return val === 'X' || val === '△';
+        const v2 = t2nd[t] || '';
+        if (v2 === 'X' || v2 === '△' || v2 === 'S') return true;
+        const v1 = t1st[t] || '';
+        if (v1 && v1 !== 'O' && !v2) return true;
+        return false;
     });
 
     if (failItems.length === 0) {
@@ -3232,11 +3240,21 @@ function getStudentChecklistStatus(studentId) {
         });
     }
 
-    // 6. 미통과 처리 (숙제 2차 X/△ 있으면)
+    // 6. 미통과 처리 (2차 X/△/S 또는 1차 미통과+2차 미입력)
     const hw2nd = rec.hw_domains_2nd || {};
-    const hwFailDomains = domains.filter(d => hw2nd[d] && hw2nd[d] !== 'O');
+    const hwFailDomains = domains.filter(d => {
+        const v2 = hw2nd[d] || '';
+        if (v2 && v2 !== 'O') return true;
+        if (hw1st[d] && hw1st[d] !== 'O' && !v2) return true;
+        return false;
+    });
     const t2nd = rec.test_domains_2nd || {};
-    const testFailItems = testItems.filter(t => t2nd[t] && t2nd[t] !== 'O');
+    const testFailItems = testItems.filter(t => {
+        const v2 = t2nd[t] || '';
+        if (v2 && v2 !== 'O') return true;
+        if (t1st[t] && t1st[t] !== 'O' && !v2) return true;
+        return false;
+    });
     if (hwFailDomains.length > 0 || testFailItems.length > 0) {
         const hwAction = rec.hw_fail_action || {};
         const testAction = rec.test_fail_action || {};
@@ -4000,7 +4018,10 @@ function applyHwDomainOX(studentId, field, domain, forceValue) {
     const rec = dailyRecords[studentId] || {};
     const domainData = { ...(rec[field] || {}) };
     const currentVal = domainData[domain] || '';
-    const newVal = forceValue !== undefined ? forceValue : nextOXValue(currentVal);
+    const is2nd = field === 'hw_domains_2nd' || field === 'test_domains_2nd';
+    const cycle = is2nd ? OX_CYCLE_2ND : OX_CYCLE;
+    const idx = cycle.indexOf(currentVal || '');
+    const newVal = forceValue !== undefined ? forceValue : cycle[(idx + 1) % cycle.length];
     domainData[domain] = newVal;
 
     // 즉시 저장
@@ -5685,26 +5706,26 @@ function generateDataTemplate(studentId) {
 
     // 출결
     const att = summary.attendance === '미확인' ? '등원전' : summary.attendance;
-    lines.push(`*출결: ${att}`);
+    lines.push(`>출결: ${att}`);
 
     // 숙제
     const hw1 = Object.entries(summary.homework_1st);
     if (hw1.length > 0) {
-        lines.push(`*숙제 1차: ${hw1.map(([d, v]) => domainFullName(d) + ' ' + v).join(', ')}`);
+        lines.push(`>숙제 1차: ${hw1.map(([d, v]) => domainFullName(d) + ' ' + v).join(', ')}`);
     }
     const hw2 = Object.entries(summary.homework_2nd);
     if (hw2.length > 0) {
-        lines.push(`*숙제 2차: ${hw2.map(([d, v]) => domainFullName(d) + ' ' + v).join(', ')}`);
+        lines.push(`>숙제 2차: ${hw2.map(([d, v]) => domainFullName(d) + ' ' + v).join(', ')}`);
     }
 
     // 테스트
     const t1 = Object.entries(summary.test_1st);
     if (t1.length > 0) {
-        lines.push(`*테스트 1차: ${t1.map(([t, v]) => domainFullName(t) + ' ' + v).join(', ')}`);
+        lines.push(`>테스트 1차: ${t1.map(([t, v]) => domainFullName(t) + ' ' + v).join(', ')}`);
     }
     const t2 = Object.entries(summary.test_2nd);
     if (t2.length > 0) {
-        lines.push(`*테스트 2차: ${t2.map(([t, v]) => domainFullName(t) + ' ' + v).join(', ')}`);
+        lines.push(`>테스트 2차: ${t2.map(([t, v]) => domainFullName(t) + ' ' + v).join(', ')}`);
     }
 
     // 미통과 후속 조치
@@ -5721,7 +5742,7 @@ function generateDataTemplate(studentId) {
     };
     if (hwActions.length > 0 || testActions.length > 0) {
         lines.push('');
-        lines.push('* 후속 조치:');
+        lines.push('> 후속 조치:');
         hwActions.forEach(([d, a]) => lines.push(formatAction(domainFullName(d), a)));
         testActions.forEach(([t, a]) => lines.push(formatAction(domainFullName(t), a)));
     }
@@ -5749,7 +5770,7 @@ function generateDataTemplate(studentId) {
         });
         if (nextHwEntries.length > 0) {
             lines.push('');
-            lines.push('* 다음 숙제:');
+            lines.push('> 다음 숙제:');
             nextHwEntries.forEach(entry => lines.push(`  - ${entry}`));
         }
     }

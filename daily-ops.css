@@ -1111,6 +1111,7 @@ body {
 .hw-fail-ox-badge.ox-green { background: #e6f4ea; color: var(--success); border-color: var(--success); }
 .hw-fail-ox-badge.ox-red { background: #fce8e6; color: var(--danger); border-color: var(--danger); }
 .hw-fail-ox-badge.ox-yellow { background: #fef7e0; color: var(--warning); border-color: var(--warning); }
+.hw-fail-ox-badge.ox-skip { background: #e8eaf6; color: #5c6bc0; border-color: #5c6bc0; }
 .hw-fail-ox-badge.ox-empty { background: white; color: var(--border); border-color: var(--border); }
 
 /* ===== HW Fail 아이콘 배지 (리스트 이름 옆) ===== */
@@ -2202,6 +2203,12 @@ textarea.field-input {
   border-color: var(--warning);
 }
 
+.hw-domain-ox.ox-skip {
+  background: #e8eaf6;
+  color: #5c6bc0;
+  border-color: #5c6bc0;
+}
+
 .hw-domain-ox.ox-empty {
   background: white;
   color: var(--border);
@@ -2235,6 +2242,11 @@ textarea.field-input {
 .hw-domain-ox.readonly.ox-yellow:hover {
   background: #fef7e0;
   border-color: var(--warning);
+}
+
+.hw-domain-ox.readonly.ox-skip:hover {
+  background: #e8eaf6;
+  border-color: #5c6bc0;
 }
 
 .hw-domain-ox.readonly.ox-empty:hover {
@@ -2883,6 +2895,8 @@ textarea.field-input {
 .bulk-modal-toggle-btn.ox-red.selected { background: #d32f2f; border-color: #d32f2f; color: white; }
 .bulk-modal-toggle-btn.ox-yellow { color: #f9a825; }
 .bulk-modal-toggle-btn.ox-yellow.selected { background: #f9a825; border-color: #f9a825; color: white; }
+.bulk-modal-toggle-btn.ox-skip { color: #5c6bc0; }
+.bulk-modal-toggle-btn.ox-skip.selected { background: #5c6bc0; border-color: #5c6bc0; color: white; }
 #bulk-modal-save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* 벌크 요약 패널 */
