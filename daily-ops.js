@@ -1326,9 +1326,11 @@ function getFilteredStudents() {
     }
 
     // hw_fail / test_fail / extra_visit 등원일이 오늘인 학생 추가 포함 (정규 수업 없어도 리스트에 나타나야 함)
+    // 단, 반 글로벌 필터가 활성이면 해당 반 학생만 추가
     const existingIds = new Set(students.map(s => s.docId));
     const visitStudents = allStudents.filter(s => {
         if (existingIds.has(s.docId)) return false;
+        if (selectedClassCode && !s.enrollments.some(e => enrollmentCode(e) === selectedClassCode)) return false;
         // hw_fail_action 등원
         const hwFail = dailyRecords[s.docId]?.hw_fail_action || {};
         if (Object.values(hwFail).some(a => a.type === '등원' && a.scheduled_date === selectedDate)) return true;
