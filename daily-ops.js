@@ -1806,8 +1806,8 @@ function renderListPanel() {
         return `<div class="list-item ${isActive}${bulkMode ? ' bulk-mode' : ''}${selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}" onclick="handleListItemClick(event, '${escAttr(s.docId)}')">
             <input type="checkbox" class="list-item-checkbox" ${selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">
             <div class="item-info">
-                <span class="item-title">${esc(s.name)}${siblingIcon}${hwFailIconHtml} <span class="item-class-type">${esc(todayEnroll?.class_type || '')}</span></span>
-                <span class="item-desc">${esc(code)}${teacherBadge}${studentShortLabel(s) ? ', ' + esc(studentShortLabel(s)) : ''}</span>
+                <span class="item-title">${esc(s.name)}${siblingIcon}${hwFailIconHtml} ${teacherBadge}</span>
+                <span class="item-desc">${esc(code)}${todayEnroll?.class_type ? ' · ' + esc(todayEnroll.class_type) : ''}${studentShortLabel(s) ? ' · ' + esc(studentShortLabel(s)) : ''}</span>
             </div>
             ${timeHtml}
             <div class="item-actions">${toggleHtml}</div>
