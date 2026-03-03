@@ -1622,6 +1622,7 @@ function renderListPanel() {
     const students = getFilteredStudents();
     const container = document.getElementById('list-items');
     const countEl = document.getElementById('list-count');
+    const todayDate = new Date(todayStr());
     // 필터 칩 렌더링
     renderFilterChips();
 
@@ -1930,10 +1931,13 @@ function renderListPanel() {
         const leaveBadge = LEAVE_STATUSES.includes(s.status)
             ? `<span class="tag tag-leave">${esc(s.status)}</span>` : '';
 
+        // 신규 학생 뱃지 (enrollment start_date가 14일 이내)
+        const newBadge = isNewStudent(s, todayDate) ? '<span class="tag tag-new">NEW</span>' : '';
+
         return `<div class="list-item ${isActive}${bulkMode ? ' bulk-mode' : ''}${selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}" onclick="handleListItemClick(event, '${escAttr(s.docId)}')">
             <input type="checkbox" class="list-item-checkbox" ${selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">
             <div class="item-info">
-                <span class="item-title">${esc(s.name)}${leaveBadge}${siblingIcon}${hwFailIconHtml} ${teacherBadge}</span>
+                <span class="item-title">${esc(s.name)}${newBadge}${leaveBadge}${siblingIcon}${hwFailIconHtml} ${teacherBadge}</span>
                 <span class="item-desc">${esc(code)}${todayEnroll?.class_type ? ' · ' + esc(todayEnroll.class_type) : ''}${studentShortLabel(s) ? ' · ' + esc(studentShortLabel(s)) : ''}</span>
             </div>
             ${timeHtml}
@@ -3982,6 +3986,15 @@ function doesStatusMatchFilter(firestoreStatus, filterSet) {
 }
 
 const LEAVE_STATUSES = ['가휴원', '실휴원'];
+const NEW_STUDENT_DAYS = 14;
+
+function isNewStudent(student, todayDate) {
+    return (student.enrollments || []).some(e => {
+        if (!e.start_date) return false;
+        const diff = (todayDate - new Date(e.start_date)) / (1000 * 60 * 60 * 24);
+        return diff >= 0 && diff <= NEW_STUDENT_DAYS;
+    });
+}
 
 function isAttendedStatus(status) {
     return status === '출석' || status === '지각' || status === '조퇴';

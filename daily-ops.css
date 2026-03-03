@@ -932,6 +932,20 @@ body {
   margin-left: 4px;
   font-weight: 600;
 }
+.tag-new {
+  background: #e3f2fd;
+  color: #1565c0;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: 4px;
+  font-weight: 700;
+  animation: new-pulse 2s ease-in-out infinite;
+}
+@keyframes new-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
 
 /* ===== Leave Section Divider ===== */
 .leave-section-divider {
