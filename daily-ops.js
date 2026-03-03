@@ -4134,6 +4134,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     initHelpGuide();
+
+    // 탭 복귀 시 자동 데이터 갱신 (5분 이상 비활성 후 돌아오면)
+    let lastActiveTime = Date.now();
+    const AUTO_RELOAD_THRESHOLD = 5 * 60 * 1000; // 5분
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            lastActiveTime = Date.now();
+        } else if (currentUser && Date.now() - lastActiveTime >= AUTO_RELOAD_THRESHOLD) {
+            reloadForDate();
+            showToast('데이터를 자동 갱신했습니다');
+        }
+    });
 });
 
 // ─── Retake actions ─────────────────────────────────────────────────────────
