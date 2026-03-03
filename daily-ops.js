@@ -352,6 +352,14 @@ async function loadStudents() {
                 ...e,
                 day: normalizeDays(e.day)
             }));
+            // 중복 enrollment 제거 (같은 반코드+학기)
+            const seen = new Set();
+            data.enrollments = data.enrollments.filter(e => {
+                const key = `${enrollmentCode(e)}_${e.semester || ''}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
         }
         allStudents.push({ docId: d.id, ...data });
     });
@@ -1932,7 +1940,7 @@ function renderListPanel() {
             ? `<span class="tag tag-leave">${esc(s.status)}</span>` : '';
 
         // 신규 학생 뱃지 (enrollment start_date가 14일 이내)
-        const newBadge = isNewStudent(s, todayDate) ? '<span class="tag tag-new">NEW</span>' : '';
+        const newBadge = isNewStudent(s, todayDate) ? '<span class="tag tag-new">N</span>' : '';
 
         return `<div class="list-item ${isActive}${bulkMode ? ' bulk-mode' : ''}${selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}" onclick="handleListItemClick(event, '${escAttr(s.docId)}')">
             <input type="checkbox" class="list-item-checkbox" ${selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">
@@ -3610,32 +3618,32 @@ function renderStudentDetail(studentId) {
     const studentHwTasks = hwFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
     const studentTestTasks = testFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
 
-    // 개별 등원시간 카드 — 오늘 수업이 있는 enrollment별 시간 입력 (휴원 학생 미표시)
-    const dayNameForDetail = getDayName(selectedDate);
-    const todayEnrollments = student.enrollments.filter(e =>
-        e.day.includes(dayNameForDetail) && (!selectedSemester || e.semester === selectedSemester)
+    // 등원 일정 카드 — 요일 + 시간 표시 (휴원 학생 미표시)
+    const semesterEnrollments = student.enrollments.filter(e =>
+        !selectedSemester || e.semester === selectedSemester
     );
-    const arrivalTimeHtml = isLeaveStudent ? '' : todayEnrollments.length > 0 ? `
+    const dayNameForDetail = getDayName(selectedDate);
+    const arrivalTimeHtml = isLeaveStudent ? '' : semesterEnrollments.length > 0 ? `
         <div class="detail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">schedule</span>
-                개별 등원시간
+                등원 일정
             </div>
-            ${todayEnrollments.map(e => {
+            ${semesterEnrollments.map(e => {
                 const code = enrollmentCode(e);
+                const days = (e.day || []).join('·');
                 const classDefault = classSettings[code]?.default_time || '';
                 const individual = e.start_time || '';
                 const isDefault = !individual || individual === classDefault;
-                const displayValue = isDefault ? classDefault : individual;
-                return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-                    <span style="font-size:13px;font-weight:500;min-width:40px;">${esc(code)}</span>
-                    <input type="time" class="arrival-time-input" style="flex:1;"
-                        value="${escAttr(displayValue)}"
-                        onchange="saveStudentScheduledTime('${escAttr(studentId)}', '${escAttr(code)}', this.value)">
-                    ${isDefault ? '<span style="font-size:11px;color:var(--text-sec);">(반 기본)</span>' : ''}
+                const displayTime = isDefault ? classDefault : individual;
+                const isToday = (e.day || []).includes(dayNameForDetail);
+                return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;${isToday ? 'font-weight:600;' : 'opacity:0.7;'}">
+                    <span style="font-size:13px;min-width:40px;">${esc(code)}</span>
+                    <span style="font-size:12px;min-width:50px;color:var(--text-sec);">${esc(days)}</span>
+                    <span style="font-size:13px;">${displayTime ? esc(formatTime12h(displayTime)) : '-'}</span>
+                    ${isToday ? '<span style="font-size:10px;color:var(--primary);font-weight:600;">오늘</span>' : ''}
                 </div>`;
             }).join('')}
-            <div style="font-size:11px;color:var(--text-sec);margin-top:4px;">변경 시 자동 저장 · 반 기본시간과 동일하면 자동 초기화</div>
         </div>
     ` : '';
 
@@ -4836,6 +4844,20 @@ async function saveEnrollment() {
 
     // enrollments 배열 업데이트
     const enrollments = [...student.enrollments];
+    const newCode = `${levelSymbol}${classNumber}`;
+    const newSemester = enrollments[enrollIdx]?.semester || '';
+
+    // 중복 반코드 체크 (같은 학기 내 다른 enrollment에 동일 코드가 있는지)
+    const isDuplicate = enrollments.some((e, i) =>
+        i !== enrollIdx &&
+        enrollmentCode(e) === newCode &&
+        (e.semester || '') === newSemester
+    );
+    if (isDuplicate) {
+        alert(`이미 같은 반(${newCode})이 등록되어 있습니다.`);
+        return;
+    }
+
     enrollments[enrollIdx] = {
         ...enrollments[enrollIdx],
         level_symbol: levelSymbol,
