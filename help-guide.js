@@ -202,10 +202,10 @@ const TABS = [
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
           <span class="material-symbols-outlined">person_add</span>
-          임시출석
+          진단평가
         </h3>
         <p class="help-guide-desc">
-          사이드바 하단 <strong>"임시출석"</strong> 버튼으로 정규 등록되지 않은 학생의 당일 출석을 임시로 처리합니다.
+          사이드바 하단 <strong>"진단평가"</strong> 버튼으로 입학 테스트 대상 학생을 등록합니다. 저장 시 contacts에 첫 등록일이 기록됩니다.
         </p>
       </section>
 
@@ -336,8 +336,8 @@ const TABS = [
         a: '<strong>일괄 선택 모드</strong>를 활성화하고 학생들을 체크한 뒤, <strong>일괄 메모</strong> 버튼을 클릭하세요.',
       },
       {
-        q: '임시출석이 뭔가요?',
-        a: '정규 등록되지 않은 학생의 당일 출석을 임시로 기록하는 기능입니다. 사이드바 하단의 <strong>"임시출석"</strong> 버튼을 클릭하세요.',
+        q: '진단평가가 뭔가요?',
+        a: '입학 테스트 대상 학생을 등록하는 기능입니다. 사이드바 하단의 <strong>"진단평가"</strong> 버튼을 클릭하세요. 저장 시 contacts에 첫 등록일이 기록됩니다.',
       },
       {
         q: '반 담당 선생님은 어떻게 배정하나요?',

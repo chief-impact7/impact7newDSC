@@ -129,11 +129,6 @@
                         <span class="nav-l1-text">테스트</span>
                         <span class="material-symbols-outlined nav-l1-expand">expand_more</span>
                     </div>
-                    <div class="nav-l1" data-category="automation" onclick="setCategory('automation')">
-                        <span class="material-symbols-outlined nav-l1-icon">smart_toy</span>
-                        <span class="nav-l1-text">자동화</span>
-                        <span class="material-symbols-outlined nav-l1-expand">expand_more</span>
-                    </div>
                     <div class="nav-l1" data-category="branch" onclick="setCategory('branch')">
                         <span class="material-symbols-outlined nav-l1-icon">apartment</span>
                         <span class="nav-l1-text">소속</span>
@@ -154,7 +149,7 @@
                 <div class="sidebar-bottom">
                     <button class="btn-temp-attendance" onclick="openTempAttendanceModal()">
                         <span class="material-symbols-outlined" style="font-size:18px;">person_add</span>
-                        임시출석
+                        첫상담/진단평가
                     </button>
                 </div>
             </aside>
@@ -458,11 +453,11 @@
             </div>
         </div>
 
-        <!-- 임시출석 모달 -->
-        <div id="temp-attendance-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="임시출석" onclick="closeModal('temp-attendance-modal', event)" style="display:none;">
+        <!-- 진단평가 모달 -->
+        <div id="temp-attendance-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="진단평가" onclick="closeModal('temp-attendance-modal', event)" style="display:none;">
             <div class="modal-content modal-sm">
                 <div class="modal-header">
-                    <h3>임시출석</h3>
+                    <h3>진단평가</h3>
                     <button class="modal-close" onclick="document.getElementById('temp-attendance-modal').style.display='none'">
                         <span class="material-symbols-outlined">close</span>
                     </button>
@@ -511,9 +506,10 @@
                             <input type="tel" id="temp-att-parent-phone" class="field-input" placeholder="01000000000" inputmode="numeric" pattern="[0-9]*">
                         </div>
                     </div>
+                    <div id="temp-att-autofill-hint" class="autofill-hint" style="display:none"></div>
                     <div class="field-group">
                         <label class="field-label">메모 (사유)</label>
-                        <textarea id="temp-att-memo" class="field-input" rows="2" placeholder="임시출석 사유를 입력하세요"></textarea>
+                        <textarea id="temp-att-memo" class="field-input" rows="2" placeholder="메모를 입력하세요"></textarea>
                     </div>
                     <div class="field-row">
                         <div class="field-group" style="flex:1;">

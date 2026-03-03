@@ -34,6 +34,7 @@ let latestSemester = null;       // 가장 최신 학기 (읽기전용 판별용
 let semesterSettings = {};       // semester → { start_date }
 let currentSemester = null;      // 오늘 기준 현재 학기
 let siblingMap = {};             // docId → Set of sibling docIds
+let allContacts = [];            // contacts 컬렉션 캐시
 let bulkMode = false;
 let selectedStudentIds = new Set();
 let groupViewMode = localStorage.getItem('dsc_groupViewMode') || 'none'; // 'none' | 'branch' | 'class'
@@ -1178,12 +1179,12 @@ function getSubFilterCount(filterKey) {
 function getScheduledVisits() {
     const visits = [];
 
-    // 1) 임시출석 (temp_attendance)
+    // 1) 진단평가 (temp_attendance)
     for (const ta of tempAttendances) {
         visits.push({
             id: `temp_${ta.docId}`,
             source: 'temp',
-            sourceLabel: '임시출석',
+            sourceLabel: '진단평가',
             sourceColor: '#7c3aed',
             studentId: null,
             name: ta.name || '(이름 없음)',
@@ -1657,6 +1658,10 @@ function renderListPanel() {
         return;
     }
 
+    // 후속대책 버튼 표시 조건 — 한 번만 계산
+    const isHw1stFilter = currentCategory === 'homework' && currentSubFilter.has('hw_1st');
+    const isTest1stFilter = currentCategory === 'test' && currentSubFilter.has('test_1st');
+
     const renderItemHtml = (s) => {
         const isActive = s.docId === selectedStudentId ? 'active' : '';
         const dayN = getDayName(selectedDate);
@@ -1942,6 +1947,18 @@ function renderListPanel() {
         // 신규 학생 뱃지 (enrollment start_date가 14일 이내)
         const newBadge = isNewStudent(s, todayDate) ? '<span class="tag tag-new">N</span>' : '';
 
+        // 후속대책 버튼: 1차 서브필터에서 미통과(X/△) 영역이 있으면 표시
+        let followUpBtnHtml = '';
+        if (!isLeave && (isHw1stFilter || isTest1stFilter)) {
+            const rec = dailyRecords[s.docId] || {};
+            const field = isHw1stFilter ? 'hw_domains_1st' : 'test_domains_1st';
+            const category = isHw1stFilter ? 'homework' : 'test';
+            const hasFail1st = Object.values(rec[field] || {}).some(v => v && v !== 'O');
+            if (hasFail1st) {
+                followUpBtnHtml = `<button class="follow-up-btn" title="후속대책" onclick="event.stopPropagation(); openFollowUpAction('${escAttr(s.docId)}', '${category}')"><span class="material-symbols-outlined" style="font-size:16px;">assignment_late</span></button>`;
+            }
+        }
+
         return `<div class="list-item ${isActive}${bulkMode ? ' bulk-mode' : ''}${selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}" onclick="handleListItemClick(event, '${escAttr(s.docId)}')">
             <input type="checkbox" class="list-item-checkbox" ${selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">
             <div class="item-info">
@@ -1950,6 +1967,7 @@ function renderListPanel() {
             </div>
             ${timeHtml}
             <div class="item-actions">${toggleHtml}</div>
+            ${followUpBtnHtml}
         </div>`;
     };
 
@@ -2319,32 +2337,40 @@ async function saveClassDefaultTime(classCode, time) {
 // ─── HW Fail Action Card ────────────────────────────────────────────────────
 // 2차 숙제 미통과 영역을 자동 감지하여 '등원' 또는 '대체숙제' 처리 입력 카드를 렌더링
 
-function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction) {
+function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, mode = 'default') {
     const rec = dailyRecords[studentId] || {};
     const d1st = rec.hw_domains_1st || {};
+    const is1stOnly = mode === '1st_only';
 
-    // 미통과 대상: 2차에서 X/△/S이거나, 1차 미통과+2차 미입력
-    const failDomains = domains.filter(d => {
-        const v2 = d2nd[d] || '';
-        if (v2 === 'X' || v2 === '△') return true;
-        // 1차 미통과 + 2차 미입력 → 후속조치 대상
-        const v1 = d1st[d] || '';
-        if (v1 && v1 !== 'O' && !v2) return true;
-        return false;
-    });
+    // 미통과 대상
+    const failDomains = is1stOnly
+        ? domains.filter(d => { const v = d1st[d] || ''; return v && v !== 'O'; })
+        : domains.filter(d => {
+            const v2 = d2nd[d] || '';
+            if (v2 === 'X' || v2 === '△') return true;
+            const v1 = d1st[d] || '';
+            if (v1 && v1 !== 'O' && !v2) return true;
+            return false;
+        });
+
+    const titleLabel = is1stOnly ? '후속대책' : '2차 숙제 처리';
+    const passLabel = is1stOnly ? '1차 모두 통과!' : '2차 모두 통과!';
 
     if (failDomains.length === 0) {
-        // 모두 O일 때: 축하 메시지만 표시
         return `
             <div class="detail-card hw-fail-card">
                 <div class="detail-card-title">
                     <span class="material-symbols-outlined" style="color:var(--success);font-size:18px;">check_circle</span>
-                    2차 숙제 처리
+                    ${titleLabel}
                 </div>
-                <div class="detail-card-empty" style="color:var(--success);">✅ 2차 모두 통과!</div>
+                <div class="detail-card-empty" style="color:var(--success);">✅ ${passLabel}</div>
             </div>
         `;
     }
+
+    const descLabel = is1stOnly
+        ? '1차 미통과 영역에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.'
+        : '2차 미통과 영역에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.';
 
     const rows = failDomains.map(domain => {
         const action = hwFailAction[domain] || {};
@@ -2352,12 +2378,13 @@ function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction) {
         const isVisit = type === '등원';
         const isAlt = type === '대체숙제';
         const escapedDomain = escAttr(domain);
+        const badgeVal = is1stOnly ? (d1st[domain] || '') : (d2nd[domain] || '');
 
         return `
             <div class="hw-fail-domain-row" data-domain="${escapedDomain}">
                 <div class="hw-fail-domain-header">
                     <span style="font-size:12px;font-weight:600;color:var(--text-main);">${esc(domain)}</span>
-                    <span class="hw-fail-ox-badge ${oxDisplayClass(d2nd[domain] || '')}">${esc(d2nd[domain] || '—')}</span>
+                    <span class="hw-fail-ox-badge ${oxDisplayClass(badgeVal)}">${esc(badgeVal || '—')}</span>
                     <div class="hw-fail-type-btns">
                         <button class="hw-fail-type-btn ${isVisit ? 'active' : ''}"
                             onclick="selectHwFailType('${escAttr(studentId)}', '${escapedDomain}', '등원', this)">
@@ -2408,10 +2435,10 @@ function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction) {
         <div class="detail-card hw-fail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--danger);font-size:18px;">assignment_late</span>
-                숙제 미통과 (${failDomains.length}개 영역)
+                ${is1stOnly ? '후속대책' : '숙제 미통과'} (${failDomains.length}개 영역)
             </div>
             <div class="hw-fail-desc" style="font-size:12px;color:var(--text-sec);margin-bottom:10px;">
-                2차 미통과 영역에 '등원 약속' 또는 '대체 숙제'를 지정하세요.
+                ${descLabel}
             </div>
             ${rows}
         </div>
@@ -2660,31 +2687,41 @@ window.cancelHwFailTask = async function(taskDocId, studentId) {
 
 // ─── Test Fail Action (테스트 2차 미통과 처리) ────────────────────────────────
 
-function renderTestFailActionCard(studentId, testSections, t2nd, testFailAction) {
+function renderTestFailActionCard(studentId, testSections, t2nd, testFailAction, mode = 'default') {
     const rec = dailyRecords[studentId] || {};
     const t1st = rec.test_domains_1st || {};
+    const is1stOnly = mode === '1st_only';
 
     const allItems = Object.values(testSections).flat();
-    // 미통과 대상: 2차에서 X/△/S이거나, 1차 미통과+2차 미입력
-    const failItems = allItems.filter(t => {
-        const v2 = t2nd[t] || '';
-        if (v2 === 'X' || v2 === '△') return true;
-        const v1 = t1st[t] || '';
-        if (v1 && v1 !== 'O' && !v2) return true;
-        return false;
-    });
+    // 미통과 대상
+    const failItems = is1stOnly
+        ? allItems.filter(t => { const v = t1st[t] || ''; return v && v !== 'O'; })
+        : allItems.filter(t => {
+            const v2 = t2nd[t] || '';
+            if (v2 === 'X' || v2 === '△') return true;
+            const v1 = t1st[t] || '';
+            if (v1 && v1 !== 'O' && !v2) return true;
+            return false;
+        });
+
+    const titleLabel = is1stOnly ? '후속대책' : '2차 테스트 처리';
+    const passLabel = is1stOnly ? '1차 모두 통과!' : '2차 모두 통과!';
 
     if (failItems.length === 0) {
         return `
             <div class="detail-card hw-fail-card">
                 <div class="detail-card-title">
                     <span class="material-symbols-outlined" style="color:var(--success);font-size:18px;">check_circle</span>
-                    2차 테스트 처리
+                    ${titleLabel}
                 </div>
-                <div class="detail-card-empty" style="color:var(--success);">✅ 2차 모두 통과!</div>
+                <div class="detail-card-empty" style="color:var(--success);">✅ ${passLabel}</div>
             </div>
         `;
     }
+
+    const descLabel = is1stOnly
+        ? '1차 미통과 항목에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.'
+        : '2차 미통과 항목에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.';
 
     const rows = failItems.map(item => {
         const action = testFailAction[item] || {};
@@ -2692,12 +2729,13 @@ function renderTestFailActionCard(studentId, testSections, t2nd, testFailAction)
         const isVisit = type === '등원';
         const isAlt = type === '대체숙제';
         const escapedItem = escAttr(item);
+        const badgeVal = is1stOnly ? (t1st[item] || '') : (t2nd[item] || '');
 
         return `
             <div class="hw-fail-domain-row" data-domain="${escapedItem}">
                 <div class="hw-fail-domain-header">
                     <span style="font-size:12px;font-weight:600;color:var(--text-main);">${esc(item)}</span>
-                    <span class="hw-fail-ox-badge ${oxDisplayClass(t2nd[item] || '')}">${esc(t2nd[item] || '—')}</span>
+                    <span class="hw-fail-ox-badge ${oxDisplayClass(badgeVal)}">${esc(badgeVal || '—')}</span>
                     <div class="hw-fail-type-btns">
                         <button class="hw-fail-type-btn ${isVisit ? 'active' : ''}"
                             onclick="selectTestFailType('${escAttr(studentId)}', '${escapedItem}', '등원', this)">
@@ -2747,10 +2785,10 @@ function renderTestFailActionCard(studentId, testSections, t2nd, testFailAction)
         <div class="detail-card hw-fail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--danger);font-size:18px;">quiz</span>
-                테스트 미통과 (${failItems.length}개)
+                ${is1stOnly ? '후속대책' : '테스트 미통과'} (${failItems.length}개)
             </div>
             <div class="hw-fail-desc" style="font-size:12px;color:var(--text-sec);margin-bottom:10px;">
-                2차 미통과 항목에 '등원 약속' 또는 '대체 숙제'를 지정하세요.
+                ${descLabel}
             </div>
             ${rows}
         </div>
@@ -3415,7 +3453,7 @@ function renderTempAttendanceDetail(docId) {
     document.getElementById('profile-avatar').textContent = (ta.name || '?')[0];
     document.getElementById('detail-name').textContent = ta.name || '';
     document.getElementById('profile-tags').innerHTML = `
-        <span class="tag" style="background:#7c3aed;color:#fff;">임시출석</span>
+        <span class="tag" style="background:#7c3aed;color:#fff;">진단평가</span>
         <span class="tag tag-pending">비등록</span>
     `;
 
@@ -3458,7 +3496,7 @@ function renderTempAttendanceDetail(docId) {
     cardsContainer.innerHTML = `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:#7c3aed;">info</span> 임시출석 정보
+                <span class="material-symbols-outlined" style="color:#7c3aed;">info</span> 진단평가 정보
             </div>
             ${infoRows.map(r => `
                 <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
@@ -3839,10 +3877,10 @@ function renderStudentDetail(studentId) {
         ${nextHwHtml}
 
         <!-- 숙제 미통과 카드 (출석 학생만) -->
-        ${isAttended ? renderHwFailActionCard(studentId, detailDomains, d2nd, rec.hw_fail_action || {}) : ''}
+        ${isAttended ? renderHwFailActionCard(studentId, detailDomains, d2nd, rec.hw_fail_action || {}, has2ndHw ? 'default' : '1st_only') : ''}
 
         <!-- 테스트 미통과 카드 (출석 학생만) -->
-        ${isAttended ? renderTestFailActionCard(studentId, detailTestSections, t2nd, rec.test_fail_action || {}) : ''}
+        ${isAttended ? renderTestFailActionCard(studentId, detailTestSections, t2nd, rec.test_fail_action || {}, has2ndTest ? 'default' : '1st_only') : ''}
 
         <!-- 밀린 Task 카드 (숙제 + 테스트) -->
         ${renderPendingTasksCard(studentId, [...studentHwTasks, ...studentTestTasks])}
@@ -4933,7 +4971,7 @@ onAuthStateChanged(auth, async (user) => {
         getCurrentSemester();
         buildSemesterFilter();
         await trackTeacherLogin(user);
-        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers()]);
+        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers(), loadContacts()]);
         await loadRoleMemos().catch(() => {});
         updateDateDisplay();
         updateReadonlyBanner();
@@ -5612,6 +5650,19 @@ window.selectStudent = (id) => {
     renderStudentDetail(id);
 };
 
+window.openFollowUpAction = (studentId, category) => {
+    selectStudent(studentId);
+    requestAnimationFrame(() => {
+        const cards = document.querySelectorAll('.hw-fail-card');
+        const card = category === 'test' ? (cards[1] || cards[0]) : cards[0];
+        if (card) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            card.classList.add('highlight-pulse');
+            setTimeout(() => card.classList.remove('highlight-pulse'), 2000);
+        }
+    });
+};
+
 window.closeModal = closeModal;
 window.saveSchedule = saveScheduleFromModal;
 window.saveHomework = saveHomeworkFromModal;
@@ -5849,50 +5900,57 @@ function generateDataTemplate(studentId) {
     const summary = collectStudentDaySummary(studentId);
     if (!summary) return '';
 
+    // 날짜 포맷: "3/4(화)" (연도 제외, 요일 포함)
+    const fmtDate = (dateStr) => {
+        if (!dateStr) return '';
+        const d = new Date(dateStr);
+        const day = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
+        return `${d.getMonth() + 1}/${d.getDate()}(${day})`;
+    };
+
     const lines = [];
-    lines.push(`[${summary.date}] 수업 결과`);
+    lines.push(`[${fmtDate(summary.date)}] 수업 결과`);
 
     // 출결
     const att = summary.attendance === '미확인' ? '등원전' : summary.attendance;
     lines.push(`>출결: ${att}`);
 
+    // 영역별 흐름 생성 헬퍼 (1차 → 2차 → 후속조치)
+    const formatActionStep = (action) => {
+        if (!action?.type) return null;
+        if (action.type === '등원') {
+            const time = action.scheduled_time ? ` ${formatTime12h(action.scheduled_time)}` : '';
+            return `${fmtDate(action.scheduled_date)}${time} 등원`;
+        }
+        if (action.type === '대체숙제') return `대체숙제 "${action.alt_hw || ''}"`;
+        if (action.type === '미통과') return '보충 예정';
+        return null;
+    };
+
+    const buildDomainFlow = (data1st, data2nd, actions, label) => {
+        const domains = [...new Set([...Object.keys(data1st), ...Object.keys(data2nd)])];
+        domains.forEach(d => {
+            const steps = [];
+            if (data1st[d]) steps.push(data1st[d]);
+            if (data2nd[d]) steps.push(data2nd[d]);
+            const step = formatActionStep(actions[d]);
+            if (step) steps.push(step);
+            lines.push(`>${domainFullName(d)} ${label}: ${steps.join(' → ')}`);
+        });
+    };
+
     // 숙제
-    const hw1 = Object.entries(summary.homework_1st);
-    if (hw1.length > 0) {
-        lines.push(`>숙제 1차: ${hw1.map(([d, v]) => domainFullName(d) + ' ' + v).join(', ')}`);
-    }
-    const hw2 = Object.entries(summary.homework_2nd);
-    if (hw2.length > 0) {
-        lines.push(`>숙제 2차: ${hw2.map(([d, v]) => domainFullName(d) + ' ' + v).join(', ')}`);
-    }
+    buildDomainFlow(summary.homework_1st, summary.homework_2nd, summary.hw_fail_actions, '숙제');
 
     // 테스트
-    const t1 = Object.entries(summary.test_1st);
-    if (t1.length > 0) {
-        lines.push(`>테스트 1차: ${t1.map(([t, v]) => domainFullName(t) + ' ' + v).join(', ')}`);
-    }
-    const t2 = Object.entries(summary.test_2nd);
-    if (t2.length > 0) {
-        lines.push(`>테스트 2차: ${t2.map(([t, v]) => domainFullName(t) + ' ' + v).join(', ')}`);
-    }
+    buildDomainFlow(summary.test_1st, summary.test_2nd, summary.test_fail_actions, '테스트');
 
-    // 미통과 후속 조치
-    const hwActions = Object.entries(summary.hw_fail_actions);
-    const testActions = Object.entries(summary.test_fail_actions);
-    const formatAction = (label, a) => {
-        if (a.type === '등원') {
-            const time = a.scheduled_time ? ` ${formatTime12h(a.scheduled_time)}` : '';
-            return `  - ${label}: ${a.scheduled_date || ''}${time} 등원 예정`;
-        }
-        if (a.type === '대체숙제') return `  - ${label}: 대체숙제 "${a.alt_hw || ''}"`;
-        if (a.type === '미통과') return `  - ${label}: 미통과 (보충 예정)`;
-        return `  - ${label}: ${a.type}`;
-    };
-    if (hwActions.length > 0 || testActions.length > 0) {
-        lines.push('');
-        lines.push('> 후속 조치:');
-        hwActions.forEach(([d, a]) => lines.push(formatAction(domainFullName(d), a)));
-        testActions.forEach(([t, a]) => lines.push(formatAction(domainFullName(t), a)));
+    // 임의등원 → 클리닉
+    const ev = summary.extra_visit;
+    if (ev.date) {
+        const evTime = ev.time ? ` ${formatTime12h(ev.time)}` : '';
+        const evReason = ev.reason ? ` (${ev.reason})` : '';
+        lines.push(`>클리닉: ${fmtDate(ev.date)}${evTime}${evReason}`);
     }
 
     // 다음 숙제
@@ -6011,7 +6069,7 @@ function copyParentMessage() {
         ? document.getElementById('parent-msg-text')
         : document.getElementById('parent-msg-manual-text');
     if (!textEl) return;
-    navigator.clipboard.writeText(decodeHtmlEntities(textEl.value)).then(() => {
+    navigator.clipboard.writeText(textEl.value).then(() => {
         const copied = document.getElementById('parent-msg-copied');
         if (copied) {
             copied.style.display = '';
@@ -6131,9 +6189,70 @@ async function resetScheduledVisit(source, docId, studentId) {
 window.completeScheduledVisit = completeScheduledVisit;
 window.resetScheduledVisit = resetScheduledVisit;
 
-// ─── 임시출석 ──────────────────────────────────────────────────────────────
+// ─── contacts 로딩 ────────────────────────────────────────────────────────
+
+async function loadContacts() {
+    try {
+        const snapshot = await getDocs(collection(db, 'contacts'));
+        allContacts = [];
+        snapshot.forEach((docSnap) => {
+            allContacts.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        allContacts.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+    } catch (error) {
+        console.error('[FIRESTORE ERROR] Failed to load contacts:', error);
+    }
+}
+
+// ─── 진단평가 ──────────────────────────────────────────────────────────────
+
+function _makeContactDocId(name, phone) {
+    let p = (phone || '').replace(/\D/g, '');
+    if (p.length === 11 && p.startsWith('0')) p = p.slice(1);
+    return `${name}_${p}`.replace(/\s+/g, '_');
+}
+
+let _lastTempAutofillId = null;
+
+function _tryTempContactAutofill() {
+    const name = document.getElementById('temp-att-name')?.value.trim();
+    const phone = document.getElementById('temp-att-parent-phone')?.value.trim();
+    if (!name || !phone) return;
+
+    const docId = _makeContactDocId(name, phone);
+    if (docId === _lastTempAutofillId) return;
+
+    const contact = allContacts.find(c => c.id === docId);
+    if (!contact) return;
+
+    _lastTempAutofillId = docId;
+
+    const setIfEmpty = (id, val) => {
+        const el = document.getElementById(id);
+        if (el && !el.value && val) el.value = val;
+    };
+
+    // level/branch는 빈 값이면 채움
+    const levelEl = document.getElementById('temp-att-level');
+    if (levelEl && !levelEl.value && contact.level) levelEl.value = contact.level;
+    const branchEl = document.getElementById('temp-att-branch');
+    if (branchEl && !branchEl.value && contact.branch) branchEl.value = contact.branch;
+
+    setIfEmpty('temp-att-school', contact.school);
+    setIfEmpty('temp-att-grade', contact.grade);
+    setIfEmpty('temp-att-student-phone', contact.student_phone);
+
+    // 자동채움 알림
+    const hint = document.getElementById('temp-att-autofill-hint');
+    if (hint) {
+        hint.textContent = `연락처에서 "${contact.name}" 정보를 불러왔습니다`;
+        hint.style.display = 'block';
+        setTimeout(() => { hint.style.display = 'none'; }, 3000);
+    }
+}
 
 function openTempAttendanceModal() {
+    _lastTempAutofillId = null;
     document.getElementById('temp-att-name').value = '';
     document.getElementById('temp-att-branch').value = '';
     document.getElementById('temp-att-school').value = '';
@@ -6169,6 +6288,28 @@ async function saveTempAttendance() {
     try {
         await addDoc(collection(db, 'temp_attendance'), data);
         document.getElementById('temp-attendance-modal').style.display = 'none';
+
+        // contacts 컬렉션에 first_registered 기록
+        if (data.parent_phone_1) {
+            try {
+                let phone = data.parent_phone_1.replace(/\D/g, '');
+                if (phone.length === 11 && phone.startsWith('0')) phone = phone.slice(1);
+                const contactDocId = `${data.name}_${phone}`.replace(/\s+/g, '_');
+                await setDoc(doc(db, 'contacts', contactDocId), {
+                    name: data.name,
+                    level: data.level || '',
+                    school: data.school || '',
+                    grade: data.grade || '',
+                    student_phone: data.student_phone || '',
+                    parent_phone_1: data.parent_phone_1,
+                    first_registered: data.temp_date,
+                    updated_at: serverTimestamp(),
+                }, { merge: true });
+            } catch (contactErr) {
+                console.warn('[CONTACTS SYNC]', contactErr);
+            }
+        }
+
         // 저장한 날짜가 현재 보고 있는 날짜면 리로드
         const savedDate = data.temp_date;
         if (savedDate === selectedDate) {
@@ -6178,13 +6319,18 @@ async function saveTempAttendance() {
         }
         showSaveIndicator('saved');
     } catch (err) {
-        console.error('임시출석 저장 실패:', err);
+        console.error('진단평가 저장 실패:', err);
         alert(`저장에 실패했습니다.\n${err.message || err}`);
     }
 }
 
 window.openTempAttendanceModal = openTempAttendanceModal;
 window.saveTempAttendance = saveTempAttendance;
+
+// 이름·학부모전화 입력 후 contacts 자동채움 이벤트
+document.getElementById('temp-att-parent-phone')?.addEventListener('change', _tryTempContactAutofill);
+document.getElementById('temp-att-parent-phone')?.addEventListener('blur', _tryTempContactAutofill);
+document.getElementById('temp-att-name')?.addEventListener('change', _tryTempContactAutofill);
 
 // ─── 일괄 메모 ──────────────────────────────────────────────────────────────
 
@@ -6249,13 +6395,12 @@ async function saveBulkNotify() {
     const fullMessage = lines.join('\n');
 
     try {
-        const decoded = decodeHtmlEntities(fullMessage);
-        await navigator.clipboard.writeText(decoded);
+        await navigator.clipboard.writeText(fullMessage);
         document.getElementById('bulk-notify-modal').style.display = 'none';
         alert(`${ids.length}명의 알림 메시지가 클립보드에 복사되었습니다.`);
     } catch (err) {
         console.error('클립보드 복사 실패:', err);
-        alert('클립보드 복사에 실패했습니다. 직접 복사해주세요.\n\n' + decodeHtmlEntities(fullMessage));
+        alert('클립보드 복사에 실패했습니다. 직접 복사해주세요.\n\n' + fullMessage);
     }
 }
 
