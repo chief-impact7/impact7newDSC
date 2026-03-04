@@ -388,7 +388,8 @@ service cloud.firestore {
           'name', 'branch', 'school', 'level', 'grade',
           'student_phone', 'parent_phone_1', 'memo',
           'temp_date', 'temp_time', 'visit_status',
-          'created_at', 'created_by'
+          'created_at', 'created_by',
+          'completed_by', 'completed_at'
         ])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0

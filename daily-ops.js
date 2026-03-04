@@ -1339,9 +1339,15 @@ function getScheduledVisits() {
         });
     }
 
-    // 시간순 정렬 (pending 먼저, 그 안에서 시간순)
+    // 정렬: completed 아래로, 소스 그룹별(등원전 → 등원이유), 시간임박순
+    const sourceGroup = (s) => {
+        if (s === 'temp' || s === 'enroll_pending') return 0; // 등원전
+        return 1; // 등원이유 (hw_fail, test_fail, extra)
+    };
     visits.sort((a, b) => {
         if (a.status !== b.status) return a.status === 'pending' ? -1 : 1;
+        const ga = sourceGroup(a.source), gb = sourceGroup(b.source);
+        if (ga !== gb) return ga - gb;
         return (a.time || '99:99').localeCompare(b.time || '99:99');
     });
 
@@ -1586,7 +1592,14 @@ function renderScheduledVisitList() {
         return;
     }
 
-    container.innerHTML = visits.map(v => {
+    // 소스 그룹별 분리선 삽입용
+    const pendingVisits = visits.filter(v => v.status === 'pending');
+    const completedVisits = visits.filter(v => v.status === 'completed');
+    const isReasonSource = (s) => s === 'hw_fail' || s === 'test_fail' || s === 'extra';
+    const pendingPre = pendingVisits.filter(v => !isReasonSource(v.source));
+    const pendingReason = pendingVisits.filter(v => isReasonSource(v.source));
+
+    const renderVisitItem = (v) => {
         const isCompleted = v.status === 'completed';
         const completedClass = isCompleted ? 'visit-completed' : '';
         const clickHandler = v.studentId
@@ -1641,7 +1654,23 @@ function renderScheduledVisitList() {
             </div>
             ${confirmBtn}
         </div>`;
-    }).join('');
+    };
+
+    let html = '';
+    if (pendingPre.length > 0) {
+        html += pendingPre.map(renderVisitItem).join('');
+    }
+    if (pendingReason.length > 0) {
+        if (pendingPre.length > 0) {
+            html += `<div class="leave-section-divider"><span>등원이유 (${pendingReason.length}건)</span></div>`;
+        }
+        html += pendingReason.map(renderVisitItem).join('');
+    }
+    if (completedVisits.length > 0) {
+        html += `<div class="leave-section-divider"><span>확인 완료 (${completedVisits.length}건)</span></div>`;
+        html += completedVisits.map(renderVisitItem).join('');
+    }
+    container.innerHTML = html;
 }
 
 function renderDepartureCheckList() {
