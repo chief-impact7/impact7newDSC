@@ -4177,8 +4177,8 @@ function renderStudentDetail(studentId) {
     const clinicButtons = isPastDate
         ? (hasClinic ? '' : '')
         : `<span style="display:flex;gap:2px;">
-            ${hasClinic ? `<button class="btn-icon" onclick="clearExtraVisit('${escAttr(studentId)}')"><span class="material-symbols-outlined" style="font-size:18px;color:var(--danger);">close</span></button>` : ''}
-            <button class="btn-icon" onclick="addExtraVisit('${escAttr(studentId)}')"><span class="material-symbols-outlined" style="font-size:18px;">add</span></button>
+            ${hasClinic ? `<button class="icon-btn" style="width:28px;height:28px;" onclick="clearExtraVisit('${escAttr(studentId)}')"><span class="material-symbols-outlined" style="font-size:18px;color:var(--danger);">close</span></button>` : ''}
+            <button class="icon-btn" style="width:28px;height:28px;" onclick="addExtraVisit('${escAttr(studentId)}')"><span class="material-symbols-outlined" style="font-size:18px;">add</span></button>
         </span>`;
     const extraVisitHtml = `
         <div class="detail-card">
