@@ -1230,7 +1230,7 @@ function getScheduledVisits() {
         });
     }
 
-    // 4) 임의등원 (dailyRecords[*].extra_visit)
+    // 4) 클리닉 (dailyRecords[*].extra_visit)
     for (const [sid, rec] of Object.entries(dailyRecords)) {
         const ev = rec.extra_visit;
         if (!ev || ev.date !== selectedDate) continue;
@@ -1238,7 +1238,7 @@ function getScheduledVisits() {
         visits.push({
             id: `extra_${sid}`,
             source: 'extra',
-            sourceLabel: '임의등원',
+            sourceLabel: '클리닉',
             sourceColor: '#2563eb',
             studentId: sid,
             name: student?.name || sid,
@@ -1249,9 +1249,11 @@ function getScheduledVisits() {
         });
     }
 
-    // 5) DB 등원예정 학생 (status === '등원예정')
+    // 5) DB 등원예정 학생 (status === '등원예정', 등원 시작일이 오늘인 경우만)
     for (const s of allStudents) {
         if (s.status !== '등원예정') continue;
+        const todaysEnrolls = (s.enrollments || []).filter(e => e.start_date === selectedDate);
+        if (!todaysEnrolls.length) continue;
         visits.push({
             id: `enroll_${s.docId}`,
             source: 'enroll_pending',
@@ -1260,7 +1262,7 @@ function getScheduledVisits() {
             studentId: s.docId,
             name: s.name || s.docId,
             time: '',
-            detail: s.enrollments?.map(e => `${e.level_symbol || ''}${e.class_number || ''}`).filter(Boolean).join(', ') || '',
+            detail: todaysEnrolls.map(e => `${e.level_symbol || ''}${e.class_number || ''}`).filter(Boolean).join(', '),
             status: 'pending',
             docId: s.docId
         });
@@ -3995,13 +3997,13 @@ function renderStudentDetail(studentId) {
         </div>
     `;
 
-    // 임의 등원 카드
+    // 클리닉 카드
     const extraVisit = rec.extra_visit || {};
     const extraVisitHtml = `
         <div class="detail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">schedule</span>
-                임의 등원
+                클리닉
             </div>
             <div style="display:flex;flex-direction:column;gap:6px;">
                 <div style="display:flex;gap:6px;">
@@ -4046,7 +4048,7 @@ function renderStudentDetail(studentId) {
         <!-- 밀린 Task 카드 (숙제 + 테스트) -->
         ${renderPendingTasksCard(studentId, [...studentHwTasks, ...studentTestTasks])}
 
-        <!-- 임의 등원 카드 -->
+        <!-- 클리닉 카드 -->
         ${extraVisitHtml}
 
         <!-- 메모 카드 -->
@@ -4076,7 +4078,7 @@ function renderStudentDetail(studentId) {
     document.getElementById('detail-panel').classList.add('mobile-visible');
 }
 
-// ─── 임의 등원 저장 ─────────────────────────────────────────────────────────
+// ─── 클리닉 저장 ────────────────────────────────────────────────────────────
 
 async function saveExtraVisit(studentId, field, value) {
     if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
@@ -4108,7 +4110,7 @@ async function saveExtraVisit(studentId, field, value) {
                 updated_at: serverTimestamp()
             }, { merge: true });
         } catch (err) {
-            console.error('임의등원 미래 날짜 저장 실패:', err);
+            console.error('클리닉 미래 날짜 저장 실패:', err);
         }
     }
 }
@@ -6117,7 +6119,7 @@ function generateDataTemplate(studentId) {
     // 테스트
     buildDomainFlow(summary.test_1st, summary.test_2nd, summary.test_fail_actions, '테스트');
 
-    // 임의등원 → 클리닉
+    // 클리닉
     const ev = summary.extra_visit;
     if (ev.date) {
         const evTime = ev.time ? ` ${formatTime12h(ev.time)}` : '';
