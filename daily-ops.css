@@ -302,6 +302,48 @@ body {
   border-color: var(--primary);
 }
 
+#temp-attendance-modal .modal-body {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.temp-edit-history {
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.temp-edit-history-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-sec);
+  margin-bottom: 8px;
+}
+
+.temp-edit-history-item {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.temp-edit-history-meta {
+  color: var(--text-sec);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.temp-edit-history-change {
+  color: var(--text-main);
+  font-size: 13px;
+}
+
+.temp-edit-history-change .field-name {
+  font-weight: 500;
+  color: var(--primary);
+}
+
 .autofill-hint {
   margin-top: 8px;
   padding: 6px 10px;

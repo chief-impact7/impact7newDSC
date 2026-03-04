@@ -45,6 +45,12 @@ let nextHwSaveTimers = {};       // classCode_domain → timer
 let selectedNextHwClass = null;  // 다음숙제 반별 상세에서 선택된 반 코드
 let nextHwModalTarget = { classCode: null, domain: null }; // 모달 타겟
 let detailTab = 'daily'; // 'daily' | 'report'
+let _editingTempDocId = null;   // null=생성모드, string=수정모드
+const TEMP_FIELD_LABELS = {
+    name: '이름', branch: '소속', school: '학교', level: '학부', grade: '학년',
+    student_phone: '학생연락처', parent_phone_1: '학부모연락처', memo: '메모',
+    temp_date: '예정날짜', temp_time: '예정시간'
+};
 const DEFAULT_DOMAINS = ['Gr', 'A/G', 'R/C'];
 const KOREAN_CHAR_RE = /^[\uAC00-\uD7AF]/;
 
@@ -1224,6 +1230,22 @@ function getSubFilterCount(filterKey) {
 
 // ─── 비정규 통합 집계 ────────────────────────────────────────────────────────
 
+// 학교+학부+학년 → 축약 표시 (예: "진명여자고등학교" → "진명여고", + 학년 → "진명여고1")
+function _formatTempSchoolInfo(ta) {
+    let school = (ta.school || '').replace('여자', '여');
+    const level = ta.level || '';
+    const grade = ta.grade || '';
+    // 학부 접미어 축약: 초등→초, 중등→중, 고등→고
+    const levelShort = level === '초등' ? '초' : level === '중등' ? '중' : level === '고등' ? '고' : '';
+    // 학교명에 이미 '초/중/고'로 끝나면 학부 생략
+    const endsWithLevel = /[초중고]$|초등학교$|중학교$|고등학교$/.test(school);
+    if (endsWithLevel) {
+        school = school.replace(/초등학교$/, '초').replace(/중학교$/, '중').replace(/고등학교$/, '고');
+        return school + grade;
+    }
+    return (school + levelShort + grade) || '';
+}
+
 function getScheduledVisits() {
     const visits = [];
     // 이메일/아이디에서 이름 prefix 추출: "홍길동" → "길동", "Iris Lee" → "Iris", "chief" → "chief"
@@ -1246,7 +1268,7 @@ function getScheduledVisits() {
             studentId: null,
             name: ta.name || '(이름 없음)',
             time: ta.temp_time || '',
-            detail: [ta.branch, ta.school, ta.grade].filter(Boolean).join(' · ') || '',
+            detail: _formatTempSchoolInfo(ta) || '',
             status: ta.visit_status === '완료' ? 'completed' : 'pending',
             caller: callerName(ta.created_by),
             completedBy: callerName(ta.completed_by),
@@ -3703,7 +3725,40 @@ function renderTempAttendanceDetail(docId) {
         </div>
     ` : '';
 
+    // 수정 이력 카드
+    let editHistoryHtml = '';
+    if (ta.edit_history && ta.edit_history.length) {
+        const sorted = [...ta.edit_history].sort((a, b) => (b.edited_at || '').localeCompare(a.edited_at || ''));
+        editHistoryHtml = `
+            <div class="detail-card">
+                <div class="detail-card-title">
+                    <span class="material-symbols-outlined" style="color:var(--warning);">history</span> 수정 이력 (${sorted.length}건)
+                </div>
+                ${sorted.map(h => {
+                    const dt = h.edited_at ? new Date(h.edited_at) : null;
+                    const dateStr = dt ? `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}` : '';
+                    const editor = (h.edited_by || '').replace(/@(gw\.)?impact7\.kr$/, '');
+                    const changes = Object.keys(h.after || {}).map(key => {
+                        const label = TEMP_FIELD_LABELS[key] || key;
+                        const before = (h.before && h.before[key]) || '(없음)';
+                        const after = h.after[key] || '(없음)';
+                        return `<div style="font-size:13px;padding:2px 0;"><span style="font-weight:500;color:var(--primary);">${label}</span>: ${esc(before)} → ${esc(after)}</div>`;
+                    }).join('');
+                    return `<div style="padding:8px 0;border-bottom:1px solid var(--border);">
+                        <div style="font-size:12px;color:var(--text-sec);margin-bottom:2px;">${dateStr} · ${esc(editor)}</div>
+                        ${changes}
+                    </div>`;
+                }).join('')}
+            </div>
+        `;
+    }
+
     cardsContainer.innerHTML = `
+        <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+            <button class="btn btn-secondary" style="font-size:13px;padding:6px 14px;" onclick="openTempAttendanceForEdit('${docId}')">
+                <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">edit</span> 수정
+            </button>
+        </div>
         <div class="detail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:#7c3aed;">info</span> 진단평가 정보
@@ -3717,6 +3772,7 @@ function renderTempAttendanceDetail(docId) {
             `).join('')}
         </div>
         ${memoHtml}
+        ${editHistoryHtml}
     `;
 }
 window.renderTempAttendanceDetail = renderTempAttendanceDetail;
@@ -6696,7 +6752,11 @@ function _tryTempContactAutofill() {
 }
 
 function openTempAttendanceModal() {
+    _editingTempDocId = null;
     _lastTempAutofillId = null;
+    document.getElementById('temp-att-modal-title').textContent = '첫데이터 및 진단평가입력';
+    document.getElementById('temp-att-save-btn').textContent = '저장';
+    document.getElementById('temp-att-edit-history').innerHTML = '';
     document.getElementById('temp-att-name').value = '';
     document.getElementById('temp-att-branch').value = '';
     document.getElementById('temp-att-school').value = '';
@@ -6708,6 +6768,27 @@ function openTempAttendanceModal() {
     document.getElementById('temp-att-date').value = selectedDate;
     document.getElementById('temp-att-time').value = nowTimeStr();
     document.getElementById('temp-attendance-modal').style.display = '';
+}
+
+async function _syncContactsForTemp(data) {
+    if (!data.parent_phone_1) return;
+    try {
+        let phone = data.parent_phone_1.replace(/\D/g, '');
+        if (phone.length === 11 && phone.startsWith('0')) phone = phone.slice(1);
+        const contactDocId = `${data.name}_${phone}`.replace(/\s+/g, '_');
+        await setDoc(doc(db, 'contacts', contactDocId), {
+            name: data.name,
+            level: data.level || '',
+            school: data.school || '',
+            grade: data.grade || '',
+            student_phone: data.student_phone || '',
+            parent_phone_1: data.parent_phone_1,
+            first_registered: data.temp_date,
+            updated_at: serverTimestamp(),
+        }, { merge: true });
+    } catch (contactErr) {
+        console.warn('[CONTACTS SYNC]', contactErr);
+    }
 }
 
 async function saveTempAttendance() {
@@ -6725,50 +6806,141 @@ async function saveTempAttendance() {
         memo: document.getElementById('temp-att-memo').value.trim(),
         temp_date: document.getElementById('temp-att-date').value,
         temp_time: document.getElementById('temp-att-time').value,
-        created_at: serverTimestamp(),
-        created_by: currentUser?.email || ''
     };
 
     try {
-        await addDoc(collection(db, 'temp_attendance'), data);
-        document.getElementById('temp-attendance-modal').style.display = 'none';
+        if (_editingTempDocId) {
+            // ── 수정 모드 ──
+            const existing = tempAttendances.find(t => t.docId === _editingTempDocId);
+            if (!existing) { alert('원본 데이터를 찾을 수 없습니다.'); return; }
 
-        // contacts 컬렉션에 first_registered 기록
-        if (data.parent_phone_1) {
-            try {
-                let phone = data.parent_phone_1.replace(/\D/g, '');
-                if (phone.length === 11 && phone.startsWith('0')) phone = phone.slice(1);
-                const contactDocId = `${data.name}_${phone}`.replace(/\s+/g, '_');
-                await setDoc(doc(db, 'contacts', contactDocId), {
-                    name: data.name,
-                    level: data.level || '',
-                    school: data.school || '',
-                    grade: data.grade || '',
-                    student_phone: data.student_phone || '',
-                    parent_phone_1: data.parent_phone_1,
-                    first_registered: data.temp_date,
-                    updated_at: serverTimestamp(),
-                }, { merge: true });
-            } catch (contactErr) {
-                console.warn('[CONTACTS SYNC]', contactErr);
+            const editableFields = Object.keys(TEMP_FIELD_LABELS);
+            const before = {};
+            const after = {};
+            for (const key of editableFields) {
+                const oldVal = (existing[key] || '').toString();
+                const newVal = (data[key] || '').toString();
+                if (oldVal !== newVal) {
+                    before[key] = oldVal;
+                    after[key] = newVal;
+                }
             }
-        }
 
-        // 저장한 날짜가 현재 보고 있는 날짜면 리로드
-        const savedDate = data.temp_date;
-        if (savedDate === selectedDate) {
-            await loadTempAttendances(selectedDate);
+            if (Object.keys(after).length === 0) {
+                alert('변경된 내용이 없습니다.');
+                return;
+            }
+
+            const historyEntry = {
+                before,
+                after,
+                edited_by: currentUser?.email || '',
+                edited_at: new Date().toISOString()
+            };
+
+            await Promise.all([
+                updateDoc(doc(db, 'temp_attendance', _editingTempDocId), {
+                    ...data,
+                    updated_by: currentUser?.email || '',
+                    updated_at: serverTimestamp(),
+                    edit_history: arrayUnion(historyEntry)
+                }),
+                _syncContactsForTemp(data)
+            ]);
+
+            // 로컬 캐시 업데이트
+            Object.assign(existing, data);
+            existing.updated_by = currentUser?.email || '';
+            if (!existing.edit_history) existing.edit_history = [];
+            existing.edit_history.push(historyEntry);
+
+            document.getElementById('temp-attendance-modal').style.display = 'none';
+
             renderSubFilters();
             renderListPanel();
+            renderTempAttendanceDetail(_editingTempDocId);
+            showSaveIndicator('saved');
+        } else {
+            // ── 생성 모드 ──
+            data.created_at = serverTimestamp();
+            data.created_by = currentUser?.email || '';
+
+            await Promise.all([
+                addDoc(collection(db, 'temp_attendance'), data),
+                _syncContactsForTemp(data)
+            ]);
+            document.getElementById('temp-attendance-modal').style.display = 'none';
+
+            const savedDate = data.temp_date;
+            if (savedDate === selectedDate) {
+                await loadTempAttendances(selectedDate);
+                renderSubFilters();
+                renderListPanel();
+            }
+            showSaveIndicator('saved');
         }
-        showSaveIndicator('saved');
     } catch (err) {
         console.error('진단평가 저장 실패:', err);
         alert(`저장에 실패했습니다.\n${err.message || err}`);
     }
 }
 
+function openTempAttendanceForEdit(docId) {
+    const ta = tempAttendances.find(t => t.docId === docId);
+    if (!ta) return;
+
+    _editingTempDocId = docId;
+    _lastTempAutofillId = null;
+
+    document.getElementById('temp-att-modal-title').textContent = '첫데이터 및 진단평가 수정';
+    document.getElementById('temp-att-save-btn').textContent = '수정';
+
+    document.getElementById('temp-att-name').value = ta.name || '';
+    document.getElementById('temp-att-branch').value = ta.branch || '';
+    document.getElementById('temp-att-school').value = ta.school || '';
+    document.getElementById('temp-att-level').value = ta.level || '';
+    document.getElementById('temp-att-grade').value = ta.grade || '';
+    document.getElementById('temp-att-student-phone').value = ta.student_phone || '';
+    document.getElementById('temp-att-parent-phone').value = ta.parent_phone_1 || '';
+    document.getElementById('temp-att-memo').value = ta.memo || '';
+    document.getElementById('temp-att-date').value = ta.temp_date || selectedDate;
+    document.getElementById('temp-att-time').value = ta.temp_time || '';
+
+    renderTempEditHistory(ta.edit_history);
+
+    document.getElementById('temp-attendance-modal').style.display = '';
+}
+
+function renderTempEditHistory(history) {
+    const container = document.getElementById('temp-att-edit-history');
+    if (!container) return;
+    if (!history || !history.length) { container.innerHTML = ''; return; }
+
+    const sorted = [...history].sort((a, b) => (b.edited_at || '').localeCompare(a.edited_at || ''));
+    container.innerHTML = `
+        <div class="temp-edit-history">
+            <div class="temp-edit-history-title">수정 이력 (${sorted.length}건)</div>
+            ${sorted.map(h => {
+                const dt = h.edited_at ? new Date(h.edited_at) : null;
+                const dateStr = dt ? `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}` : '';
+                const editor = (h.edited_by || '').replace(/@(gw\.)?impact7\.kr$/, '');
+                const changes = Object.keys(h.after || {}).map(key => {
+                    const label = TEMP_FIELD_LABELS[key] || key;
+                    const before = (h.before && h.before[key]) || '(없음)';
+                    const after = h.after[key] || '(없음)';
+                    return `<div class="temp-edit-history-change"><span class="field-name">${esc(label)}</span>: ${esc(before)} → ${esc(after)}</div>`;
+                }).join('');
+                return `<div class="temp-edit-history-item">
+                    <div class="temp-edit-history-meta">${dateStr} · ${esc(editor)}</div>
+                    ${changes}
+                </div>`;
+            }).join('')}
+        </div>
+    `;
+}
+
 window.openTempAttendanceModal = openTempAttendanceModal;
+window.openTempAttendanceForEdit = openTempAttendanceForEdit;
 window.saveTempAttendance = saveTempAttendance;
 
 // 과거 연락처 클릭 → 진단평가 모달 열기 + 자동채움
