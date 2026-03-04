@@ -3593,7 +3593,7 @@ function buildStayStatsHtml(student) {
     `;
 }
 
-// ─── 성적표 탭 ───────────────────────────────────────────────────────────────
+// ─── 출결현황 탭 ──────────────────────────────────────────────────────────────
 function switchDetailTab(tab) {
     detailTab = tab;
     document.querySelectorAll('.detail-tab').forEach(t => {
@@ -3636,7 +3636,7 @@ async function loadReportCard() {
 
         renderReportCard(records);
     } catch (err) {
-        console.error('성적표 조회 실패:', err);
+        console.error('출결현황 조회 실패:', err);
         contentEl.innerHTML = '<div class="detail-card-empty" style="padding:32px;text-align:center;color:var(--danger);">조회 실패: ' + esc(err.message) + '</div>';
     }
 }
@@ -6137,13 +6137,26 @@ function generateDataTemplate(studentId) {
             'Vo': 'Vocabulary', 'Id': 'Idiom', 'V3': 'Verb 3형식',
             'L/C': '청해', 'Su': '써머리', 'Sm': '써머리'
         };
-        const nextHwName = (abbr) => NEXT_HW_NAMES[abbr] || abbr;
+        const DOMAIN_ALIASES = { '듣기': '청해', '실전': '실전문법' };
+        const nextHwName = (abbr) => {
+            const name = NEXT_HW_NAMES[abbr] || abbr;
+            return DOMAIN_ALIASES[name] || name;
+        };
         const nextHwEntries = [];
+        const seenHw = new Set();
         todayEnrolls.forEach(e => {
             const code = enrollmentCode(e);
             const data = classNextHw[code]?.domains || {};
             Object.entries(data).forEach(([d, v]) => {
-                if (v && v.trim() && v.trim() !== '없음') nextHwEntries.push(`${nextHwName(d)}: ${v.trim()}`);
+                if (!v) return;
+                const content = v.trim();
+                if (!content || content === '없음') return;
+                const display = nextHwName(d);
+                const key = `${display}::${content}`;
+                if (!seenHw.has(key)) {
+                    seenHw.add(key);
+                    nextHwEntries.push(`${display}: ${content}`);
+                }
             });
         });
         if (nextHwEntries.length > 0) {

@@ -3031,7 +3031,7 @@ textarea.field-input {
     border-bottom-color: var(--primary);
 }
 
-/* ─── 성적표 ─── */
+/* ─── 출결현황 ─── */
 .report-date-range {
     display: flex;
     align-items: center;
