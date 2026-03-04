@@ -2417,6 +2417,15 @@ textarea.field-input {
   white-space: nowrap;
   flex-shrink: 0;
 }
+.visit-caller-badge {
+  font-size: 11px;
+  color: var(--text-sec);
+  background: var(--surface-variant);
+  padding: 1px 6px;
+  border-radius: 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 
 .visit-item.visit-completed {
   opacity: 0.5;

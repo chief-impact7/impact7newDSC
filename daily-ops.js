@@ -646,8 +646,8 @@ function renderSubFilters() {
     const container = document.getElementById('nav-l2-group');
     const filters = {
         attendance: [
-            { key: 'scheduled_visit', label: '등원예정' },
-            { key: 'pre_arrival', label: '등원전' },
+            { key: 'scheduled_visit', label: '비정규' },
+            { key: 'pre_arrival', label: '정규' },
             { key: 'present', label: '출석' },
             { key: 'late', label: '지각' },
             { key: 'absent', label: '결석' },
@@ -944,7 +944,7 @@ function renderFilterChips() {
 
     const categoryLabels = { attendance: '출결', homework: '숙제', test: '테스트', automation: '자동화' };
     const subFilterLabels = {
-        pre_arrival: '등원전', present: '출석', late: '지각', absent: '결석', other: '기타',
+        pre_arrival: '정규', present: '출석', late: '지각', absent: '결석', other: '기타',
         hw_1st: '1차', hw_2nd: '2차', hw_next: '다음숙제',
         test_1st: '1차', test_2nd: '2차',
         auto_hw_missing: '미제출 숙제', auto_retake: '재시 필요', auto_unchecked: '미체크 출석'
@@ -1186,10 +1186,18 @@ function getSubFilterCount(filterKey) {
     return { count: 0, total: 0 };
 }
 
-// ─── 등원예정 통합 집계 ─────────────────────────────────────────────────────
+// ─── 비정규 통합 집계 ────────────────────────────────────────────────────────
 
 function getScheduledVisits() {
     const visits = [];
+    // 이메일 또는 아이디에서 이름만 추출 (성 제거): "홍길동" → "길동"
+    const callerName = (emailOrId) => {
+        if (!emailOrId) return '';
+        const id = emailOrId.split('@')[0];
+        const teacher = teachersList.find(tc => tc.email === emailOrId || tc.email.split('@')[0] === id);
+        const name = teacher?.display_name || id;
+        return name.length >= 2 ? name.slice(1) : name;
+    };
 
     // 1) 진단평가 (temp_attendance)
     for (const ta of tempAttendances) {
@@ -1203,6 +1211,7 @@ function getScheduledVisits() {
             time: ta.temp_time || '',
             detail: [ta.branch, ta.school, ta.grade].filter(Boolean).join(' · ') || '',
             status: ta.visit_status === '완료' ? 'completed' : 'pending',
+            caller: callerName(ta.created_by),
             docId: ta.docId
         });
     }
@@ -1220,6 +1229,7 @@ function getScheduledVisits() {
             time: t.scheduled_time || '',
             detail: `${t.domain || ''} (${t.source_date || ''})`,
             status: t.status === '완료' ? 'completed' : 'pending',
+            caller: callerName(t.created_by || ''),
             docId: t.docId
         });
     }
@@ -1237,6 +1247,7 @@ function getScheduledVisits() {
             time: t.scheduled_time || '',
             detail: `${t.item || t.domain || ''} (${t.source_date || ''})`,
             status: t.status === '완료' ? 'completed' : 'pending',
+            caller: callerName(t.created_by || ''),
             docId: t.docId
         });
     }
@@ -1256,6 +1267,7 @@ function getScheduledVisits() {
             time: ev.time || '',
             detail: ev.reason || '',
             status: ev.visit_status === '완료' ? 'completed' : 'pending',
+            caller: callerName(rec.updated_by),
             docId: sid
         });
     }
@@ -1275,6 +1287,7 @@ function getScheduledVisits() {
             time: '',
             detail: todaysEnrolls.map(e => `${e.level_symbol || ''}${e.class_number || ''}`).filter(Boolean).join(', '),
             status: 'pending',
+            caller: '',
             docId: s.docId
         });
     }
@@ -1513,7 +1526,7 @@ function renderScheduledVisitList() {
     if (visits.length === 0) {
         container.innerHTML = `<div class="empty-state">
             <span class="material-symbols-outlined">event_available</span>
-            <p>등원예정 항목이 없습니다</p>
+            <p>비정규 항목이 없습니다</p>
         </div>`;
         return;
     }
@@ -1525,6 +1538,7 @@ function renderScheduledVisitList() {
             ? `onclick="selectedStudentId='${escAttr(v.studentId)}'; renderStudentDetail('${escAttr(v.studentId)}'); document.querySelectorAll('.list-item').forEach(el=>el.classList.remove('active')); this.classList.add('active');"`
             : (v.source === 'temp' ? `onclick="renderTempAttendanceDetail('${escAttr(v.docId)}'); document.querySelectorAll('.list-item').forEach(el=>el.classList.remove('active')); this.classList.add('active');"` : '');
         const guestBadge = !v.studentId ? '<span class="visit-guest-badge">비등록</span>' : '';
+        const callerBadge = v.caller ? `<span class="visit-caller-badge">${esc(v.caller)}</span>` : '';
         const timeDisplay = v.time ? formatTime12h(v.time) : '';
         const completedTag = isCompleted ? '<span class="visit-source-badge" style="background:#059669;">완료</span>' : '';
         const confirmBtn = !isCompleted
@@ -1537,6 +1551,7 @@ function renderScheduledVisitList() {
                 <span class="visit-source-badge" style="background:${v.sourceColor};">${esc(v.sourceLabel)}</span>
                 ${guestBadge}
                 ${completedTag}
+                ${callerBadge}
                 <span style="font-size:12px;color:var(--text-sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(v.detail)}</span>
             </div>
             <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
@@ -1624,7 +1639,7 @@ function renderDepartureCheckList() {
 }
 
 function renderListPanel() {
-    // 등원예정 서브필터 활성 시 통합 리스트로 전환
+    // 비정규 서브필터 활성 시 통합 리스트로 전환
     if (currentCategory === 'attendance' && currentSubFilter.has('scheduled_visit')) {
         renderScheduledVisitList();
         return;
@@ -1691,9 +1706,9 @@ function renderListPanel() {
         } else if (currentCategory === 'attendance') {
             const rec = dailyRecords[s.docId];
             const attStatus = rec?.attendance?.status || '미확인';
-            const statuses = ['등원전', '출석', '지각', '결석', '조퇴', '기타'];
-            // 미확인 maps to 등원전 for display
-            const currentDisplay = attStatus === '미확인' ? '등원전' : attStatus;
+            const statuses = ['정규', '출석', '지각', '결석', '조퇴', '기타'];
+            // 미확인 maps to 정규 for display
+            const currentDisplay = attStatus === '미확인' ? '정규' : attStatus;
             toggleHtml = `<div class="toggle-group">` +
                 statuses.map(st => {
                     let activeClass = '';
@@ -3804,7 +3819,7 @@ function renderStudentDetail(studentId) {
         const period = pauseStart && pauseEnd ? ` (${pauseStart} ~ ${pauseEnd})` : pauseStart ? ` (${pauseStart} ~)` : '';
         tagText = `${student.status}${period}`;
     } else {
-        const displayStatus = attStatus === '미확인' ? '등원전' : attStatus;
+        const displayStatus = attStatus === '미확인' ? '정규' : attStatus;
         tagClass = attStatus === '출석' ? 'tag-present' :
                    attStatus === '결석' ? 'tag-absent' :
                    attStatus === '지각' ? 'tag-late' : 'tag-pending';
@@ -4138,8 +4153,8 @@ function toggleAttendance(studentId, displayStatus) {
 }
 
 function applyAttendance(studentId, displayStatus, force = false, silent = false) {
-    // 등원전 → 미확인으로 매핑
-    const firestoreStatus = displayStatus === '등원전' ? '미확인' : displayStatus;
+    // 정규 → 미확인으로 매핑
+    const firestoreStatus = displayStatus === '정규' ? '미확인' : displayStatus;
 
     const rec = dailyRecords[studentId] || {};
     const currentStatus = rec?.attendance?.status || '미확인';
@@ -4169,7 +4184,7 @@ function applyAttendance(studentId, displayStatus, force = false, silent = false
 
     const row = document.querySelector(`.list-item[data-id="${CSS.escape(studentId)}"]`);
     if (row) {
-        const newDisplay = newStatus === '미확인' ? '등원전' : newStatus;
+        const newDisplay = newStatus === '미확인' ? '정규' : newStatus;
         row.querySelectorAll('.toggle-btn').forEach(btn => {
             btn.classList.remove('active-present', 'active-late', 'active-absent', 'active-other');
             if (btn.textContent.trim() === newDisplay) {
@@ -5316,7 +5331,7 @@ async function exportDailyReport() {
 
         // 출결
         const attStatus = rec?.attendance?.status || '미확인';
-        const displayAtt = attStatus === '미확인' ? '등원전' : attStatus;
+        const displayAtt = attStatus === '미확인' ? '정규' : attStatus;
         const arrTime = rec?.arrival_time ? formatTime12h(rec.arrival_time) : '';
         const attReason = rec?.attendance?.reason || '';
 
@@ -5719,7 +5734,7 @@ function openBulkModal(type, field, domain) {
 
     if (type === 'attendance') {
         titleEl.textContent = '일괄 출결 변경';
-        const statuses = ['등원전', '출석', '지각', '결석', '조퇴', '기타'];
+        const statuses = ['정규', '출석', '지각', '결석', '조퇴', '기타'];
         bodyEl.innerHTML = `<div class="bulk-modal-toggle-group">${statuses.map(st =>
             `<button class="bulk-modal-toggle-btn" data-value="${esc(st)}" onclick="selectBulkValue(this, '${esc(st)}')">${esc(st)}</button>`
         ).join('')}</div>`;
@@ -5756,7 +5771,7 @@ window.resetBulkModal = () => {
     modal.style.display = 'none';
 
     if (_bulkModalType === 'attendance') {
-        [...selectedStudentIds].forEach(id => applyAttendance(id, '등원전', true, true));
+        [...selectedStudentIds].forEach(id => applyAttendance(id, '정규', true, true));
     } else if (_bulkModalType === 'ox') {
         bulkApplyOxToAttended('');
     }
@@ -6097,7 +6112,7 @@ function generateDataTemplate(studentId) {
     lines.push(`[${fmtDate(summary.date)}] 수업 결과`);
 
     // 출결
-    const att = summary.attendance === '미확인' ? '등원전' : summary.attendance;
+    const att = summary.attendance === '미확인' ? '정규' : summary.attendance;
     lines.push(`>출결: ${att}`);
 
     // 영역별 흐름 생성 헬퍼 (1차 → 2차 → 후속조치)
@@ -6287,7 +6302,7 @@ window.togglePromptEditor = togglePromptEditor;
 window.saveCustomPrompt = saveCustomPrompt;
 window.resetPromptToDefault = resetPromptToDefault;
 
-// ─── 등원예정 완료 처리 ────────────────────────────────────────────────────
+// ─── 비정규 완료 처리 ─────────────────────────────────────────────────────
 
 async function completeScheduledVisit(source, docId, studentId) {
     showSaveIndicator('saving');
@@ -6333,7 +6348,7 @@ async function completeScheduledVisit(source, docId, studentId) {
         if (selectedStudentId) renderStudentDetail(selectedStudentId);
         showSaveIndicator('saved');
     } catch (err) {
-        console.error('등원예정 완료 처리 실패:', err);
+        console.error('비정규 완료 처리 실패:', err);
         showSaveIndicator('error');
     }
 }
@@ -6379,7 +6394,7 @@ async function resetScheduledVisit(source, docId, studentId) {
         if (selectedStudentId) renderStudentDetail(selectedStudentId);
         showSaveIndicator('saved');
     } catch (err) {
-        console.error('등원예정 초기화 실패:', err);
+        console.error('비정규 초기화 실패:', err);
         showSaveIndicator('error');
     }
 }
