@@ -4133,6 +4133,13 @@ function renderStudentDetail(studentId) {
     // 클리닉 카드
     const extraVisit = rec.extra_visit || {};
     const hasClinic = !!extraVisit.date;
+    const isPastDate = selectedDate < todayStr();
+    const clinicButtons = isPastDate
+        ? (hasClinic ? '' : '')
+        : `<span style="display:flex;gap:2px;">
+            ${hasClinic ? `<button class="btn-icon" onclick="clearExtraVisit('${escAttr(studentId)}')"><span class="material-symbols-outlined" style="font-size:18px;color:var(--danger);">close</span></button>` : ''}
+            <button class="btn-icon" onclick="addExtraVisit('${escAttr(studentId)}')"><span class="material-symbols-outlined" style="font-size:18px;">add</span></button>
+        </span>`;
     const extraVisitHtml = `
         <div class="detail-card">
             <div class="detail-card-title" style="display:flex;align-items:center;justify-content:space-between;">
@@ -4140,24 +4147,22 @@ function renderStudentDetail(studentId) {
                     <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">schedule</span>
                     클리닉
                 </span>
-                ${!hasClinic
-                    ? `<button class="btn-icon" onclick="addExtraVisit('${escAttr(studentId)}')"><span class="material-symbols-outlined" style="font-size:18px;">add</span></button>`
-                    : `<button class="btn-icon" onclick="clearExtraVisit('${escAttr(studentId)}')"><span class="material-symbols-outlined" style="font-size:18px;color:var(--danger);">close</span></button>`}
+                ${clinicButtons}
             </div>
             ${hasClinic ? `<div style="display:flex;flex-direction:column;gap:6px;">
                 <div style="display:flex;gap:6px;">
                     <input type="date" class="field-input" style="flex:1;padding:4px 8px;font-size:12px;"
                         value="${escAttr(extraVisit.date || '')}"
                         placeholder="날짜"
-                        onchange="saveExtraVisit('${escAttr(studentId)}', 'date', this.value)">
+                        ${isPastDate ? 'readonly' : `onchange="saveExtraVisit('${escAttr(studentId)}', 'date', this.value)"`}>
                     <input type="time" class="field-input" style="width:100px;padding:4px 8px;font-size:12px;"
                         value="${escAttr(extraVisit.time || '')}"
-                        onchange="saveExtraVisit('${escAttr(studentId)}', 'time', this.value)">
+                        ${isPastDate ? 'readonly' : `onchange="saveExtraVisit('${escAttr(studentId)}', 'time', this.value)"`}>
                 </div>
                 <input type="text" class="field-input" style="width:100%;padding:4px 8px;font-size:12px;"
                     placeholder="사유 (예: 보충수업, 재시험 등)"
                     value="${escAttr(extraVisit.reason || '')}"
-                    onchange="saveExtraVisit('${escAttr(studentId)}', 'reason', this.value)">
+                    ${isPastDate ? 'readonly' : `onchange="saveExtraVisit('${escAttr(studentId)}', 'reason', this.value)"`}>
             </div>` : ''}
         </div>
     `;
@@ -4262,6 +4267,7 @@ async function addExtraVisit(studentId) {
 
 // × 버튼 클릭 → extra_visit 삭제 + 리렌더
 async function clearExtraVisit(studentId) {
+    if (selectedDate < todayStr()) { alert('과거 기록은 삭제할 수 없습니다.'); return; }
     const rec = dailyRecords[studentId];
     if (rec) delete rec.extra_visit;
     await saveImmediately(studentId, { extra_visit: deleteField() });
