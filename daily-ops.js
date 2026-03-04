@@ -46,6 +46,7 @@ let selectedNextHwClass = null;  // 다음숙제 반별 상세에서 선택된 �
 let nextHwModalTarget = { classCode: null, domain: null }; // 모달 타겟
 let detailTab = 'daily'; // 'daily' | 'report'
 const DEFAULT_DOMAINS = ['Gr', 'A/G', 'R/C'];
+const KOREAN_CHAR_RE = /^[\uAC00-\uD7AF]/;
 
 // ─── OX Helpers ─────────────────────────────────────────────────────────────
 const OX_CYCLE = ['O', '△', 'X', ''];
@@ -1066,6 +1067,15 @@ function setSubFilter(filterKey) {
     renderListPanel();
 }
 
+// 비정규 등원 여부 판별 (hw_fail/test_fail/extra_visit)
+function isVisitStudent(docId) {
+    const hwFail = dailyRecords[docId]?.hw_fail_action || {};
+    if (Object.values(hwFail).some(a => a.type === '등원' && a.scheduled_date === selectedDate)) return true;
+    if (testFailTasks.some(t => t.student_id === docId && t.type === '등원' && t.scheduled_date === selectedDate && t.status === 'pending')) return true;
+    if (dailyRecords[docId]?.extra_visit?.date === selectedDate) return true;
+    return false;
+}
+
 function getSubFilterCount(filterKey) {
     const dayName = getDayName(selectedDate);
     let todayStudents = allStudents.filter(s =>
@@ -1084,10 +1094,11 @@ function getSubFilterCount(filterKey) {
     allStudents.forEach(s => {
         if (existingIds.has(s.docId)) return;
         if (selectedClassCode && !s.enrollments.some(e => enrollmentCode(e) === selectedClassCode)) return;
-        const hwFail = dailyRecords[s.docId]?.hw_fail_action || {};
-        if (Object.values(hwFail).some(a => a.type === '등원' && a.scheduled_date === selectedDate)) { todayStudents.push(s); existingIds.add(s.docId); visitStudentIds.add(s.docId); return; }
-        if (testFailTasks.some(t => t.student_id === s.docId && t.type === '등원' && t.scheduled_date === selectedDate && t.status === 'pending')) { todayStudents.push(s); existingIds.add(s.docId); visitStudentIds.add(s.docId); return; }
-        if (dailyRecords[s.docId]?.extra_visit?.date === selectedDate) { todayStudents.push(s); existingIds.add(s.docId); visitStudentIds.add(s.docId); return; }
+        if (isVisitStudent(s.docId)) {
+            todayStudents.push(s);
+            existingIds.add(s.docId);
+            visitStudentIds.add(s.docId);
+        }
     });
 
     const total = todayStudents.length;
@@ -1192,14 +1203,14 @@ function getSubFilterCount(filterKey) {
 
 function getScheduledVisits() {
     const visits = [];
-    // 이메일 또는 아이디에서 이름 추출 (한글이면 성 제거): "홍길동" → "길동", "Rachel Lee" → "Rachel Lee"
+    // 이메일/아이디에서 이름 prefix 추출: "홍길동" → "길동", "Iris Lee" → "Iris", "chief" → "chief"
     const callerName = (emailOrId) => {
         if (!emailOrId) return '';
         const id = emailOrId.split('@')[0];
         const teacher = teachersList.find(tc => tc.email === emailOrId || tc.email.split('@')[0] === id);
         const name = teacher?.display_name || id;
-        const isKorean = /^[\uAC00-\uD7AF]/.test(name);
-        return (isKorean && name.length >= 2) ? name.slice(1) : name;
+        if (KOREAN_CHAR_RE.test(name)) return name.length >= 2 ? name.slice(1) : name;
+        return name.split(' ')[0];
     };
 
     // 1) 진단평가 (temp_attendance)
@@ -1215,6 +1226,8 @@ function getScheduledVisits() {
             detail: [ta.branch, ta.school, ta.grade].filter(Boolean).join(' · ') || '',
             status: ta.visit_status === '완료' ? 'completed' : 'pending',
             caller: callerName(ta.created_by),
+            completedBy: callerName(ta.completed_by),
+            completedAt: ta.completed_at || '',
             docId: ta.docId
         });
     }
@@ -1233,6 +1246,8 @@ function getScheduledVisits() {
             detail: `${t.domain || ''} (${t.source_date || ''})`,
             status: t.status === '완료' ? 'completed' : 'pending',
             caller: callerName(t.created_by || ''),
+            completedBy: callerName(t.completed_by || ''),
+            completedAt: t.completed_at || '',
             docId: t.docId
         });
     }
@@ -1251,6 +1266,8 @@ function getScheduledVisits() {
             detail: `${t.item || t.domain || ''} (${t.source_date || ''})`,
             status: t.status === '완료' ? 'completed' : 'pending',
             caller: callerName(t.created_by || ''),
+            completedBy: callerName(t.completed_by || ''),
+            completedAt: t.completed_at || '',
             docId: t.docId
         });
     }
@@ -1271,6 +1288,8 @@ function getScheduledVisits() {
             detail: ev.reason || '',
             status: ev.visit_status === '완료' ? 'completed' : 'pending',
             caller: callerName(rec.updated_by),
+            completedBy: callerName(ev.completed_by),
+            completedAt: ev.completed_at || '',
             docId: sid
         });
     }
@@ -1291,6 +1310,8 @@ function getScheduledVisits() {
             detail: todaysEnrolls.map(e => `${e.level_symbol || ''}${e.class_number || ''}`).filter(Boolean).join(', '),
             status: 'pending',
             caller: '',
+            completedBy: '',
+            completedAt: '',
             docId: s.docId
         });
     }
@@ -1480,28 +1501,20 @@ function getFilteredStudents() {
     const visitStudents = allStudents.filter(s => {
         if (existingIds.has(s.docId)) return false;
         if (selectedClassCode && !s.enrollments.some(e => enrollmentCode(e) === selectedClassCode)) return false;
-        // hw_fail_action 등원
-        const hwFail = dailyRecords[s.docId]?.hw_fail_action || {};
-        if (Object.values(hwFail).some(a => a.type === '등원' && a.scheduled_date === selectedDate)) return true;
-        // test_fail 등원
-        if (testFailTasks.some(t => t.student_id === s.docId && t.type === '등원' && t.scheduled_date === selectedDate && t.status === 'pending')) return true;
-        // extra_visit 등원
-        if (dailyRecords[s.docId]?.extra_visit?.date === selectedDate) return true;
-        return false;
+        return isVisitStudent(s.docId);
     });
     if (visitStudents.length > 0) {
         let filtered = visitStudents;
         // 출결 필터 활성 시 적용 (비정규 학생은 '정규' 필터에서 제외)
         const attF = allFilters['attendance'];
         if (attF?.size > 0) {
-            const attFWithoutPreArrival = new Set(attF);
-            attFWithoutPreArrival.delete('pre_arrival');
-            if (attFWithoutPreArrival.size === 0) {
+            if (attF.size === 1 && attF.has('pre_arrival')) {
                 filtered = [];
             } else {
+                const effectiveFilter = attF.has('pre_arrival') ? new Set([...attF].filter(f => f !== 'pre_arrival')) : attF;
                 filtered = filtered.filter(s => {
                     const st = dailyRecords[s.docId]?.attendance?.status || '미확인';
-                    return doesStatusMatchFilter(st, attFWithoutPreArrival);
+                    return doesStatusMatchFilter(st, effectiveFilter);
                 });
             }
         }
@@ -1523,6 +1536,16 @@ function getFilteredStudents() {
 }
 
 // ─── Rendering ──────────────────────────────────────────────────────────────
+
+function formatCompletedBadge(completedBy, completedAt) {
+    if (!completedBy) return '';
+    let timeStr = '';
+    if (completedAt) {
+        const d = new Date(completedAt);
+        if (!isNaN(d)) timeStr = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+    }
+    return `<span class="visit-caller-badge">(${esc(completedBy)}${timeStr ? ': ' + timeStr : ''} 확인)</span>`;
+}
 
 function renderScheduledVisitList() {
     const visits = getScheduledVisits();
@@ -1548,25 +1571,61 @@ function renderScheduledVisitList() {
             : (v.source === 'temp' ? `onclick="renderTempAttendanceDetail('${escAttr(v.docId)}'); document.querySelectorAll('.list-item').forEach(el=>el.classList.remove('active')); this.classList.add('active');"` : '');
         const guestBadge = !v.studentId ? '<span class="visit-guest-badge">비등록</span>' : '';
         const callerBadge = v.caller ? `<span class="visit-caller-badge">(${esc(v.caller)})</span>` : '';
-        const timeDisplay = v.time ? formatTime12h(v.time) : '';
-        const completedTag = isCompleted ? '<span class="visit-source-badge" style="background:#059669;">완료</span>' : '';
+        const completedInfo = isCompleted ? formatCompletedBadge(v.completedBy, v.completedAt) : '';
+        const dataId = v.studentId || v.id;
+
+        // 시간 블록 + 출결 토글 (studentId가 있는 경우만)
+        let timeHtml = '';
+        let toggleHtml = '';
+        const rec = v.studentId ? dailyRecords[v.studentId] : null;
+        const arrivalTime = rec?.arrival_time;
+        if (arrivalTime) {
+            timeHtml = `<div class="item-time-block arrived">
+                <span class="item-time-label">등원</span>
+                <span class="item-time-value">${esc(formatTime12h(arrivalTime))}</span>
+            </div>`;
+        } else if (v.time) {
+            timeHtml = `<div class="item-time-block">
+                <span class="item-time-label">예정</span>
+                <span class="item-time-value">${esc(formatTime12h(v.time))}</span>
+            </div>`;
+        }
+
+        if (v.studentId) {
+            const attStatus = rec?.attendance?.status || '미확인';
+            const currentDisplay = attStatus === '미확인' ? '등원전' : attStatus;
+            const statuses = ['등원전', '출석', '지각', '결석'];
+            toggleHtml = `<div class="toggle-group">` +
+                statuses.map(st => {
+                    let activeClass = '';
+                    if (st === currentDisplay) {
+                        if (st === '출석') activeClass = 'active-present';
+                        else if (st === '지각') activeClass = 'active-late';
+                        else if (st === '결석') activeClass = 'active-absent';
+                        else activeClass = 'active-other';
+                    }
+                    const toggleVal = st === '등원전' ? '정규' : st;
+                    return `<button class="toggle-btn ${activeClass}" onclick="event.stopPropagation(); toggleAttendance('${escAttr(v.studentId)}', '${toggleVal}')">${st}</button>`;
+                }).join('') +
+                `</div>`;
+        }
+
         const confirmBtn = !isCompleted
             ? `<button class="toggle-btn active-present" style="padding:2px 10px;font-size:12px;min-width:auto;" onclick="event.stopPropagation(); completeScheduledVisit('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">확인</button>`
             : `<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;color:var(--text-sec);border-color:var(--border);" onclick="event.stopPropagation(); resetScheduledVisit('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">초기화</button>`;
 
-        return `<div class="list-item visit-item ${completedClass}" ${clickHandler} style="${(v.studentId || v.source === 'temp') ? 'cursor:pointer;' : ''}">
-            <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
-                <span class="item-title" style="font-weight:500;min-width:60px;">${esc(v.name)}</span>
-                <span class="visit-source-badge" style="background:${v.sourceColor};">${esc(v.sourceLabel)}</span>
-                ${guestBadge}
-                ${completedTag}
-                ${callerBadge}
+        return `<div class="list-item visit-item ${completedClass}" data-id="${escAttr(dataId)}" ${clickHandler} style="${(v.studentId || v.source === 'temp') ? 'cursor:pointer;' : ''}">
+            <div class="item-info">
+                <span class="item-title">${esc(v.name)}${callerBadge ? ' ' + callerBadge : ''}</span>
+                <span class="item-desc"><span class="visit-source-badge" style="background:${v.sourceColor};">${esc(v.sourceLabel)}</span> ${guestBadge}</span>
+            </div>
+            ${timeHtml}
+            ${toggleHtml}
+            <div class="item-actions">
                 <span style="font-size:12px;color:var(--text-sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(v.detail)}</span>
+                ${completedInfo}
             </div>
-            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-                ${timeDisplay ? `<span style="font-size:12px;color:var(--text-sec);font-variant-numeric:tabular-nums;">${timeDisplay}</span>` : ''}
-                ${confirmBtn}
-            </div>
+            ${confirmBtn}
         </div>`;
     }).join('');
 }
@@ -6318,31 +6377,35 @@ async function completeScheduledVisit(source, docId, studentId) {
     try {
         const completedBy = (currentUser?.email || '').split('@')[0];
 
+        const completedAt = new Date().toISOString();
+
         if (source === 'temp') {
-            await updateDoc(doc(db, 'temp_attendance', docId), { visit_status: '완료' });
+            await updateDoc(doc(db, 'temp_attendance', docId), { visit_status: '완료', completed_by: completedBy, completed_at: completedAt });
             const ta = tempAttendances.find(t => t.docId === docId);
-            if (ta) ta.visit_status = '완료';
+            if (ta) { ta.visit_status = '완료'; ta.completed_by = completedBy; ta.completed_at = completedAt; }
         } else if (source === 'hw_fail') {
             await updateDoc(doc(db, 'hw_fail_tasks', docId), {
                 status: '완료',
                 completed_by: completedBy,
-                completed_at: new Date().toISOString()
+                completed_at: completedAt
             });
             const t = hwFailTasks.find(t => t.docId === docId);
-            if (t) { t.status = '완료'; t.completed_by = completedBy; }
+            if (t) { t.status = '완료'; t.completed_by = completedBy; t.completed_at = completedAt; }
         } else if (source === 'test_fail') {
             await updateDoc(doc(db, 'test_fail_tasks', docId), {
                 status: '완료',
                 completed_by: completedBy,
-                completed_at: new Date().toISOString()
+                completed_at: completedAt
             });
             const t = testFailTasks.find(t => t.docId === docId);
-            if (t) { t.status = '완료'; t.completed_by = completedBy; }
+            if (t) { t.status = '완료'; t.completed_by = completedBy; t.completed_at = completedAt; }
         } else if (source === 'extra') {
             // docId is studentId for extra_visit
             const rec = dailyRecords[docId] || {};
             const ev = rec.extra_visit || {};
             ev.visit_status = '완료';
+            ev.completed_by = completedBy;
+            ev.completed_at = completedAt;
             await saveImmediately(docId, { extra_visit: ev });
             if (dailyRecords[docId]) dailyRecords[docId].extra_visit = ev;
         }
@@ -6366,9 +6429,9 @@ async function resetScheduledVisit(source, docId, studentId) {
     showSaveIndicator('saving');
     try {
         if (source === 'temp') {
-            await updateDoc(doc(db, 'temp_attendance', docId), { visit_status: 'pending' });
+            await updateDoc(doc(db, 'temp_attendance', docId), { visit_status: 'pending', completed_by: deleteField(), completed_at: deleteField() });
             const ta = tempAttendances.find(t => t.docId === docId);
-            if (ta) ta.visit_status = 'pending';
+            if (ta) { ta.visit_status = 'pending'; delete ta.completed_by; delete ta.completed_at; }
         } else if (source === 'hw_fail') {
             await updateDoc(doc(db, 'hw_fail_tasks', docId), {
                 status: 'pending',
@@ -6376,7 +6439,7 @@ async function resetScheduledVisit(source, docId, studentId) {
                 completed_at: deleteField()
             });
             const t = hwFailTasks.find(t => t.docId === docId);
-            if (t) { t.status = 'pending'; delete t.completed_by; }
+            if (t) { t.status = 'pending'; delete t.completed_by; delete t.completed_at; }
         } else if (source === 'test_fail') {
             await updateDoc(doc(db, 'test_fail_tasks', docId), {
                 status: 'pending',
@@ -6384,11 +6447,13 @@ async function resetScheduledVisit(source, docId, studentId) {
                 completed_at: deleteField()
             });
             const t = testFailTasks.find(t => t.docId === docId);
-            if (t) { t.status = 'pending'; delete t.completed_by; }
+            if (t) { t.status = 'pending'; delete t.completed_by; delete t.completed_at; }
         } else if (source === 'extra') {
             const rec = dailyRecords[docId] || {};
             const ev = rec.extra_visit || {};
             ev.visit_status = 'pending';
+            delete ev.completed_by;
+            delete ev.completed_at;
             await saveImmediately(docId, { extra_visit: ev });
             if (dailyRecords[docId]) dailyRecords[docId].extra_visit = ev;
         }
