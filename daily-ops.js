@@ -6652,11 +6652,6 @@ async function completeScheduledVisit(source, docId, studentId) {
             if (dailyRecords[docId]) dailyRecords[docId].extra_visit = ev;
         }
 
-        // 자동 출석 처리
-        if (studentId) {
-            applyAttendance(studentId, '출석', true, true);
-        }
-
         renderSubFilters();
         renderListPanel();
         if (selectedStudentId) renderStudentDetail(selectedStudentId);
@@ -6698,11 +6693,6 @@ async function resetScheduledVisit(source, docId, studentId) {
             delete ev.completed_at;
             await saveImmediately(docId, { extra_visit: ev });
             if (dailyRecords[docId]) dailyRecords[docId].extra_visit = ev;
-        }
-
-        // 출석도 초기화
-        if (studentId) {
-            applyAttendance(studentId, '미확인', true, true);
         }
 
         renderSubFilters();
@@ -6748,8 +6738,8 @@ function cycleVisitStatus(source, docId, studentId) {
         btn.style.cssText = sty;
     }
 
-    // 3초 디바운스 후 저장
-    _visitStatusTimers[docId] = setTimeout(() => _commitVisitStatus(docId), 3000);
+    // 5초 디바운스 후 저장
+    _visitStatusTimers[docId] = setTimeout(() => _commitVisitStatus(docId), 5000);
 }
 
 async function _commitVisitStatus(docId) {
