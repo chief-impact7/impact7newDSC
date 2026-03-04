@@ -1339,17 +1339,8 @@ function getScheduledVisits() {
         });
     }
 
-    // 정렬: completed 아래로, 소스 그룹별(등원전 → 등원이유), 시간임박순
-    const sourceGroup = (s) => {
-        if (s === 'temp' || s === 'enroll_pending') return 0; // 등원전
-        return 1; // 등원이유 (hw_fail, test_fail, extra)
-    };
-    visits.sort((a, b) => {
-        if (a.status !== b.status) return a.status === 'pending' ? -1 : 1;
-        const ga = sourceGroup(a.source), gb = sourceGroup(b.source);
-        if (ga !== gb) return ga - gb;
-        return (a.time || '99:99').localeCompare(b.time || '99:99');
-    });
+    // 시간임박순 정렬
+    visits.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
 
     return visits;
 }
@@ -1592,12 +1583,29 @@ function renderScheduledVisitList() {
         return;
     }
 
-    // 소스 그룹별 분리선 삽입용
+    // 등원전 / 소스별 그룹 / 확인완료 분리
+    const isPreArrival = (v) => {
+        if (!v.studentId) return true; // 비등록(진단평가 등)은 등원전 취급
+        const st = dailyRecords[v.studentId]?.attendance?.status || '미확인';
+        return st === '미확인';
+    };
     const pendingVisits = visits.filter(v => v.status === 'pending');
     const completedVisits = visits.filter(v => v.status === 'completed');
-    const isReasonSource = (s) => s === 'hw_fail' || s === 'test_fail' || s === 'extra';
-    const pendingPre = pendingVisits.filter(v => !isReasonSource(v.source));
-    const pendingReason = pendingVisits.filter(v => isReasonSource(v.source));
+    const preArrival = pendingVisits.filter(v => isPreArrival(v));
+    const arrived = pendingVisits.filter(v => !isPreArrival(v));
+
+    // 소스별 라벨
+    const SOURCE_LABELS = {
+        extra: '클리닉', temp: '진단평가', enroll_pending: '등원예정',
+        hw_fail: '숙제미통과', test_fail: '테스트미통과'
+    };
+    // 소스별 그룹핑 (순서: 클리닉 → 진단평가 → 등원예정 → 숙제미통과 → 테스트미통과)
+    const SOURCE_ORDER = ['extra', 'temp', 'enroll_pending', 'hw_fail', 'test_fail'];
+    const arrivedBySource = {};
+    for (const v of arrived) {
+        if (!arrivedBySource[v.source]) arrivedBySource[v.source] = [];
+        arrivedBySource[v.source].push(v);
+    }
 
     const renderVisitItem = (v) => {
         const isCompleted = v.status === 'completed';
@@ -1657,15 +1665,18 @@ function renderScheduledVisitList() {
     };
 
     let html = '';
-    if (pendingPre.length > 0) {
-        html += pendingPre.map(renderVisitItem).join('');
+    // 1) 등원전: 시간임박순
+    if (preArrival.length > 0) {
+        html += preArrival.map(renderVisitItem).join('');
     }
-    if (pendingReason.length > 0) {
-        if (pendingPre.length > 0) {
-            html += `<div class="leave-section-divider"><span>등원이유 (${pendingReason.length}건)</span></div>`;
-        }
-        html += pendingReason.map(renderVisitItem).join('');
+    // 2) 소스별 그룹
+    for (const src of SOURCE_ORDER) {
+        const group = arrivedBySource[src];
+        if (!group || group.length === 0) continue;
+        html += `<div class="leave-section-divider"><span>${SOURCE_LABELS[src] || src} (${group.length}건)</span></div>`;
+        html += group.map(renderVisitItem).join('');
     }
+    // 3) 확인 완료
     if (completedVisits.length > 0) {
         html += `<div class="leave-section-divider"><span>확인 완료 (${completedVisits.length}건)</span></div>`;
         html += completedVisits.map(renderVisitItem).join('');
