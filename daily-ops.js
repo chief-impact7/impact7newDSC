@@ -57,9 +57,17 @@ const KOREAN_CHAR_RE = /^[\uAC00-\uD7AF]/;
 // ─── OX Helpers ─────────────────────────────────────────────────────────────
 const OX_CYCLE = ['O', '△', 'X', ''];
 const VISIT_STATUS_CYCLE = ['pending', '완료', '기타'];
+let _visitStatusTimers = {};   // docId → setTimeout id
+let _visitStatusPending = {};  // docId → { source, nextStatus, studentId }
 
 function _toVisitStatus(rawStatus) {
     return rawStatus === '완료' ? '완료' : rawStatus === '기타' ? '기타' : '미완료';
+}
+
+function _visitBtnStyles(status) {
+    const cls = status === '완료' ? 'active-present' : status === '기타' ? 'active-other' : '';
+    const sty = (status === 'pending' || status === '미완료') ? 'color:var(--text-sec);border-color:var(--border);' : '';
+    return { cls, sty: `padding:2px 10px;font-size:12px;min-width:auto;${sty}` };
 }
 
 function nextOXValue(current) {
@@ -687,6 +695,7 @@ function renderSubFilters() {
     if (items.length === 0) {
         container.innerHTML = '<div style="padding:16px;color:var(--text-sec);font-size:13px;">추후 확장 예정</div>';
     } else {
+        _subFilterBase = null; // 캐시 초기화
         container.innerHTML = items.map(f => {
             const isActive = currentSubFilter.has(f.key) ? 'active' : '';
             const { count, total } = getSubFilterCount(f.key);
@@ -698,6 +707,7 @@ function renderSubFilters() {
                 ${badge}
             </div>`;
         }).join('');
+        _subFilterBase = null; // 캐시 해제
     }
 
     // L2 컨테이너를 활성 L1 바로 뒤에 배치
@@ -1105,7 +1115,12 @@ function isVisitStudent(docId) {
     return false;
 }
 
-function getSubFilterCount(filterKey) {
+// 캐시: renderSubFilters에서 탭당 반복 호출 시 base list 재계산 방지
+let _subFilterBase = null;
+
+function _getSubFilterBase() {
+    if (_subFilterBase) return _subFilterBase;
+
     const dayName = getDayName(selectedDate);
     let todayStudents = allStudents.filter(s =>
         s.status !== '퇴원' && s.enrollments.some(e =>
@@ -1117,7 +1132,6 @@ function getSubFilterCount(filterKey) {
         e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === selectedClassCode
     ));
 
-    // visitStudents 추가 (hw_fail/test_fail/extra_visit 등원 — getFilteredStudents와 동일 기준)
     const existingIds = new Set(todayStudents.map(s => s.docId));
     const visitStudentIds = new Set();
     allStudents.forEach(s => {
@@ -1130,39 +1144,47 @@ function getSubFilterCount(filterKey) {
         }
     });
 
+    const regularOnly = todayStudents.filter(s => !visitStudentIds.has(s.docId));
+    _subFilterBase = { todayStudents, visitStudentIds, regularOnly };
+    return _subFilterBase;
+}
+
+function getSubFilterCount(filterKey) {
+    const { todayStudents, regularOnly } = _getSubFilterBase();
     const total = todayStudents.length;
     const r = (count) => ({ count, total });
 
     if (currentCategory === 'attendance') {
+        const regularTotal = regularOnly.length;
+        const rr = (count) => ({ count, total: regularTotal });
+
         switch (filterKey) {
             case 'scheduled_visit': {
                 const visits = getScheduledVisits();
                 const pending = visits.filter(v => v.status === 'pending').length;
                 return { count: pending, total: visits.length };
             }
-            case 'all': return r(total);
+            case 'all': return rr(regularTotal);
             case 'pre_arrival': {
-                const regularStudents = todayStudents.filter(s =>
-                    !visitStudentIds.has(s.docId) && hasRegularEnrollmentToday(s)
-                );
-                const pending = regularStudents.filter(s => {
+                const preStudents = regularOnly.filter(s => hasRegularEnrollmentToday(s));
+                const pending = preStudents.filter(s => {
                     const rec = dailyRecords[s.docId];
                     return !rec?.attendance?.status || rec.attendance.status === '미확인';
                 }).length;
-                return { count: pending, total: regularStudents.length };
+                return { count: pending, total: preStudents.length };
             }
-            case 'present': return r(todayStudents.filter(s => dailyRecords[s.docId]?.attendance?.status === '출석').length);
-            case 'late': return r(todayStudents.filter(s => dailyRecords[s.docId]?.attendance?.status === '지각').length);
-            case 'absent': return r(todayStudents.filter(s => dailyRecords[s.docId]?.attendance?.status === '결석').length);
-            case 'other': return r(todayStudents.filter(s => {
+            case 'present': return rr(regularOnly.filter(s => dailyRecords[s.docId]?.attendance?.status === '출석').length);
+            case 'late': return rr(regularOnly.filter(s => dailyRecords[s.docId]?.attendance?.status === '지각').length);
+            case 'absent': return rr(regularOnly.filter(s => dailyRecords[s.docId]?.attendance?.status === '결석').length);
+            case 'other': return rr(regularOnly.filter(s => {
                 const st = dailyRecords[s.docId]?.attendance?.status;
                 return st && !['미확인', '출석', '지각', '결석'].includes(st);
             }).length);
             case 'departure_check': {
-                const departed = todayStudents.filter(s => dailyRecords[s.docId]?.departure?.status === '귀가').length;
-                return { count: departed, total };
+                const departed = regularOnly.filter(s => dailyRecords[s.docId]?.departure?.status === '귀가').length;
+                return { count: departed, total: regularTotal };
             }
-            default: return r(0);
+            default: return rr(0);
         }
     }
 
@@ -1547,40 +1569,29 @@ function getFilteredStudents() {
     }
 
     // hw_fail / test_fail / extra_visit 등원일이 오늘인 학생 추가 포함 (정규 수업 없어도 리스트에 나타나야 함)
-    // 단, 반 글로벌 필터가 활성이면 해당 반 학생만 추가
-    const existingIds = new Set(students.map(s => s.docId));
-    const visitStudents = allStudents.filter(s => {
-        if (existingIds.has(s.docId)) return false;
-        if (selectedClassCode && !s.enrollments.some(e => enrollmentCode(e) === selectedClassCode)) return false;
-        return isVisitStudent(s.docId);
-    });
-    if (visitStudents.length > 0) {
-        let filtered = visitStudents;
-        // 출결 필터 활성 시 적용 (비정규 학생은 '정규' 필터에서 제외)
-        const attF = allFilters['attendance'];
-        if (attF?.size > 0) {
-            if (attF.size === 1 && attF.has('pre_arrival')) {
-                filtered = [];
-            } else {
-                const effectiveFilter = attF.has('pre_arrival') ? new Set([...attF].filter(f => f !== 'pre_arrival')) : attF;
+    // 단, 출결 필터 활성 시 비정규 학생은 추가하지 않음 (비정규 페이지에서만 표시)
+    const attFilterActive = allFilters['attendance']?.size > 0;
+    if (!attFilterActive) {
+        const existingIds = new Set(students.map(s => s.docId));
+        const visitStudents = allStudents.filter(s => {
+            if (existingIds.has(s.docId)) return false;
+            if (selectedClassCode && !s.enrollments.some(e => enrollmentCode(e) === selectedClassCode)) return false;
+            return isVisitStudent(s.docId);
+        });
+        if (visitStudents.length > 0) {
+            let filtered = visitStudents;
+            if (searchQuery) {
+                const q = searchQuery.trim().toLowerCase();
+                const chosungMode = isChosungOnly(q);
                 filtered = filtered.filter(s => {
-                    const st = dailyRecords[s.docId]?.attendance?.status || '미확인';
-                    return doesStatusMatchFilter(st, effectiveFilter);
+                    if (chosungMode) return matchChosung(s.name, q) || matchChosung(s.school, q);
+                    return (s.name?.toLowerCase().includes(q)) ||
+                        (s.school?.toLowerCase().includes(q)) ||
+                        s.enrollments.some(e => enrollmentCode(e).toLowerCase().includes(q));
                 });
             }
+            students = [...students, ...filtered];
         }
-        // 검색어 필터 적용
-        if (searchQuery) {
-            const q = searchQuery.trim().toLowerCase();
-            const chosungMode = isChosungOnly(q);
-            filtered = filtered.filter(s => {
-                if (chosungMode) return matchChosung(s.name, q) || matchChosung(s.school, q);
-                return (s.name?.toLowerCase().includes(q)) ||
-                    (s.school?.toLowerCase().includes(q)) ||
-                    s.enrollments.some(e => enrollmentCode(e).toLowerCase().includes(q));
-            });
-        }
-        students = [...students, ...filtered];
     }
 
     return students;
@@ -1681,9 +1692,8 @@ function renderScheduledVisitList() {
             ? `<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;color:var(--text-sec);border-color:var(--border);" onclick="event.stopPropagation(); resetScheduledVisit('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">초기화</button>`
             : (() => {
                 const vs = v.visitStatus || '미완료';
-                const cls = vs === '완료' ? 'active-present' : vs === '기타' ? 'active-other' : '';
-                const sty = vs === '미완료' ? 'color:var(--text-sec);border-color:var(--border);' : '';
-                return `<button class="toggle-btn ${cls}" style="padding:2px 10px;font-size:12px;min-width:auto;${sty}" onclick="event.stopPropagation(); cycleVisitStatus('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">${esc(vs)}</button>`;
+                const { cls, sty } = _visitBtnStyles(vs);
+                return `<button class="toggle-btn ${cls}" data-visit-id="${escAttr(v.docId)}" style="${sty}" onclick="event.stopPropagation(); cycleVisitStatus('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">${esc(vs)}</button>`;
             })();
 
         return `<div class="list-item visit-item ${completedClass}" data-id="${escAttr(dataId)}" ${clickHandler} style="${(v.studentId || v.source === 'temp') ? 'cursor:pointer;' : ''}">
@@ -4651,6 +4661,11 @@ function updateDateDisplay() {
 }
 
 async function reloadForDate() {
+    // 이전 날짜의 pending visit status 타이머 정리
+    Object.values(_visitStatusTimers).forEach(id => clearTimeout(id));
+    _visitStatusTimers = {};
+    _visitStatusPending = {};
+
     await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadRoleMemos(), loadClassNextHw(selectedDate), loadClassSettings(), loadTeachers()]);
     selectedNextHwClass = null;
     updateDateDisplay();
@@ -6700,10 +6715,15 @@ async function resetScheduledVisit(source, docId, studentId) {
     }
 }
 
-async function cycleVisitStatus(source, docId, studentId) {
-    // 현재 상태 가져오기
+function cycleVisitStatus(source, docId, studentId) {
+    // 기존 타이머 취소
+    if (_visitStatusTimers[docId]) clearTimeout(_visitStatusTimers[docId]);
+
+    // 현재 상태: pending 중이면 거기서, 아니면 데이터에서
     let currentStatus;
-    if (source === 'temp') {
+    if (_visitStatusPending[docId]) {
+        currentStatus = _visitStatusPending[docId].nextStatus;
+    } else if (source === 'temp') {
         currentStatus = tempAttendances.find(t => t.docId === docId)?.visit_status || 'pending';
     } else if (source === 'hw_fail') {
         currentStatus = hwFailTasks.find(t => t.docId === docId)?.status || 'pending';
@@ -6713,15 +6733,39 @@ async function cycleVisitStatus(source, docId, studentId) {
         currentStatus = dailyRecords[docId]?.extra_visit?.visit_status || 'pending';
     }
 
+    // 다음 상태로 토글
     const nextIdx = (VISIT_STATUS_CYCLE.indexOf(currentStatus) + 1) % VISIT_STATUS_CYCLE.length;
     const nextStatus = VISIT_STATUS_CYCLE[nextIdx];
+    _visitStatusPending[docId] = { source, nextStatus, studentId };
+
+    // 버튼 텍스트+스타일 즉시 변경
+    const btn = document.querySelector(`[data-visit-id="${docId}"]`);
+    if (btn) {
+        const label = nextStatus === 'pending' ? '미완료' : nextStatus;
+        const { cls, sty } = _visitBtnStyles(nextStatus);
+        btn.textContent = label;
+        btn.className = `toggle-btn ${cls}`.trim();
+        btn.style.cssText = sty;
+    }
+
+    // 3초 디바운스 후 저장
+    _visitStatusTimers[docId] = setTimeout(() => _commitVisitStatus(docId), 3000);
+}
+
+async function _commitVisitStatus(docId) {
+    const pending = _visitStatusPending[docId];
+    if (!pending) return;
+    delete _visitStatusPending[docId];
+    delete _visitStatusTimers[docId];
+
+    const { source, nextStatus, studentId } = pending;
 
     if (nextStatus === 'pending') {
         await resetScheduledVisit(source, docId, studentId);
     } else if (nextStatus === '완료') {
         await completeScheduledVisit(source, docId, studentId);
     } else {
-        // '기타' — completeScheduledVisit와 동일 패턴, 상태만 다름
+        // '기타'
         showSaveIndicator('saving');
         try {
             const completedBy = (currentUser?.email || '').split('@')[0];
