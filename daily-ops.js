@@ -1070,6 +1070,21 @@ function setSubFilter(filterKey) {
     renderListPanel();
 }
 
+const REGULAR_CLASS_TYPES = ['정규', '내신', '특강'];
+
+let _regularDayCache = { date: null, dayName: null };
+function hasRegularEnrollmentToday(student) {
+    if (_regularDayCache.date !== selectedDate) {
+        _regularDayCache = { date: selectedDate, dayName: getDayName(selectedDate) };
+    }
+    const dayName = _regularDayCache.dayName;
+    return student.enrollments.some(e =>
+        e.day.includes(dayName) &&
+        (!selectedSemester || e.semester === selectedSemester) &&
+        REGULAR_CLASS_TYPES.includes(e.class_type || '정규')
+    );
+}
+
 // 비정규 등원 여부 판별 (hw_fail/test_fail/extra_visit)
 function isVisitStudent(docId) {
     const hwFail = dailyRecords[docId]?.hw_fail_action || {};
@@ -1111,14 +1126,20 @@ function getSubFilterCount(filterKey) {
         switch (filterKey) {
             case 'scheduled_visit': {
                 const visits = getScheduledVisits();
-                return { count: visits.length, total: 0 };
+                const pending = visits.filter(v => v.status === 'pending').length;
+                return { count: pending, total: visits.length };
             }
             case 'all': return r(total);
-            case 'pre_arrival': return r(todayStudents.filter(s => {
-                if (visitStudentIds.has(s.docId)) return false; // 비정규 학생 제외
-                const rec = dailyRecords[s.docId];
-                return !rec?.attendance?.status || rec.attendance.status === '미확인';
-            }).length);
+            case 'pre_arrival': {
+                const regularStudents = todayStudents.filter(s =>
+                    !visitStudentIds.has(s.docId) && hasRegularEnrollmentToday(s)
+                );
+                const pending = regularStudents.filter(s => {
+                    const rec = dailyRecords[s.docId];
+                    return !rec?.attendance?.status || rec.attendance.status === '미확인';
+                }).length;
+                return { count: pending, total: regularStudents.length };
+            }
             case 'present': return r(todayStudents.filter(s => dailyRecords[s.docId]?.attendance?.status === '출석').length);
             case 'late': return r(todayStudents.filter(s => dailyRecords[s.docId]?.attendance?.status === '지각').length);
             case 'absent': return r(todayStudents.filter(s => dailyRecords[s.docId]?.attendance?.status === '결석').length);
@@ -1408,7 +1429,7 @@ function getFilteredStudents() {
             const rec = dailyRecords[s.docId];
             const st = rec?.attendance?.status || '미확인';
             for (const f of attF) {
-                if (f === 'pre_arrival' && (!st || st === '미확인')) return true;
+                if (f === 'pre_arrival' && (!st || st === '미확인')) return hasRegularEnrollmentToday(s);
                 if (f === 'present' && st === '출석') return true;
                 if (f === 'late' && st === '지각') return true;
                 if (f === 'absent' && st === '결석') return true;
@@ -2065,10 +2086,43 @@ function renderListPanel() {
     const activeStudents = students.filter(s => !LEAVE_STATUSES.includes(s.status));
     const leaveStudents = students.filter(s => LEAVE_STATUSES.includes(s.status));
 
+    // 정규/비정규 분리 조건: attendance 카테고리이고 출석/지각/결석/기타 서브필터 활성 시
+    const shouldSplitRegular = currentCategory === 'attendance' &&
+        currentSubFilter.size > 0 &&
+        !currentSubFilter.has('all') &&
+        !currentSubFilter.has('pre_arrival') &&
+        !currentSubFilter.has('scheduled_visit') &&
+        !currentSubFilter.has('departure_check');
+
+    // 정규/비정규 분리 (single-pass)
+    let regularActive, irregularActive;
+    if (shouldSplitRegular) {
+        regularActive = [];
+        irregularActive = [];
+        for (const s of activeStudents) {
+            (hasRegularEnrollmentToday(s) ? regularActive : irregularActive).push(s);
+        }
+    } else {
+        regularActive = activeStudents;
+        irregularActive = [];
+    }
+
+    const appendIrregularAndLeave = (html) => {
+        if (irregularActive.length > 0) {
+            html += `<div class="leave-section-divider"><span>비정규 (${irregularActive.length}명)</span></div>`;
+            html += irregularActive.map(renderItemHtml).join('');
+        }
+        if (leaveStudents.length > 0) {
+            html += `<div class="leave-section-divider"><span>휴원 학생 (${leaveStudents.length}명)</span></div>`;
+            html += leaveStudents.map(renderItemHtml).join('');
+        }
+        return html;
+    };
+
     // 그룹 뷰 or 일반 렌더링
     if (groupViewMode !== 'none') {
         const groups = {};
-        activeStudents.forEach(s => {
+        regularActive.forEach(s => {
             if (groupViewMode === 'branch') {
                 const key = branchFromStudent(s) || '미지정';
                 if (!groups[key]) groups[key] = [];
@@ -2085,18 +2139,10 @@ function renderListPanel() {
             const headerHtml = `<div class="group-header"><span class="group-label">${esc(key)}</span><span class="group-count">${groups[key].length}명</span></div>`;
             return headerHtml + groups[key].map(renderItemHtml).join('');
         }).join('');
-        if (leaveStudents.length > 0) {
-            html += `<div class="leave-section-divider"><span>휴원 학생 (${leaveStudents.length}명)</span></div>`;
-            html += leaveStudents.map(renderItemHtml).join('');
-        }
-        container.innerHTML = html;
+        container.innerHTML = appendIrregularAndLeave(html);
     } else {
-        let html = activeStudents.map(renderItemHtml).join('');
-        if (leaveStudents.length > 0) {
-            html += `<div class="leave-section-divider"><span>휴원 학생 (${leaveStudents.length}명)</span></div>`;
-            html += leaveStudents.map(renderItemHtml).join('');
-        }
-        container.innerHTML = html;
+        let html = regularActive.map(renderItemHtml).join('');
+        container.innerHTML = appendIrregularAndLeave(html);
     }
 
     // 반 상세 표시: 반(+소속)만 선택되고, 콘텐츠 서브필터 없을 때
