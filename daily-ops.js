@@ -3644,7 +3644,6 @@ window.loadReportCard = loadReportCard;
 
 function renderReportCard(records) {
     const contentEl = document.getElementById('report-content');
-    const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
 
     if (records.length === 0) {
         contentEl.innerHTML = '<div class="detail-card-empty" style="padding:32px;text-align:center;">해당 기간에 기록이 없습니다.</div>';
@@ -3654,7 +3653,7 @@ function renderReportCard(records) {
     // ── 출석 집계 ──
     const attendanceRows = records.map(rec => {
         const date = rec.date || '';
-        const dayName = date ? DAY_NAMES[new Date(date + 'T00:00:00').getDay()] : '';
+        const dayName = date ? getDayName(date) : '';
         const status = rec.attendance?.status || '';
         const reason = rec.attendance?.reason || '';
         return { date, dayName, status, reason };
