@@ -202,7 +202,7 @@ service cloud.firestore {
           'completed_by', 'completed_at', 'cancelled_by', 'cancelled_at', 'branch'
         ])
         && request.resource.data.status is string
-        && request.resource.data.status in ['pending', '완료', '취소']
+        && request.resource.data.status in ['pending', '완료', '취소', '기타']
         && withinFieldLimit(20);
 
       allow delete: if isAuthorized();
@@ -222,7 +222,7 @@ service cloud.firestore {
           'completed_by', 'completed_at', 'cancelled_by', 'cancelled_at', 'branch'
         ])
         && request.resource.data.status is string
-        && request.resource.data.status in ['pending', '완료', '취소']
+        && request.resource.data.status in ['pending', '완료', '취소', '기타']
         && withinFieldLimit(20);
 
       allow delete: if isAuthorized();

@@ -56,6 +56,11 @@ const KOREAN_CHAR_RE = /^[\uAC00-\uD7AF]/;
 
 // ─── OX Helpers ─────────────────────────────────────────────────────────────
 const OX_CYCLE = ['O', '△', 'X', ''];
+const VISIT_STATUS_CYCLE = ['pending', '완료', '기타'];
+
+function _toVisitStatus(rawStatus) {
+    return rawStatus === '완료' ? '완료' : rawStatus === '기타' ? '기타' : '미완료';
+}
 
 function nextOXValue(current) {
     const idx = OX_CYCLE.indexOf(current || '');
@@ -1269,7 +1274,8 @@ function getScheduledVisits() {
             name: ta.name || '(이름 없음)',
             time: ta.temp_time || '',
             detail: _formatTempSchoolInfo(ta) || '',
-            status: ta.visit_status === '완료' ? 'completed' : 'pending',
+            status: (ta.visit_status === '완료' || ta.visit_status === '기타') ? 'completed' : 'pending',
+            visitStatus: _toVisitStatus(ta.visit_status),
             caller: callerName(ta.created_by),
             completedBy: callerName(ta.completed_by),
             completedAt: ta.completed_at || '',
@@ -1279,7 +1285,7 @@ function getScheduledVisits() {
 
     // 2) 숙제미통과 등원 (hwFailTasks)
     for (const t of hwFailTasks) {
-        if (t.type !== '등원' || t.scheduled_date !== selectedDate || (t.status !== 'pending' && t.status !== '완료')) continue;
+        if (t.type !== '등원' || t.scheduled_date !== selectedDate || (t.status !== 'pending' && t.status !== '완료' && t.status !== '기타')) continue;
         visits.push({
             id: `hw_fail_${t.docId}`,
             source: 'hw_fail',
@@ -1289,7 +1295,8 @@ function getScheduledVisits() {
             name: t.student_name || t.student_id,
             time: t.scheduled_time || '',
             detail: `${t.domain || ''} (${t.source_date || ''})`,
-            status: t.status === '완료' ? 'completed' : 'pending',
+            status: (t.status === '완료' || t.status === '기타') ? 'completed' : 'pending',
+            visitStatus: _toVisitStatus(t.status),
             caller: callerName(t.created_by || ''),
             completedBy: callerName(t.completed_by || ''),
             completedAt: t.completed_at || '',
@@ -1299,7 +1306,7 @@ function getScheduledVisits() {
 
     // 3) 테스트미통과 등원 (testFailTasks)
     for (const t of testFailTasks) {
-        if (t.type !== '등원' || t.scheduled_date !== selectedDate || (t.status !== 'pending' && t.status !== '완료')) continue;
+        if (t.type !== '등원' || t.scheduled_date !== selectedDate || (t.status !== 'pending' && t.status !== '완료' && t.status !== '기타')) continue;
         visits.push({
             id: `test_fail_${t.docId}`,
             source: 'test_fail',
@@ -1309,7 +1316,8 @@ function getScheduledVisits() {
             name: t.student_name || t.student_id,
             time: t.scheduled_time || '',
             detail: `${t.item || t.domain || ''} (${t.source_date || ''})`,
-            status: t.status === '완료' ? 'completed' : 'pending',
+            status: (t.status === '완료' || t.status === '기타') ? 'completed' : 'pending',
+            visitStatus: _toVisitStatus(t.status),
             caller: callerName(t.created_by || ''),
             completedBy: callerName(t.completed_by || ''),
             completedAt: t.completed_at || '',
@@ -1331,7 +1339,8 @@ function getScheduledVisits() {
             name: student?.name || sid,
             time: ev.time || '',
             detail: ev.reason || '',
-            status: ev.visit_status === '완료' ? 'completed' : 'pending',
+            status: (ev.visit_status === '완료' || ev.visit_status === '기타') ? 'completed' : 'pending',
+            visitStatus: _toVisitStatus(ev.visit_status),
             caller: callerName(rec.updated_by),
             completedBy: callerName(ev.completed_by),
             completedAt: ev.completed_at || '',
@@ -1668,9 +1677,14 @@ function renderScheduledVisitList() {
             toggleHtml = `<button class="toggle-btn ${activeClass}" style="min-width:48px;" onclick="event.stopPropagation(); cycleVisitAttendance('${escAttr(v.studentId)}')">${currentDisplay}</button>`;
         }
 
-        const confirmBtn = !isCompleted
-            ? `<button class="toggle-btn active-present" style="padding:2px 10px;font-size:12px;min-width:auto;" onclick="event.stopPropagation(); completeScheduledVisit('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">확인</button>`
-            : `<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;color:var(--text-sec);border-color:var(--border);" onclick="event.stopPropagation(); resetScheduledVisit('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">초기화</button>`;
+        const confirmBtn = isCompleted
+            ? `<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;color:var(--text-sec);border-color:var(--border);" onclick="event.stopPropagation(); resetScheduledVisit('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">초기화</button>`
+            : (() => {
+                const vs = v.visitStatus || '미완료';
+                const cls = vs === '완료' ? 'active-present' : vs === '기타' ? 'active-other' : '';
+                const sty = vs === '미완료' ? 'color:var(--text-sec);border-color:var(--border);' : '';
+                return `<button class="toggle-btn ${cls}" style="padding:2px 10px;font-size:12px;min-width:auto;${sty}" onclick="event.stopPropagation(); cycleVisitStatus('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">${esc(vs)}</button>`;
+            })();
 
         return `<div class="list-item visit-item ${completedClass}" data-id="${escAttr(dataId)}" ${clickHandler} style="${(v.studentId || v.source === 'temp') ? 'cursor:pointer;' : ''}">
             <div class="item-info">
@@ -6686,8 +6700,67 @@ async function resetScheduledVisit(source, docId, studentId) {
     }
 }
 
+async function cycleVisitStatus(source, docId, studentId) {
+    // 현재 상태 가져오기
+    let currentStatus;
+    if (source === 'temp') {
+        currentStatus = tempAttendances.find(t => t.docId === docId)?.visit_status || 'pending';
+    } else if (source === 'hw_fail') {
+        currentStatus = hwFailTasks.find(t => t.docId === docId)?.status || 'pending';
+    } else if (source === 'test_fail') {
+        currentStatus = testFailTasks.find(t => t.docId === docId)?.status || 'pending';
+    } else if (source === 'extra') {
+        currentStatus = dailyRecords[docId]?.extra_visit?.visit_status || 'pending';
+    }
+
+    const nextIdx = (VISIT_STATUS_CYCLE.indexOf(currentStatus) + 1) % VISIT_STATUS_CYCLE.length;
+    const nextStatus = VISIT_STATUS_CYCLE[nextIdx];
+
+    if (nextStatus === 'pending') {
+        await resetScheduledVisit(source, docId, studentId);
+    } else if (nextStatus === '완료') {
+        await completeScheduledVisit(source, docId, studentId);
+    } else {
+        // '기타' — completeScheduledVisit와 동일 패턴, 상태만 다름
+        showSaveIndicator('saving');
+        try {
+            const completedBy = (currentUser?.email || '').split('@')[0];
+            const completedAt = new Date().toISOString();
+            const statusPayload = { completed_by: completedBy, completed_at: completedAt };
+
+            if (source === 'temp') {
+                await updateDoc(doc(db, 'temp_attendance', docId), { visit_status: '기타', ...statusPayload });
+                const ta = tempAttendances.find(t => t.docId === docId);
+                if (ta) Object.assign(ta, { visit_status: '기타', ...statusPayload });
+            } else if (source === 'hw_fail') {
+                await updateDoc(doc(db, 'hw_fail_tasks', docId), { status: '기타', ...statusPayload });
+                const t = hwFailTasks.find(t => t.docId === docId);
+                if (t) Object.assign(t, { status: '기타', ...statusPayload });
+            } else if (source === 'test_fail') {
+                await updateDoc(doc(db, 'test_fail_tasks', docId), { status: '기타', ...statusPayload });
+                const t = testFailTasks.find(t => t.docId === docId);
+                if (t) Object.assign(t, { status: '기타', ...statusPayload });
+            } else if (source === 'extra') {
+                const ev = dailyRecords[docId]?.extra_visit || {};
+                Object.assign(ev, { visit_status: '기타', ...statusPayload });
+                await saveImmediately(docId, { extra_visit: ev });
+                if (dailyRecords[docId]) dailyRecords[docId].extra_visit = ev;
+            }
+
+            renderSubFilters();
+            renderListPanel();
+            if (selectedStudentId) renderStudentDetail(selectedStudentId);
+            showSaveIndicator('saved');
+        } catch (err) {
+            console.error('비정규 기타 처리 실패:', err);
+            showSaveIndicator('error');
+        }
+    }
+}
+
 window.completeScheduledVisit = completeScheduledVisit;
 window.resetScheduledVisit = resetScheduledVisit;
+window.cycleVisitStatus = cycleVisitStatus;
 
 // ─── contacts 로딩 ────────────────────────────────────────────────────────
 
