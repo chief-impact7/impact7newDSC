@@ -43,10 +43,13 @@ service cloud.firestore {
         let allowed = [
           'name', 'level', 'school', 'grade',
           'student_phone', 'parent_phone_1', 'parent_phone_2',
+          'guardian_name_1', 'guardian_name_2',
           'branch', 'status', 'enrollments',
           'pause_start_date', 'pause_end_date',
           'day', 'class_type', 'level_code', 'level_symbol', 'class_number',
-          'start_date', 'special_start_date', 'special_end_date'
+          'start_date', 'special_start_date', 'special_end_date',
+          'first_registered',
+          'has_memo'
         ];
         return request.resource.data.keys().hasOnly(allowed);
       }
@@ -56,12 +59,12 @@ service cloud.firestore {
       allow create: if isAuthorized()
         && hasRequiredStudentFields()
         && hasOnlyAllowedStudentFields()
-        && withinFieldLimit(20);
+        && withinFieldLimit(30);
 
       allow update: if isAuthorized()
         && hasRequiredStudentFields()
         && hasOnlyAllowedStudentFields()
-        && withinFieldLimit(20);
+        && withinFieldLimit(30);
 
       allow delete: if isAuthorized();
 
@@ -103,7 +106,7 @@ service cloud.firestore {
           && data.doc_id is string
           && data.doc_id.size() > 0
           && data.change_type is string
-          && data.change_type in ['ENROLL', 'UPDATE', 'WITHDRAW']
+          && data.change_type in ['ENROLL', 'UPDATE', 'WITHDRAW', 'DELETE']
           && data.before is string
           && data.after is string
           && data.google_login_id is string
@@ -274,7 +277,7 @@ service cloud.firestore {
 
       function hasOnlyAllowedClassSettingsFields() {
         return request.resource.data.keys().hasOnly([
-          'domains', 'test_sections', 'default_time', 'teacher', 'sub_teacher'
+          'domains', 'test_sections', 'teacher', 'sub_teacher', 'default_time'
         ]);
       }
 
@@ -409,9 +412,10 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly([
           'email', 'display_name', 'photo_url', 'last_login'
         ])
+        && request.resource.data.email is string
         && withinFieldLimit(10);
 
-      allow delete: if isAuthorized();
+      allow delete: if false;
     }
 
     // =========================================================================
@@ -423,6 +427,25 @@ service cloud.firestore {
       allow create, update: if isAuthorized()
         && request.resource.data.keys().hasOnly(['start_date'])
         && withinFieldLimit(5);
+
+      allow delete: if isAuthorized();
+    }
+
+    // =========================================================================
+    // [DB] Contacts (과거 연락처)
+    // =========================================================================
+    match /contacts/{docId} {
+      allow read: if isAuthorized();
+
+      allow create, update: if isAuthorized()
+        && request.resource.data.keys().hasOnly([
+          'name', 'level', 'school', 'grade',
+          'student_phone', 'parent_phone_1', 'parent_phone_2',
+          'guardian_name_1', 'guardian_name_2',
+          'first_registered', 'status_history',
+          'created_at', 'updated_at'
+        ])
+        && withinFieldLimit(15);
 
       allow delete: if isAuthorized();
     }
