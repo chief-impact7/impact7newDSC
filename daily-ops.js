@@ -1078,6 +1078,17 @@ function getSubFilterCount(filterKey) {
         e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === selectedClassCode
     ));
 
+    // visitStudents 추가 (hw_fail/test_fail/extra_visit 등원 — getFilteredStudents와 동일 기준)
+    const existingIds = new Set(todayStudents.map(s => s.docId));
+    allStudents.forEach(s => {
+        if (existingIds.has(s.docId)) return;
+        if (selectedClassCode && !s.enrollments.some(e => enrollmentCode(e) === selectedClassCode)) return;
+        const hwFail = dailyRecords[s.docId]?.hw_fail_action || {};
+        if (Object.values(hwFail).some(a => a.type === '등원' && a.scheduled_date === selectedDate)) { todayStudents.push(s); existingIds.add(s.docId); return; }
+        if (testFailTasks.some(t => t.student_id === s.docId && t.type === '등원' && t.scheduled_date === selectedDate && t.status === 'pending')) { todayStudents.push(s); existingIds.add(s.docId); return; }
+        if (dailyRecords[s.docId]?.extra_visit?.date === selectedDate) { todayStudents.push(s); existingIds.add(s.docId); return; }
+    });
+
     const total = todayStudents.length;
     const r = (count) => ({ count, total });
 
