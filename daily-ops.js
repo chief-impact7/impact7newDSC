@@ -1594,20 +1594,12 @@ function renderScheduledVisitList() {
         if (v.studentId) {
             const attStatus = rec?.attendance?.status || '미확인';
             const currentDisplay = attStatus === '미확인' ? '등원전' : attStatus;
-            const statuses = ['등원전', '출석', '지각', '결석'];
-            toggleHtml = `<div class="toggle-group">` +
-                statuses.map(st => {
-                    let activeClass = '';
-                    if (st === currentDisplay) {
-                        if (st === '출석') activeClass = 'active-present';
-                        else if (st === '지각') activeClass = 'active-late';
-                        else if (st === '결석') activeClass = 'active-absent';
-                        else activeClass = 'active-other';
-                    }
-                    const toggleVal = st === '등원전' ? '정규' : st;
-                    return `<button class="toggle-btn ${activeClass}" onclick="event.stopPropagation(); toggleAttendance('${escAttr(v.studentId)}', '${toggleVal}')">${st}</button>`;
-                }).join('') +
-                `</div>`;
+            let activeClass = '';
+            if (currentDisplay === '출석') activeClass = 'active-present';
+            else if (currentDisplay === '지각') activeClass = 'active-late';
+            else if (currentDisplay === '결석') activeClass = 'active-absent';
+            else activeClass = 'active-other';
+            toggleHtml = `<button class="toggle-btn ${activeClass}" style="min-width:48px;" onclick="event.stopPropagation(); cycleVisitAttendance('${escAttr(v.studentId)}')">${currentDisplay}</button>`;
         }
 
         const confirmBtn = !isCompleted
@@ -4211,6 +4203,19 @@ async function saveExtraVisit(studentId, field, value) {
 
 // ─── Toggle handlers (immediate save) ──────────────────────────────────────
 
+function cycleVisitAttendance(studentId) {
+    if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
+    const cycle = ['등원전', '출석', '지각', '결석'];
+    const rec = dailyRecords[studentId] || {};
+    const attStatus = rec?.attendance?.status || '미확인';
+    const currentDisplay = attStatus === '미확인' ? '등원전' : attStatus;
+    const nextIdx = (cycle.indexOf(currentDisplay) + 1) % cycle.length;
+    const nextDisplay = cycle[nextIdx];
+    const nextVal = nextDisplay === '등원전' ? '정규' : nextDisplay;
+    applyAttendance(studentId, nextVal, true);
+    renderListPanel();
+}
+
 function toggleAttendance(studentId, displayStatus) {
     if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     if (bulkMode && selectedStudentIds.size >= 2 && selectedStudentIds.has(studentId)) {
@@ -5891,6 +5896,7 @@ window.setCategory = setCategory;
 window.setSubFilter = setSubFilter;
 window.setBranch = setBranch;
 window.toggleAttendance = toggleAttendance;
+window.cycleVisitAttendance = cycleVisitAttendance;
 window.toggleHomework = toggleHomework;
 window.toggleHwDomainOX = toggleHwDomainOX;
 window.setClassCode = setClassCode;
