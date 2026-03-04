@@ -57,7 +57,6 @@ const KOREAN_CHAR_RE = /^[\uAC00-\uD7AF]/;
 // ─── OX Helpers ─────────────────────────────────────────────────────────────
 const OX_CYCLE = ['O', '△', 'X', ''];
 const VISIT_STATUS_CYCLE = ['pending', '완료', '기타'];
-let _visitStatusTimers = {};   // docId → setTimeout id
 let _visitStatusPending = {};  // docId → { source, nextStatus, studentId }
 
 function _toVisitStatus(rawStatus) {
@@ -1693,7 +1692,8 @@ function renderScheduledVisitList() {
             : (() => {
                 const vs = v.visitStatus || '미완료';
                 const { cls, sty } = _visitBtnStyles(vs);
-                return `<button class="toggle-btn ${cls}" data-visit-id="${escAttr(v.docId)}" style="${sty}" onclick="event.stopPropagation(); cycleVisitStatus('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">${esc(vs)}</button>`;
+                const sid = v.studentId ? `'${escAttr(v.studentId)}'` : 'null';
+                return `<button class="toggle-btn ${cls}" data-visit-id="${escAttr(v.docId)}" style="${sty}" onclick="event.stopPropagation(); cycleVisitStatus('${escAttr(v.source)}', '${escAttr(v.docId)}', ${sid})">${esc(vs)}</button><button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;" onclick="event.stopPropagation(); confirmVisitStatus('${escAttr(v.docId)}')">확인</button>`;
             })();
 
         return `<div class="list-item visit-item ${completedClass}" data-id="${escAttr(dataId)}" ${clickHandler} style="${(v.studentId || v.source === 'temp') ? 'cursor:pointer;' : ''}">
@@ -4661,9 +4661,6 @@ function updateDateDisplay() {
 }
 
 async function reloadForDate() {
-    // 이전 날짜의 pending visit status 타이머 정리
-    Object.values(_visitStatusTimers).forEach(id => clearTimeout(id));
-    _visitStatusTimers = {};
     _visitStatusPending = {};
 
     await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadRoleMemos(), loadClassNextHw(selectedDate), loadClassSettings(), loadTeachers()]);
@@ -6706,10 +6703,7 @@ async function resetScheduledVisit(source, docId, studentId) {
 }
 
 function cycleVisitStatus(source, docId, studentId) {
-    // 기존 타이머 취소
-    if (_visitStatusTimers[docId]) clearTimeout(_visitStatusTimers[docId]);
-
-    // 현재 상태: pending 중이면 거기서, 아니면 데이터에서
+    // 현재 상태
     let currentStatus;
     if (_visitStatusPending[docId]) {
         currentStatus = _visitStatusPending[docId].nextStatus;
@@ -6737,16 +6731,12 @@ function cycleVisitStatus(source, docId, studentId) {
         btn.className = `toggle-btn ${cls}`.trim();
         btn.style.cssText = sty;
     }
-
-    // 5초 디바운스 후 저장
-    _visitStatusTimers[docId] = setTimeout(() => _commitVisitStatus(docId), 5000);
 }
 
-async function _commitVisitStatus(docId) {
+async function confirmVisitStatus(docId) {
     const pending = _visitStatusPending[docId];
-    if (!pending) return;
+    if (!pending) return; // 토글 안 했으면 무시
     delete _visitStatusPending[docId];
-    delete _visitStatusTimers[docId];
 
     const { source, nextStatus, studentId } = pending;
 
@@ -6795,6 +6785,7 @@ async function _commitVisitStatus(docId) {
 window.completeScheduledVisit = completeScheduledVisit;
 window.resetScheduledVisit = resetScheduledVisit;
 window.cycleVisitStatus = cycleVisitStatus;
+window.confirmVisitStatus = confirmVisitStatus;
 
 // ─── contacts 로딩 ────────────────────────────────────────────────────────
 
