@@ -760,6 +760,7 @@ body {
 .toggle-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   padding: 3px 8px;
   border-radius: 12px;
   font-size: 11px;

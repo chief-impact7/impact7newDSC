@@ -679,9 +679,12 @@ function renderSubFilters() {
         container.innerHTML = items.map(f => {
             const isActive = currentSubFilter.has(f.key) ? 'active' : '';
             const { count, total } = getSubFilterCount(f.key);
+            const badge = count > 0 || total > 0
+                ? `<span class="nav-l2-count">${total > 0 ? `${count}/${total}` : count}</span>`
+                : '';
             return `<div class="nav-l2 ${isActive}" data-filter="${f.key}" onclick="setSubFilter('${f.key}')">
                 ${esc(f.label)}
-                ${total > 0 ? `<span class="nav-l2-count">${count}/${total}</span>` : ''}
+                ${badge}
             </div>`;
         }).join('');
     }
@@ -1108,8 +1111,7 @@ function getSubFilterCount(filterKey) {
         switch (filterKey) {
             case 'scheduled_visit': {
                 const visits = getScheduledVisits();
-                const pending = visits.filter(v => v.status === 'pending').length;
-                return { count: pending, total: visits.length };
+                return { count: visits.length, total: 0 };
             }
             case 'all': return r(total);
             case 'pre_arrival': return r(todayStudents.filter(s => {
@@ -1608,14 +1610,13 @@ function renderScheduledVisitList() {
 
         return `<div class="list-item visit-item ${completedClass}" data-id="${escAttr(dataId)}" ${clickHandler} style="${(v.studentId || v.source === 'temp') ? 'cursor:pointer;' : ''}">
             <div class="item-info">
-                <span class="item-title">${esc(v.name)}${callerBadge ? ' ' + callerBadge : ''}</span>
+                <span class="item-title">${esc(v.name)}</span>
                 <span class="item-desc"><span class="visit-source-badge" style="background:${v.sourceColor};">${esc(v.sourceLabel)}</span> ${guestBadge}</span>
             </div>
             ${timeHtml}
             ${toggleHtml}
             <div class="item-actions">
-                <span style="font-size:12px;color:var(--text-sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(v.detail)}</span>
-                ${completedInfo}
+                <span style="font-size:12px;color:var(--text-sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${callerBadge ? callerBadge + ' ' : ''}${esc(v.detail)}${completedInfo ? ' ' + completedInfo : ''}</span>
             </div>
             ${confirmBtn}
         </div>`;
@@ -4085,13 +4086,19 @@ function renderStudentDetail(studentId) {
 
     // 클리닉 카드
     const extraVisit = rec.extra_visit || {};
+    const hasClinic = !!extraVisit.date;
     const extraVisitHtml = `
         <div class="detail-card">
-            <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">schedule</span>
-                클리닉
+            <div class="detail-card-title" style="display:flex;align-items:center;justify-content:space-between;">
+                <span style="display:flex;align-items:center;gap:6px;">
+                    <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">schedule</span>
+                    클리닉
+                </span>
+                ${!hasClinic
+                    ? `<button class="btn-icon" onclick="addExtraVisit('${escAttr(studentId)}')"><span class="material-symbols-outlined" style="font-size:18px;">add</span></button>`
+                    : `<button class="btn-icon" onclick="clearExtraVisit('${escAttr(studentId)}')"><span class="material-symbols-outlined" style="font-size:18px;color:var(--danger);">close</span></button>`}
             </div>
-            <div style="display:flex;flex-direction:column;gap:6px;">
+            ${hasClinic ? `<div style="display:flex;flex-direction:column;gap:6px;">
                 <div style="display:flex;gap:6px;">
                     <input type="date" class="field-input" style="flex:1;padding:4px 8px;font-size:12px;"
                         value="${escAttr(extraVisit.date || '')}"
@@ -4105,7 +4112,7 @@ function renderStudentDetail(studentId) {
                     placeholder="사유 (예: 보충수업, 재시험 등)"
                     value="${escAttr(extraVisit.reason || '')}"
                     onchange="saveExtraVisit('${escAttr(studentId)}', 'reason', this.value)">
-            </div>
+            </div>` : ''}
         </div>
     `;
 
@@ -4199,6 +4206,22 @@ async function saveExtraVisit(studentId, field, value) {
             console.error('클리닉 미래 날짜 저장 실패:', err);
         }
     }
+}
+
+// + 버튼 클릭 → 오늘 날짜로 초기화 + 상세패널 리렌더
+async function addExtraVisit(studentId) {
+    await saveExtraVisit(studentId, 'date', selectedDate);
+    renderStudentDetail(studentId);
+}
+
+// × 버튼 클릭 → extra_visit 삭제 + 리렌더
+async function clearExtraVisit(studentId) {
+    const rec = dailyRecords[studentId];
+    if (rec) delete rec.extra_visit;
+    await saveImmediately(studentId, { extra_visit: deleteField() });
+    renderStudentDetail(studentId);
+    renderSubFilters();
+    renderListPanel();
 }
 
 // ─── Toggle handlers (immediate save) ──────────────────────────────────────
@@ -5958,6 +5981,8 @@ window.saveNextHwFromModal = saveNextHwFromModal;
 window.saveNextHwNone = saveNextHwNone;
 window.openPersonalNextHwModal = openPersonalNextHwModal;
 window.saveExtraVisit = saveExtraVisit;
+window.addExtraVisit = addExtraVisit;
+window.clearExtraVisit = clearExtraVisit;
 window.addClassDomain = addClassDomain;
 window.removeClassDomain = removeClassDomain;
 window.resetClassDomains = resetClassDomains;
