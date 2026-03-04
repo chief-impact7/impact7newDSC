@@ -1786,6 +1786,22 @@ function renderListPanel() {
     // 필터 칩 렌더링
     renderFilterChips();
 
+    // contacts 검색 (검색어가 있을 때만)
+    let contactResults = [];
+    if (searchQuery) {
+        const q = searchQuery.trim().toLowerCase();
+        const chosungMode = isChosungOnly(q);
+        const studentIdSet = new Set(allStudents.map(s => s.docId));
+        contactResults = allContacts.filter(c => {
+            if (studentIdSet.has(c.id)) return false;
+            if (chosungMode) return matchChosung(c.name, q) || matchChosung(c.school, q);
+            return (c.name && c.name.toLowerCase().includes(q)) ||
+                (c.school && c.school.toLowerCase().includes(q)) ||
+                (c.student_phone && c.student_phone.includes(q)) ||
+                (c.parent_phone_1 && c.parent_phone_1.includes(q));
+        }).slice(0, 50);
+    }
+
     // 벌크 모드: 현재 목록에 없는 학생 선택 해제, 0명이면 벌크모드 종료
     if (bulkMode) {
         const visibleIds = new Set(students.map(s => s.docId));
@@ -1801,7 +1817,7 @@ function renderListPanel() {
 
     countEl.textContent = `${students.length}명`;
 
-    if (students.length === 0) {
+    if (students.length === 0 && contactResults.length === 0) {
         container.innerHTML = `<div class="empty-state">
             <span class="material-symbols-outlined">person_search</span>
             <p>해당하는 학생이 없습니다</p>
@@ -2183,6 +2199,24 @@ function renderListPanel() {
     } else {
         let html = regularActive.map(renderItemHtml).join('');
         container.innerHTML = appendIrregularAndLeave(html);
+    }
+
+    // 과거 연락처 결과 표시 (검색 시)
+    if (contactResults.length > 0) {
+        let contactHtml = `<div class="leave-section-divider"><span>과거 연락처 (${contactResults.length}명)</span></div>`;
+        contactResults.forEach(c => {
+            const phone = c.parent_phone_1 || c.student_phone || '';
+            const last4 = phone.replace(/\D/g, '').slice(-4);
+            const schoolGrade = [c.school || '', c.grade ? c.grade + '학년' : ''].filter(Boolean).join(' ');
+            const sub = [schoolGrade, last4 ? `☎${last4}` : ''].filter(Boolean).join(' · ');
+            contactHtml += `<div class="list-item contact-item" style="cursor:pointer" onclick="window.openContactAsTemp('${escAttr(c.id)}')">
+                <div class="item-info">
+                    <span class="item-title">${esc(c.name || '—')} <span class="tag-past">과거</span></span>
+                    <span class="item-desc">${esc(sub || '—')}</span>
+                </div>
+            </div>`;
+        });
+        container.insertAdjacentHTML('beforeend', contactHtml);
     }
 
     // 반 상세 표시: 반(+소속)만 선택되고, 콘텐츠 서브필터 없을 때
@@ -6736,6 +6770,20 @@ async function saveTempAttendance() {
 
 window.openTempAttendanceModal = openTempAttendanceModal;
 window.saveTempAttendance = saveTempAttendance;
+
+// 과거 연락처 클릭 → 진단평가 모달 열기 + 자동채움
+window.openContactAsTemp = function(contactId) {
+    const c = allContacts.find(ct => ct.id === contactId);
+    if (!c) return;
+    openTempAttendanceModal();
+    document.getElementById('temp-att-name').value = c.name || '';
+    document.getElementById('temp-att-branch').value = c.branch || '';
+    document.getElementById('temp-att-school').value = c.school || '';
+    document.getElementById('temp-att-level').value = c.level || '';
+    document.getElementById('temp-att-grade').value = c.grade || '';
+    document.getElementById('temp-att-student-phone').value = c.student_phone || '';
+    document.getElementById('temp-att-parent-phone').value = c.parent_phone_1 || '';
+};
 
 // 이름·학부모전화 입력 후 contacts 자동채움 이벤트
 document.getElementById('temp-att-parent-phone')?.addEventListener('change', _tryTempContactAutofill);
