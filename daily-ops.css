@@ -3005,3 +3005,119 @@ textarea.field-input {
   animation: highlightPulse 0.8s ease-out 2;
   border-color: var(--danger);
 }
+
+/* ─── 상세 패널 탭 ─── */
+.detail-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 0 16px;
+    background: var(--surface);
+}
+.detail-tab {
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-sec);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+}
+.detail-tab:hover { color: var(--text-main); }
+.detail-tab.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+}
+
+/* ─── 성적표 ─── */
+.report-date-range {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+}
+.report-date-range .field-input {
+    flex: 1;
+    padding: 6px 8px;
+    font-size: 13px;
+}
+.report-date-sep {
+    color: var(--text-sec);
+    font-size: 13px;
+}
+.btn-sm {
+    padding: 6px 14px;
+    font-size: 12px;
+    min-width: auto;
+}
+
+/* 출석 테이블 */
+.report-attendance-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.report-attendance-table th {
+    text-align: left;
+    padding: 6px 8px;
+    font-weight: 500;
+    color: var(--text-sec);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+}
+.report-attendance-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border-light, #f0f0f0);
+}
+.att-present { color: var(--success, #34a853); }
+.att-absent { color: var(--danger, #ea4335); }
+.att-late { color: var(--warning, #fbbc04); }
+.att-makeup { color: var(--primary); }
+
+/* 숙제/테스트 그리드 */
+.report-ox-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 0 16px 16px;
+}
+.report-ox-section {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 12px;
+    border: 1px solid var(--border);
+}
+.report-ox-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text-main);
+}
+.report-ox-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 0;
+    font-size: 12px;
+}
+.report-ox-label {
+    min-width: 36px;
+    font-weight: 500;
+    color: var(--text-sec);
+}
+.report-ox-val {
+    font-size: 11px;
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+.report-ox-o { color: var(--success, #34a853); font-weight: 600; }
+.report-ox-t { color: var(--warning, #fbbc04); font-weight: 600; }
+.report-ox-x { color: var(--danger, #ea4335); font-weight: 600; }
+
+@media (max-width: 768px) {
+    .report-ox-grid {
+        grid-template-columns: 1fr;
+    }
+}

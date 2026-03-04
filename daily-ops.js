@@ -44,6 +44,7 @@ let classNextHw = {};            // classCode → { domains: { "Gr": "...", ... 
 let nextHwSaveTimers = {};       // classCode_domain → timer
 let selectedNextHwClass = null;  // 다음숙제 반별 상세에서 선택된 반 코드
 let nextHwModalTarget = { classCode: null, domain: null }; // 모달 타겟
+let detailTab = 'daily'; // 'daily' | 'report'
 const DEFAULT_DOMAINS = ['Gr', 'A/G', 'R/C'];
 
 // ─── OX Helpers ─────────────────────────────────────────────────────────────
@@ -3592,6 +3593,167 @@ function buildStayStatsHtml(student) {
     `;
 }
 
+// ─── 성적표 탭 ───────────────────────────────────────────────────────────────
+function switchDetailTab(tab) {
+    detailTab = tab;
+    document.querySelectorAll('.detail-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.tab === tab);
+    });
+    document.getElementById('detail-cards').style.display = tab === 'daily' ? '' : 'none';
+    document.getElementById('report-tab').style.display = tab === 'report' ? '' : 'none';
+}
+window.switchDetailTab = switchDetailTab;
+
+async function loadReportCard() {
+    const studentId = selectedStudentId;
+    if (!studentId) return;
+
+    const startDate = document.getElementById('report-start').value;
+    const endDate = document.getElementById('report-end').value;
+    if (!startDate || !endDate) {
+        alert('시작일과 종료일을 모두 입력해주세요.');
+        return;
+    }
+    if (startDate > endDate) {
+        alert('시작일이 종료일보다 늦습니다.');
+        return;
+    }
+
+    const contentEl = document.getElementById('report-content');
+    contentEl.innerHTML = '<div class="detail-card-empty" style="padding:32px;text-align:center;">조회 중...</div>';
+
+    try {
+        const q = query(
+            collection(db, 'daily_records'),
+            where('student_id', '==', studentId),
+            where('date', '>=', startDate),
+            where('date', '<=', endDate)
+        );
+        const snap = await getDocs(q);
+        const records = [];
+        snap.forEach(d => records.push(d.data()));
+        records.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+        renderReportCard(records);
+    } catch (err) {
+        console.error('성적표 조회 실패:', err);
+        contentEl.innerHTML = '<div class="detail-card-empty" style="padding:32px;text-align:center;color:var(--danger);">조회 실패: ' + esc(err.message) + '</div>';
+    }
+}
+window.loadReportCard = loadReportCard;
+
+function renderReportCard(records) {
+    const contentEl = document.getElementById('report-content');
+    const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
+
+    if (records.length === 0) {
+        contentEl.innerHTML = '<div class="detail-card-empty" style="padding:32px;text-align:center;">해당 기간에 기록이 없습니다.</div>';
+        return;
+    }
+
+    // ── 출석 집계 ──
+    const attendanceRows = records.map(rec => {
+        const date = rec.date || '';
+        const dayName = date ? DAY_NAMES[new Date(date + 'T00:00:00').getDay()] : '';
+        const status = rec.attendance?.status || '';
+        const reason = rec.attendance?.reason || '';
+        return { date, dayName, status, reason };
+    }).filter(r => r.date);
+
+    const attendanceHtml = `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">event_available</span>
+                출석 (${attendanceRows.length}일)
+            </div>
+            <table class="report-attendance-table">
+                <thead><tr><th>날짜</th><th>구분</th><th>비고</th></tr></thead>
+                <tbody>
+                    ${attendanceRows.map(r => {
+                        const dateShort = r.date.slice(5).replace('-', '/');
+                        const cls = r.status === '출석' ? 'att-present' :
+                                    r.status === '결석' ? 'att-absent' :
+                                    r.status === '지각' ? 'att-late' :
+                                    r.status === '보충' ? 'att-makeup' : '';
+                        return `<tr>
+                            <td>${esc(dateShort)}(${esc(r.dayName)})</td>
+                            <td class="${cls}">${esc(r.status || '-')}</td>
+                            <td>${esc(r.reason)}</td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    // ── 숙제 O/△/X 집계 ──
+    const hwDomains = new Set();
+    records.forEach(rec => {
+        Object.keys(rec.hw_domains_1st || {}).forEach(d => hwDomains.add(d));
+        Object.keys(rec.hw_domains_2nd || {}).forEach(d => hwDomains.add(d));
+    });
+
+    const hwStats = {};
+    hwDomains.forEach(d => { hwStats[d] = { O: 0, '△': 0, X: 0 }; });
+    records.forEach(rec => {
+        hwDomains.forEach(d => {
+            const val = (rec.hw_domains_2nd?.[d]) || (rec.hw_domains_1st?.[d]) || '';
+            if (val === 'O' || val === '△' || val === 'X') {
+                hwStats[d][val]++;
+            }
+        });
+    });
+
+    // ── 테스트 O/△/X 집계 ──
+    const testDomains = new Set();
+    records.forEach(rec => {
+        Object.keys(rec.test_domains_1st || {}).forEach(d => testDomains.add(d));
+        Object.keys(rec.test_domains_2nd || {}).forEach(d => testDomains.add(d));
+    });
+
+    const testStats = {};
+    testDomains.forEach(d => { testStats[d] = { O: 0, '△': 0, X: 0 }; });
+    records.forEach(rec => {
+        testDomains.forEach(d => {
+            const val = (rec.test_domains_2nd?.[d]) || (rec.test_domains_1st?.[d]) || '';
+            if (val === 'O' || val === '△' || val === 'X') {
+                testStats[d][val]++;
+            }
+        });
+    });
+
+    const renderOxSection = (title, icon, stats) => {
+        const domains = Object.keys(stats);
+        if (domains.length === 0) return '';
+        return `
+            <div class="report-ox-section">
+                <div class="report-ox-title">
+                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">${icon}</span>
+                    ${esc(title)}
+                </div>
+                ${domains.map(d => {
+                    const s = stats[d];
+                    return `<div class="report-ox-row">
+                        <span class="report-ox-label">${esc(d)}</span>
+                        <span class="report-ox-val report-ox-o">O:${s.O}</span>
+                        <span class="report-ox-val report-ox-t">△:${s['△']}</span>
+                        <span class="report-ox-val report-ox-x">X:${s.X}</span>
+                    </div>`;
+                }).join('')}
+            </div>
+        `;
+    };
+
+    const oxGridHtml = (hwDomains.size > 0 || testDomains.size > 0) ? `
+        <div class="report-ox-grid">
+            ${renderOxSection('숙제', 'assignment', hwStats)}
+            ${renderOxSection('테스트', 'quiz', testStats)}
+        </div>
+    ` : '';
+
+    contentEl.innerHTML = attendanceHtml + oxGridHtml;
+}
+
 function renderStudentDetail(studentId) {
     if (!studentId) {
         document.getElementById('detail-empty').style.display = '';
@@ -3899,6 +4061,17 @@ function renderStudentDetail(studentId) {
                 onchange="saveDailyRecord('${studentId}', { note: this.value })">${esc(rec.note || '')}</textarea>
         </div>
     `;
+
+    // 탭 상태 복원
+    const tabsEl = document.getElementById('detail-tabs');
+    if (tabsEl) {
+        tabsEl.querySelectorAll('.detail-tab').forEach(t => {
+            t.classList.toggle('active', t.dataset.tab === detailTab);
+        });
+    }
+    document.getElementById('detail-cards').style.display = detailTab === 'daily' ? '' : 'none';
+    const reportTabEl = document.getElementById('report-tab');
+    if (reportTabEl) reportTabEl.style.display = detailTab === 'report' ? '' : 'none';
 
     // 모바일에서 패널 보이기
     document.getElementById('detail-panel').classList.add('mobile-visible');

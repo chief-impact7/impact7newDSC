@@ -227,12 +227,33 @@
                         </button>
                     </div>
 
+                    <!-- 상세 탭 -->
+                    <div class="detail-tabs" id="detail-tabs">
+                        <button class="detail-tab active" data-tab="daily" onclick="switchDetailTab('daily')">일일현황</button>
+                        <button class="detail-tab" data-tab="report" onclick="switchDetailTab('report')">성적표</button>
+                    </div>
+
                     <!-- 개인현황 카드들 (JS에서 동적 렌더링) -->
                     <div id="detail-cards">
                         <!-- 미완료 숙제 카드 -->
                         <!-- 미완료 테스트 카드 -->
                         <!-- 연기/재시 일정 카드 -->
                         <!-- 메모 카드 -->
+                    </div>
+
+                    <!-- 성적표 -->
+                    <div id="report-tab" style="display:none;">
+                        <div class="report-date-range">
+                            <input type="date" id="report-start" class="field-input">
+                            <span class="report-date-sep">~</span>
+                            <input type="date" id="report-end" class="field-input">
+                            <button class="btn btn-primary btn-sm" onclick="loadReportCard()">조회</button>
+                        </div>
+                        <div id="report-content">
+                            <div class="detail-card-empty" style="padding:32px;text-align:center;">
+                                기간을 선택하고 조회를 눌러주세요
+                            </div>
+                        </div>
                     </div>
                 </div>
             </main>
