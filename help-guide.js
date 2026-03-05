@@ -303,6 +303,52 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
+          <span class="material-symbols-outlined">admin_panel_settings</span>
+          행정 (L1)
+        </h3>
+        <p class="help-guide-desc">휴원/퇴원 행정 업무를 관리합니다. L2 필터로 세부 기능을 선택합니다.</p>
+
+        <h4 style="font-size:13.5px;font-weight:600;margin:14px 0 6px;color:var(--text-main,#1f1f1f);">결석대장</h4>
+        <p class="help-guide-desc">
+          장기 결석(3일 이상 연속 결석) 학생을 자동 집계하여 보여줍니다.
+        </p>
+        <ul class="help-guide-list">
+          <li>학생별 연속 결석 일수와 마지막 출석일이 표시됩니다.</li>
+          <li>학생을 클릭하면 상세 패널에서 <strong>상담 기록</strong>과 <strong>출결 이력</strong>을 확인할 수 있습니다.</li>
+          <li><strong>행정완료</strong> 버튼으로 해당 건의 행정 처리를 완료 표시합니다.</li>
+        </ul>
+
+        <h4 style="font-size:13.5px;font-weight:600;margin:14px 0 6px;color:var(--text-main,#1f1f1f);">휴퇴원요청</h4>
+        <p class="help-guide-desc">
+          학생/학부모의 휴원 또는 퇴원 요청을 접수하고 처리합니다.
+        </p>
+        <ul class="help-guide-list">
+          <li>상단 <strong>"+ 휴퇴원 요청"</strong> 버튼으로 새 요청을 등록합니다.</li>
+          <li>요청 유형: <strong>가휴원, 실휴원, 퇴원, 휴원연장</strong></li>
+          <li><strong>가휴원</strong> &mdash; 일시적 휴원 (복귀 예정)</li>
+          <li><strong>실휴원</strong> &mdash; 장기 휴원</li>
+          <li><strong>퇴원</strong> &mdash; 완전 퇴원 처리</li>
+          <li><strong>휴원연장</strong> &mdash; 기존 휴원의 종료일만 변경 (사유 불필요)</li>
+          <li>요청 상태: <strong>대기중 &rarr; 승인 &rarr; 완료</strong> 순서로 처리됩니다.</li>
+          <li>승인 시 학생 상태가 자동으로 변경됩니다 (가휴원/실휴원/퇴원).</li>
+        </ul>
+
+        <h4 style="font-size:13.5px;font-weight:600;margin:14px 0 6px;color:var(--text-main,#1f1f1f);">복귀예정</h4>
+        <p class="help-guide-desc">
+          휴원 중인 학생(가휴원/실휴원) 중 <strong>2주 이내에 복귀 예정</strong>인 학생을 보여줍니다.
+        </p>
+        <ul class="help-guide-list">
+          <li><strong>1주일 이내</strong>(빨간 D-day 뱃지)와 <strong>2주일 이내</strong>(주황 뱃지)로 그룹이 나뉩니다.</li>
+          <li><strong>D-n</strong> 뱃지로 복귀까지 남은 일수를 한눈에 확인합니다.</li>
+          <li>📞 아이콘 &mdash; <strong>복귀유도상담</strong> 완료 여부를 토글합니다. (녹색 체크 = 완료)</li>
+          <li>학생을 클릭하면 상세 패널에서 <strong>복귀상담 카드</strong>가 나타납니다.</li>
+          <li>복귀상담 카드에서 상담 체크박스와 <strong>상담 메모</strong>를 기록할 수 있습니다.</li>
+          <li>사이드바 카운트 뱃지: <strong>1주 이내 수 / 전체 수</strong>로 표시됩니다.</li>
+        </ul>
+      </section>
+
+      <section class="help-guide-section">
+        <h3 class="help-guide-section-title">
           <span class="material-symbols-outlined">label</span>
           필터 칩
         </h3>
