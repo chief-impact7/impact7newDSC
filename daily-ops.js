@@ -57,6 +57,13 @@ const TEMP_FIELD_LABELS = {
 };
 const DEFAULT_DOMAINS = ['Gr', 'A/G', 'R/C'];
 const KOREAN_CHAR_RE = /^[\uAC00-\uD7AF]/;
+const SV_SOURCE_MAP = {
+    sv_absence_makeup: ['absence_makeup'],
+    sv_clinic: ['extra'],
+    sv_diagnostic: ['temp'],
+    sv_fail: ['hw_fail', 'test_fail']
+};
+const SV_L3_KEYS = Object.keys(SV_SOURCE_MAP);
 
 // ─── OX Helpers ─────────────────────────────────────────────────────────────
 const OX_CYCLE = ['O', '△', 'X', ''];
@@ -708,8 +715,14 @@ function renderSubFilters() {
     const container = document.getElementById('nav-l2-group');
     const filters = {
         attendance: [
-            { key: 'scheduled_visit', label: '비정규' },
+            { key: 'scheduled_visit', label: '비정규', children: [
+                { key: 'sv_absence_makeup', label: '결석보충' },
+                { key: 'sv_clinic', label: '클리닉' },
+                { key: 'sv_diagnostic', label: '진단평가' },
+                { key: 'sv_fail', label: '미통과' }
+            ]},
             { key: 'pre_arrival', label: '정규', children: [
+                { key: 'enroll_pending', label: '등원예정' },
                 { key: 'present', label: '출석' },
                 { key: 'late', label: '지각' },
                 { key: 'absent', label: '결석' },
@@ -745,6 +758,8 @@ function renderSubFilters() {
     } else {
         _subFilterBase = null; // 캐시 초기화
         _returnUpcomingCache = null;
+        _scheduledVisitsCache = null;
+        _enrollPendingCache = null;
         let html = '';
         for (const f of items) {
             const childKeys = f.children ? f.children.map(c => c.key) : [];
@@ -1269,11 +1284,16 @@ function getSubFilterCount(filterKey) {
             case 'all': return rr(regularTotal);
             case 'pre_arrival': {
                 const preStudents = regularOnly.filter(s => hasRegularEnrollmentToday(s));
+                const enrollPending = getEnrollPendingVisits();
                 const pending = preStudents.filter(s => {
                     const rec = dailyRecords[s.docId];
                     return !rec?.attendance?.status || rec.attendance.status === '미확인';
-                }).length;
-                return { count: pending, total: preStudents.length };
+                }).length + enrollPending.length;
+                return { count: pending, total: preStudents.length + enrollPending.length };
+            }
+            case 'enroll_pending': {
+                const visits = getEnrollPendingVisits();
+                return { count: visits.length, total: visits.length };
             }
             case 'present': return rr(regularOnly.filter(s => dailyRecords[s.docId]?.attendance?.status === '출석').length);
             case 'late': return rr(regularOnly.filter(s => dailyRecords[s.docId]?.attendance?.status === '지각').length);
@@ -1286,7 +1306,15 @@ function getSubFilterCount(filterKey) {
                 const departed = regularOnly.filter(s => dailyRecords[s.docId]?.departure?.status === '귀가').length;
                 return { count: departed, total: regularTotal };
             }
-            default: return rr(0);
+            default: {
+                const svSources = SV_SOURCE_MAP[filterKey];
+                if (svSources) {
+                    const visits = getScheduledVisits().filter(v => svSources.includes(v.source));
+                    const pending = visits.filter(v => v.status === 'pending').length;
+                    return { count: pending, total: visits.length };
+                }
+                return rr(0);
+            }
         }
     }
 
@@ -1395,7 +1423,9 @@ function _formatTempSchoolInfo(ta) {
     return (school + levelShort + grade) || '';
 }
 
+let _scheduledVisitsCache = null;
 function getScheduledVisits() {
+    if (_scheduledVisitsCache) return _scheduledVisitsCache;
     const visits = [];
     // 이메일/아이디에서 이름 prefix 추출: "홍길동" → "길동", "Iris Lee" → "Iris", "chief" → "chief"
     const callerName = (emailOrId) => {
@@ -1492,29 +1522,7 @@ function getScheduledVisits() {
         });
     }
 
-    // 5) DB 등원예정 학생 (status === '등원예정', 등원 시작일이 오늘인 경우만)
-    for (const s of allStudents) {
-        if (s.status !== '등원예정') continue;
-        const todaysEnrolls = (s.enrollments || []).filter(e => e.start_date === selectedDate);
-        if (!todaysEnrolls.length) continue;
-        visits.push({
-            id: `enroll_${s.docId}`,
-            source: 'enroll_pending',
-            sourceLabel: '등원예정',
-            sourceColor: '#059669',
-            studentId: s.docId,
-            name: s.name || s.docId,
-            time: '',
-            detail: todaysEnrolls.map(e => `${e.level_symbol || ''}${e.class_number || ''}`).filter(Boolean).join(', '),
-            status: 'pending',
-            caller: '',
-            completedBy: '',
-            completedAt: '',
-            docId: s.docId
-        });
-    }
-
-    // 6) 결석보충 (absenceRecords)
+    // 5) 결석보충 (absenceRecords) — 등원예정은 정규 쪽으로 이동
     for (const r of absenceRecords) {
         if (r.resolution !== '보충' || r.makeup_date !== selectedDate || r.status !== 'open') continue;
         visits.push({
@@ -1538,6 +1546,36 @@ function getScheduledVisits() {
     // 시간임박순 정렬
     visits.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
 
+    _scheduledVisitsCache = visits;
+    return visits;
+}
+
+let _enrollPendingCache = null;
+function getEnrollPendingVisits() {
+    if (_enrollPendingCache) return _enrollPendingCache;
+    const visits = [];
+    for (const s of allStudents) {
+        if (s.status !== '등원예정') continue;
+        if (!matchesBranchFilter(s)) continue;
+        const todaysEnrolls = (s.enrollments || []).filter(e => e.start_date === selectedDate);
+        if (!todaysEnrolls.length) continue;
+        visits.push({
+            id: `enroll_${s.docId}`,
+            source: 'enroll_pending',
+            sourceLabel: '등원예정',
+            sourceColor: '#059669',
+            studentId: s.docId,
+            name: s.name || s.docId,
+            time: '',
+            detail: todaysEnrolls.map(e => `${e.level_symbol || ''}${e.class_number || ''}`).filter(Boolean).join(', '),
+            status: 'pending',
+            caller: '',
+            completedBy: '',
+            completedAt: '',
+            docId: s.docId
+        });
+    }
+    _enrollPendingCache = visits;
     return visits;
 }
 
@@ -1753,7 +1791,15 @@ function formatCompletedBadge(completedBy, completedAt) {
 }
 
 function renderScheduledVisitList() {
-    const visits = getScheduledVisits();
+    let visits = getScheduledVisits();
+
+    // L3 필터 적용
+    const activeL3 = [...currentSubFilter].find(k => SV_SOURCE_MAP[k]);
+    if (activeL3) {
+        const sources = SV_SOURCE_MAP[activeL3];
+        visits = visits.filter(v => sources.includes(v.source));
+    }
+
     const container = document.getElementById('list-items');
     const countEl = document.getElementById('list-count');
 
@@ -1781,11 +1827,11 @@ function renderScheduledVisitList() {
 
     // 소스별 라벨
     const SOURCE_LABELS = {
-        extra: '클리닉', temp: '진단평가', enroll_pending: '등원예정',
+        extra: '클리닉', temp: '진단평가',
         hw_fail: '숙제미통과', test_fail: '테스트미통과', absence_makeup: '결석보충'
     };
-    // 소스별 그룹핑 (순서: 클리닉 → 진단평가 → 등원예정 → 숙제미통과 → 테스트미통과 → 결석보충)
-    const SOURCE_ORDER = ['extra', 'temp', 'enroll_pending', 'hw_fail', 'test_fail', 'absence_makeup'];
+    // 소스별 그룹핑 (순서: 클리닉 → 진단평가 → 숙제미통과 → 테스트미통과 → 결석보충)
+    const SOURCE_ORDER = ['extra', 'temp', 'hw_fail', 'test_fail', 'absence_makeup'];
     const arrivedBySource = {};
     for (const v of arrived) {
         if (!arrivedBySource[v.source]) arrivedBySource[v.source] = [];
@@ -1872,6 +1918,43 @@ function renderScheduledVisitList() {
         html += completedVisits.map(renderVisitItem).join('');
     }
     container.innerHTML = html;
+}
+
+function renderEnrollPendingItem(v) {
+    const clickHandler = `onclick="selectedStudentId='${escAttr(v.studentId)}'; renderStudentDetail('${escAttr(v.studentId)}'); document.querySelectorAll('.list-item').forEach(el=>el.classList.remove('active')); this.classList.add('active');"`;
+    return `<div class="list-item visit-item" data-id="${escAttr(v.studentId)}" ${clickHandler} style="cursor:pointer;">
+        <div class="item-info">
+            <span class="item-title">${esc(v.name)}</span>
+            <span class="item-desc"><span class="visit-source-badge" style="background:${v.sourceColor};">${esc(v.sourceLabel)}</span> ${esc(v.detail)}</span>
+        </div>
+    </div>`;
+}
+
+function renderEnrollPendingSection() {
+    const visits = getEnrollPendingVisits();
+    if (visits.length === 0) return '';
+    let html = `<div class="leave-section-divider"><span>등원예정 (${visits.length}건)</span></div>`;
+    html += visits.map(renderEnrollPendingItem).join('');
+    return html;
+}
+
+function renderEnrollPendingOnly() {
+    const visits = getEnrollPendingVisits();
+    const container = document.getElementById('list-items');
+    const countEl = document.getElementById('list-count');
+
+    renderFilterChips();
+    countEl.textContent = `${visits.length}건`;
+
+    if (visits.length === 0) {
+        container.innerHTML = `<div class="empty-state">
+            <span class="material-symbols-outlined">event_available</span>
+            <p>등원예정 학생이 없습니다</p>
+        </div>`;
+        return;
+    }
+
+    container.innerHTML = visits.map(renderEnrollPendingItem).join('');
 }
 
 function renderDepartureCheckList() {
@@ -2218,9 +2301,18 @@ function selectReturnUpcomingStudent(studentId) {
 }
 
 function renderListPanel() {
-    // 비정규 서브필터 활성 시 통합 리스트로 전환
-    if (currentCategory === 'attendance' && currentSubFilter.has('scheduled_visit')) {
+    // 비정규 L2 또는 L3(sv_*) 서브필터 활성 시 통합 리스트로 전환
+    if (currentCategory === 'attendance' && (
+        currentSubFilter.has('scheduled_visit') ||
+        SV_L3_KEYS.some(k => currentSubFilter.has(k))
+    )) {
         renderScheduledVisitList();
+        return;
+    }
+
+    // 등원예정 L3 선택 시 등원예정만 표시
+    if (currentCategory === 'attendance' && currentSubFilter.has('enroll_pending')) {
+        renderEnrollPendingOnly();
         return;
     }
 
@@ -2290,9 +2382,12 @@ function renderListPanel() {
         }
     }
 
-    countEl.textContent = `${students.length}명`;
+    // 정규(pre_arrival) L2 활성 시 등원예정 인원도 카운트에 포함
+    const enrollPendingCount = (currentCategory === 'attendance' && currentSubFilter.has('pre_arrival'))
+        ? getEnrollPendingVisits().length : 0;
+    countEl.textContent = `${students.length + enrollPendingCount}명`;
 
-    if (students.length === 0 && contactResults.length === 0) {
+    if (students.length === 0 && contactResults.length === 0 && enrollPendingCount === 0) {
         container.innerHTML = `<div class="empty-state">
             <span class="material-symbols-outlined">person_search</span>
             <p>해당하는 학생이 없습니다</p>
@@ -2622,8 +2717,10 @@ function renderListPanel() {
         currentSubFilter.size > 0 &&
         !currentSubFilter.has('all') &&
         !currentSubFilter.has('pre_arrival') &&
+        !currentSubFilter.has('enroll_pending') &&
         !currentSubFilter.has('scheduled_visit') &&
-        !currentSubFilter.has('departure_check');
+        !currentSubFilter.has('departure_check') &&
+        !SV_L3_KEYS.some(k => currentSubFilter.has(k));
 
     // 정규/비정규 분리 (single-pass)
     let regularActive, irregularActive;
@@ -2650,6 +2747,10 @@ function renderListPanel() {
         return html;
     };
 
+    // 정규(pre_arrival) L2 선택 시 등원예정 섹션 상단 삽입
+    const enrollPendingHtml = (currentCategory === 'attendance' && currentSubFilter.has('pre_arrival'))
+        ? renderEnrollPendingSection() : '';
+
     // 그룹 뷰 or 일반 렌더링
     if (groupViewMode !== 'none') {
         const groups = {};
@@ -2666,13 +2767,13 @@ function renderListPanel() {
             }
         });
         const sortedKeys = Object.keys(groups).sort((a, b) => a.localeCompare(b, 'ko'));
-        let html = sortedKeys.map(key => {
+        let html = enrollPendingHtml + sortedKeys.map(key => {
             const headerHtml = `<div class="group-header"><span class="group-label">${esc(key)}</span><span class="group-count">${groups[key].length}명</span></div>`;
             return headerHtml + groups[key].map(renderItemHtml).join('');
         }).join('');
         container.innerHTML = appendIrregularAndLeave(html);
     } else {
-        let html = regularActive.map(renderItemHtml).join('');
+        let html = enrollPendingHtml + regularActive.map(renderItemHtml).join('');
         container.innerHTML = appendIrregularAndLeave(html);
     }
 
