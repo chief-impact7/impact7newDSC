@@ -3253,3 +3253,66 @@ textarea.field-input {
 .absence-validity-badge { font-size:10px; font-weight:600; border-radius:3px; padding:1px 5px; margin-left:4px; }
 .absence-validity-badge.valid { color:#16a34a; background:#f0fdf4; border:1px solid #bbf7d0; }
 .absence-validity-badge.invalid { color:#dc2626; background:#fef2f2; border:1px solid #fecaca; }
+
+/* ===== Leave Request ===== */
+#lr-student-results .list-item:hover { background: var(--bg-hover); }
+
+/* M3 Button System */
+.lr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: 'Google Sans', 'Roboto', sans-serif;
+  border: none;
+  cursor: pointer;
+  transition: box-shadow 0.2s, background 0.2s;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.lr-btn .material-symbols-outlined { font-size: 18px; }
+
+/* Filled (primary action — 승인) */
+.lr-btn-filled {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 1px 3px 0 rgba(0,0,0,.15);
+}
+.lr-btn-filled:hover {
+  box-shadow: 0 1px 3px 1px rgba(0,0,0,.2);
+  background: #0842a0;
+}
+
+/* Tonal (secondary action — 요청) */
+.lr-btn-tonal {
+  background: #d3e3fd;
+  color: #0b57d0;
+}
+.lr-btn-tonal:hover {
+  background: #c0d7fb;
+  box-shadow: 0 1px 2px 0 rgba(0,0,0,.1);
+}
+
+/* Outlined (tertiary — 취소) */
+.lr-btn-outlined {
+  background: transparent;
+  color: var(--text-main);
+  border: 1px solid var(--border);
+}
+.lr-btn-outlined:hover {
+  background: var(--surface-hover, #f5f5f5);
+}
+
+/* Text (minimal — modal 취소) */
+.lr-btn-text {
+  background: transparent;
+  color: var(--primary);
+  padding: 8px 12px;
+}
+.lr-btn-text:hover {
+  background: rgba(11,87,208,.08);
+}

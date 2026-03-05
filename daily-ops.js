@@ -16,6 +16,8 @@ let hwFailTasks = [];           // hw_fail_tasks 전체
 let testFailTasks = [];         // test_fail_tasks 전체
 let tempAttendances = [];       // temp_attendance 전체 (해당 날짜)
 let absenceRecords = [];        // absence_records (open 상태)
+let leaveRequests = [];          // leave_requests (requested + approved)
+let withdrawnStudents = [];      // 퇴원 학생 (퇴원→휴원 검색용)
 let selectedDate = todayStr();
 let selectedStudentId = null;
 let currentCategory = 'attendance'; // 'attendance' | 'homework' | 'test' | 'automation'
@@ -470,6 +472,28 @@ async function loadAbsenceRecords() {
     }
 }
 
+async function loadLeaveRequests() {
+    leaveRequests = [];
+    try {
+        const q = query(collection(db, 'leave_requests'), where('status', 'in', ['requested', 'approved']));
+        const snap = await getDocs(q);
+        snap.forEach(d => leaveRequests.push({ docId: d.id, ...d.data() }));
+    } catch (err) {
+        console.error('leave_requests 로드 실패:', err.message);
+    }
+}
+
+async function loadWithdrawnStudents() {
+    withdrawnStudents = [];
+    try {
+        const q = query(collection(db, 'students'), where('status', '==', '퇴원'));
+        const snap = await getDocs(q);
+        snap.forEach(d => withdrawnStudents.push({ docId: d.id, ...d.data() }));
+    } catch (err) {
+        console.error('퇴원 학생 로드 실패:', err.message);
+    }
+}
+
 function saveDailyRecord(studentId, updates) {
     if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     if (saveTimers[studentId]) clearTimeout(saveTimers[studentId]);
@@ -708,7 +732,8 @@ function renderSubFilters() {
             { key: 'auto_unchecked', label: '미체크 출석' }
         ],
         admin: [
-            { key: 'absence_ledger', label: '결석대장' }
+            { key: 'absence_ledger', label: '결석대장' },
+            { key: 'leave_request', label: '휴퇴원요청서' }
         ]
     };
 
@@ -1268,6 +1293,11 @@ function getSubFilterCount(filterKey) {
             case 'absence_ledger': {
                 let filtered = selectedBranch ? absenceRecords.filter(r => r.branch === selectedBranch) : absenceRecords;
                 return { count: filtered.length, total: 0 };
+            }
+            case 'leave_request': {
+                let filtered = selectedBranch ? leaveRequests.filter(r => r.branch === selectedBranch) : leaveRequests;
+                const pending = filtered.filter(r => r.status === 'requested').length;
+                return { count: pending, total: filtered.length };
             }
             default: return { count: 0, total: 0 };
         }
@@ -1992,6 +2022,105 @@ function renderAbsenceLedgerList() {
     container.innerHTML = html;
 }
 
+// ─── 휴퇴원요청서 리스트 ─────────────────────────────────────────────────────
+
+function _leaveRequestTypeBadge(r) {
+    const typeMap = {
+        '휴원요청': { label: '휴원', color: '#2563eb' },
+        '퇴원요청': { label: '퇴원', color: '#dc2626' },
+        '휴원→퇴원': { label: '휴→퇴', color: '#dc2626' },
+        '퇴원→휴원': { label: '퇴→휴', color: '#7c3aed' }
+    };
+    const t = typeMap[r.request_type] || { label: r.request_type, color: '#666' };
+    let badge = `<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;color:#fff;background:${t.color};">${esc(t.label)}</span>`;
+    if (r.leave_sub_type) {
+        badge += `<span style="font-size:11px;color:var(--text-sec);margin-left:2px;">${esc(r.leave_sub_type)}</span>`;
+    }
+    return badge;
+}
+
+function _leaveRequestStatusBadge(status) {
+    const map = {
+        'requested': { label: '대기', cls: 'absence-status-badge unconsulted' },
+        'approved': { label: '승인', cls: 'absence-status-badge completed' },
+        'rejected': { label: '반려', cls: 'absence-status-badge noshow' },
+        'cancelled': { label: '취소', cls: 'absence-status-badge undecided' }
+    };
+    const m = map[status] || { label: status, cls: '' };
+    return `<span class="${m.cls}">${esc(m.label)}</span>`;
+}
+
+let _selectedLeaveRequestId = null;
+
+function renderLeaveRequestList() {
+    const container = document.getElementById('list-items');
+    const countEl = document.getElementById('list-count');
+    renderFilterChips();
+
+    let records = selectedBranch ? leaveRequests.filter(r => r.branch === selectedBranch) : [...leaveRequests];
+    countEl.textContent = `${records.length}건`;
+
+    // 새 요청 버튼
+    let html = `<div style="padding:8px 12px;">
+        <button class="lr-btn lr-btn-tonal" style="width:100%;" onclick="openLeaveRequestModal()">
+            <span class="material-symbols-outlined">add</span> 새 요청
+        </button>
+    </div>`;
+
+    if (records.length === 0) {
+        html += '<div class="empty-state">휴퇴원 요청이 없습니다.</div>';
+        container.innerHTML = html;
+        return;
+    }
+
+    // 그룹: 승인 대기 → 승인 완료
+    const pending = records.filter(r => r.status === 'requested');
+    const approved = records.filter(r => r.status === 'approved');
+
+    const groups = [
+        { label: '승인 대기', items: pending },
+        { label: '승인 완료', items: approved }
+    ];
+
+    for (const g of groups) {
+        if (g.items.length === 0) continue;
+        html += `<div class="visit-source-header" style="margin-top:8px;padding:4px 12px;font-size:11px;font-weight:600;color:var(--text-sec);">${esc(g.label)} (${g.items.length})</div>`;
+        for (const r of g.items) {
+            const isActive = r.student_id === selectedStudentId && r.docId === _selectedLeaveRequestId;
+            const classCodes = (r.class_codes || []).join(', ');
+            const _by = getTeacherName(r.requested_by);
+            const tsStr = _fmtTs(r.requested_at);
+
+            html += `<div class="list-item ${isActive ? 'active' : ''}" data-id="${escAttr(r.docId)}"
+                onclick="selectLeaveRequest('${escAttr(r.docId)}')">
+                <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+                            <span style="font-weight:600;font-size:13px;">${esc(r.student_name)}</span>
+                            ${_leaveRequestTypeBadge(r)}
+                            ${_leaveRequestStatusBadge(r.status)}
+                        </div>
+                        <div style="font-size:11px;color:var(--text-sec);margin-top:2px;">
+                            ${esc(classCodes)}${_by ? ' · ' + esc(_by) : ''} · ${esc(tsStr)}
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        }
+    }
+    container.innerHTML = html;
+}
+
+function selectLeaveRequest(docId) {
+    _selectedLeaveRequestId = docId;
+    const r = leaveRequests.find(lr => lr.docId === docId);
+    if (r) {
+        selectedStudentId = r.student_id;
+        renderLeaveRequestList();
+        renderStudentDetail(r.student_id);
+    }
+}
+
 function renderListPanel() {
     // 비정규 서브필터 활성 시 통합 리스트로 전환
     if (currentCategory === 'attendance' && currentSubFilter.has('scheduled_visit')) {
@@ -2008,6 +2137,12 @@ function renderListPanel() {
     // 결석대장 서브필터 활성 시 결석대장 리스트로 전환
     if (currentCategory === 'admin' && currentSubFilter.has('absence_ledger')) {
         renderAbsenceLedgerList();
+        return;
+    }
+
+    // 휴퇴원요청서 서브필터 활성 시 요청서 리스트로 전환
+    if (currentCategory === 'admin' && currentSubFilter.has('leave_request')) {
+        renderLeaveRequestList();
         return;
     }
 
@@ -4712,6 +4847,74 @@ function renderAbsenceRecordCard(studentId) {
         </div>`;
 }
 
+// ─── 휴퇴원요청서 카드 (학생 상세) ──────────────────────────────────────────
+
+function renderLeaveRequestCard(studentId) {
+    const records = leaveRequests.filter(r => r.student_id === studentId);
+    if (records.length === 0) return '';
+
+    const rows = records.map((r, idx) => {
+        const typeBadge = _leaveRequestTypeBadge(r);
+        const statusBadge = _leaveRequestStatusBadge(r.status);
+
+        // 날짜 요약
+        let dateStr = '';
+        if (r.withdrawal_date) dateStr = `퇴원일: ${r.withdrawal_date}`;
+        else if (r.leave_start_date) dateStr = `${r.leave_start_date} ~ ${r.leave_end_date || ''}`;
+
+        // 메타
+        const reqBy = getTeacherName(r.requested_by);
+        const appBy = getTeacherName(r.approved_by);
+        let metaHtml = `<div style="font-size:10px;color:var(--text-sec);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap;">
+            ${reqBy ? `<span>요청: ${esc(reqBy)} ${_fmtTs(r.requested_at, true)}</span>` : ''}
+            ${appBy ? `<span>승인: ${esc(appBy)} ${_fmtTs(r.approved_at, true)}</span>` : ''}
+        </div>`;
+
+        // 상담내용
+        const noteHtml = r.consultation_note
+            ? `<div style="font-size:12px;margin-top:4px;padding:6px 8px;background:var(--bg-secondary);border-radius:4px;">${esc(r.consultation_note)}</div>`
+            : '';
+
+        // 버튼
+        let actionsHtml = '';
+        if (r.status === 'requested') {
+            actionsHtml = `
+                <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
+                    <button class="lr-btn lr-btn-outlined"
+                        onclick="cancelLeaveRequest('${escAttr(r.docId)}', '${escAttr(studentId)}')">
+                        <span class="material-symbols-outlined">close</span>요청 취소
+                    </button>
+                    <button class="lr-btn lr-btn-filled"
+                        onclick="approveLeaveRequest('${escAttr(r.docId)}', '${escAttr(studentId)}')">
+                        <span class="material-symbols-outlined">check</span>승인
+                    </button>
+                </div>`;
+        }
+
+        return `
+            <div class="pending-task-row" data-lr-idx="${idx}" style="background:#f0f5ff;">
+                <div class="pending-task-summary" onclick="this.parentElement.classList.toggle('expanded')">
+                    <span>${typeBadge} ${statusBadge} <span style="font-size:12px;color:var(--text-sec);margin-left:4px;">${esc(dateStr)}</span></span>
+                    <span class="pending-task-arrow material-symbols-outlined" style="font-size:16px;color:var(--text-sec);">expand_more</span>
+                </div>
+                <div class="pending-task-expand">
+                    ${noteHtml}
+                    ${metaHtml}
+                    ${actionsHtml}
+                </div>
+            </div>`;
+    }).join('');
+
+    return `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:#2563eb;font-size:18px;">description</span>
+                휴퇴원요청서 <span style="font-size:12px;color:var(--text-sec);">(${records.length}건)</span>
+            </div>
+            ${rows}
+        </div>`;
+}
+
 function renderStudentDetail(studentId) {
     if (!studentId) {
         document.getElementById('detail-empty').style.display = '';
@@ -5018,6 +5221,9 @@ function renderStudentDetail(studentId) {
 
         <!-- 결석대장 카드 -->
         ${renderAbsenceRecordCard(studentId)}
+
+        <!-- 휴퇴원요청서 카드 -->
+        ${renderLeaveRequestCard(studentId)}
 
         <!-- 클리닉 카드 -->
         ${extraVisitHtml}
@@ -5525,6 +5731,288 @@ async function cancelRetake(retakeDocId) {
 function closeModal(id, event) {
     if (!event || event.target === event.currentTarget) {
         document.getElementById(id).style.display = 'none';
+    }
+}
+
+// ─── 휴퇴원요청서 모달 로직 ─────────────────────────────────────────────────
+
+const _isWithdrawalType = (t) => t === '퇴원요청' || t === '휴원→퇴원';
+const _isLeaveSubType = (t) => t === '휴원요청' || t === '퇴원→휴원';
+
+let _leaveRequestStudentId = null;
+let _leaveRequestStudentData = null;
+
+function openLeaveRequestModal() {
+    document.getElementById('lr-request-type').value = '휴원요청';
+    document.getElementById('lr-sub-type').value = '실휴원';
+    document.getElementById('lr-consultation-note').value = '';
+    onLeaveRequestTypeChange(); // resets student state + date fields
+    document.getElementById('leave-request-modal').style.display = 'flex';
+}
+
+function onLeaveRequestTypeChange() {
+    const type = document.getElementById('lr-request-type').value;
+    const subWrap = document.getElementById('lr-sub-type-wrap');
+    subWrap.style.display = _isLeaveSubType(type) ? '' : 'none';
+    _renderLeaveRequestDateFields(type);
+    // 퇴원→휴원 선택 시 퇴원 학생 lazy-load
+    if (type === '퇴원→휴원' && withdrawnStudents.length === 0) {
+        loadWithdrawnStudents();
+    }
+    // 검색 초기화
+    _leaveRequestStudentId = null;
+    _leaveRequestStudentData = null;
+    document.getElementById('lr-student-search').value = '';
+    document.getElementById('lr-student-results').innerHTML = '';
+    document.getElementById('lr-student-info').style.display = 'none';
+}
+
+function _renderLeaveRequestDateFields(type) {
+    const container = document.getElementById('lr-date-fields');
+    if (_isWithdrawalType(type)) {
+        container.innerHTML = `
+            <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">퇴원시작일</label>
+            <input type="date" id="lr-withdrawal-date" class="field-input" style="width:100%;">`;
+    } else {
+        container.innerHTML = `
+            <div style="display:flex;gap:8px;">
+                <div style="flex:1;">
+                    <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">휴원시작일</label>
+                    <input type="date" id="lr-leave-start" class="field-input" style="width:100%;">
+                </div>
+                <div style="flex:1;">
+                    <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">휴원종료일</label>
+                    <input type="date" id="lr-leave-end" class="field-input" style="width:100%;">
+                </div>
+            </div>`;
+    }
+}
+
+function searchLeaveRequestStudent(term) {
+    const results = document.getElementById('lr-student-results');
+    if (!term || term.length < 1) { results.innerHTML = ''; return; }
+
+    const type = document.getElementById('lr-request-type').value;
+    let pool;
+    if (type === '퇴원→휴원') {
+        pool = withdrawnStudents;
+    } else if (type === '휴원→퇴원') {
+        pool = allStudents.filter(s => LEAVE_STATUSES.includes(s.status));
+    } else {
+        pool = allStudents.filter(s => s.status === '재원' || s.status === '등원예정');
+    }
+
+    const isChosung = isChosungOnly(term);
+    const matched = pool.filter(s => {
+        if (isChosung) return matchChosung(s.name, term);
+        return s.name.includes(term);
+    }).slice(0, 10);
+
+    if (matched.length === 0) {
+        results.innerHTML = '<div style="padding:8px;font-size:12px;color:var(--text-sec);">결과 없음</div>';
+        return;
+    }
+
+    results.innerHTML = matched.map(s => {
+        const codes = allClassCodes(s).join(', ');
+        return `<div class="list-item" style="padding:6px 10px;cursor:pointer;" onclick="selectLeaveRequestStudentById('${escAttr(s.docId)}')">
+            <span style="font-weight:600;font-size:13px;">${esc(s.name)}</span>
+            <span style="font-size:11px;color:var(--text-sec);margin-left:6px;">${esc(codes)} · ${esc(s.status || '')}</span>
+        </div>`;
+    }).join('');
+}
+
+function selectLeaveRequestStudentById(id) {
+    const type = document.getElementById('lr-request-type').value;
+    const pool = type === '퇴원→휴원' ? withdrawnStudents : allStudents;
+    const s = pool.find(st => st.docId === id);
+    if (!s) return;
+
+    _leaveRequestStudentId = id;
+    _leaveRequestStudentData = s;
+
+    document.getElementById('lr-student-search').value = s.name;
+    document.getElementById('lr-student-results').innerHTML = '';
+    document.getElementById('lr-student-info').style.display = '';
+    document.getElementById('lr-student-name').textContent = s.name;
+    document.getElementById('lr-student-class').textContent = allClassCodes(s).join(', ');
+    document.getElementById('lr-student-status').textContent = s.status || '';
+    document.getElementById('lr-student-phone').textContent = s.student_phone || '—';
+    document.getElementById('lr-parent-phone').textContent = s.parent_phone_1 || '—';
+}
+
+async function submitLeaveRequest() {
+    if (!_leaveRequestStudentId || !_leaveRequestStudentData) {
+        alert('학생을 선택해주세요.');
+        return;
+    }
+
+    const type = document.getElementById('lr-request-type').value;
+    const s = _leaveRequestStudentData;
+    const isWithdrawal = _isWithdrawalType(type);
+    const showSub = _isLeaveSubType(type);
+
+    const data = {
+        student_id: _leaveRequestStudentId,
+        student_name: s.name,
+        branch: branchFromStudent(s),
+        class_codes: allClassCodes(s),
+        request_type: type,
+        student_phone: s.student_phone || '',
+        parent_phone_1: s.parent_phone_1 || '',
+        consultation_note: document.getElementById('lr-consultation-note').value.trim(),
+        status: 'requested',
+        previous_status: s.status || '',
+        requested_by: currentUser?.email || '',
+        requested_at: serverTimestamp(),
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp()
+    };
+
+    if (showSub) {
+        data.leave_sub_type = document.getElementById('lr-sub-type').value;
+    }
+
+    if (isWithdrawal) {
+        const wd = document.getElementById('lr-withdrawal-date')?.value;
+        if (!wd) { alert('퇴원시작일을 입력해주세요.'); return; }
+        data.withdrawal_date = wd;
+    } else {
+        const ls = document.getElementById('lr-leave-start')?.value;
+        const le = document.getElementById('lr-leave-end')?.value;
+        if (!ls || !le) { alert('휴원 시작일과 종료일을 입력해주세요.'); return; }
+        if (le < ls) { alert('종료일이 시작일보다 앞섭니다.'); return; }
+        data.leave_start_date = ls;
+        data.leave_end_date = le;
+    }
+
+    try {
+        const docRef = await addDoc(collection(db, 'leave_requests'), data);
+        leaveRequests.push({ docId: docRef.id, ...data, requested_at: new Date(), created_at: new Date() });
+        document.getElementById('leave-request-modal').style.display = 'none';
+        showSaveIndicator('saved');
+        renderSubFilters();
+        renderLeaveRequestList();
+    } catch (err) {
+        alert('요청 저장 실패: ' + err.message);
+        console.error(err);
+    }
+}
+
+// ─── 휴퇴원 승인/취소 ───────────────────────────────────────────────────────
+
+async function approveLeaveRequest(docId, studentId) {
+    const r = leaveRequests.find(lr => lr.docId === docId);
+    if (!r) return;
+
+    const typeLabel = `${r.request_type}${r.leave_sub_type ? ' (' + r.leave_sub_type + ')' : ''}`;
+    if (!confirm(`${r.student_name} — ${typeLabel}\n승인하시겠습니까?`)) return;
+
+    try {
+        // 1. 학생 현재 상태 가져오기
+        const studentSnap = await getDoc(doc(db, 'students', studentId));
+        const beforeData = studentSnap.exists() ? studentSnap.data() : {};
+        const beforeStatus = beforeData.status || '';
+
+        // 2. 요청 승인 처리
+        await updateDoc(doc(db, 'leave_requests', docId), {
+            status: 'approved',
+            approved_by: currentUser?.email || '',
+            approved_at: serverTimestamp(),
+            updated_at: serverTimestamp()
+        });
+
+        // 3. 학생 status 변경
+        const studentUpdate = {};
+        const isWithdrawal = _isWithdrawalType(r.request_type);
+
+        if (isWithdrawal) {
+            studentUpdate.status = '퇴원';
+            studentUpdate.pause_start_date = deleteField();
+            studentUpdate.pause_end_date = deleteField();
+        } else {
+            // 휴원요청 or 퇴원→휴원
+            studentUpdate.status = r.leave_sub_type || '실휴원';
+            studentUpdate.pause_start_date = r.leave_start_date || '';
+            studentUpdate.pause_end_date = r.leave_end_date || '';
+        }
+
+        // 3-4. 학생 status 변경 + history_logs 기록 (병렬)
+        const changeType = isWithdrawal ? 'WITHDRAW' : 'UPDATE';
+        await Promise.all([
+            updateDoc(doc(db, 'students', studentId), studentUpdate),
+            addDoc(collection(db, 'history_logs'), {
+                doc_id: studentId,
+                change_type: changeType,
+                before: JSON.stringify({ status: beforeStatus, pause_start_date: beforeData.pause_start_date || '', pause_end_date: beforeData.pause_end_date || '' }),
+                after: JSON.stringify({ status: studentUpdate.status, pause_start_date: studentUpdate.pause_start_date || '', pause_end_date: studentUpdate.pause_end_date || '' }),
+                google_login_id: currentUser?.email || 'system',
+                timestamp: serverTimestamp()
+            })
+        ]);
+
+        // 5. 로컬 캐시 업데이트
+        const lrIdx = leaveRequests.findIndex(lr => lr.docId === docId);
+        if (lrIdx >= 0) leaveRequests[lrIdx].status = 'approved';
+
+        const sIdx = allStudents.findIndex(s => s.docId === studentId);
+        if (isWithdrawal) {
+            // 퇴원: allStudents에서 제거, withdrawnStudents에 추가
+            if (sIdx >= 0) {
+                const removed = allStudents.splice(sIdx, 1)[0];
+                removed.status = '퇴원';
+                delete removed.pause_start_date;
+                delete removed.pause_end_date;
+                withdrawnStudents.push(removed);
+            }
+        } else if (r.request_type === '퇴원→휴원') {
+            // 퇴원→휴원: withdrawnStudents에서 제거, allStudents에 추가
+            const wIdx = withdrawnStudents.findIndex(s => s.docId === studentId);
+            if (wIdx >= 0) {
+                const restored = withdrawnStudents.splice(wIdx, 1)[0];
+                restored.status = studentUpdate.status;
+                restored.pause_start_date = studentUpdate.pause_start_date;
+                restored.pause_end_date = studentUpdate.pause_end_date;
+                allStudents.push(restored);
+            }
+        } else {
+            // 휴원: allStudents에서 status만 변경
+            if (sIdx >= 0) {
+                allStudents[sIdx].status = studentUpdate.status;
+                allStudents[sIdx].pause_start_date = studentUpdate.pause_start_date;
+                allStudents[sIdx].pause_end_date = studentUpdate.pause_end_date;
+            }
+        }
+
+        showSaveIndicator('saved');
+        renderSubFilters();
+        if (currentCategory === 'admin' && currentSubFilter.has('leave_request')) {
+            renderLeaveRequestList();
+        }
+        renderStudentDetail(studentId);
+    } catch (err) {
+        alert('승인 처리 실패: ' + err.message);
+        console.error(err);
+    }
+}
+
+async function cancelLeaveRequest(docId, studentId) {
+    if (!confirm('요청을 취소하시겠습니까?')) return;
+    try {
+        await updateDoc(doc(db, 'leave_requests', docId), {
+            status: 'cancelled',
+            updated_at: serverTimestamp()
+        });
+        leaveRequests = leaveRequests.filter(lr => lr.docId !== docId);
+        showSaveIndicator('saved');
+        renderSubFilters();
+        if (currentCategory === 'admin' && currentSubFilter.has('leave_request')) {
+            renderLeaveRequestList();
+        }
+        renderStudentDetail(studentId);
+    } catch (err) {
+        alert('취소 실패: ' + err.message);
+        console.error(err);
     }
 }
 
@@ -6237,7 +6725,7 @@ onAuthStateChanged(auth, async (user) => {
         getCurrentSemester();
         buildSemesterFilter();
         await trackTeacherLogin(user);
-        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadAbsenceRecords(), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers(), loadContacts()]);
+        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers(), loadContacts()]);
         await syncAbsenceRecords();
         await loadRoleMemos().catch(() => {});
         updateDateDisplay();
@@ -6268,7 +6756,7 @@ onAuthStateChanged(auth, async (user) => {
 // ─── Keyboard shortcut: ESC closes modals ───────────────────────────────────
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-        ['schedule-modal', 'homework-modal', 'test-modal', 'enrollment-modal', 'memo-modal', 'next-hw-modal', 'parent-msg-modal', 'temp-attendance-modal', 'bulk-confirm-modal', 'bulk-memo-modal', 'bulk-notify-modal'].forEach(id => {
+        ['schedule-modal', 'homework-modal', 'test-modal', 'enrollment-modal', 'memo-modal', 'next-hw-modal', 'parent-msg-modal', 'temp-attendance-modal', 'bulk-confirm-modal', 'bulk-memo-modal', 'bulk-notify-modal', 'leave-request-modal'].forEach(id => {
             const modal = document.getElementById(id);
             if (modal?.style.display !== 'none') {
                 modal.style.display = 'none';
@@ -6906,7 +7394,7 @@ window.refreshData = async () => {
     await loadSemesterSettings();
     getCurrentSemester();
     buildSemesterFilter();
-    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadAbsenceRecords(), loadRoleMemos(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers()]);
+    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadRoleMemos(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers()]);
     await syncAbsenceRecords();
     renderBranchFilter();
     renderSubFilters();
@@ -6980,6 +7468,16 @@ window.searchMemoStudent = searchMemoStudent;
 window.selectMemoStudent = selectMemoStudent;
 window.markMemoRead = markMemoRead;
 window.expandMemo = expandMemo;
+
+// 휴퇴원요청서
+window.openLeaveRequestModal = openLeaveRequestModal;
+window.onLeaveRequestTypeChange = onLeaveRequestTypeChange;
+window.searchLeaveRequestStudent = searchLeaveRequestStudent;
+window.selectLeaveRequestStudentById = selectLeaveRequestStudentById;
+window.submitLeaveRequest = submitLeaveRequest;
+window.selectLeaveRequest = selectLeaveRequest;
+window.approveLeaveRequest = approveLeaveRequest;
+window.cancelLeaveRequest = cancelLeaveRequest;
 
 // ─── 학부모 알림 메시지 생성 ────────────────────────────────────────────────
 

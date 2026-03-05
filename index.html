@@ -780,5 +780,68 @@
             </div>
         </div>
     </div>
+
+    <!-- 휴퇴원요청서 모달 -->
+    <div id="leave-request-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="휴퇴원요청서" onclick="closeModal('leave-request-modal', event)" style="display:none;">
+        <div class="modal-content" style="max-width:480px;">
+            <div class="modal-header">
+                <h3>휴퇴원 요청</h3>
+                <button class="modal-close" onclick="closeModal('leave-request-modal')">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;">
+                <!-- 요청 유형 -->
+                <div>
+                    <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">요청 유형</label>
+                    <select id="lr-request-type" class="field-input" style="width:100%;" onchange="onLeaveRequestTypeChange()">
+                        <option value="휴원요청">휴원요청</option>
+                        <option value="퇴원요청">퇴원요청</option>
+                        <option value="휴원→퇴원">휴원→퇴원</option>
+                        <option value="퇴원→휴원">퇴원→휴원</option>
+                    </select>
+                </div>
+                <!-- 휴원 서브타입 -->
+                <div id="lr-sub-type-wrap">
+                    <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">휴원 유형</label>
+                    <select id="lr-sub-type" class="field-input" style="width:100%;">
+                        <option value="실휴원">실휴원</option>
+                        <option value="가휴원">가휴원</option>
+                    </select>
+                </div>
+                <!-- 학생 검색 -->
+                <div>
+                    <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">학생 검색</label>
+                    <input type="text" id="lr-student-search" class="field-input" style="width:100%;" placeholder="이름 또는 초성으로 검색..." oninput="searchLeaveRequestStudent(this.value)">
+                    <div id="lr-student-results" style="max-height:150px;overflow-y:auto;margin-top:4px;"></div>
+                </div>
+                <!-- 선택된 학생 정보 -->
+                <div id="lr-student-info" style="display:none;background:var(--bg-secondary);border-radius:8px;padding:10px;">
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+                        <span id="lr-student-name" style="font-weight:600;font-size:14px;"></span>
+                        <span id="lr-student-class" style="font-size:12px;color:var(--text-sec);"></span>
+                        <span id="lr-student-status" style="font-size:11px;"></span>
+                    </div>
+                    <div style="font-size:12px;color:var(--text-sec);">
+                        <span>학생: <span id="lr-student-phone"></span></span>
+                        <span style="margin-left:12px;">보호자: <span id="lr-parent-phone"></span></span>
+                    </div>
+                </div>
+                <!-- 날짜 필드 (동적) -->
+                <div id="lr-date-fields"></div>
+                <!-- 상담내용 -->
+                <div>
+                    <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">상담내용</label>
+                    <textarea id="lr-consultation-note" class="field-input" style="width:100%;min-height:60px;resize:vertical;" placeholder="상담 내용을 입력하세요..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;">
+                <button class="lr-btn lr-btn-text" onclick="closeModal('leave-request-modal')">취소</button>
+                <button class="lr-btn lr-btn-tonal" onclick="submitLeaveRequest()">
+                    <span class="material-symbols-outlined">send</span>요청
+                </button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
