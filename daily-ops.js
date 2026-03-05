@@ -1875,6 +1875,15 @@ function renderScheduledVisitList() {
             else if (currentDisplay === '결석') activeClass = 'active-absent';
             else activeClass = 'active-other';
             toggleHtml = `<button class="toggle-btn ${activeClass}" style="min-width:48px;" onclick="event.stopPropagation(); cycleVisitAttendance('${escAttr(v.studentId)}')">${currentDisplay}</button>`;
+        } else if (v.source === 'temp') {
+            const ta = tempAttendances.find(t => t.docId === v.docId);
+            const arrStatus = ta?.temp_arrival || '';
+            const arrDisplay = arrStatus === '등원' ? '등원' : arrStatus === '미등원' ? '미등원' : '등원전';
+            let activeClass = '';
+            if (arrDisplay === '등원') activeClass = 'active-present';
+            else if (arrDisplay === '미등원') activeClass = 'active-absent';
+            else activeClass = 'active-other';
+            toggleHtml = `<button class="toggle-btn ${activeClass}" style="min-width:48px;" onclick="event.stopPropagation(); cycleTempArrival('${escAttr(v.docId)}')">${arrDisplay}</button>`;
         }
 
         const confirmBtn = isCompleted
@@ -5645,6 +5654,29 @@ async function clearExtraVisit(studentId) {
 
 // ─── Toggle handlers (immediate save) ──────────────────────────────────────
 
+async function cycleTempArrival(docId) {
+    const ta = tempAttendances.find(t => t.docId === docId);
+    if (!ta) return;
+    const cycle = ['', '등원', '미등원'];
+    const current = ta.temp_arrival || '';
+    const nextIdx = (cycle.indexOf(current) + 1) % cycle.length;
+    const next = cycle[nextIdx];
+    showSaveIndicator('saving');
+    try {
+        const update = next ? { temp_arrival: next } : { temp_arrival: deleteField() };
+        await updateDoc(doc(db, 'temp_attendance', docId), update);
+        ta.temp_arrival = next || undefined;
+        _scheduledVisitsCache = null;
+        renderSubFilters();
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('진단평가 등원 상태 변경 실패:', err);
+        showSaveIndicator('error');
+    }
+}
+window.cycleTempArrival = cycleTempArrival;
+
 function cycleVisitAttendance(studentId) {
     if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     const cycle = ['등원전', '출석', '지각', '결석'];
@@ -8352,8 +8384,14 @@ function cycleVisitStatus(source, docId, studentId) {
 }
 
 async function confirmVisitStatus(docId) {
-    const pending = _visitStatusPending[docId];
-    if (!pending) return; // 토글 안 했으면 무시
+    let pending = _visitStatusPending[docId];
+    if (!pending) {
+        // 토글 안 했으면 현재 상태 그대로 '완료' 처리
+        const visits = getScheduledVisits();
+        const v = visits.find(vi => vi.docId === docId);
+        if (!v) return;
+        pending = { source: v.source, nextStatus: '완료', studentId: v.studentId };
+    }
     delete _visitStatusPending[docId];
 
     const { source, nextStatus, studentId } = pending;
