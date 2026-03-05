@@ -1315,7 +1315,7 @@ function getScheduledVisits() {
             studentId: t.student_id,
             name: t.student_name || t.student_id,
             time: t.scheduled_time || '',
-            detail: `${t.domain || ''} (${t.source_date || ''})`,
+            detail: `${t.domain || ''} (${_stripYear(t.source_date)})`,
             status: (t.status === '완료' || t.status === '기타') ? 'completed' : 'pending',
             visitStatus: _toVisitStatus(t.status),
             caller: callerName(t.created_by || ''),
@@ -1336,7 +1336,7 @@ function getScheduledVisits() {
             studentId: t.student_id,
             name: t.student_name || t.student_id,
             time: t.scheduled_time || '',
-            detail: `${t.item || t.domain || ''} (${t.source_date || ''})`,
+            detail: `${t.item || t.domain || ''} (${_stripYear(t.source_date)})`,
             status: (t.status === '완료' || t.status === '기타') ? 'completed' : 'pending',
             visitStatus: _toVisitStatus(t.status),
             caller: callerName(t.created_by || ''),
@@ -2844,42 +2844,48 @@ async function saveHwFailAction(studentId, hwFailAction) {
 
 // ─── 밀린 Task 카드 렌더링 ───────────────────────────────────────────────────
 
+function _stripYear(dateStr) {
+    if (!dateStr) return '';
+    return dateStr.replace(/^\d{4}-/, '');
+}
+
 function renderPendingTasksCard(studentId, tasks) {
     if (tasks.length === 0) return '';
 
-    const taskRows = tasks.map(t => {
+    const taskRows = tasks.map((t, idx) => {
         const isTest = t.source === 'test';
         const completeFunc = isTest ? 'completeTestFailTask' : 'completeHwFailTask';
         const cancelFunc = isTest ? 'cancelTestFailTask' : 'cancelHwFailTask';
         const sourceLabel = isTest ? '테스트' : '숙제';
+        const typeIcon = t.type === '등원' ? '🚶' : '📝';
 
-        const typeIcon = t.type === '등원'
-            ? `<span class="material-symbols-outlined" style="font-size:14px;color:var(--danger);">directions_walk</span>`
-            : `<span class="material-symbols-outlined" style="font-size:14px;color:var(--primary);">edit_note</span>`;
+        // 1줄 요약: 도메인 · 타입 · 출처날짜
+        const summary = `${esc(t.domain)} ${typeIcon} ${esc(t.type)} · ${esc(sourceLabel)} ${esc(_stripYear(t.source_date))}`;
 
+        // 상세 내용
         const detail = t.type === '등원'
-            ? `${esc(t.scheduled_date || '')}${t.scheduled_time ? ' ' + esc(formatTime12h(t.scheduled_time)) : ''}`
-            : `${esc(t.alt_hw || '내용 미입력')}${t.scheduled_date ? ' (기한: ' + esc(t.scheduled_date) + ')' : ''}`;
+            ? `${esc(_stripYear(t.scheduled_date))}${t.scheduled_time ? ' ' + esc(formatTime12h(t.scheduled_time)) : ''}`
+            : `${esc(t.alt_hw || '내용 미입력')}${t.scheduled_date ? ' (기한: ' + esc(_stripYear(t.scheduled_date)) + ')' : ''}`;
 
         return `
-            <div class="pending-task-card">
-                <div class="pending-task-header">
-                    <span class="pending-task-domain">${esc(t.domain)}</span>
-                    ${typeIcon}
-                    <span class="pending-task-type">${esc(t.type)}</span>
-                    <span class="pending-task-source">${esc(sourceLabel)} · ${esc(t.source_date || '')}</span>
+            <div class="pending-task-row" data-task-idx="${idx}">
+                <div class="pending-task-summary" onclick="this.parentElement.classList.toggle('expanded')">
+                    <span>${summary}</span>
+                    <span class="pending-task-arrow material-symbols-outlined" style="font-size:16px;color:var(--text-sec);">expand_more</span>
                 </div>
-                <div class="pending-task-detail">${detail}</div>
-                <div class="pending-task-meta">담당: ${esc(t.handler || '')}</div>
-                <div class="pending-task-actions">
-                    <button class="hw-fail-type-btn active" style="background:var(--success);border-color:var(--success);font-size:11px;"
-                        onclick="${completeFunc}('${escAttr(t.docId)}', '${escAttr(studentId)}')">
-                        <span class="material-symbols-outlined" style="font-size:13px;">check_circle</span>완료
-                    </button>
-                    <button class="hw-fail-type-btn hw-fail-clear-btn" style="font-size:11px;"
-                        onclick="${cancelFunc}('${escAttr(t.docId)}', '${escAttr(studentId)}')">
-                        <span class="material-symbols-outlined" style="font-size:13px;">cancel</span>취소
-                    </button>
+                <div class="pending-task-expand">
+                    <div class="pending-task-detail">${detail}</div>
+                    <div class="pending-task-meta">담당: ${esc(t.handler || '')}</div>
+                    <div class="pending-task-actions">
+                        <button class="hw-fail-type-btn active" style="background:var(--success);border-color:var(--success);font-size:11px;"
+                            onclick="${completeFunc}('${escAttr(t.docId)}', '${escAttr(studentId)}')">
+                            <span class="material-symbols-outlined" style="font-size:13px;">check_circle</span>완료
+                        </button>
+                        <button class="hw-fail-type-btn hw-fail-clear-btn" style="font-size:11px;"
+                            onclick="${cancelFunc}('${escAttr(t.docId)}', '${escAttr(studentId)}')">
+                            <span class="material-symbols-outlined" style="font-size:13px;">cancel</span>취소
+                        </button>
+                    </div>
                 </div>
             </div>
         `;
@@ -2891,7 +2897,6 @@ function renderPendingTasksCard(studentId, tasks) {
                 <span class="material-symbols-outlined" style="color:#d97706;font-size:18px;">pending_actions</span>
                 밀린 Task (${tasks.length})
             </div>
-            <div style="font-size:12px;color:var(--text-sec);margin-bottom:10px;">완료 또는 취소 처리로 해결하세요.</div>
             ${taskRows}
         </div>
     `;
