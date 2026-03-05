@@ -1326,11 +1326,13 @@ function getSubFilterCount(filterKey) {
     if (currentCategory === 'admin') {
         switch (filterKey) {
             case 'absence_ledger': {
-                let filtered = selectedBranch ? absenceRecords.filter(r => r.branch === selectedBranch) : absenceRecords;
+                let filtered = absenceRecords.filter(r => r.absence_date === selectedDate);
+                if (selectedBranch) filtered = filtered.filter(r => r.branch === selectedBranch);
                 return { count: filtered.length, total: 0 };
             }
             case 'leave_request': {
-                let filtered = selectedBranch ? leaveRequests.filter(r => r.branch === selectedBranch) : leaveRequests;
+                let filtered = leaveRequests.filter(r => _leaveRequestDate(r) === selectedDate);
+                if (selectedBranch) filtered = filtered.filter(r => r.branch === selectedBranch);
                 const pending = filtered.filter(r => r.status === 'requested').length;
                 return { count: pending, total: filtered.length };
             }
@@ -2072,7 +2074,8 @@ function renderAbsenceLedgerList() {
     const countEl = document.getElementById('list-count');
     renderFilterChips();
 
-    let records = selectedBranch ? absenceRecords.filter(r => r.branch === selectedBranch) : [...absenceRecords];
+    let records = absenceRecords.filter(r => r.absence_date === selectedDate);
+    if (selectedBranch) records = records.filter(r => r.branch === selectedBranch);
 
     countEl.textContent = `${records.length}건`;
 
@@ -2161,12 +2164,19 @@ function _leaveRequestStatusBadge(status) {
 
 let _selectedLeaveRequestId = null;
 
+function _leaveRequestDate(r) {
+    if (!r.requested_at) return '';
+    const d = r.requested_at.toDate ? r.requested_at.toDate() : new Date(r.requested_at);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
 function renderLeaveRequestList() {
     const container = document.getElementById('list-items');
     const countEl = document.getElementById('list-count');
     renderFilterChips();
 
-    let records = selectedBranch ? leaveRequests.filter(r => r.branch === selectedBranch) : [...leaveRequests];
+    let records = leaveRequests.filter(r => _leaveRequestDate(r) === selectedDate);
+    if (selectedBranch) records = records.filter(r => r.branch === selectedBranch);
     countEl.textContent = `${records.length}건`;
 
     // 새 요청 버튼
