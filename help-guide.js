@@ -323,13 +323,13 @@ const TABS = [
           학생/학부모의 휴원 또는 퇴원 요청을 접수하고 처리합니다.
         </p>
         <ul class="help-guide-list">
-          <li>상단 <strong>"+ 휴퇴원 요청"</strong> 버튼으로 새 요청을 등록합니다.</li>
+          <li>상단 <strong>"새 요청"</strong> 버튼으로 새 요청을 등록합니다.</li>
           <li>요청 유형: <strong>가휴원, 실휴원, 퇴원, 휴원연장</strong></li>
           <li><strong>가휴원</strong> &mdash; 일시적 휴원 (복귀 예정)</li>
           <li><strong>실휴원</strong> &mdash; 장기 휴원</li>
           <li><strong>퇴원</strong> &mdash; 완전 퇴원 처리</li>
           <li><strong>휴원연장</strong> &mdash; 기존 휴원의 종료일만 변경 (사유 불필요)</li>
-          <li>요청 상태: <strong>대기중 &rarr; 승인 &rarr; 완료</strong> 순서로 처리됩니다.</li>
+          <li>요청 상태: <strong>대기중 &rarr; 승인</strong> 순서로 처리됩니다.</li>
           <li>승인 시 학생 상태가 자동으로 변경됩니다 (가휴원/실휴원/퇴원).</li>
         </ul>
 
