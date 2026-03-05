@@ -3316,3 +3316,24 @@ textarea.field-input {
 .lr-btn-text:hover {
   background: rgba(11,87,208,.08);
 }
+
+/* ── 복귀예정 D-day 뱃지 ───────────────────────────────────────────── */
+.return-dday {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+}
+.return-dday.urgent { background: #dc2626; }
+.return-dday.soon { background: #f59e0b; }
+.return-consult-icon {
+    cursor: pointer;
+    font-size: 16px;
+    user-select: none;
+    padding: 2px;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+.return-consult-icon:hover { background: var(--bg-hover, rgba(0,0,0,0.06)); }
