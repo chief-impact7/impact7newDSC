@@ -476,6 +476,29 @@ body {
   margin-right: 12px;
 }
 
+/* --- L3 Sub-Sub-Filter Items --- */
+.nav-l2.nav-l3 {
+  padding-left: 36px;
+  font-size: 12px;
+  height: 28px;
+}
+
+.nav-l2.l2-parent .l2-expand-icon {
+  margin-left: auto;
+  margin-right: 8px;
+  font-size: 14px;
+  color: var(--text-sec);
+}
+
+.nav-l2.l2-expanded:not(.active) {
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.nav-l2.l2-expanded .l2-expand-icon {
+  color: var(--primary);
+}
+
 /* ===== Sidebar Overlay (mobile, hidden on desktop) ===== */
 .sidebar-overlay {
   display: none;
@@ -1306,6 +1329,38 @@ body {
 .pending-task-actions {
     display: flex;
     gap: 8px;
+}
+
+.no-show-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+    background: var(--danger);
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+.reschedule-history {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px dashed var(--border);
+}
+
+.reschedule-history-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-sec);
+    margin-bottom: 4px;
+}
+
+.reschedule-history-item {
+    font-size: 11px;
+    color: var(--text-sec);
+    padding: 2px 0;
+    line-height: 1.4;
 }
 
 /* ===== Form Fields ===== */
@@ -3186,3 +3241,15 @@ textarea.field-input {
         grid-template-columns: 1fr;
     }
 }
+
+/* ─── 결석대장 뱃지/스타일 ─── */
+.absence-status-badge { font-size:10px; font-weight:600; border-radius:4px; padding:2px 6px; color:#fff; }
+.absence-status-badge.unconsulted { background:#f59e0b; }
+.absence-status-badge.undecided { background:#6b7280; }
+.absence-status-badge.makeup { background:#2563eb; }
+.absence-status-badge.noshow { background:#dc2626; }
+.absence-status-badge.completed { background:#22c55e; }
+.absence-status-badge.settlement { background:#7c3aed; }
+.absence-validity-badge { font-size:10px; font-weight:600; border-radius:3px; padding:1px 5px; margin-left:4px; }
+.absence-validity-badge.valid { color:#16a34a; background:#f0fdf4; border:1px solid #bbf7d0; }
+.absence-validity-badge.invalid { color:#dc2626; background:#fef2f2; border:1px solid #fecaca; }

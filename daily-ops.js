@@ -15,6 +15,7 @@ let retakeSchedules = [];       // retake_schedule 전체
 let hwFailTasks = [];           // hw_fail_tasks 전체
 let testFailTasks = [];         // test_fail_tasks 전체
 let tempAttendances = [];       // temp_attendance 전체 (해당 날짜)
+let absenceRecords = [];        // absence_records (open 상태)
 let selectedDate = todayStr();
 let selectedStudentId = null;
 let currentCategory = 'attendance'; // 'attendance' | 'homework' | 'test' | 'automation'
@@ -451,6 +452,17 @@ async function loadTempAttendances(date) {
     }
 }
 
+async function loadAbsenceRecords() {
+    absenceRecords = [];
+    try {
+        const q = query(collection(db, 'absence_records'), where('status', '==', 'open'));
+        const snap = await getDocs(q);
+        snap.forEach(d => absenceRecords.push({ docId: d.id, ...d.data() }));
+    } catch (err) {
+        console.error('absence_records 로드 실패:', err.message);
+    }
+}
+
 function saveDailyRecord(studentId, updates) {
     if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     if (saveTimers[studentId]) clearTimeout(saveTimers[studentId]);
@@ -666,12 +678,13 @@ function renderSubFilters() {
     const filters = {
         attendance: [
             { key: 'scheduled_visit', label: '비정규' },
-            { key: 'pre_arrival', label: '정규' },
-            { key: 'present', label: '출석' },
-            { key: 'late', label: '지각' },
-            { key: 'absent', label: '결석' },
-            { key: 'other', label: '기타' },
-            { key: 'departure_check', label: '귀가점검' }
+            { key: 'pre_arrival', label: '정규', children: [
+                { key: 'present', label: '출석' },
+                { key: 'late', label: '지각' },
+                { key: 'absent', label: '결석' },
+                { key: 'other', label: '기타' },
+                { key: 'departure_check', label: '귀가점검' }
+            ]}
         ],
         homework: [
             { key: 'hw_1st', label: '1차' },
@@ -686,6 +699,9 @@ function renderSubFilters() {
             { key: 'auto_hw_missing', label: '미제출 숙제' },
             { key: 'auto_retake', label: '재시 필요' },
             { key: 'auto_unchecked', label: '미체크 출석' }
+        ],
+        admin: [
+            { key: 'absence_ledger', label: '결석대장' }
         ]
     };
 
@@ -695,18 +711,40 @@ function renderSubFilters() {
         container.innerHTML = '<div style="padding:16px;color:var(--text-sec);font-size:13px;">추후 확장 예정</div>';
     } else {
         _subFilterBase = null; // 캐시 초기화
-        container.innerHTML = items.map(f => {
+        let html = '';
+        for (const f of items) {
+            const childKeys = f.children ? f.children.map(c => c.key) : [];
+            const parentOrChildActive = currentSubFilter.has(f.key) || childKeys.some(k => currentSubFilter.has(k));
             const isActive = currentSubFilter.has(f.key) ? 'active' : '';
+            const isExpanded = parentOrChildActive ? 'l2-expanded' : '';
+            const parentClass = f.children ? 'l2-parent' : '';
+            const expandIcon = f.children
+                ? `<span class="material-symbols-outlined l2-expand-icon">${parentOrChildActive ? 'expand_less' : 'expand_more'}</span>`
+                : '';
             const { count, total } = getSubFilterCount(f.key);
             const badge = count > 0 || total > 0
                 ? `<span class="nav-l2-count">${total > 0 ? `${count}/${total}` : count}</span>`
                 : '';
-            return `<div class="nav-l2 ${isActive}" data-filter="${f.key}" onclick="setSubFilter('${f.key}')">
+            html += `<div class="nav-l2 ${parentClass} ${isExpanded} ${isActive}" data-filter="${f.key}" onclick="setSubFilter('${f.key}')">
                 ${esc(f.label)}
                 ${badge}
+                ${expandIcon}
             </div>`;
-        }).join('');
-        _subFilterBase = null; // 캐시 해제
+            if (f.children && parentOrChildActive) {
+                for (const child of f.children) {
+                    const childActive = currentSubFilter.has(child.key) ? 'active' : '';
+                    const { count: cc, total: ct } = getSubFilterCount(child.key);
+                    const childBadge = cc > 0 || ct > 0
+                        ? `<span class="nav-l2-count">${ct > 0 ? `${cc}/${ct}` : cc}</span>`
+                        : '';
+                    html += `<div class="nav-l2 nav-l3 ${childActive}" data-filter="${child.key}" onclick="setSubFilter('${child.key}')">
+                        ${esc(child.label)}
+                        ${childBadge}
+                    </div>`;
+                }
+            }
+        }
+        container.innerHTML = html;
     }
 
     // L2 컨테이너를 활성 L1 바로 뒤에 배치
@@ -966,9 +1004,10 @@ function renderFilterChips() {
     const container = document.getElementById('filter-chips');
     if (!container) return;
 
-    const categoryLabels = { attendance: '출결', homework: '숙제', test: '테스트', automation: '자동화' };
+    const categoryLabels = { attendance: '출결', homework: '숙제', test: '테스트', automation: '자동화', admin: '행정' };
     const subFilterLabels = {
-        pre_arrival: '정규', present: '출석', late: '지각', absent: '결석', other: '기타',
+        scheduled_visit: '비정규', pre_arrival: '정규', present: '출석', late: '지각', absent: '결석', other: '기타',
+        departure_check: '귀가점검', absence_ledger: '결석대장',
         hw_1st: '1차', hw_2nd: '2차', hw_next: '다음숙제',
         test_1st: '1차', test_2nd: '2차',
         auto_hw_missing: '미제출 숙제', auto_retake: '재시 필요', auto_unchecked: '미체크 출석'
@@ -1078,15 +1117,11 @@ function setSubFilter(filterKey) {
         currentSubFilter.add(filterKey);
     }
 
-
-    document.querySelectorAll('.nav-l2').forEach(el => {
-        el.classList.toggle('active', currentSubFilter.has(el.dataset.filter));
-    });
-
     // 현재 카테고리의 L2 상태 저장
     savedSubFilters[currentCategory] = new Set(currentSubFilter);
 
-
+    // L3 확장/축소 반영을 위해 innerHTML 재구성
+    renderSubFilters();
     renderListPanel();
 }
 
@@ -1184,6 +1219,16 @@ function getSubFilterCount(filterKey) {
                 return { count: departed, total: regularTotal };
             }
             default: return rr(0);
+        }
+    }
+
+    if (currentCategory === 'admin') {
+        switch (filterKey) {
+            case 'absence_ledger': {
+                let filtered = selectedBranch ? absenceRecords.filter(r => r.branch === selectedBranch) : absenceRecords;
+                return { count: filtered.length, total: 0 };
+            }
+            default: return { count: 0, total: 0 };
         }
     }
 
@@ -1388,6 +1433,27 @@ function getScheduledVisits() {
             completedBy: '',
             completedAt: '',
             docId: s.docId
+        });
+    }
+
+    // 6) 결석보충 (absenceRecords)
+    for (const r of absenceRecords) {
+        if (r.resolution !== '보충' || r.makeup_date !== selectedDate || r.status !== 'open') continue;
+        visits.push({
+            id: `absence_makeup_${r.docId}`,
+            source: 'absence_makeup',
+            sourceLabel: '결석보충',
+            sourceColor: '#dc2626',
+            studentId: r.student_id,
+            name: r.student_name || r.student_id,
+            time: r.makeup_time || '',
+            detail: `${r.class_code || ''} (${_stripYear(r.absence_date)})`,
+            status: r.makeup_status === '완료' ? 'completed' : 'pending',
+            visitStatus: r.makeup_status === '완료' ? '완료' : (r.makeup_status === '미등원' ? '미등원' : ''),
+            caller: '',
+            completedBy: r.makeup_completed_by ? (r.makeup_completed_by.split('@')[0]) : '',
+            completedAt: r.makeup_completed_at || '',
+            docId: r.docId
         });
     }
 
@@ -1638,10 +1704,10 @@ function renderScheduledVisitList() {
     // 소스별 라벨
     const SOURCE_LABELS = {
         extra: '클리닉', temp: '진단평가', enroll_pending: '등원예정',
-        hw_fail: '숙제미통과', test_fail: '테스트미통과'
+        hw_fail: '숙제미통과', test_fail: '테스트미통과', absence_makeup: '결석보충'
     };
-    // 소스별 그룹핑 (순서: 클리닉 → 진단평가 → 등원예정 → 숙제미통과 → 테스트미통과)
-    const SOURCE_ORDER = ['extra', 'temp', 'enroll_pending', 'hw_fail', 'test_fail'];
+    // 소스별 그룹핑 (순서: 클리닉 → 진단평가 → 등원예정 → 숙제미통과 → 테스트미통과 → 결석보충)
+    const SOURCE_ORDER = ['extra', 'temp', 'enroll_pending', 'hw_fail', 'test_fail', 'absence_makeup'];
     const arrivedBySource = {};
     for (const v of arrived) {
         if (!arrivedBySource[v.source]) arrivedBySource[v.source] = [];
@@ -1806,6 +1872,85 @@ function renderDepartureCheckList() {
     }).join('');
 }
 
+// ─── 결석대장 리스트 뷰 ─────────────────────────────────────────────────────
+
+function _renderValidityBadge(reasonValid) {
+    if (!reasonValid) return '';
+    const cls = reasonValid === '정당' ? 'valid' : 'invalid';
+    return `<span class="absence-validity-badge ${cls}">${esc(reasonValid)}</span>`;
+}
+
+function _getAbsenceStatusGroup(r) {
+    if (!r.consultation_done) return { order: 0, label: '미상담', badgeClass: 'unconsulted' };
+    if (r.resolution === 'pending') return { order: 1, label: '처리 미결정', badgeClass: 'undecided' };
+    if (r.resolution === '보충') {
+        if (r.makeup_status === '미등원') return { order: 3, label: '보충 미등원', badgeClass: 'noshow' };
+        if (r.makeup_status === '완료') return { order: 4, label: '보충 완료', badgeClass: 'completed' };
+        return { order: 2, label: '보충 예정', badgeClass: 'makeup' };
+    }
+    if (r.resolution === '정산') return { order: 5, label: '정산 대기', badgeClass: 'settlement' };
+    return { order: 6, label: '기타', badgeClass: 'undecided' };
+}
+
+function renderAbsenceLedgerList() {
+    const container = document.getElementById('list-items');
+    const countEl = document.getElementById('list-count');
+    renderFilterChips();
+
+    let records = selectedBranch ? absenceRecords.filter(r => r.branch === selectedBranch) : [...absenceRecords];
+
+    countEl.textContent = `${records.length}건`;
+
+    if (records.length === 0) {
+        container.innerHTML = '<div class="empty-state">열린 결석 기록이 없습니다.</div>';
+        return;
+    }
+
+    // 상태별 그룹 정렬
+    records.sort((a, b) => {
+        const ga = _getAbsenceStatusGroup(a);
+        const gb = _getAbsenceStatusGroup(b);
+        if (ga.order !== gb.order) return ga.order - gb.order;
+        return (b.absence_date || '').localeCompare(a.absence_date || '');
+    });
+
+    let currentGroup = -1;
+    let html = '';
+    for (const r of records) {
+        const group = _getAbsenceStatusGroup(r);
+        if (group.order !== currentGroup) {
+            currentGroup = group.order;
+            html += `<div class="visit-source-header" style="margin-top:8px;padding:4px 12px;font-size:11px;font-weight:600;color:var(--text-sec);">${esc(group.label)}</div>`;
+        }
+        const isActive = r.student_id === selectedStudentId;
+        const validityBadge = _renderValidityBadge(r.reason_valid);
+        const consultBtn = r.consultation_done
+            ? '<span class="material-symbols-outlined" style="font-size:14px;color:var(--success);">check_circle</span>'
+            : `<button class="btn-icon" style="padding:2px;" onclick="event.stopPropagation(); toggleConsultation('${escAttr(r.docId)}', '${escAttr(r.student_id)}')" title="상담 완료 처리"><span class="material-symbols-outlined" style="font-size:14px;color:var(--text-sec);">phone_callback</span></button>`;
+
+        const _createdBy = getTeacherName(r.created_by);
+        const metaStr = _createdBy ? ` · ${_createdBy} ${_fmtTs(r.created_at)}` : '';
+
+        html += `<div class="list-item ${isActive ? 'active' : ''}" data-id="${escAttr(r.student_id)}"
+            onclick="selectedStudentId='${escAttr(r.student_id)}'; renderStudentDetail('${escAttr(r.student_id)}'); document.querySelectorAll('.list-item').forEach(el=>el.classList.remove('active')); this.classList.add('active');">
+            <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
+                ${consultBtn}
+                <div style="flex:1;min-width:0;">
+                    <div style="display:flex;align-items:center;gap:4px;">
+                        <span style="font-weight:600;font-size:13px;">${esc(r.student_name)}</span>
+                        <span class="absence-status-badge ${group.badgeClass}">${esc(group.label)}</span>
+                        ${validityBadge}
+                    </div>
+                    <div style="font-size:11px;color:var(--text-sec);margin-top:2px;">
+                        ${esc(r.class_code || '')} · ${esc(_stripYear(r.absence_date))}${r.reason ? ' · ' + esc(r.reason) : ''}${metaStr}
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    }
+    container.innerHTML = html;
+}
+
 function renderListPanel() {
     // 비정규 서브필터 활성 시 통합 리스트로 전환
     if (currentCategory === 'attendance' && currentSubFilter.has('scheduled_visit')) {
@@ -1816,6 +1961,12 @@ function renderListPanel() {
     // 귀가점검 서브필터 활성 시 귀가 체크 리스트로 전환
     if (currentCategory === 'attendance' && currentSubFilter.has('departure_check')) {
         renderDepartureCheckList();
+        return;
+    }
+
+    // 결석대장 서브필터 활성 시 결석대장 리스트로 전환
+    if (currentCategory === 'admin' && currentSubFilter.has('absence_ledger')) {
+        renderAbsenceLedgerList();
         return;
     }
 
@@ -2268,7 +2419,7 @@ function renderListPanel() {
     // 반 상세 표시: 반(+소속)만 선택되고, 콘텐츠 서브필터 없을 때
     const allFilters = { ...savedSubFilters };
     allFilters[currentCategory] = new Set(currentSubFilter);
-    const hasContentFilter = ['attendance', 'homework', 'test', 'automation'].some(cat => allFilters[cat]?.size > 0);
+    const hasContentFilter = ['attendance', 'homework', 'test', 'automation', 'admin'].some(cat => allFilters[cat]?.size > 0);
     if (selectedClassCode && !selectedStudentId && !hasContentFilter) {
         renderClassDetail(selectedClassCode);
     }
@@ -2849,6 +3000,36 @@ function _stripYear(dateStr) {
     return dateStr.replace(/^\d{4}-/, '');
 }
 
+function _fmtTs(ts, includeTime = false) {
+    if (!ts) return '';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    const base = `${d.getMonth()+1}/${d.getDate()}`;
+    return includeTime
+        ? `${base} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+        : base;
+}
+
+function _isNoShow(t) {
+    return t.type === '등원' && t.status === 'pending'
+        && t.scheduled_date && t.scheduled_date < selectedDate;
+}
+
+function _renderRescheduleHistory(history) {
+    if (!history || !Array.isArray(history) || history.length === 0) return '';
+    const sorted = [...history].sort((a, b) => (b.rescheduled_at || '').localeCompare(a.rescheduled_at || ''));
+    const items = sorted.map(h => {
+        const prevLabel = `${_stripYear(h.prev_date)}${h.prev_time ? ' ' + formatTime12h(h.prev_time) : ''}`;
+        const newLabel = `${_stripYear(h.new_date)}${h.new_time ? ' ' + formatTime12h(h.new_time) : ''}`;
+        const reason = h.reason ? ` (${esc(h.reason)})` : '';
+        const by = h.rescheduled_by ? ` by ${esc(h.rescheduled_by)}` : '';
+        return `<div class="reschedule-history-item">${esc(prevLabel)} → ${esc(newLabel)}${reason}${by}</div>`;
+    }).join('');
+    return `<div class="reschedule-history">
+        <div class="reschedule-history-title">재지정 이력</div>
+        ${items}
+    </div>`;
+}
+
 function renderPendingTasksCard(studentId, tasks) {
     if (tasks.length === 0) return '';
 
@@ -2856,16 +3037,30 @@ function renderPendingTasksCard(studentId, tasks) {
         const isTest = t.source === 'test';
         const completeFunc = isTest ? 'completeTestFailTask' : 'completeHwFailTask';
         const cancelFunc = isTest ? 'cancelTestFailTask' : 'cancelHwFailTask';
+        const collection = isTest ? 'test_fail_tasks' : 'hw_fail_tasks';
         const sourceLabel = isTest ? '테스트' : '숙제';
         const typeIcon = t.type === '등원' ? '🚶' : '📝';
+        const noShow = _isNoShow(t);
 
-        // 1줄 요약: 도메인 · 타입 · 출처날짜
-        const summary = `${esc(t.domain)} ${typeIcon} ${esc(t.type)} · ${esc(sourceLabel)} ${esc(_stripYear(t.source_date))}`;
+        // 1줄 요약: 도메인 · 타입 · 출처날짜 + 미등원 뱃지
+        const noShowBadge = noShow ? '<span class="no-show-badge">미등원</span>' : '';
+        const summary = `${esc(t.domain)} ${typeIcon} ${esc(t.type)} · ${esc(sourceLabel)} ${esc(_stripYear(t.source_date))}${noShowBadge}`;
 
         // 상세 내용
         const detail = t.type === '등원'
             ? `${esc(_stripYear(t.scheduled_date))}${t.scheduled_time ? ' ' + esc(formatTime12h(t.scheduled_time)) : ''}`
             : `${esc(t.alt_hw || '내용 미입력')}${t.scheduled_date ? ' (기한: ' + esc(_stripYear(t.scheduled_date)) + ')' : ''}`;
+
+        // 재지정 버튼 (미등원 + 등원 타입만)
+        const rescheduleBtn = (noShow && t.type === '등원')
+            ? `<button class="hw-fail-type-btn" style="background:#7c3aed;border-color:#7c3aed;color:#fff;font-size:11px;"
+                    onclick="openRescheduleModal('${escAttr(collection)}', '${escAttr(t.docId)}', '${escAttr(studentId)}')">
+                    <span class="material-symbols-outlined" style="font-size:13px;">event</span>재지정
+                </button>`
+            : '';
+
+        // 재지정 이력
+        const historyHtml = _renderRescheduleHistory(t.reschedule_history);
 
         return `
             <div class="pending-task-row" data-task-idx="${idx}">
@@ -2885,7 +3080,9 @@ function renderPendingTasksCard(studentId, tasks) {
                             onclick="${cancelFunc}('${escAttr(t.docId)}', '${escAttr(studentId)}')">
                             <span class="material-symbols-outlined" style="font-size:13px;">cancel</span>취소
                         </button>
+                        ${rescheduleBtn}
                     </div>
+                    ${historyHtml}
                 </div>
             </div>
         `;
@@ -2944,6 +3141,283 @@ window.cancelHwFailTask = async function(taskDocId, studentId) {
         console.error('취소 처리 실패:', err);
         showSaveIndicator('error');
     }
+};
+
+// ─── 밀린 Task 재지정 ─────────────────────────────────────────────────────────
+
+let _rescheduleTarget = null;
+
+window.openRescheduleModal = function(collection, docId, studentId) {
+    // 결석대장 재예약
+    if (collection === 'absence_records') {
+        const r = absenceRecords.find(x => x.docId === docId);
+        if (!r) return;
+        _rescheduleTarget = { collection, docId, studentId };
+        document.getElementById('reschedule-prev-info').innerHTML =
+            `<strong>현재 보충 예정:</strong> ${r.makeup_date ? esc(_stripYear(r.makeup_date)) : '미정'}${r.makeup_time ? ' ' + esc(formatTime12h(r.makeup_time)) : ''}`;
+        document.getElementById('reschedule-date').value = '';
+        document.getElementById('reschedule-time').value = r.makeup_time || '16:00';
+        document.getElementById('reschedule-reason').value = '';
+        document.getElementById('reschedule-modal').style.display = 'flex';
+        return;
+    }
+    const arr = collection === 'test_fail_tasks' ? testFailTasks : hwFailTasks;
+    const t = arr.find(x => x.docId === docId);
+    if (!t) return;
+    _rescheduleTarget = { collection, docId, studentId };
+    document.getElementById('reschedule-prev-info').innerHTML =
+        `<strong>현재 예정:</strong> ${esc(_stripYear(t.scheduled_date))}${t.scheduled_time ? ' ' + esc(formatTime12h(t.scheduled_time)) : ''}`;
+    document.getElementById('reschedule-date').value = '';
+    document.getElementById('reschedule-time').value = t.scheduled_time || '16:00';
+    document.getElementById('reschedule-reason').value = '';
+    document.getElementById('reschedule-modal').style.display = 'flex';
+};
+
+window.saveReschedule = async function() {
+    if (!_rescheduleTarget) return;
+    const { collection: col, docId, studentId } = _rescheduleTarget;
+    const newDate = document.getElementById('reschedule-date').value;
+    const newTime = document.getElementById('reschedule-time').value;
+    const reason = document.getElementById('reschedule-reason').value.trim();
+    if (!newDate) { alert('새 날짜를 입력하세요.'); return; }
+
+    // 결석대장 재예약 분기
+    if (col === 'absence_records') {
+        const r = absenceRecords.find(x => x.docId === docId);
+        if (!r) return;
+        const entry = {
+            prev_date: r.makeup_date || '',
+            prev_time: r.makeup_time || '',
+            new_date: newDate,
+            new_time: newTime || '',
+            rescheduled_by: (currentUser?.email || '').split('@')[0],
+            rescheduled_at: new Date().toISOString()
+        };
+        if (reason) entry.reason = reason;
+
+        showSaveIndicator('saving');
+        try {
+            await updateDoc(doc(db, 'absence_records', docId), {
+                makeup_date: newDate,
+                makeup_time: newTime || '',
+                makeup_status: 'pending',
+                reschedule_history: arrayUnion(entry),
+                updated_by: currentUser?.email || '',
+                updated_at: serverTimestamp()
+            });
+            r.makeup_date = newDate;
+            r.makeup_time = newTime || '';
+            r.makeup_status = 'pending';
+            if (!r.reschedule_history) r.reschedule_history = [];
+            r.reschedule_history.push(entry);
+
+            document.getElementById('reschedule-modal').style.display = 'none';
+            _rescheduleTarget = null;
+            renderStudentDetail(studentId);
+            renderListPanel();
+            showSaveIndicator('saved');
+        } catch (err) {
+            console.error('결석 재예약 저장 실패:', err);
+            showSaveIndicator('error');
+        }
+        return;
+    }
+
+    const arr = col === 'test_fail_tasks' ? testFailTasks : hwFailTasks;
+    const t = arr.find(x => x.docId === docId);
+    if (!t) return;
+
+    const entry = {
+        prev_date: t.scheduled_date || '',
+        prev_time: t.scheduled_time || '',
+        new_date: newDate,
+        new_time: newTime || '',
+        rescheduled_by: (currentUser?.email || '').split('@')[0],
+        rescheduled_at: new Date().toISOString()
+    };
+    if (reason) entry.reason = reason;
+
+    showSaveIndicator('saving');
+    try {
+        await updateDoc(doc(db, col, docId), {
+            scheduled_date: newDate,
+            scheduled_time: newTime || '',
+            reschedule_history: arrayUnion(entry)
+        });
+        // 로컬 캐시 업데이트
+        t.scheduled_date = newDate;
+        t.scheduled_time = newTime || '';
+        if (!t.reschedule_history) t.reschedule_history = [];
+        t.reschedule_history.push(entry);
+
+        document.getElementById('reschedule-modal').style.display = 'none';
+        _rescheduleTarget = null;
+        renderStudentDetail(studentId);
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('재지정 저장 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
+// ─── 결석대장 CRUD ───────────────────────────────────────────────────────────
+
+window.updateAbsenceField = async function(docId, field, value, studentId) {
+    const r = absenceRecords.find(x => x.docId === docId);
+    if (!r) return;
+    showSaveIndicator('saving');
+    try {
+        await updateDoc(doc(db, 'absence_records', docId), {
+            [field]: value,
+            updated_by: currentUser?.email || '',
+            updated_at: serverTimestamp()
+        });
+        r[field] = value;
+        renderStudentDetail(studentId);
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('결석대장 필드 업데이트 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
+window.toggleConsultation = async function(docId, studentId) {
+    const r = absenceRecords.find(x => x.docId === docId);
+    if (!r) return;
+    const sid = studentId || r.student_id;
+    const newVal = !r.consultation_done;
+    showSaveIndicator('saving');
+    try {
+        await updateDoc(doc(db, 'absence_records', docId), {
+            consultation_done: newVal,
+            updated_by: currentUser?.email || '',
+            updated_at: serverTimestamp()
+        });
+        r.consultation_done = newVal;
+        if (sid) renderStudentDetail(sid);
+        renderSubFilters();
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('상담 토글 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
+window.setAbsenceResolution = async function(docId, resolution, studentId) {
+    const r = absenceRecords.find(x => x.docId === docId);
+    if (!r) return;
+    const newRes = r.resolution === resolution ? 'pending' : resolution;
+    showSaveIndicator('saving');
+    try {
+        await updateDoc(doc(db, 'absence_records', docId), {
+            resolution: newRes,
+            updated_by: currentUser?.email || '',
+            updated_at: serverTimestamp()
+        });
+        r.resolution = newRes;
+        renderStudentDetail(studentId);
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('처리방법 설정 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
+window.completeAbsenceMakeup = async function(docId, studentId) {
+    const r = absenceRecords.find(x => x.docId === docId);
+    if (!r) return;
+    showSaveIndicator('saving');
+    try {
+        await updateDoc(doc(db, 'absence_records', docId), {
+            makeup_status: '완료',
+            makeup_completed_by: currentUser?.email || '',
+            makeup_completed_at: serverTimestamp(),
+            updated_by: currentUser?.email || '',
+            updated_at: serverTimestamp()
+        });
+        r.makeup_status = '완료';
+        r.makeup_completed_by = currentUser?.email || '';
+        r.makeup_completed_at = new Date();
+        renderStudentDetail(studentId);
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('보충완료 처리 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
+window.markAbsenceNoShow = async function(docId, studentId) {
+    const r = absenceRecords.find(x => x.docId === docId);
+    if (!r) return;
+    showSaveIndicator('saving');
+    try {
+        await updateDoc(doc(db, 'absence_records', docId), {
+            makeup_status: '미등원',
+            updated_by: currentUser?.email || '',
+            updated_at: serverTimestamp()
+        });
+        r.makeup_status = '미등원';
+        renderStudentDetail(studentId);
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('미등원 처리 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
+window.switchToSettlement = async function(docId, studentId) {
+    if (!confirm('정산으로 전환하시겠습니까?')) return;
+    const r = absenceRecords.find(x => x.docId === docId);
+    if (!r) return;
+    showSaveIndicator('saving');
+    try {
+        await updateDoc(doc(db, 'absence_records', docId), {
+            resolution: '정산',
+            makeup_status: 'pending',
+            updated_by: currentUser?.email || '',
+            updated_at: serverTimestamp()
+        });
+        r.resolution = '정산';
+        r.makeup_status = 'pending';
+        renderStudentDetail(studentId);
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('정산전환 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
+window.closeAbsenceRecord = async function(docId, studentId) {
+    if (!confirm('이 결석 건의 행정절차를 종료하시겠습니까?\n(목록에서 사라지며 되돌릴 수 없습니다)')) return;
+    const r = absenceRecords.find(x => x.docId === docId);
+    if (!r) return;
+    showSaveIndicator('saving');
+    try {
+        await updateDoc(doc(db, 'absence_records', docId), {
+            status: 'closed',
+            updated_by: currentUser?.email || '',
+            updated_at: serverTimestamp()
+        });
+        absenceRecords = absenceRecords.filter(x => x.docId !== docId);
+        renderStudentDetail(studentId);
+        renderSubFilters();
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('결석대장 종료 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
+window.openAbsenceRescheduleModal = function(docId, studentId) {
+    window.openRescheduleModal('absence_records', docId, studentId);
 };
 
 // ─── Test Fail Action (테스트 2차 미통과 처리) ────────────────────────────────
@@ -4047,6 +4521,158 @@ function renderReportCard(records) {
     contentEl.innerHTML = attendanceHtml + oxGridHtml;
 }
 
+// ─── 결석대장 카드 (학생 상세) ───────────────────────────────────────────────
+
+function renderAbsenceRecordCard(studentId) {
+    const records = absenceRecords.filter(r => r.student_id === studentId);
+    if (records.length === 0) return '';
+
+    const rows = records.map((r, idx) => {
+        const group = _getAbsenceStatusGroup(r);
+        const validityBadge = _renderValidityBadge(r.reason_valid);
+
+        // 상담 메모
+        const consultChecked = r.consultation_done ? 'checked' : '';
+        const consultMemoHtml = `
+            <textarea class="field-input" style="width:100%;min-height:40px;resize:vertical;font-size:12px;margin-bottom:6px;"
+                placeholder="상담 내용..."
+                onchange="updateAbsenceField('${escAttr(r.docId)}', 'consultation_note', this.value, '${escAttr(studentId)}')">${esc(r.consultation_note || '')}</textarea>`;
+
+        // 사유 + 정당/부당
+        const reasonHtml = `
+            <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px;">
+                <input type="text" class="field-input" style="flex:1;font-size:12px;" placeholder="결석 사유"
+                    value="${escAttr(r.reason || '')}"
+                    onchange="updateAbsenceField('${escAttr(r.docId)}', 'reason', this.value, '${escAttr(studentId)}')" />
+                <button class="hw-fail-type-btn ${r.reason_valid === '정당' ? 'active' : ''}" style="font-size:11px;${r.reason_valid === '정당' ? 'background:#16a34a;border-color:#16a34a;color:#fff;' : ''}"
+                    onclick="updateAbsenceField('${escAttr(r.docId)}', 'reason_valid', '${r.reason_valid === '정당' ? '' : '정당'}', '${escAttr(studentId)}')">정당</button>
+                <button class="hw-fail-type-btn ${r.reason_valid === '부당' ? 'active' : ''}" style="font-size:11px;${r.reason_valid === '부당' ? 'background:#dc2626;border-color:#dc2626;color:#fff;' : ''}"
+                    onclick="updateAbsenceField('${escAttr(r.docId)}', 'reason_valid', '${r.reason_valid === '부당' ? '' : '부당'}', '${escAttr(studentId)}')">부당</button>
+            </div>`;
+
+        // 상담완료 + 처리방법 (한 줄)
+        const resolutionHtml = `
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+                <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;white-space:nowrap;">
+                    <input type="checkbox" ${consultChecked} onchange="toggleConsultation('${escAttr(r.docId)}', '${escAttr(studentId)}')" />
+                    상담완료
+                </label>
+                <span style="width:1px;height:16px;background:var(--border);margin:0 2px;"></span>
+                <span style="font-size:11px;color:var(--text-sec);white-space:nowrap;">처리방법:</span>
+                <button class="hw-fail-type-btn ${r.resolution === '보충' ? 'active' : ''}" style="font-size:11px;${r.resolution === '보충' ? 'background:#2563eb;border-color:#2563eb;color:#fff;' : ''}"
+                    onclick="setAbsenceResolution('${escAttr(r.docId)}', '보충', '${escAttr(studentId)}')">보충</button>
+                <button class="hw-fail-type-btn ${r.resolution === '정산' ? 'active' : ''}" style="font-size:11px;${r.resolution === '정산' ? 'background:#7c3aed;border-color:#7c3aed;color:#fff;' : ''}"
+                    onclick="setAbsenceResolution('${escAttr(r.docId)}', '정산', '${escAttr(studentId)}')">정산</button>
+            </div>`;
+
+        // 보충 세부 (보충 선택 시)
+        let makeupHtml = '';
+        if (r.resolution === '보충') {
+            const makeupDateVal = r.makeup_date || '';
+            const makeupTimeVal = r.makeup_time || '16:00';
+            let makeupActions = '';
+            if (r.makeup_status === 'pending') {
+                makeupActions = `
+                    <button class="hw-fail-type-btn active" style="background:var(--success);border-color:var(--success);font-size:11px;"
+                        onclick="completeAbsenceMakeup('${escAttr(r.docId)}', '${escAttr(studentId)}')">
+                        <span class="material-symbols-outlined" style="font-size:13px;">check_circle</span>보충완료
+                    </button>
+                    <button class="hw-fail-type-btn" style="font-size:11px;background:#dc2626;border-color:#dc2626;color:#fff;"
+                        onclick="markAbsenceNoShow('${escAttr(r.docId)}', '${escAttr(studentId)}')">
+                        <span class="material-symbols-outlined" style="font-size:13px;">person_off</span>미등원
+                    </button>`;
+            } else if (r.makeup_status === '미등원') {
+                makeupActions = `
+                    <button class="hw-fail-type-btn" style="font-size:11px;background:#7c3aed;border-color:#7c3aed;color:#fff;"
+                        onclick="openAbsenceRescheduleModal('${escAttr(r.docId)}', '${escAttr(studentId)}')">
+                        <span class="material-symbols-outlined" style="font-size:13px;">event</span>재예약
+                    </button>
+                    <button class="hw-fail-type-btn" style="font-size:11px;"
+                        onclick="switchToSettlement('${escAttr(r.docId)}', '${escAttr(studentId)}')">정산전환</button>`;
+            } else if (r.makeup_status === '완료') {
+                makeupActions = `<span style="font-size:11px;color:var(--success);font-weight:600;">보충 완료됨</span>`;
+            }
+            makeupHtml = `
+                <div style="background:#eff6ff;border-radius:6px;padding:8px;margin-bottom:6px;">
+                    <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">
+                        <input type="date" class="field-input" style="font-size:12px;width:130px;" value="${escAttr(makeupDateVal)}"
+                            onchange="updateAbsenceField('${escAttr(r.docId)}', 'makeup_date', this.value, '${escAttr(studentId)}')" />
+                        <input type="time" class="field-input" style="font-size:12px;width:100px;" value="${escAttr(makeupTimeVal)}"
+                            onchange="updateAbsenceField('${escAttr(r.docId)}', 'makeup_time', this.value, '${escAttr(studentId)}')" />
+                    </div>
+                    <div style="display:flex;align-items:center;gap:4px;">${makeupActions}</div>
+                </div>`;
+        }
+
+        // 정산 세부
+        let settlementHtml = '';
+        if (r.resolution === '정산') {
+            settlementHtml = `
+                <div style="background:#f5f3ff;border-radius:6px;padding:8px;margin-bottom:6px;">
+                    <textarea class="field-input" style="width:100%;min-height:36px;resize:vertical;font-size:12px;"
+                        placeholder="정산 메모..."
+                        onchange="updateAbsenceField('${escAttr(r.docId)}', 'settlement_memo', this.value, '${escAttr(studentId)}')">${esc(r.settlement_memo || '')}</textarea>
+                </div>`;
+        }
+
+        // 재지정 이력
+        const historyHtml = _renderRescheduleHistory(r.reschedule_history);
+
+        // 입력자 + 타임스탬프
+        const createdBy = getTeacherName(r.created_by);
+        const updatedBy = getTeacherName(r.updated_by);
+        const metaHtml = `
+            <div style="font-size:10px;color:var(--text-sec);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap;">
+                ${createdBy ? `<span>등록: ${esc(createdBy)} ${_fmtTs(r.created_at, true)}</span>` : ''}
+                ${updatedBy && updatedBy !== createdBy ? `<span>수정: ${esc(updatedBy)} ${_fmtTs(r.updated_at, true)}</span>` : ''}
+            </div>`;
+
+        // 수정 + 행정종료 버튼
+        const closeBtn = `
+            ${metaHtml}
+            <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:4px;">
+                <button class="hw-fail-type-btn" style="font-size:11px;"
+                    onclick="event.preventDefault(); showSaveIndicator('saved');">
+                    <span class="material-symbols-outlined" style="font-size:13px;">edit</span>수정
+                </button>
+                <button class="hw-fail-type-btn" style="font-size:11px;background:#6b7280;border-color:#6b7280;color:#fff;"
+                    onclick="closeAbsenceRecord('${escAttr(r.docId)}', '${escAttr(studentId)}')">
+                    <span class="material-symbols-outlined" style="font-size:13px;">archive</span>행정종료
+                </button>
+            </div>`;
+
+        return `
+            <div class="pending-task-row" data-absence-idx="${idx}" style="background:#fef2f2;">
+                <div class="pending-task-summary" onclick="this.parentElement.classList.toggle('expanded')">
+                    <span style="display:flex;align-items:center;gap:4px;">
+                        <span class="absence-status-badge ${group.badgeClass}">${esc(group.label)}</span>
+                        ${esc(r.class_code || '')} · ${esc(_stripYear(r.absence_date))}
+                        ${validityBadge}
+                    </span>
+                    <span class="pending-task-arrow material-symbols-outlined" style="font-size:16px;color:var(--text-sec);">expand_more</span>
+                </div>
+                <div class="pending-task-expand">
+                    ${consultMemoHtml}
+                    ${reasonHtml}
+                    ${resolutionHtml}
+                    ${makeupHtml}
+                    ${settlementHtml}
+                    ${historyHtml}
+                    ${closeBtn}
+                </div>
+            </div>`;
+    }).join('');
+
+    return `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:#dc2626;font-size:18px;">event_busy</span>
+                결석대장 <span style="font-size:12px;color:var(--text-sec);">(${records.length}건)</span>
+            </div>
+            ${rows}
+        </div>`;
+}
+
 function renderStudentDetail(studentId) {
     if (!studentId) {
         document.getElementById('detail-empty').style.display = '';
@@ -4351,6 +4977,9 @@ function renderStudentDetail(studentId) {
         <!-- 밀린 Task 카드 (숙제 + 테스트) -->
         ${renderPendingTasksCard(studentId, [...studentHwTasks, ...studentTestTasks])}
 
+        <!-- 결석대장 카드 -->
+        ${renderAbsenceRecordCard(studentId)}
+
         <!-- 클리닉 카드 -->
         ${extraVisitHtml}
 
@@ -4459,6 +5088,89 @@ function toggleAttendance(studentId, displayStatus) {
     applyAttendance(studentId, displayStatus);
 }
 
+async function autoCreateAbsenceRecord(studentId, overrides) {
+    // 중복 체크
+    const exists = absenceRecords.some(r => r.student_id === studentId && r.absence_date === selectedDate);
+    if (exists) return;
+
+    const student = allStudents.find(s => s.docId === studentId);
+
+    let name, branch, classCode, reason;
+    if (student) {
+        const dayName = getDayName(selectedDate);
+        const classCodes = (student.enrollments || [])
+            .filter(e => e.day && e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester))
+            .map(e => enrollmentCode(e))
+            .filter(Boolean);
+        name = student.name || '';
+        branch = branchFromStudent(student);
+        classCode = classCodes.join(', ');
+        reason = '';
+    } else if (overrides) {
+        name = overrides.student_name || studentId.replace(/_\d+$/, '');
+        branch = overrides.branch || '';
+        classCode = overrides.class_code || '';
+        reason = overrides.reason || '';
+    } else {
+        return;
+    }
+
+    try {
+        const record = {
+            student_id: studentId,
+            student_name: name,
+            branch,
+            class_code: classCode,
+            absence_date: selectedDate,
+            consultation_done: false,
+            consultation_note: '',
+            reason,
+            reason_valid: '',
+            resolution: 'pending',
+            settlement_memo: '',
+            makeup_date: '',
+            makeup_time: '',
+            makeup_status: 'pending',
+            makeup_completed_by: '',
+            makeup_completed_at: '',
+            reschedule_history: [],
+            status: 'open',
+            created_by: currentUser?.email || '',
+            updated_by: currentUser?.email || ''
+        };
+        const docRef = await addDoc(collection(db, 'absence_records'), {
+            ...record,
+            created_at: serverTimestamp(),
+            updated_at: serverTimestamp()
+        });
+        absenceRecords.push({
+            ...record,
+            docId: docRef.id,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        });
+    } catch (err) {
+        console.error('결석대장 자동 생성 실패:', err);
+    }
+}
+
+// Self-healing: dailyRecords에서 결석인데 absence_records에 없는 건 자동 보충
+async function syncAbsenceRecords() {
+    const absentEntries = Object.entries(dailyRecords)
+        .filter(([, v]) => v?.attendance?.status === '결석');
+
+    const tasks = absentEntries
+        .filter(([studentId]) => !absenceRecords.some(r => r.student_id === studentId && r.absence_date === selectedDate))
+        .map(([studentId, rec]) => autoCreateAbsenceRecord(studentId, {
+            student_name: studentId.replace(/_\d+$/, ''),
+            branch: rec.branch || '',
+            class_code: rec.class_code || '',
+            reason: rec.attendance?.reason || ''
+        }));
+
+    await Promise.all(tasks);
+}
+
 function applyAttendance(studentId, displayStatus, force = false, silent = false) {
     // 정규 → 미확인으로 매핑
     const firestoreStatus = displayStatus === '정규' ? '미확인' : displayStatus;
@@ -4486,6 +5198,11 @@ function applyAttendance(studentId, displayStatus, force = false, silent = false
         dailyRecords[studentId] = { student_id: studentId, date: selectedDate };
     }
     Object.assign(dailyRecords[studentId], updates);
+
+    // 결석 시 결석대장 자동 생성
+    if (newStatus === '결석') {
+        autoCreateAbsenceRecord(studentId);
+    }
 
     if (silent) return;
 
@@ -4668,7 +5385,8 @@ function updateDateDisplay() {
 async function reloadForDate() {
     _visitStatusPending = {};
 
-    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadRoleMemos(), loadClassNextHw(selectedDate), loadClassSettings(), loadTeachers()]);
+    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadAbsenceRecords(), loadRoleMemos(), loadClassNextHw(selectedDate), loadClassSettings(), loadTeachers()]);
+    await syncAbsenceRecords();
     selectedNextHwClass = null;
     updateDateDisplay();
     updateReadonlyBanner();
@@ -5480,7 +6198,8 @@ onAuthStateChanged(auth, async (user) => {
         getCurrentSemester();
         buildSemesterFilter();
         await trackTeacherLogin(user);
-        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers(), loadContacts()]);
+        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadAbsenceRecords(), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers(), loadContacts()]);
+        await syncAbsenceRecords();
         await loadRoleMemos().catch(() => {});
         updateDateDisplay();
         updateReadonlyBanner();
@@ -6129,6 +6848,7 @@ window.changeDate = changeDate;
 window.openDatePicker = openDatePicker;
 window.goToday = goToday;
 window.setCategory = setCategory;
+if (import.meta.env?.DEV) { window._debug = { get absenceRecords() { return absenceRecords; }, get dailyRecords() { return dailyRecords; }, get selectedDate() { return selectedDate; }, set selectedDate(v) { selectedDate = v; }, get allStudents() { return allStudents; } }; }
 window.setSubFilter = setSubFilter;
 window.setBranch = setBranch;
 window.toggleAttendance = toggleAttendance;
@@ -6146,7 +6866,8 @@ window.refreshData = async () => {
     await loadSemesterSettings();
     getCurrentSemester();
     buildSemesterFilter();
-    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadRoleMemos(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers()]);
+    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadAbsenceRecords(), loadRoleMemos(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers()]);
+    await syncAbsenceRecords();
     renderBranchFilter();
     renderSubFilters();
     renderListPanel();

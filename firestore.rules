@@ -199,7 +199,8 @@ service cloud.firestore {
           'student_id', 'student_name', 'domain', 'type', 'source',
           'source_date', 'scheduled_date', 'scheduled_time',
           'alt_hw', 'handler', 'status', 'created_by', 'created_at',
-          'completed_by', 'completed_at', 'cancelled_by', 'cancelled_at', 'branch'
+          'completed_by', 'completed_at', 'cancelled_by', 'cancelled_at', 'branch',
+          'reschedule_history'
         ])
         && request.resource.data.status is string
         && request.resource.data.status in ['pending', '완료', '취소', '기타']
@@ -219,7 +220,8 @@ service cloud.firestore {
           'student_id', 'student_name', 'domain', 'type', 'source',
           'source_date', 'scheduled_date', 'scheduled_time',
           'alt_hw', 'handler', 'status', 'created_by', 'created_at',
-          'completed_by', 'completed_at', 'cancelled_by', 'cancelled_at', 'branch'
+          'completed_by', 'completed_at', 'cancelled_by', 'cancelled_at', 'branch',
+          'reschedule_history'
         ])
         && request.resource.data.status is string
         && request.resource.data.status in ['pending', '완료', '취소', '기타']
@@ -376,6 +378,34 @@ service cloud.firestore {
       allow create, update: if isAuthorized()
         && hasOnlyAllowedPostponedFields()
         && withinFieldLimit(15);
+
+      allow delete: if isAuthorized();
+    }
+
+    // =========================================================================
+    // [DSC] Absence Records (결석생대장)
+    // =========================================================================
+    match /absence_records/{docId} {
+
+      function hasOnlyAllowedAbsenceFields() {
+        return request.resource.data.keys().hasOnly([
+          'student_id', 'student_name', 'branch', 'class_code', 'absence_date',
+          'consultation_done', 'consultation_note',
+          'reason', 'reason_valid', 'resolution', 'settlement_memo',
+          'makeup_date', 'makeup_time',
+          'makeup_status', 'makeup_completed_by', 'makeup_completed_at',
+          'reschedule_history',
+          'status', 'created_by', 'created_at', 'updated_by', 'updated_at'
+        ]);
+      }
+
+      allow read: if isAuthorized();
+
+      allow create, update: if isAuthorized()
+        && hasOnlyAllowedAbsenceFields()
+        && request.resource.data.status is string
+        && request.resource.data.status in ['open', 'closed']
+        && withinFieldLimit(25);
 
       allow delete: if isAuthorized();
     }
