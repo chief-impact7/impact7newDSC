@@ -5266,7 +5266,11 @@ function renderStudentDetail(studentId) {
     document.getElementById('detail-content').style.display = '';
 
     const student = allStudents.find(s => s.docId === studentId);
-    if (!student) return;
+    if (!student) {
+        document.getElementById('detail-empty').style.display = '';
+        document.getElementById('detail-content').style.display = 'none';
+        return;
+    }
 
     // 프로필
     document.getElementById('profile-avatar').textContent = (student.name || '?')[0];
@@ -5771,13 +5775,11 @@ async function syncAbsenceRecords() {
         .filter(([, v]) => v?.attendance?.status === '결석');
 
     const tasks = absentEntries
-        .filter(([studentId]) => !absenceRecords.some(r => r.student_id === studentId && r.absence_date === selectedDate))
-        .map(([studentId, rec]) => autoCreateAbsenceRecord(studentId, {
-            student_name: studentId.replace(/_\d+$/, ''),
-            branch: rec.branch || '',
-            class_code: rec.class_code || '',
-            reason: rec.attendance?.reason || ''
-        }));
+        .filter(([studentId]) =>
+            allStudents.some(s => s.docId === studentId) &&
+            !absenceRecords.some(r => r.student_id === studentId && r.absence_date === selectedDate)
+        )
+        .map(([studentId]) => autoCreateAbsenceRecord(studentId));
 
     await Promise.all(tasks);
 }
