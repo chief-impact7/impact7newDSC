@@ -451,7 +451,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly([
           'name', 'branch', 'school', 'level', 'grade',
           'student_phone', 'parent_phone_1', 'memo',
-          'temp_date', 'temp_time', 'visit_status',
+          'temp_date', 'temp_time', 'visit_status', 'temp_arrival',
           'created_at', 'created_by',
           'completed_by', 'completed_at',
           'updated_by', 'updated_at', 'edit_history'
