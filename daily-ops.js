@@ -5784,6 +5784,19 @@ async function autoCreateAbsenceRecord(studentId, overrides) {
     }
 }
 
+async function autoRemoveAbsenceRecord(studentId) {
+    const idx = absenceRecords.findIndex(r => r.student_id === studentId && r.absence_date === selectedDate);
+    if (idx === -1) return;
+    const record = absenceRecords[idx];
+    try {
+        await deleteDoc(doc(db, 'absence_records', record.docId));
+        absenceRecords.splice(idx, 1);
+        renderSubFilters();
+    } catch (err) {
+        console.error('결석대장 자동 삭제 실패:', err);
+    }
+}
+
 // Self-healing: dailyRecords에서 결석인데 absence_records에 없는 건 자동 보충
 async function syncAbsenceRecords() {
     const absentEntries = Object.entries(dailyRecords)
@@ -5827,9 +5840,11 @@ function applyAttendance(studentId, displayStatus, force = false, silent = false
     }
     Object.assign(dailyRecords[studentId], updates);
 
-    // 결석 시 결석대장 자동 생성
+    // 결석 시 결석대장 자동 생성, 결석 아닌 상태로 변경 시 자동 삭제
     if (newStatus === '결석') {
         autoCreateAbsenceRecord(studentId);
+    } else if (currentStatus === '결석' && newStatus !== '결석') {
+        autoRemoveAbsenceRecord(studentId);
     }
 
     if (silent) return;
