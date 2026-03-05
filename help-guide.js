@@ -310,11 +310,11 @@ const TABS = [
 
         <h4 style="font-size:13.5px;font-weight:600;margin:14px 0 6px;color:var(--text-main,#1f1f1f);">결석대장</h4>
         <p class="help-guide-desc">
-          장기 결석(3일 이상 연속 결석) 학생을 자동 집계하여 보여줍니다.
+          결석 처리된 학생이 <strong>자동으로</strong> 결석대장에 등록됩니다. (결석 1건 = 결석대장 1건)
         </p>
         <ul class="help-guide-list">
-          <li>학생별 연속 결석 일수와 마지막 출석일이 표시됩니다.</li>
-          <li>학생을 클릭하면 상세 패널에서 <strong>상담 기록</strong>과 <strong>출결 이력</strong>을 확인할 수 있습니다.</li>
+          <li>출결에서 <strong>결석</strong> 체크 시 해당 날짜의 결석대장이 자동 생성됩니다.</li>
+          <li>학생을 클릭하면 상세 패널에서 <strong>상담 체크</strong>, <strong>사유</strong>, <strong>보강 일정</strong> 등을 관리합니다.</li>
           <li><strong>행정완료</strong> 버튼으로 해당 건의 행정 처리를 완료 표시합니다.</li>
         </ul>
 
