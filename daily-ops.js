@@ -29,6 +29,7 @@ let memoTab = 'inbox';
 let classSettings = {};          // classCode → { domains: [...], teacher, sub_teacher }
 let teachersList = [];           // teachers 컬렉션 캐시 [{ email, display_name }]
 let selectedBranch = null;       // 소속 글로벌 필터 (null = 전체, '2단지' | '10단지')
+let selectedBranchLevel = null;  // 소속 L3 필터 (null = 전체, '초등' | '중등' | '고등')
 let selectedClassCode = null;    // 반 글로벌 필터 (null = 전체, 'ax104' 등)
 let selectedSemester = null;     // 학기 글로벌 필터 (null = 전체, '2026-Winter' 등)
 let latestSemester = null;       // 가장 최신 학기 (읽기전용 판별용)
@@ -183,6 +184,12 @@ function branchFromStudent(s) {
     if (first === '1') return '2단지';
     if (first === '2') return '10단지';
     return '';
+}
+
+function matchesBranchFilter(s) {
+    if (selectedBranch && branchFromStudent(s) !== selectedBranch) return false;
+    if (selectedBranch && selectedBranchLevel && (s.level || '') !== selectedBranchLevel) return false;
+    return true;
 }
 
 function enrollmentCode(e) {
@@ -572,7 +579,7 @@ function getUniqueClassCodes() {
     const codes = new Set();
     allStudents.forEach(s => {
         if (s.status === '퇴원') return;
-        if (selectedBranch && branchFromStudent(s) !== selectedBranch) return;
+        if (!matchesBranchFilter(s)) return;
         s.enrollments.forEach(e => {
             if (!e.day.includes(dayName)) return;
             if (selectedSemester && e.semester !== selectedSemester) return;
@@ -590,7 +597,7 @@ function getClassMgmtCount(filterKey) {
             e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
         )
     );
-    if (selectedBranch) students = students.filter(s => branchFromStudent(s) === selectedBranch);
+    students = students.filter(s => matchesBranchFilter(s));
     if (filterKey === 'all') return students.length;
     return students.filter(s =>
         s.enrollments.some(e =>
@@ -770,8 +777,8 @@ function renderBranchFilter() {
     }
 
     const branches = [
-        { key: '2단지', label: '2단지' },
-        { key: '10단지', label: '10단지' }
+        { key: '2단지', label: '2단지', children: ['초등', '중등', '고등'] },
+        { key: '10단지', label: '10단지', children: ['초등', '중등', '고등'] }
     ];
     const dayName = getDayName(selectedDate);
     const active = allStudents.filter(s =>
@@ -780,14 +787,32 @@ function renderBranchFilter() {
         )
     );
 
-    container.innerHTML = branches.map(b => {
-        const isActive = selectedBranch === b.key ? 'active' : '';
-        const count = active.filter(s => branchFromStudent(s) === b.key).length;
-        return `<div class="nav-l2 ${isActive}" data-filter="${b.key}" onclick="setBranch('${b.key}')">
+    let html = '';
+    for (const b of branches) {
+        const branchStudents = active.filter(s => branchFromStudent(s) === b.key);
+        const count = branchStudents.length;
+        const isBranchSelected = selectedBranch === b.key;
+        const parentActive = isBranchSelected && !selectedBranchLevel ? 'active' : '';
+        const expanded = isBranchSelected ? 'l2-expanded' : '';
+
+        html += `<div class="nav-l2 l2-parent ${parentActive} ${expanded}" data-filter="${b.key}" onclick="setBranch('${b.key}')">
             ${esc(b.label)}
             ${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
+            <span class="material-symbols-outlined l2-expand-icon">${isBranchSelected ? 'expand_less' : 'expand_more'}</span>
         </div>`;
-    }).join('');
+
+        if (isBranchSelected) {
+            for (const level of b.children) {
+                const levelCount = branchStudents.filter(s => (s.level || '') === level).length;
+                const levelActive = selectedBranchLevel === level ? 'active' : '';
+                html += `<div class="nav-l2 nav-l3 ${levelActive}" data-filter="${b.key}_${level}" onclick="setBranchLevel('${level}')">
+                    ${esc(level)}
+                    ${levelCount > 0 ? `<span class="nav-l2-count">${levelCount}</span>` : ''}
+                </div>`;
+            }
+        }
+    }
+    container.innerHTML = html;
 
     const isExpanded = branchL1.classList.contains('expanded');
     container.style.display = isExpanded ? '' : 'none';
@@ -854,11 +879,24 @@ function setClassCode(code) {
 }
 
 function setBranch(branchKey) {
-    selectedBranch = selectedBranch === branchKey ? null : branchKey;
+    if (selectedBranch === branchKey) {
+        selectedBranch = null;
+        selectedBranchLevel = null;
+    } else {
+        selectedBranch = branchKey;
+        selectedBranchLevel = null;
+    }
 
     renderBranchFilter();
     renderSubFilters();
+    renderListPanel();
+}
 
+function setBranchLevel(level) {
+    selectedBranchLevel = selectedBranchLevel === level ? null : level;
+
+    renderBranchFilter();
+    renderSubFilters();
     renderListPanel();
 }
 
@@ -1028,7 +1066,8 @@ function renderFilterChips() {
 
     // 소속 칩
     if (selectedBranch) {
-        chips.push({ label: `소속: ${selectedBranch}`, onRemove: 'clearBranch' });
+        const branchLabel = selectedBranchLevel ? `${selectedBranch} ${selectedBranchLevel}` : selectedBranch;
+        chips.push({ label: `소속: ${branchLabel}`, onRemove: 'clearBranch' });
     }
 
     // 반 칩
@@ -1062,6 +1101,7 @@ function removeFilterChip(action) {
         updateL1ExpandIcons();
     } else if (action === 'clearBranch') {
         selectedBranch = null;
+        selectedBranchLevel = null;
         const branchL1 = document.querySelector('.nav-l1[data-category="branch"]');
         branchL1?.classList.remove('expanded');
         renderBranchFilter();
@@ -1089,6 +1129,7 @@ function clearAllFilters() {
     l2Expanded = false;
     // 글로벌 필터 해제 (학기는 사이드바 드롭다운에서만 제어 — 유지)
     selectedBranch = null;
+    selectedBranchLevel = null;
     selectedClassCode = null;
     document.querySelector('.nav-l1[data-category="branch"]')?.classList.remove('expanded');
     document.querySelector('.nav-l1[data-category="class_mgmt"]')?.classList.remove('expanded');
@@ -1161,7 +1202,7 @@ function _getSubFilterBase() {
             e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
         )
     );
-    if (selectedBranch) todayStudents = todayStudents.filter(s => branchFromStudent(s) === selectedBranch);
+    todayStudents = todayStudents.filter(s => matchesBranchFilter(s));
     if (selectedClassCode) todayStudents = todayStudents.filter(s => s.enrollments.some(e =>
         e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === selectedClassCode
     ));
@@ -1474,7 +1515,7 @@ function getFilteredStudents() {
                 e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
             )
         );
-        if (selectedBranch) students = students.filter(s => branchFromStudent(s) === selectedBranch);
+        students = students.filter(s => matchesBranchFilter(s));
         if (searchQuery) {
             const q = searchQuery.trim().toLowerCase();
             const chosungMode = isChosungOnly(q);
@@ -1506,7 +1547,7 @@ function getFilteredStudents() {
     );
 
     // 소속 글로벌 필터
-    if (selectedBranch) students = students.filter(s => branchFromStudent(s) === selectedBranch);
+    students = students.filter(s => matchesBranchFilter(s));
 
     // 반 글로벌 필터
     if (selectedClassCode) {
@@ -1803,7 +1844,7 @@ function renderDepartureCheckList() {
             e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
         )
     );
-    if (selectedBranch) students = students.filter(s => branchFromStudent(s) === selectedBranch);
+    students = students.filter(s => matchesBranchFilter(s));
     if (selectedClassCode) students = students.filter(s => s.enrollments.some(e =>
         e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === selectedClassCode
     ));
@@ -2458,9 +2499,7 @@ function renderClassDetail(classCode) {
         s.status !== '퇴원' &&
         s.enrollments.some(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode)
     );
-    if (selectedBranch) {
-        classStudents = classStudents.filter(s => branchFromStudent(s) === selectedBranch);
-    }
+    classStudents = classStudents.filter(s => matchesBranchFilter(s));
     const domains = getClassDomains(classCode);
     const testSections = getClassTestSections(classCode);
 
@@ -3916,7 +3955,7 @@ function renderNextHwClassDetail(classCode) {
     let classStudents = allStudents.filter(s =>
         s.status !== '퇴원' && s.enrollments.some(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode)
     );
-    if (selectedBranch) classStudents = classStudents.filter(s => branchFromStudent(s) === selectedBranch);
+    classStudents = classStudents.filter(s => matchesBranchFilter(s));
 
     const cardsContainer = document.getElementById('detail-cards');
     cardsContainer.innerHTML = `
@@ -6294,7 +6333,7 @@ async function exportDailyReport() {
         s.status !== '퇴원' &&
         s.enrollments.some(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester))
     );
-    if (selectedBranch) students = students.filter(s => branchFromStudent(s) === selectedBranch);
+    students = students.filter(s => matchesBranchFilter(s));
     if (selectedClassCode) {
         students = students.filter(s =>
             s.enrollments.some(e =>
@@ -6851,6 +6890,7 @@ window.setCategory = setCategory;
 if (import.meta.env?.DEV) { window._debug = { get absenceRecords() { return absenceRecords; }, get dailyRecords() { return dailyRecords; }, get selectedDate() { return selectedDate; }, set selectedDate(v) { selectedDate = v; }, get allStudents() { return allStudents; } }; }
 window.setSubFilter = setSubFilter;
 window.setBranch = setBranch;
+window.setBranchLevel = setBranchLevel;
 window.toggleAttendance = toggleAttendance;
 window.cycleVisitAttendance = cycleVisitAttendance;
 window.toggleHomework = toggleHomework;
