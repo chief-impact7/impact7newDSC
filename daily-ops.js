@@ -8402,6 +8402,25 @@ function cycleVisitStatus(source, docId, studentId) {
     // 다음 상태로 토글
     const nextIdx = (VISIT_STATUS_CYCLE.indexOf(currentStatus) + 1) % VISIT_STATUS_CYCLE.length;
     const nextStatus = VISIT_STATUS_CYCLE[nextIdx];
+    // 이전 pending 상태 모두 클리어 (마지막 토글만 유지)
+    for (const key of Object.keys(_visitStatusPending)) {
+        if (key !== docId) {
+            // 이전 항목 UI 원복
+            const oldBtn = document.querySelector(`[data-visit-id="${key}"]`);
+            if (oldBtn) {
+                const old = _visitStatusPending[key];
+                // 원래 상태로 되돌리기: nextStatus의 이전 상태
+                const prevIdx = (VISIT_STATUS_CYCLE.indexOf(old.nextStatus) - 1 + VISIT_STATUS_CYCLE.length) % VISIT_STATUS_CYCLE.length;
+                const prevStatus = VISIT_STATUS_CYCLE[prevIdx];
+                const label = prevStatus === 'pending' ? '미완료' : prevStatus;
+                const { cls, sty } = _visitBtnStyles(prevStatus);
+                oldBtn.textContent = label;
+                oldBtn.className = `toggle-btn ${cls}`.trim();
+                oldBtn.style.cssText = sty;
+            }
+        }
+    }
+    _visitStatusPending = {};
     _visitStatusPending[docId] = { source, nextStatus, studentId };
 
     // 버튼 텍스트+스타일 즉시 변경
