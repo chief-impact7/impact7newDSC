@@ -473,7 +473,12 @@ async function loadAbsenceRecords() {
     try {
         const q = query(collection(db, 'absence_records'), where('status', '==', 'open'));
         const snap = await getDocs(q);
-        snap.forEach(d => absenceRecords.push({ docId: d.id, ...d.data() }));
+        const withdrawnIds = new Set(allStudents.filter(s => s.status === '퇴원').map(s => s.docId));
+        snap.forEach(d => {
+            if (!withdrawnIds.has(d.data().student_id)) {
+                absenceRecords.push({ docId: d.id, ...d.data() });
+            }
+        });
     } catch (err) {
         console.error('absence_records 로드 실패:', err.message);
     }
