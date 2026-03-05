@@ -2106,8 +2106,10 @@ function renderAbsenceLedgerList() {
             ? '<span class="material-symbols-outlined" style="font-size:14px;color:var(--success);">check_circle</span>'
             : `<button class="btn-icon" style="padding:2px;" onclick="event.stopPropagation(); toggleConsultation('${escAttr(r.docId)}', '${escAttr(r.student_id)}')" title="상담 완료 처리"><span class="material-symbols-outlined" style="font-size:14px;color:var(--text-sec);">phone_callback</span></button>`;
 
-        const _createdBy = getTeacherName(r.created_by);
-        const metaStr = _createdBy ? ` · ${_createdBy} ${_fmtTs(r.created_at)}` : '';
+        const _primaryCode = (r.class_code || '').split(',')[0].trim();
+        const _teacherEmail = classSettings[_primaryCode]?.teacher;
+        const _teacher = _teacherEmail ? getTeacherName(_teacherEmail) : '';
+        const metaStr = _teacher ? ` · ${_teacher}` : '';
 
         html += `<div class="list-item ${isActive ? 'active' : ''}" data-id="${escAttr(r.student_id)}"
             onclick="selectedStudentId='${escAttr(r.student_id)}'; renderStudentDetail('${escAttr(r.student_id)}'); document.querySelectorAll('.list-item').forEach(el=>el.classList.remove('active')); this.classList.add('active');">
