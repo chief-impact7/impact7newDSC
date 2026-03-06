@@ -365,7 +365,14 @@ async function saveClassSettings(classCode, data) {
 // ─── Firebase CRUD ──────────────────────────────────────────────────────────
 
 async function loadStudents() {
-    const snap = await getDocs(collection(db, 'students'));
+    let snap;
+    try {
+        snap = await getDocs(collection(db, 'students'));
+    } catch (err) {
+        console.error('students 로드 실패:', err.message);
+        allStudents = [];
+        return;
+    }
     allStudents = [];
     snap.forEach(d => {
         const data = d.data();
