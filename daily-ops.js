@@ -368,8 +368,9 @@ async function loadStudents() {
     let snap;
     try {
         snap = await getDocs(collection(db, 'students'));
+        console.log('[loadStudents] 문서 수:', snap.size);
     } catch (err) {
-        console.error('students 로드 실패:', err.message);
+        console.error('[loadStudents] 로드 실패:', err.message, err);
         allStudents = [];
         return;
     }
