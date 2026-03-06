@@ -8024,12 +8024,12 @@ function collectStudentDaySummary(studentId) {
 
     const hwAction = rec.hw_fail_action || {};
     Object.entries(hwAction).forEach(([d, a]) => {
-        if (a.type) summary.hw_fail_actions[d] = { type: a.type, scheduled_date: a.scheduled_date, alt_hw: a.alt_hw };
+        if (a.type) summary.hw_fail_actions[d] = { type: a.type, scheduled_date: a.scheduled_date, scheduled_time: a.scheduled_time, alt_hw: a.alt_hw };
     });
 
     const testAction = rec.test_fail_action || {};
     Object.entries(testAction).forEach(([t, a]) => {
-        if (a.type) summary.test_fail_actions[t] = { type: a.type, scheduled_date: a.scheduled_date, alt_hw: a.alt_hw };
+        if (a.type) summary.test_fail_actions[t] = { type: a.type, scheduled_date: a.scheduled_date, scheduled_time: a.scheduled_time, alt_hw: a.alt_hw };
     });
 
     // hw_fail_tasks / test_fail_tasks 컬렉션에서 pending 태스크 보완
@@ -8039,13 +8039,13 @@ function collectStudentDaySummary(studentId) {
     matchedHwTasks.filter(t => t.source_date === selectedDate || t.scheduled_date === selectedDate).forEach(t => {
         const key = t.domain || t.type || 'etc';
         if (!summary.hw_fail_actions[key]) {
-            summary.hw_fail_actions[key] = { type: t.type, scheduled_date: t.scheduled_date, alt_hw: t.alt_hw };
+            summary.hw_fail_actions[key] = { type: t.type, scheduled_date: t.scheduled_date, scheduled_time: t.scheduled_time, alt_hw: t.alt_hw };
         }
     });
     matchedTestTasks.filter(t => t.source_date === selectedDate || t.scheduled_date === selectedDate).forEach(t => {
         const key = t.domain || t.type || 'etc';
         if (!summary.test_fail_actions[key]) {
-            summary.test_fail_actions[key] = { type: t.type, scheduled_date: t.scheduled_date, alt_hw: t.alt_hw };
+            summary.test_fail_actions[key] = { type: t.type, scheduled_date: t.scheduled_date, scheduled_time: t.scheduled_time, alt_hw: t.alt_hw };
         }
     });
 
@@ -8109,12 +8109,15 @@ function generateDataTemplate(studentId) {
     // 영역별 흐름 생성 헬퍼 (1차 → 2차 → 후속조치)
     const formatActionStep = (action) => {
         if (!action?.type) return null;
+        const time = action.scheduled_time ? ` ${formatTime12h(action.scheduled_time)}` : '';
         if (action.type === '등원') {
-            const time = action.scheduled_time ? ` ${formatTime12h(action.scheduled_time)}` : '';
             return `${fmtDate(action.scheduled_date)}${time} 등원`;
         }
         if (action.type === '대체숙제') return `대체숙제 "${action.alt_hw || ''}"`;
-        if (action.type === '미통과') return '보충 예정';
+        if (action.type === '미통과') {
+            if (action.scheduled_date) return `${fmtDate(action.scheduled_date)}${time} 재시`;
+            return '보충 예정';
+        }
         return null;
     };
 
