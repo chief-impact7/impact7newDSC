@@ -1232,6 +1232,7 @@ function hasRegularEnrollmentToday(student) {
 function isVisitStudent(docId) {
     const hwFail = dailyRecords[docId]?.hw_fail_action || {};
     if (Object.values(hwFail).some(a => a.type === '등원' && a.scheduled_date === selectedDate)) return true;
+    if (hwFailTasks.some(t => t.student_id === docId && t.type === '등원' && t.scheduled_date === selectedDate && t.status === 'pending')) return true;
     if (testFailTasks.some(t => t.student_id === docId && t.type === '등원' && t.scheduled_date === selectedDate && t.status === 'pending')) return true;
     if (dailyRecords[docId]?.extra_visit?.date === selectedDate) return true;
     return false;
