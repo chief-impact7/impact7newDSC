@@ -434,7 +434,7 @@ async function loadRetakeSchedules() {
 async function loadHwFailTasks() {
     hwFailTasks = [];
     try {
-        const q = query(collection(db, 'hw_fail_tasks'), where('status', '==', 'pending'));
+        const q = query(collection(db, 'hw_fail_tasks'), where('status', 'in', ['pending', '완료', '기타']));
         const snap = await getDocs(q);
         snap.forEach(d => {
             hwFailTasks.push({ docId: d.id, ...d.data() });
@@ -447,7 +447,7 @@ async function loadHwFailTasks() {
 async function loadTestFailTasks() {
     testFailTasks = [];
     try {
-        const q = query(collection(db, 'test_fail_tasks'), where('status', '==', 'pending'));
+        const q = query(collection(db, 'test_fail_tasks'), where('status', 'in', ['pending', '완료', '기타']));
         const snap = await getDocs(q);
         snap.forEach(d => {
             testFailTasks.push({ docId: d.id, ...d.data() });
