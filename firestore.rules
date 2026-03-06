@@ -4,7 +4,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // =========================================================================
-    // 인증 헬퍼
+    // 인증 헬퍼 (DB/DSC 앱용)
     // =========================================================================
     function isLoggedIn() {
       return request.auth != null;
@@ -22,7 +22,16 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // 학생 마스터 컬렉션
+    // 인증 헬퍼 (Director 앱용)
+    // =========================================================================
+    function getUserRole() {
+      return get(/databases/$(database)/documents/director_users/$(request.auth.uid)).data.role;
+    }
+    function isDirector() { return isLoggedIn() && getUserRole() == 'director'; }
+    function isStaff() { return isLoggedIn() && getUserRole() == 'staff'; }
+
+    // =========================================================================
+    // [공통] 학생 마스터 컬렉션
     // =========================================================================
     match /students/{docId} {
 
@@ -56,7 +65,8 @@ service cloud.firestore {
         return request.resource.data.keys().hasOnly(allowed);
       }
 
-      allow read: if isAuthorized();
+      // DB/DSC: 읽기+쓰기, Director: 읽기만
+      allow read: if isLoggedIn();
 
       allow create: if isAuthorized()
         && hasRequiredStudentFields()
@@ -68,7 +78,7 @@ service cloud.firestore {
         && hasOnlyAllowedStudentFields()
         && withinFieldLimit(30);
 
-      allow delete: if isAuthorized();
+      allow delete: if false;  // 삭제 차단 — soft-delete(status='퇴원')로 대체
 
       // 메모 서브컬렉션
       match /memos/{memoId} {
@@ -98,7 +108,7 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // 이력 로그: 읽기 + 생성만, 수정/삭제 불가
+    // [공통] 이력 로그: 읽기 + 생성만, 수정/삭제 불가
     // =========================================================================
     match /history_logs/{logId} {
 
@@ -131,7 +141,7 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // [DB] 사용자 역할: 자기 문서만 읽기, 생성/수정/삭제는 콘솔에서만
+    // [DB] 사용자 역할 (DB/DSC): 자기 문서만 읽기, 생성/수정/삭제는 콘솔에서만
     // =========================================================================
     match /users/{userEmail} {
       allow read: if isAuthorized()
@@ -509,6 +519,71 @@ service cloud.firestore {
         && withinFieldLimit(15);
 
       allow delete: if isAuthorized();
+    }
+
+    // =========================================================================
+    // [Director] 사용자/역할 (uid 기반)
+    // =========================================================================
+    match /director_users/{uid} {
+      allow read: if isLoggedIn() && (isDirector() || request.auth.uid == uid);
+      allow write: if isDirector();
+    }
+
+    // =========================================================================
+    // [Director] Entities / Buildings / Teams
+    // =========================================================================
+    match /entities/{id} { allow read: if isLoggedIn(); allow write: if isDirector(); }
+    match /buildings/{id} { allow read: if isLoggedIn(); allow write: if isDirector(); }
+    match /teams/{id} { allow read: if isLoggedIn(); allow write: if isDirector(); }
+
+    // =========================================================================
+    // [Director] Staff + 서브컬렉션
+    // =========================================================================
+    match /staff/{staffId} {
+      allow read: if isLoggedIn();
+      allow write: if isDirector();
+
+      match /contracts/{contractId} {
+        allow read: if isDirector() ||
+          (isStaff() && resource.data.assignedTo == request.auth.uid);
+        allow write: if isDirector();
+      }
+
+      match /assignments/{id} {
+        allow read: if isLoggedIn();
+        allow write: if isDirector();
+      }
+    }
+
+    // =========================================================================
+    // [Director] Contract Templates
+    // =========================================================================
+    match /contractTemplates/{id} {
+      allow read: if isLoggedIn();
+      allow write: if isDirector();
+    }
+
+    // =========================================================================
+    // [Director] Payroll
+    // =========================================================================
+    match /payroll/{yearMonth}/staff/{staffId} {
+      allow read, write: if isDirector();
+    }
+
+    // =========================================================================
+    // [Director] Expenses / Vendors / Tax Reports
+    // =========================================================================
+    match /expenses/{id} { allow read, write: if isDirector(); }
+    match /vendors/{id} { allow read, write: if isDirector(); }
+    match /taxReports/{id} { allow read, write: if isDirector(); }
+
+    // =========================================================================
+    // [Director] Audit Log
+    // =========================================================================
+    match /auditLog/{id} {
+      allow read: if isDirector();
+      allow create: if isLoggedIn();
+      allow update, delete: if false;
     }
 
     // =========================================================================
