@@ -1,6 +1,6 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import {
-    collection, getDocs, doc, setDoc, getDoc, addDoc,
+    collection, getDocs, doc, setDoc, getDoc, getDocFromServer, addDoc,
     query, where, serverTimestamp, updateDoc, writeBatch, arrayUnion, deleteField, Timestamp, deleteDoc
 } from 'firebase/firestore';
 import { auth, db, geminiModel } from './firebase-config.js';
@@ -1631,17 +1631,28 @@ function getFilteredStudents() {
     }
 
     const dayName = getDayName(selectedDate);
-    let students = allStudents.filter(s =>
-        s.status !== '퇴원' && s.enrollments.some(e =>
-            e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
-        )
-    );
+
+    // 검색어가 있으면 요일 무관, 현재 학기 학생만 (과거 학생은 allContacts에서 별도 검색)
+    let students;
+    if (searchQuery) {
+        students = allStudents.filter(s =>
+            s.status !== '퇴원' && s.enrollments.some(e =>
+                !selectedSemester || e.semester === selectedSemester
+            )
+        );
+    } else {
+        students = allStudents.filter(s =>
+            s.status !== '퇴원' && s.enrollments.some(e =>
+                e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
+            )
+        );
+    }
 
     // 소속 글로벌 필터
     students = students.filter(s => matchesBranchFilter(s));
 
-    // 반 글로벌 필터
-    if (selectedClassCode) {
+    // 반 글로벌 필터 (검색 시에는 반 필터 무시)
+    if (selectedClassCode && !searchQuery) {
         students = students.filter(s =>
             s.enrollments.some(e =>
                 e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === selectedClassCode
@@ -2388,20 +2399,25 @@ function renderListPanel() {
     // 필터 칩 렌더링
     renderFilterChips();
 
-    // contacts 검색 (검색어가 있을 때만)
-    let contactResults = [];
+    // 과거 학생 검색: allContacts에서 현재 학기 학생(allStudents 중 학기 일치)을 제외한 나머지
+    let pastContactResults = [];
     if (searchQuery) {
         const q = searchQuery.trim().toLowerCase();
         const chosungMode = isChosungOnly(q);
-        const studentIdSet = new Set(allStudents.map(s => s.docId));
-        contactResults = allContacts.filter(c => {
-            if (studentIdSet.has(c.id)) return false;
+        // 현재 학기에 해당하는 학생 ID (getFilteredStudents가 반환하는 범위)
+        const currentSemesterIds = new Set(
+            allStudents.filter(s =>
+                s.status !== '퇴원' && s.enrollments.some(e => !selectedSemester || e.semester === selectedSemester)
+            ).map(s => s.docId)
+        );
+        pastContactResults = allContacts.filter(c => {
+            if (currentSemesterIds.has(c.id)) return false;
             if (chosungMode) return matchChosung(c.name, q) || matchChosung(c.school, q);
             return (c.name && c.name.toLowerCase().includes(q)) ||
                 (c.school && c.school.toLowerCase().includes(q)) ||
                 (c.student_phone && c.student_phone.includes(q)) ||
                 (c.parent_phone_1 && c.parent_phone_1.includes(q));
-        }).slice(0, 50);
+        });
     }
 
     // 벌크 모드: 현재 목록에 없는 학생 선택 해제, 0명이면 벌크모드 종료
@@ -2422,7 +2438,7 @@ function renderListPanel() {
         ? getEnrollPendingVisits().length : 0;
     countEl.textContent = `${students.length + enrollPendingCount}명`;
 
-    if (students.length === 0 && contactResults.length === 0 && enrollPendingCount === 0) {
+    if (students.length === 0 && pastContactResults.length === 0 && enrollPendingCount === 0) {
         container.innerHTML = `<div class="empty-state">
             <span class="material-symbols-outlined">person_search</span>
             <p>해당하는 학생이 없습니다</p>
@@ -2743,12 +2759,26 @@ function renderListPanel() {
         </div>`;
     };
 
-    // 휴원 학생 분리
-    const activeStudents = students.filter(s => !LEAVE_STATUSES.includes(s.status));
-    const leaveStudents = students.filter(s => LEAVE_STATUSES.includes(s.status));
+    // 검색 시 현재학기(오늘/다른요일) 분리
+    let todayStudents, otherDayStudents;
+    if (searchQuery) {
+        const dayN = getDayName(selectedDate);
+        todayStudents = students.filter(s =>
+            s.enrollments.some(e => e.day.includes(dayN) && (!selectedSemester || e.semester === selectedSemester))
+        );
+        const todayIds = new Set(todayStudents.map(s => s.docId));
+        otherDayStudents = students.filter(s => !todayIds.has(s.docId));
+    } else {
+        todayStudents = students;
+        otherDayStudents = [];
+    }
+
+    // 휴원 학생 분리 (오늘 수업 학생 기준)
+    const activeStudents = todayStudents.filter(s => !LEAVE_STATUSES.includes(s.status));
+    const leaveStudents = todayStudents.filter(s => LEAVE_STATUSES.includes(s.status));
 
     // 정규/비정규 분리 조건: attendance 카테고리이고 출석/지각/결석/기타 서브필터 활성 시
-    const shouldSplitRegular = currentCategory === 'attendance' &&
+    const shouldSplitRegular = !searchQuery && currentCategory === 'attendance' &&
         currentSubFilter.size > 0 &&
         !currentSubFilter.has('all') &&
         !currentSubFilter.has('pre_arrival') &&
@@ -2787,7 +2817,7 @@ function renderListPanel() {
         ? renderEnrollPendingSection() : '';
 
     // 그룹 뷰 or 일반 렌더링
-    if (groupViewMode !== 'none') {
+    if (groupViewMode !== 'none' && !searchQuery) {
         const groups = {};
         regularActive.forEach(s => {
             if (groupViewMode === 'branch') {
@@ -2812,22 +2842,45 @@ function renderListPanel() {
         container.innerHTML = appendIrregularAndLeave(html);
     }
 
-    // 과거 연락처 결과 표시 (검색 시)
-    if (contactResults.length > 0) {
-        let contactHtml = `<div class="leave-section-divider"><span>과거 연락처 (${contactResults.length}명)</span></div>`;
-        contactResults.forEach(c => {
+    // 다른 요일 학생 표시 (검색 시)
+    if (otherDayStudents.length > 0) {
+        let otherHtml = `<div class="leave-section-divider"><span>다른 요일 (${otherDayStudents.length}명)</span></div>`;
+        otherHtml += otherDayStudents.map(renderItemHtml).join('');
+        container.insertAdjacentHTML('beforeend', otherHtml);
+    }
+
+    // 과거 학생 표시 (검색 시, allContacts 기반, 최대 50명)
+    if (pastContactResults.length > 0) {
+        const PAST_LIMIT = 50;
+        const showAll = pastContactResults.length <= PAST_LIMIT;
+        const visiblePast = showAll ? pastContactResults : pastContactResults.slice(0, PAST_LIMIT);
+        const renderPastItem = (c) => {
             const phone = c.parent_phone_1 || c.student_phone || '';
             const last4 = phone.replace(/\D/g, '').slice(-4);
             const schoolGrade = [c.school || '', c.grade ? c.grade + '학년' : ''].filter(Boolean).join(' ');
             const sub = [schoolGrade, last4 ? `☎${last4}` : ''].filter(Boolean).join(' · ');
-            contactHtml += `<div class="list-item contact-item" style="cursor:pointer" onclick="window.openContactAsTemp('${escAttr(c.id)}')">
+            return `<div class="list-item contact-item" style="cursor:pointer" onclick="window.openContactAsTemp('${escAttr(c.id)}')">
                 <div class="item-info">
                     <span class="item-title">${esc(c.name || '—')} <span class="tag-past">과거</span></span>
                     <span class="item-desc">${esc(sub || '—')}</span>
                 </div>
             </div>`;
-        });
-        container.insertAdjacentHTML('beforeend', contactHtml);
+        };
+        let pastHtml = `<div class="leave-section-divider"><span>과거 학생 (${pastContactResults.length}명)</span></div>`;
+        pastHtml += visiblePast.map(renderPastItem).join('');
+        if (!showAll) {
+            pastHtml += `<div class="list-item" style="justify-content:center;cursor:pointer;color:var(--primary)" onclick="window._showAllPastStudents()">
+                <span>+ ${pastContactResults.length - PAST_LIMIT}명 더보기</span>
+            </div>`;
+        }
+        container.insertAdjacentHTML('beforeend', pastHtml);
+        if (!showAll) {
+            window._showAllPastStudents = () => {
+                const moreHtml = pastContactResults.slice(PAST_LIMIT).map(renderPastItem).join('');
+                const btn = container.querySelector('[onclick="window._showAllPastStudents()"]');
+                if (btn) btn.outerHTML = moreHtml;
+            };
+        }
     }
 
     // 반 상세 표시: 반(+소속)만 선택되고, 콘텐츠 서브필터 없을 때
@@ -2889,6 +2942,11 @@ function renderClassDetail(classCode) {
 
     // ① 등원예정시간 — 반 기본 시간만 설정 (학생별 개별시간은 학생 상세패널에서)
     const defaultTime = classSettings[classCode]?.default_time || '';
+    const timeUpdatedBy = classSettings[classCode]?.default_time_updated_by || '';
+    const timeUpdatedAt = classSettings[classCode]?.default_time_updated_at || '';
+    const timeUpdatedLabel = timeUpdatedBy
+        ? `${getTeacherName(timeUpdatedBy)} · ${timeUpdatedAt ? new Date(timeUpdatedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}`
+        : '';
 
     // ② 영역숙제관리
     const domainChips = domains.map((d, i) => `
@@ -2970,7 +3028,7 @@ function renderClassDetail(classCode) {
                 <input type="time" class="arrival-time-input" value="${defaultTime}"
                     onchange="saveClassDefaultTime('${escAttr(classCode)}', this.value)">
             </div>
-            <div style="font-size:11px;color:var(--text-sec);margin-top:4px;">변경 시 자동 저장</div>
+            <div style="font-size:11px;color:var(--text-sec);margin-top:4px;">변경 시 자동 저장${timeUpdatedLabel ? ` · 최근: ${esc(timeUpdatedLabel)}` : ''}</div>
         </div>
 
         <div class="detail-card">
@@ -3144,12 +3202,24 @@ async function saveClassDefaultTime(classCode, time) {
     if (!time) return;
     showSaveIndicator('saving');
     try {
-        await saveClassSettings(classCode, { default_time: time });
+        await saveClassSettings(classCode, {
+            default_time: time,
+            default_time_updated_by: currentUser?.email || '',
+            default_time_updated_at: new Date().toISOString(),
+        });
+        // 서버에 실제 반영되었는지 검증 (오프라인 캐시 false-positive 방지)
+        const snap = await getDocFromServer(doc(db, 'class_settings', classCode));
+        const serverTime = snap.data()?.default_time;
+        if (serverTime !== time) {
+            throw new Error(`서버에 반영되지 않았습니다 (서버값: ${serverTime}). 로그아웃 후 다시 로그인해주세요.`);
+        }
         showSaveIndicator('saved');
+        renderClassDetail(classCode);
         if (selectedStudentId) renderStudentDetail(selectedStudentId);
     } catch (err) {
         console.error('반 기본 시간 저장 실패:', err);
         showSaveIndicator('error');
+        alert('등원예정시간 저장에 실패했습니다: ' + err.message);
     }
 }
 
@@ -8517,6 +8587,49 @@ async function loadContacts() {
         snapshot.forEach((docSnap) => {
             allContacts.push({ id: docSnap.id, ...docSnap.data() });
         });
+
+        // allStudents → contacts DB 동기화 (contacts에 없는 학생은 DB에 저장)
+        const contactIdSet = new Set(allContacts.map(c => c.id));
+        const toSync = [];
+        for (const s of allStudents) {
+            if (!contactIdSet.has(s.docId)) {
+                const contactData = {
+                    name: s.name || '',
+                    school: s.school || '',
+                    grade: s.grade || '',
+                    student_phone: s.student_phone || '',
+                    parent_phone_1: s.parent_phone_1 || '',
+                    parent_phone_2: s.parent_phone_2 || '',
+                    guardian_name_1: s.guardian_name_1 || '',
+                    guardian_name_2: s.guardian_name_2 || '',
+                    level: s.level || '',
+                    updated_at: serverTimestamp(),
+                };
+                toSync.push({ id: s.docId, data: contactData });
+                // 메모리에도 즉시 추가
+                allContacts.push({ id: s.docId, ...contactData });
+                contactIdSet.add(s.docId);
+            }
+        }
+        // DB에 배치 저장 (백그라운드)
+        if (toSync.length > 0) {
+            console.log(`[loadContacts] 새 학생 ${toSync.length}명 → contacts DB 동기화`);
+            (async () => {
+                try {
+                    for (let i = 0; i < toSync.length; i += 500) {
+                        const batch = writeBatch(db);
+                        toSync.slice(i, i + 500).forEach(item => {
+                            batch.set(doc(db, 'contacts', item.id), item.data);
+                        });
+                        await batch.commit();
+                    }
+                    console.log(`[loadContacts] contacts DB 동기화 완료 (${toSync.length}건)`);
+                } catch (e) {
+                    console.warn('[loadContacts] contacts DB 동기화 실패:', e);
+                }
+            })();
+        }
+        console.log(`[loadContacts] contacts=${snapshot.size}, 동기화 후 allContacts=${allContacts.length}`);
         allContacts.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
     } catch (error) {
         console.error('[FIRESTORE ERROR] Failed to load contacts:', error);

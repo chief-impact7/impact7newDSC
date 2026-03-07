@@ -23,12 +23,12 @@
 - 변경사항 요약을 항상 남겨서 Gemini가 컨텍스트를 파악할 수 있게 한다
 
 ## 공유 Firebase 규칙 (중요!)
-- 이 프로젝트는 **impact7DB, impact7-director와 동일한 Firebase 프로젝트(impact7db)를 공유**
+- 이 프로젝트는 **impact7DB, impact7HR와 동일한 Firebase 프로젝트(impact7db)를 공유**
 - `firestore.rules`는 3개 프로젝트가 **동일한 파일**을 사용한다
-- rules 수정 시 반드시 3개 프로젝트(impact7DB, impact7newDSC, impact7-director) 모두에 복사
+- rules 수정 시 반드시 3개 프로젝트(impact7DB, impact7newDSC, impact7HR) 모두에 복사
 - 배포는 impact7DB에서만 하는 것을 권장
 - `students` 컬렉션: 클라이언트 삭제 완전 차단 (`allow delete: if false`)
-- Director 앱의 사용자 컬렉션은 `director_users` (DB의 `users`와 분리)
+- HR 앱의 사용자 컬렉션은 `director_users` (DB의 `users`와 분리)
 
 ## Git 관련
 - 커밋은 사용자 요청 시에만 수행
