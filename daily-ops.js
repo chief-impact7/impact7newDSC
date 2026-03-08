@@ -2470,7 +2470,7 @@ function renderListPanel() {
     const renderItemHtml = (s) => {
         const isActive = s.docId === selectedStudentId ? 'active' : '';
         const dayN = getDayName(selectedDate);
-        const code = (s.enrollments || []).filter(e => e.day.includes(dayN) && (!selectedSemester || e.semester === selectedSemester)).map(e => enrollmentCode(e)).join(', ') || (s.enrollments || []).map(e => enrollmentCode(e)).join(', ');
+        const code = getActiveEnrollments(s, selectedDate).filter(e => e.day.includes(dayN) && (!selectedSemester || e.semester === selectedSemester)).map(e => enrollmentCode(e)).join(', ') || getActiveEnrollments(s, selectedDate).map(e => enrollmentCode(e)).join(', ');
         const branch = branchFromStudent(s);
 
         let toggleHtml = '';
@@ -2781,7 +2781,7 @@ function renderListPanel() {
     if (searchQuery) {
         const dayN = getDayName(selectedDate);
         todayStudents = students.filter(s =>
-            s.enrollments.some(e => e.day.includes(dayN) && (!selectedSemester || e.semester === selectedSemester))
+            getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayN) && (!selectedSemester || e.semester === selectedSemester))
         );
         const todayIds = new Set(todayStudents.map(s => s.docId));
         otherDayStudents = students.filter(s => !todayIds.has(s.docId));
@@ -2940,7 +2940,7 @@ function renderClassDetail(classCode) {
     const dayName = getDayName(selectedDate);
     let classStudents = allStudents.filter(s =>
         s.status !== '퇴원' &&
-        s.enrollments.some(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode)
+        getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode)
     );
     classStudents = classStudents.filter(s => matchesBranchFilter(s));
     const domains = getClassDomains(classCode);
@@ -4466,7 +4466,7 @@ function renderNextHwClassDetail(classCode) {
     // 반 소속 학생 목록
     const dayName = getDayName(selectedDate);
     let classStudents = allStudents.filter(s =>
-        s.status !== '퇴원' && s.enrollments.some(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode)
+        s.status !== '퇴원' && getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode)
     );
     classStudents = classStudents.filter(s => matchesBranchFilter(s));
 
@@ -7334,12 +7334,12 @@ async function exportDailyReport() {
     const dayName = getDayName(selectedDate);
     let students = allStudents.filter(s =>
         s.status !== '퇴원' &&
-        s.enrollments.some(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester))
+        getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester))
     );
     students = students.filter(s => matchesBranchFilter(s));
     if (selectedClassCode) {
         students = students.filter(s =>
-            s.enrollments.some(e =>
+            getActiveEnrollments(s, selectedDate).some(e =>
                 e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === selectedClassCode
             )
         );
@@ -7392,7 +7392,7 @@ async function exportDailyReport() {
     };
 
     const dataRows = students.map(s => {
-        const todayEnroll = s.enrollments.find(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester));
+        const todayEnroll = getActiveEnrollments(s, selectedDate).find(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester));
         const code = todayEnroll ? enrollmentCode(todayEnroll) : '';
         const rec = dailyRecords[s.docId] || {};
         const teacher = classSettings[code]?.teacher ? getTeacherName(classSettings[code].teacher) : '';
