@@ -219,8 +219,11 @@ function getActiveEnrollments(s, dateStr) {
         validDate(e.end_date) && e.end_date >= today
     );
     if (hasActiveNaesin) {
-        return enrollments.filter(e => e.class_type !== '정규');
+        const result = enrollments.filter(e => e.class_type !== '정규');
+        if (s.name === '차지석') console.log('[DEBUG 차지석]', { today, hasActiveNaesin, enrollments: JSON.stringify(enrollments), result: JSON.stringify(result) });
+        return result;
     }
+    if (s.name === '차지석') console.log('[DEBUG 차지석] no active naesin', { today, enrollments: JSON.stringify(enrollments) });
     return enrollments;
 }
 
