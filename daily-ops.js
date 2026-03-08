@@ -207,22 +207,30 @@ function enrollmentCode(e) {
 }
 const allClassCodes = (s) => (s.enrollments || []).map(e => enrollmentCode(e)).filter(Boolean);
 
-// 활성 enrollment만 반환. 내신이 활성 기간이면 정규를 숨김.
+// 활성 enrollment만 반환.
+// - end_date가 지난 enrollment(내신/특강)은 제외
+// - 내신이 활성 기간이면 정규를 숨김 (내신 종료 후 정규 복귀)
 function getActiveEnrollments(s, dateStr) {
     const enrollments = s.enrollments || [];
     if (enrollments.length === 0) return [];
     const today = dateStr || todayStr();
     const validDate = (d) => d && /^\d{4}-/.test(d);
-    const hasActiveNaesin = enrollments.some(e =>
+
+    // 1) end_date가 지난 enrollment 제외 (정규는 end_date 없으므로 항상 유지)
+    const current = enrollments.filter(e => {
+        if (!validDate(e.end_date)) return true; // end_date 없으면 유지
+        return e.end_date >= today;
+    });
+
+    // 2) 내신이 활성 기간이면 정규를 숨김
+    const hasActiveNaesin = current.some(e =>
         e.class_type === '내신' &&
-        validDate(e.start_date) && e.start_date <= today &&
-        validDate(e.end_date) && e.end_date >= today
+        validDate(e.start_date) && e.start_date <= today
     );
     if (hasActiveNaesin) {
-        const result = enrollments.filter(e => e.class_type !== '정규');
-        return result;
+        return current.filter(e => e.class_type !== '정규');
     }
-    return enrollments;
+    return current;
 }
 
 // 학생 등원시간: 개별 시간 → 반 기본 시간 fallback
