@@ -53,6 +53,23 @@ const branchFromClassNumber = (num) => {
 const branchFromStudent = (s) =>
     s.branch || (s.enrollments?.[0] ? branchFromClassNumber(s.enrollments[0].class_number) : '');
 
+// 활성 enrollment만 반환. 내신이 활성 기간이면 정규를 숨김.
+function getActiveEnrollments(s, dateStr) {
+    const enrollments = s.enrollments || [];
+    if (enrollments.length === 0) return [];
+    const today = dateStr || todayStr();
+    const validDate = (d) => d && /^\d{4}-/.test(d);
+    const hasActiveNaesin = enrollments.some(e =>
+        e.class_type === '내신' &&
+        validDate(e.start_date) && e.start_date <= today &&
+        validDate(e.end_date) && e.end_date >= today
+    );
+    if (hasActiveNaesin) {
+        return enrollments.filter(e => e.class_type !== '정규');
+    }
+    return enrollments;
+}
+
 // 기존 flat 필드 → enrollments 배열 자동 변환
 function normalizeEnrollments(s) {
     if (s.enrollments?.length) return s.enrollments;
@@ -339,20 +356,23 @@ function getStudentsForDay(branchFilter, classFilter) {
         const branch = branchFromStudent(s);
         if (branchFilter && branch !== branchFilter) return;
 
-        (s.enrollments || []).forEach((e, idx) => {
+        const activeEnrolls = getActiveEnrollments(s, selectedDate);
+        activeEnrolls.forEach((e, idx) => {
             const days = normalizeDays(e.day);
             if (!days.includes(dayName)) return;
 
             const code = enrollmentCode(e);
             if (classFilter && code !== classFilter) return;
 
+            // 원래 enrollments 배열에서의 index를 찾아 checkId에 사용
+            const origIdx = (s.enrollments || []).indexOf(e);
             rows.push({
                 student: s,
                 enrollment: e,
-                enrollIdx: idx,
+                enrollIdx: origIdx >= 0 ? origIdx : idx,
                 code,
                 branch,
-                checkId: makeDailyCheckId(selectedDate, s.id, idx),
+                checkId: makeDailyCheckId(selectedDate, s.id, origIdx >= 0 ? origIdx : idx),
                 startTime: e.start_time || '',
             });
         });
