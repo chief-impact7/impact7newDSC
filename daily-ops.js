@@ -223,7 +223,7 @@ function getActiveEnrollments(s, dateStr) {
         if (s.name === '차지석') console.log('[DEBUG 차지석]', { today, hasActiveNaesin, enrollments: JSON.stringify(enrollments), result: JSON.stringify(result) });
         return result;
     }
-    if (s.name === '차지석') console.log('[DEBUG 차지석] no active naesin', { today, enrollments: JSON.stringify(enrollments) });
+    if (s.name === '차지석') console.log('[DEBUG 차지석] no active naesin, today=' + today + ', dateStr=' + dateStr + ', enrollments=' + JSON.stringify(enrollments.map(e => ({ct: e.class_type, sd: e.start_date, ed: e.end_date, day: e.day}))));
     return enrollments;
 }
 
