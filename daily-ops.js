@@ -424,10 +424,11 @@ async function loadStudents() {
                 ...e,
                 day: normalizeDays(e.day)
             }));
-            // 중복 enrollment 제거 (같은 반코드+학기+수업종류)
+            // 중복 enrollment 제거 (같은 반코드+학기+수업종류+요일)
             const seen = new Set();
             data.enrollments = data.enrollments.filter(e => {
-                const key = `${enrollmentCode(e)}_${e.semester || ''}_${e.class_type || '정규'}`;
+                const dayStr = (e.day || []).sort().join(',');
+                const key = `${enrollmentCode(e)}_${e.semester || ''}_${e.class_type || '정규'}_${dayStr}`;
                 if (seen.has(key)) return false;
                 seen.add(key);
                 return true;
@@ -7175,15 +7176,18 @@ async function saveEnrollment() {
     const newCode = `${levelSymbol}${classNumber}`;
     const newSemester = enrollments[enrollIdx]?.semester || '';
 
-    // 중복 반코드 체크 (같은 학기+수업종류 내 다른 enrollment에 동일 코드가 있는지)
-    const isDuplicate = enrollments.some((e, i) =>
-        i !== enrollIdx &&
-        enrollmentCode(e) === newCode &&
-        (e.semester || '') === newSemester &&
-        (e.class_type || '정규') === classType
-    );
+    // 중복 반코드 체크 (같은 학기+수업종류+요일 내 다른 enrollment에 동일 코드가 있는지)
+    const isDuplicate = enrollments.some((e, i) => {
+        if (i === enrollIdx) return false;
+        if (enrollmentCode(e) !== newCode) return false;
+        if ((e.semester || '') !== newSemester) return false;
+        if ((e.class_type || '정규') !== classType) return false;
+        // 요일이 겹치는지 확인
+        const existingDays = e.day || [];
+        return selectedDays.some(d => existingDays.includes(d));
+    });
     if (isDuplicate) {
-        alert(`이미 같은 반(${newCode}, ${classType})이 등록되어 있습니다.`);
+        alert(`같은 반(${newCode}, ${classType})에 겹치는 요일이 있습니다.`);
         return;
     }
 
