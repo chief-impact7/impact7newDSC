@@ -5457,18 +5457,24 @@ function renderStudentDetail(studentId) {
                 등원 일정
             </div>
             ${semesterEnrollments.map(e => {
+                const idx = student.enrollments.indexOf(e);
                 const code = enrollmentCode(e);
+                const ct = e.class_type || '정규';
                 const days = (e.day || []).join('·');
                 const classDefault = classSettings[code]?.default_time || '';
                 const individual = e.start_time || '';
                 const isDefault = !individual || individual === classDefault;
                 const displayTime = isDefault ? classDefault : individual;
                 const isToday = (e.day || []).includes(dayNameForDetail);
+                const periodStr = ct !== '정규' && e.end_date ? ` ~${e.end_date.slice(5)}` : '';
                 return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;${isToday ? 'font-weight:600;' : 'opacity:0.7;'}">
                     <span style="font-size:13px;min-width:40px;">${esc(code)}</span>
+                    ${ct !== '정규' ? `<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:${ct === '내신' ? 'var(--warning)' : 'var(--info)'};color:#fff;">${esc(ct)}</span>` : ''}
                     <span style="font-size:12px;min-width:50px;color:var(--text-sec);">${esc(days)}</span>
                     <span style="font-size:13px;">${displayTime ? esc(formatTime12h(displayTime)) : '-'}</span>
+                    ${periodStr ? `<span style="font-size:10px;color:var(--text-sec);">${esc(periodStr)}</span>` : ''}
                     ${isToday ? '<span style="font-size:10px;color:var(--primary);font-weight:600;">오늘</span>' : ''}
+                    <span class="material-symbols-outlined" style="font-size:14px;color:var(--text-sec);cursor:pointer;margin-left:auto;" onclick="openEnrollmentModal('${escAttr(studentId)}', ${idx})">edit</span>
                 </div>`;
             }).join('')}
         </div>
@@ -7132,7 +7138,10 @@ function openEnrollmentModal(studentId, enrollIdx) {
     document.getElementById('enroll-student-name').textContent = student.name || '';
     document.getElementById('enroll-level').value = enroll.level_symbol || '';
     document.getElementById('enroll-class-num').value = enroll.class_number || '';
+    document.getElementById('enroll-class-type').value = enroll.class_type || '정규';
     document.getElementById('enroll-time').value = enroll.start_time || '';
+    document.getElementById('enroll-start-date').value = enroll.start_date || '';
+    document.getElementById('enroll-end-date').value = enroll.end_date || '';
 
     // 요일 버튼 초기화
     const days = enroll.day || [];
@@ -7150,7 +7159,10 @@ async function saveEnrollment() {
 
     const levelSymbol = document.getElementById('enroll-level').value.trim();
     const classNumber = document.getElementById('enroll-class-num').value.trim();
+    const classType = document.getElementById('enroll-class-type').value;
     const startTime = document.getElementById('enroll-time').value;
+    const startDate = document.getElementById('enroll-start-date').value;
+    const endDate = document.getElementById('enroll-end-date').value;
 
     // 선택된 요일 수집
     const selectedDays = [];
@@ -7163,24 +7175,32 @@ async function saveEnrollment() {
     const newCode = `${levelSymbol}${classNumber}`;
     const newSemester = enrollments[enrollIdx]?.semester || '';
 
-    // 중복 반코드 체크 (같은 학기 내 다른 enrollment에 동일 코드가 있는지)
+    // 중복 반코드 체크 (같은 학기+수업종류 내 다른 enrollment에 동일 코드가 있는지)
     const isDuplicate = enrollments.some((e, i) =>
         i !== enrollIdx &&
         enrollmentCode(e) === newCode &&
-        (e.semester || '') === newSemester
+        (e.semester || '') === newSemester &&
+        (e.class_type || '정규') === classType
     );
     if (isDuplicate) {
-        alert(`이미 같은 반(${newCode})이 등록되어 있습니다.`);
+        alert(`이미 같은 반(${newCode}, ${classType})이 등록되어 있습니다.`);
         return;
     }
 
-    enrollments[enrollIdx] = {
+    const updated = {
         ...enrollments[enrollIdx],
         level_symbol: levelSymbol,
         class_number: classNumber,
+        class_type: classType,
         day: selectedDays,
         start_time: startTime
     };
+    if (startDate) updated.start_date = startDate;
+    else delete updated.start_date;
+    if (endDate) updated.end_date = endDate;
+    else delete updated.end_date;
+
+    enrollments[enrollIdx] = updated;
 
     showSaveIndicator('saving');
     try {

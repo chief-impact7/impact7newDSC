@@ -457,6 +457,14 @@
                         </div>
                     </div>
                     <div class="form-field">
+                        <label class="field-label">수업종류</label>
+                        <select id="enroll-class-type" class="field-input">
+                            <option value="정규">정규</option>
+                            <option value="내신">내신</option>
+                            <option value="특강">특강</option>
+                        </select>
+                    </div>
+                    <div class="form-field">
                         <label class="field-label">수업 요일</label>
                         <div class="day-selector" id="enroll-days">
                             <button type="button" class="day-btn" data-day="월" onclick="this.classList.toggle('active')">월</button>
@@ -470,6 +478,16 @@
                     <div class="form-field">
                         <label class="field-label">수업 시작 시간</label>
                         <input type="time" id="enroll-time" class="field-input">
+                    </div>
+                    <div class="form-row" id="enroll-period-row">
+                        <div class="form-field">
+                            <label class="field-label">시작일</label>
+                            <input type="date" id="enroll-start-date" class="field-input">
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">종료일</label>
+                            <input type="date" id="enroll-end-date" class="field-input">
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
