@@ -220,10 +220,8 @@ function getActiveEnrollments(s, dateStr) {
     );
     if (hasActiveNaesin) {
         const result = enrollments.filter(e => e.class_type !== '정규');
-        if (s.name === '차지석') console.log('[DEBUG 차지석]', { today, hasActiveNaesin, enrollments: JSON.stringify(enrollments), result: JSON.stringify(result) });
         return result;
     }
-    if (s.name === '차지석') console.log('[DEBUG 차지석] no active naesin, today=' + today + ', dateStr=' + dateStr + ', enrollments=' + JSON.stringify(enrollments.map(e => ({ct: e.class_type, sd: e.start_date, ed: e.end_date, day: e.day}))));
     return enrollments;
 }
 
@@ -418,10 +416,10 @@ async function loadStudents() {
                 ...e,
                 day: normalizeDays(e.day)
             }));
-            // 중복 enrollment 제거 (같은 반코드+학기)
+            // 중복 enrollment 제거 (같은 반코드+학기+수업종류)
             const seen = new Set();
             data.enrollments = data.enrollments.filter(e => {
-                const key = `${enrollmentCode(e)}_${e.semester || ''}`;
+                const key = `${enrollmentCode(e)}_${e.semester || ''}_${e.class_type || '정규'}`;
                 if (seen.has(key)) return false;
                 seen.add(key);
                 return true;
