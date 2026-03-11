@@ -2554,14 +2554,10 @@ function renderListPanel() {
     if (searchQuery) {
         const q = searchQuery.trim().toLowerCase();
         const chosungMode = isChosungOnly(q);
-        // 현재 학기에 해당하는 학생 ID + 퇴원 학생 (allStudents에 포함되므로 중복 방지)
-        const currentSemesterIds = new Set(
-            allStudents.filter(s =>
-                s.status === '퇴원' || s.enrollments.some(e => !selectedSemester || e.semester === selectedSemester)
-            ).map(s => s.docId)
-        );
+        // allStudents에 있는 학생 ID → 과거 학생에서 제외 (퇴원 포함)
+        const allStudentIds = new Set(allStudents.map(s => s.docId));
         pastContactResults = allContacts.filter(c => {
-            if (currentSemesterIds.has(c.id)) return false;
+            if (allStudentIds.has(c.id)) return false;
             if (chosungMode) return matchChosung(c.name, q) || matchChosung(c.school, q);
             return (c.name && c.name.toLowerCase().includes(q)) ||
                 (c.school && c.school.toLowerCase().includes(q)) ||
