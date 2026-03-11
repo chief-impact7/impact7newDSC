@@ -403,7 +403,6 @@ async function loadStudents() {
     allStudents = [];
     snap.forEach(d => {
         const data = d.data();
-        if (data.status === '퇴원') return;
         if (!data.enrollments?.length) {
             let levelSymbol = data.level_symbol || data.level_code || '';
             let classNumber = data.class_number || '';
@@ -1773,8 +1772,9 @@ function getFilteredStudents() {
     // 검색어가 있으면 요일 무관, 현재 학기 학생만 (과거 학생은 allContacts에서 별도 검색)
     let students;
     if (searchQuery) {
+        // 검색 시 퇴원 학생 포함 (enrollment 없어도 이름으로 검색 가능)
         students = allStudents.filter(s =>
-            s.status !== '퇴원' && getActiveEnrollments(s, selectedDate).some(e =>
+            s.status === '퇴원' || getActiveEnrollments(s, selectedDate).some(e =>
                 !selectedSemester || e.semester === selectedSemester
             )
         );
@@ -2554,10 +2554,10 @@ function renderListPanel() {
     if (searchQuery) {
         const q = searchQuery.trim().toLowerCase();
         const chosungMode = isChosungOnly(q);
-        // 현재 학기에 해당하는 학생 ID (getFilteredStudents가 반환하는 범위)
+        // 현재 학기에 해당하는 학생 ID + 퇴원 학생 (allStudents에 포함되므로 중복 방지)
         const currentSemesterIds = new Set(
             allStudents.filter(s =>
-                s.status !== '퇴원' && s.enrollments.some(e => !selectedSemester || e.semester === selectedSemester)
+                s.status === '퇴원' || s.enrollments.some(e => !selectedSemester || e.semester === selectedSemester)
             ).map(s => s.docId)
         );
         pastContactResults = allContacts.filter(c => {
@@ -2609,8 +2609,8 @@ function renderListPanel() {
         let toggleHtml = '';
         const isLeave = LEAVE_STATUSES.includes(s.status);
 
-        if (isLeave) {
-            // 휴원 학생은 모든 카테고리에서 입력 버튼 숨김
+        if (isLeave || s.status === '퇴원') {
+            // 휴원/퇴원 학생은 모든 카테고리에서 입력 버튼 숨김
             toggleHtml = '';
         } else if (currentCategory === 'attendance') {
             const rec = dailyRecords[s.docId];
@@ -2880,7 +2880,9 @@ function renderListPanel() {
         const teacherBadge = teacherEmail ? `<span class="teacher-badge" title="담당: ${esc(getTeacherName(teacherEmail))}">${esc(getTeacherName(teacherEmail))}</span>` : '';
 
         const leaveBadge = LEAVE_STATUSES.includes(s.status)
-            ? `<span class="tag tag-leave">${esc(s.status)}</span>` : '';
+            ? `<span class="tag tag-leave">${esc(s.status)}</span>`
+            : s.status === '퇴원'
+            ? `<span class="tag" style="background:#dc2626;color:#fff;">퇴원</span>` : '';
 
         // 신규 학생 뱃지 (enrollment start_date가 14일 이내)
         const newBadge = isNewStudent(s, todayDate) ? '<span class="tag tag-new">N</span>' : '';
@@ -5661,8 +5663,16 @@ function renderStudentDetail(studentId) {
     const arrivalTime = rec?.arrival_time || '';
     const isLeaveStudent = LEAVE_STATUSES.includes(student.status);
 
+    const isWithdrawn = student.status === '퇴원';
     let tagClass, tagText;
-    if (isLeaveStudent) {
+    if (isWithdrawn) {
+        tagClass = '';
+        // 퇴원요청서에서 퇴원일 찾기
+        const leaveReq = leaveRequests.find(lr => lr.student_id === studentId && lr.status === 'approved' &&
+            (lr.request_type === '퇴원요청' || lr.request_type === '휴원→퇴원'));
+        const wdDate = leaveReq?.withdrawal_date || '';
+        tagText = `퇴원${wdDate ? ` (${wdDate})` : ''}`;
+    } else if (isLeaveStudent) {
         tagClass = 'tag-leave';
         const pauseStart = student.pause_start_date || '';
         const pauseEnd = student.pause_end_date || '';
@@ -5682,7 +5692,7 @@ function renderStudentDetail(studentId) {
     const siblingHtml = hasSibling ? `<span class="tag tag-sibling"><span class="material-symbols-outlined" style="font-size:13px;">group</span> ${esc(siblingNames)}</span>` : '';
 
     document.getElementById('profile-tags').innerHTML = `
-        <span class="tag tag-status ${tagClass}">${esc(tagText)}</span>
+        <span class="tag tag-status ${tagClass}" ${isWithdrawn ? 'style="background:#dc2626;color:#fff;"' : ''}>${esc(tagText)}</span>
         ${siblingHtml}
     `;
 
@@ -5700,7 +5710,7 @@ function renderStudentDetail(studentId) {
         !selectedSemester || e.semester === selectedSemester
     );
     const dayNameForDetail = getDayName(selectedDate);
-    const arrivalTimeHtml = isLeaveStudent ? '' : semesterEnrollments.length > 0 ? `
+    const arrivalTimeHtml = (isLeaveStudent || isWithdrawn) ? '' : semesterEnrollments.length > 0 ? `
         <div class="detail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">schedule</span>
@@ -5916,7 +5926,20 @@ function renderStudentDetail(studentId) {
         </div>
     `;
 
-    cardsContainer.innerHTML = `
+    cardsContainer.innerHTML = isWithdrawn ? `
+        <!-- 퇴원 학생: 휴퇴원요청서 + 결석대장 + 메모만 표시 -->
+        ${renderLeaveRequestCard(studentId)}
+        ${renderAbsenceRecordCard(studentId)}
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:var(--text-sec);font-size:18px;">sticky_note_2</span>
+                메모
+            </div>
+            <textarea class="field-input" style="width:100%;min-height:60px;resize:vertical;"
+                placeholder="메모 입력..."
+                onchange="saveDailyRecord('${studentId}', { note: this.value })">${esc(rec.note || '')}</textarea>
+        </div>
+    ` : `
         <!-- 복귀상담 카드 (복귀예정 뷰) -->
         ${renderReturnConsultCard(studentId)}
 
