@@ -5304,9 +5304,12 @@ function renderAbsenceRecordCard(studentId) {
                 </div>
             </div>`;
 
-        // ── 2단계 조건: 1단계 모두 입력 시 표시 ──
+        // ── 이미 입력된 카드인지 판별 (resolution이 설정됨 → 보기 모드: 모든 단계 표시) ──
+        const hasExistingData = !!(r.resolution && r.resolution !== 'pending');
+
+        // ── 2단계 조건: 1단계 모두 입력 시 표시 (보기 모드면 항상 표시) ──
         const stage2Done = !!(stage1Done && r.consultation_done && r.resolution && r.resolution !== 'pending');
-        const stage2Html = !stage1Done ? '' : `
+        const stage2Html = !(stage1Done || hasExistingData) ? '' : `
             <div style="margin-bottom:8px;padding-top:8px;border-top:1px dashed var(--border);">
                 <div style="font-size:10px;color:var(--text-sec);font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:4px;">
                     ${_renderStepBadge(2, stage2Done)}
@@ -5326,9 +5329,9 @@ function renderAbsenceRecordCard(studentId) {
                 </div>
             </div>`;
 
-        // ── 3단계: 2단계 완료 후, 보충 선택 시 일시/시간 + 미정 버튼, 정산 선택 시 정산 메모 ──
+        // ── 3단계: 2단계 완료 후 또는 보기 모드 시 표시 ──
         let stage3Html = '';
-        if (stage2Done && r.resolution === '보충') {
+        if ((stage2Done || hasExistingData) && r.resolution === '보충') {
             const isUndecided = r.makeup_date === 'undecided';
             const makeupDateVal = isUndecided ? '' : (r.makeup_date || '');
             const makeupTimeVal = r.makeup_time || '16:00';
@@ -5380,7 +5383,7 @@ function renderAbsenceRecordCard(studentId) {
                         ${makeupActions ? `<div style="display:flex;align-items:center;gap:4px;">${makeupActions}</div>` : ''}
                     </div>
                 </div>`;
-        } else if (stage2Done && r.resolution === '정산') {
+        } else if ((stage2Done || hasExistingData) && r.resolution === '정산') {
             stage3Html = `
                 <div style="margin-bottom:8px;padding-top:8px;border-top:1px dashed var(--border);">
                     <div style="font-size:10px;color:var(--text-sec);font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:4px;">
@@ -5414,7 +5417,7 @@ function renderAbsenceRecordCard(studentId) {
                     <span class="material-symbols-outlined" style="font-size:13px;">save</span>저장
                 </button>`;
 
-        const stage4Html = !stage3Done ? '' : `
+        const stage4Html = !(stage3Done || hasExistingData) ? '' : `
             <div style="padding-top:8px;border-top:1px dashed var(--border);">
                 ${historyHtml}
                 <div style="font-size:10px;color:var(--text-sec);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap;">
