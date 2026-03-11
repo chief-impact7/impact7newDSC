@@ -530,6 +530,57 @@ async function loadLeaveRequests() {
     }
 }
 
+// ─── 1개월 경과 자동 처리 ────────────────────────────────────────────────────
+
+function _isOlderThanOneMonth(timestamp) {
+    if (!timestamp) return false;
+    const d = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    return d < oneMonthAgo;
+}
+
+async function autoCloseOldRecords() {
+    // 결석대장: 1개월 경과 → 행정완료
+    const oldAbsences = absenceRecords.filter(r => _isOlderThanOneMonth(r.created_at));
+    for (const r of oldAbsences) {
+        try {
+            await updateDoc(doc(db, 'absence_records', r.docId), {
+                status: 'closed',
+                updated_by: 'system_auto',
+                updated_at: serverTimestamp()
+            });
+        } catch (err) {
+            console.error('결석대장 자동종료 실패:', r.docId, err);
+        }
+    }
+    if (oldAbsences.length > 0) {
+        absenceRecords = absenceRecords.filter(r => !oldAbsences.includes(r));
+        console.log(`결석대장 자동 행정완료: ${oldAbsences.length}건`);
+    }
+
+    // 휴퇴원요청: 1개월 경과 requested → 자동승인
+    const oldRequests = leaveRequests.filter(r =>
+        r.status === 'requested' && _isOlderThanOneMonth(r.requested_at)
+    );
+    for (const r of oldRequests) {
+        try {
+            await updateDoc(doc(db, 'leave_requests', r.docId), {
+                status: 'approved',
+                approved_by: 'system_auto',
+                approved_at: serverTimestamp(),
+                updated_at: serverTimestamp()
+            });
+            r.status = 'approved';
+        } catch (err) {
+            console.error('휴퇴원요청 자동승인 실패:', r.docId, err);
+        }
+    }
+    if (oldRequests.length > 0) {
+        console.log(`휴퇴원요청 자동 승인: ${oldRequests.length}건`);
+    }
+}
+
 async function loadWithdrawnStudents() {
     withdrawnStudents = [];
     try {
@@ -7398,6 +7449,7 @@ onAuthStateChanged(auth, async (user) => {
         await trackTeacherLogin(user);
         await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers(), loadContacts()]);
         await syncAbsenceRecords();
+        autoCloseOldRecords();  // 1개월 경과 건 자동 처리 (비동기, 백그라운드)
         await loadRoleMemos().catch(() => {});
         updateDateDisplay();
         updateReadonlyBanner();
