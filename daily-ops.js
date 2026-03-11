@@ -2875,10 +2875,12 @@ function renderListPanel() {
         const teacherEmail = classSettings[primaryCode]?.teacher;
         const teacherBadge = teacherEmail ? `<span class="teacher-badge" title="담당: ${esc(getTeacherName(teacherEmail))}">${esc(getTeacherName(teacherEmail))}</span>` : '';
 
-        const leaveBadge = LEAVE_STATUSES.includes(s.status)
-            ? `<span class="tag tag-leave">${esc(s.status)}</span>`
-            : s.status === '퇴원'
-            ? `<span class="tag" style="background:#dc2626;color:#fff;">퇴원</span>` : '';
+        let leaveBadge = '';
+        if (LEAVE_STATUSES.includes(s.status)) {
+            leaveBadge = `<span class="tag tag-leave">${esc(s.status)}</span>`;
+        } else if (s.status === '퇴원') {
+            leaveBadge = `<span class="tag" style="background:#dc2626;color:#fff;">퇴원</span>`;
+        }
 
         // 신규 학생 뱃지 (enrollment start_date가 14일 이내)
         const newBadge = isNewStudent(s, todayDate) ? '<span class="tag tag-new">N</span>' : '';
@@ -5660,13 +5662,13 @@ function renderStudentDetail(studentId) {
     const isLeaveStudent = LEAVE_STATUSES.includes(student.status);
 
     const isWithdrawn = student.status === '퇴원';
+    // 퇴원 학생: leave_request 한 번만 조회 (프로필 태그 + 퇴원 정보 카드에서 공유)
+    const wdLeaveReq = isWithdrawn ? leaveRequests.find(lr => lr.student_id === studentId && lr.status === 'approved' &&
+        (lr.request_type === '퇴원요청' || lr.request_type === '휴원→퇴원')) : null;
     let tagClass, tagText;
     if (isWithdrawn) {
         tagClass = '';
-        // 퇴원요청서에서 퇴원일 찾기
-        const leaveReq = leaveRequests.find(lr => lr.student_id === studentId && lr.status === 'approved' &&
-            (lr.request_type === '퇴원요청' || lr.request_type === '휴원→퇴원'));
-        const wdDate = leaveReq?.withdrawal_date || '';
+        const wdDate = wdLeaveReq?.withdrawal_date || '';
         tagText = `퇴원${wdDate ? ` (${wdDate})` : ''}`;
     } else if (isLeaveStudent) {
         tagClass = 'tag-leave';
@@ -5922,20 +5924,58 @@ function renderStudentDetail(studentId) {
         </div>
     `;
 
-    cardsContainer.innerHTML = isWithdrawn ? `
-        <!-- 퇴원 학생: 휴퇴원요청서 + 결석대장 + 메모만 표시 -->
-        ${renderLeaveRequestCard(studentId)}
-        ${renderAbsenceRecordCard(studentId)}
-        <div class="detail-card">
-            <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--text-sec);font-size:18px;">sticky_note_2</span>
-                메모
+    let withdrawnHtml = '';
+    if (isWithdrawn) {
+        const wdDate = wdLeaveReq?.withdrawal_date || '';
+        const wdReason = wdLeaveReq?.reason || '';
+        const wdReqBy = wdLeaveReq ? getTeacherName(wdLeaveReq.requested_by) : '';
+        const wdAppBy = wdLeaveReq ? getTeacherName(wdLeaveReq.approved_by) : '';
+        const enrollInfo = student.enrollments.map(e => {
+            const code = enrollmentCode(e);
+            const days = (e.day || []).join('·');
+            const ct = e.class_type || '정규';
+            return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                <span style="font-size:13px;font-weight:600;">${esc(code)}</span>
+                ${ct !== '정규' ? `<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:${ct === '내신' ? 'var(--warning)' : 'var(--info)'};color:#fff;">${esc(ct)}</span>` : ''}
+                <span style="font-size:12px;color:var(--text-sec);">${esc(days)}</span>
+                <span style="font-size:11px;color:var(--text-sec);">${e.semester || ''}</span>
+            </div>`;
+        }).join('');
+        withdrawnHtml = `
+            <div class="detail-card" style="border-left:3px solid #dc2626;">
+                <div class="detail-card-title">
+                    <span class="material-symbols-outlined" style="color:#dc2626;font-size:18px;">person_off</span>
+                    퇴원 정보
+                </div>
+                ${wdDate ? `<div style="font-size:13px;margin-bottom:6px;"><strong>퇴원일:</strong> ${esc(wdDate)}</div>` : ''}
+                ${wdReason ? `<div style="font-size:13px;margin-bottom:6px;"><strong>사유:</strong> ${esc(wdReason)}</div>` : ''}
+                <div style="font-size:11px;color:var(--text-sec);display:flex;gap:12px;flex-wrap:wrap;">
+                    ${wdReqBy ? `<span>요청: ${esc(wdReqBy)}</span>` : ''}
+                    ${wdAppBy ? `<span>승인: ${esc(wdAppBy)}</span>` : ''}
+                </div>
+                ${!wdLeaveReq ? '<div style="font-size:12px;color:var(--text-sec);margin-top:4px;">휴퇴원 요청서 기록 없음</div>' : ''}
             </div>
-            <textarea class="field-input" style="width:100%;min-height:60px;resize:vertical;"
-                placeholder="메모 입력..."
-                onchange="saveDailyRecord('${studentId}', { note: this.value })">${esc(rec.note || '')}</textarea>
-        </div>
-    ` : `
+            ${enrollInfo ? `<div class="detail-card">
+                <div class="detail-card-title">
+                    <span class="material-symbols-outlined" style="color:var(--text-sec);font-size:18px;">school</span>
+                    수강 이력
+                </div>
+                ${enrollInfo}
+            </div>` : ''}
+            ${renderLeaveRequestCard(studentId)}
+            ${renderAbsenceRecordCard(studentId)}
+            <div class="detail-card">
+                <div class="detail-card-title">
+                    <span class="material-symbols-outlined" style="color:var(--text-sec);font-size:18px;">sticky_note_2</span>
+                    메모
+                </div>
+                <textarea class="field-input" style="width:100%;min-height:60px;resize:vertical;"
+                    placeholder="메모 입력..."
+                    onchange="saveDailyRecord('${studentId}', { note: this.value })">${esc(rec.note || '')}</textarea>
+            </div>`;
+    }
+
+    cardsContainer.innerHTML = isWithdrawn ? withdrawnHtml : `
         <!-- 복귀상담 카드 (복귀예정 뷰) -->
         ${renderReturnConsultCard(studentId)}
 
