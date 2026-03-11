@@ -1696,11 +1696,18 @@ function getScheduledVisits() {
         });
     }
 
-    // 시간임박순 정렬
-    visits.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+    // 소속 필터 적용 (글로벌 branch 필터)
+    const filtered = (selectedBranch || selectedBranchLevel) ? visits.filter(v => {
+        if (!v.studentId) return true; // 진단평가 등 학생 미연동 항목은 항상 포함
+        const student = allStudents.find(s => s.docId === v.studentId);
+        return student ? matchesBranchFilter(student) : true;
+    }) : visits;
 
-    _scheduledVisitsCache = visits;
-    return visits;
+    // 시간임박순 정렬
+    filtered.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+
+    _scheduledVisitsCache = filtered;
+    return filtered;
 }
 
 let _enrollPendingCache = null;
