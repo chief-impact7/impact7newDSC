@@ -469,7 +469,7 @@ async function loadRetakeSchedules() {
 async function loadHwFailTasks() {
     hwFailTasks = [];
     try {
-        const q = query(collection(db, 'hw_fail_tasks'), where('status', '==', 'pending'));
+        const q = query(collection(db, 'hw_fail_tasks'), where('status', 'in', ['pending', '완료', '기타']));
         const snap = await getDocs(q);
         snap.forEach(d => {
             hwFailTasks.push({ docId: d.id, ...d.data() });
@@ -482,7 +482,7 @@ async function loadHwFailTasks() {
 async function loadTestFailTasks() {
     testFailTasks = [];
     try {
-        const q = query(collection(db, 'test_fail_tasks'), where('status', '==', 'pending'));
+        const q = query(collection(db, 'test_fail_tasks'), where('status', 'in', ['pending', '완료', '기타']));
         const snap = await getDocs(q);
         snap.forEach(d => {
             testFailTasks.push({ docId: d.id, ...d.data() });
@@ -615,6 +615,25 @@ async function autoCloseOldRecords() {
     if (dupsToRemove.length > 0) {
         absenceRecords = absenceRecords.filter(r => !dupsToRemove.includes(r));
         console.log(`결석대장 중복 정리: ${dupsToRemove.length}건 제거`);
+    }
+
+    // class_code 중복 정리: "HS201, HS201" → "HS201"
+    const dedupClassCodeRecords = absenceRecords.filter(r => {
+        if (!r.class_code) return false;
+        const parts = r.class_code.split(',').map(s => s.trim()).filter(Boolean);
+        return parts.length !== new Set(parts).size;
+    });
+    for (const r of dedupClassCodeRecords) {
+        const fixed = [...new Set(r.class_code.split(',').map(s => s.trim()).filter(Boolean))].join(', ');
+        try {
+            await updateDoc(doc(db, 'absence_records', r.docId), { class_code: fixed });
+            r.class_code = fixed;
+        } catch (err) {
+            console.error('class_code 중복 정리 실패:', r.docId, err);
+        }
+    }
+    if (dedupClassCodeRecords.length > 0) {
+        console.log(`class_code 중복 정리: ${dedupClassCodeRecords.length}건`);
     }
 }
 
@@ -5417,7 +5436,7 @@ function renderAbsenceRecordCard(studentId) {
                     <span class="material-symbols-outlined" style="font-size:13px;">save</span>저장
                 </button>`;
 
-        const stage4Html = !(stage3Done || hasExistingData) ? '' : `
+        const stage4Html = `
             <div style="padding-top:8px;border-top:1px dashed var(--border);">
                 ${historyHtml}
                 <div style="font-size:10px;color:var(--text-sec);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap;">
@@ -6101,7 +6120,7 @@ async function autoCreateAbsenceRecord(studentId, overrides) {
             .filter(Boolean);
         name = student.name || '';
         branch = branchFromStudent(student);
-        classCode = classCodes.join(', ');
+        classCode = [...new Set(classCodes)].join(', ');
         reason = '';
     } else if (overrides) {
         name = overrides.student_name || studentId.replace(/_\d+$/, '');
