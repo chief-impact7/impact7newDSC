@@ -579,6 +579,43 @@ async function autoCloseOldRecords() {
     if (oldRequests.length > 0) {
         console.log(`휴퇴원요청 자동 승인: ${oldRequests.length}건`);
     }
+
+    // 결석대장 중복 제거: 같은 학생+같은 날짜에 open 건이 여러 개인 경우 입력된 건 유지, 나머지 삭제
+    const absenceMap = new Map();
+    for (const r of absenceRecords) {
+        const key = `${r.student_id}_${r.absence_date}`;
+        if (!absenceMap.has(key)) absenceMap.set(key, []);
+        absenceMap.get(key).push(r);
+    }
+    const dupsToRemove = [];
+    for (const [, group] of absenceMap) {
+        if (group.length <= 1) continue;
+        // 입력된 건(상담내용/사유/정당부당 중 하나라도 있는 건) 우선 유지
+        group.sort((a, b) => {
+            const aFilled = (a.consultation_note || a.reason || a.reason_valid || a.consultation_done) ? 1 : 0;
+            const bFilled = (b.consultation_note || b.reason || b.reason_valid || b.consultation_done) ? 1 : 0;
+            return bFilled - aFilled; // 입력된 건이 앞으로
+        });
+        // 첫 번째(가장 많이 입력된 건)만 유지, 나머지 삭제
+        for (let i = 1; i < group.length; i++) {
+            dupsToRemove.push(group[i]);
+        }
+    }
+    for (const r of dupsToRemove) {
+        try {
+            await updateDoc(doc(db, 'absence_records', r.docId), {
+                status: 'closed',
+                updated_by: 'system_dedup',
+                updated_at: serverTimestamp()
+            });
+        } catch (err) {
+            console.error('중복 결석대장 정리 실패:', r.docId, err);
+        }
+    }
+    if (dupsToRemove.length > 0) {
+        absenceRecords = absenceRecords.filter(r => !dupsToRemove.includes(r));
+        console.log(`결석대장 중복 정리: ${dupsToRemove.length}건 제거`);
+    }
 }
 
 async function loadWithdrawnStudents() {
@@ -6007,9 +6044,29 @@ function toggleAttendance(studentId, displayStatus) {
 }
 
 async function autoCreateAbsenceRecord(studentId, overrides) {
-    // 중복 체크
+    // 메모리 중복 체크
     const exists = absenceRecords.some(r => r.student_id === studentId && r.absence_date === selectedDate);
     if (exists) return;
+
+    // Firestore 서버 측 중복 체크 (다른 브라우저/세션에서 이미 생성한 경우 방지)
+    try {
+        const dupQ = query(collection(db, 'absence_records'),
+            where('student_id', '==', studentId),
+            where('absence_date', '==', selectedDate),
+            where('status', '==', 'open'));
+        const dupSnap = await getDocs(dupQ);
+        if (!dupSnap.empty) {
+            // 서버에 이미 존재 → 메모리에만 추가하고 리턴
+            dupSnap.forEach(d => {
+                if (!absenceRecords.some(r => r.docId === d.id)) {
+                    absenceRecords.push({ docId: d.id, ...d.data() });
+                }
+            });
+            return;
+        }
+    } catch (err) {
+        console.warn('결석대장 중복 체크 실패, 생성 진행:', err);
+    }
 
     const student = allStudents.find(s => s.docId === studentId);
 
