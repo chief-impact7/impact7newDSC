@@ -536,7 +536,7 @@ service cloud.firestore {
     // =========================================================================
     // [Director] Entities / Buildings / Teams
     // =========================================================================
-    match /entities/{id} { allow read: if isLoggedIn(); allow write: if isDirector(); }
+    match /entities/{id} { allow read: if isLoggedIn(); allow get: if true; allow write: if isDirector(); }
     match /buildings/{id} { allow read: if isLoggedIn(); allow write: if isDirector(); }
     match /teams/{id} { allow read: if isLoggedIn(); allow write: if isDirector(); }
 
@@ -559,6 +559,40 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // [Director] Contract Signing Tokens
+    // =========================================================================
+    match /contractSigningTokens/{tokenId} {
+      allow read, write: if isDirector() || isStaff();
+
+      // 비인증 사용자: 토큰 검증(read) + 서명 완료(update)만 허용
+      allow read: if true;
+      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['status'])
+        && request.resource.data.status == 'signed'
+        && resource.data.status == 'pending'
+        && resource.data.expiresAt > request.time;
+
+      allow create, delete: if isDirector() || isStaff();
+    }
+
+    // =========================================================================
+    // [Director] Salary Notification Tokens (급여 통보서)
+    // =========================================================================
+    match /salaryNotificationTokens/{tokenId} {
+      allow read, write: if isDirector() || isStaff();
+
+      // 비인증 사용자: 토큰 검증(read) + 서명 완료(update)만 허용
+      allow read: if true;
+      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['status'])
+        && request.resource.data.status == 'signed'
+        && resource.data.status == 'pending'
+        && resource.data.expiresAt > request.time;
+
+      allow create, delete: if isDirector() || isStaff();
+    }
+
+    // =========================================================================
     // [Director] Staff + 서브컬렉션
     // =========================================================================
     match /staff/{staffId} {
@@ -568,10 +602,19 @@ service cloud.firestore {
       // 온보딩: 비인증 사용자가 유효한 토큰으로 staff 문서 생성
       allow create: if request.resource.data.status == 'onboarding';
 
+      // 비인증: 토큰 기반 staff 읽기 (이름 표시용)
+      allow get: if true;
+
       match /contracts/{contractId} {
         allow read: if isDirector() ||
           (isStaff() && resource.data.assignedTo == request.auth.uid);
         allow write: if isDirector();
+
+        // 비인증: 토큰 기반 계약서 읽기 + 서명 업데이트
+        allow get: if true;
+        allow update: if request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['signatures', 'status', 'updatedAt'])
+          && request.resource.data.status in ['ready', 'signed'];
       }
 
       match /assignments/{id} {
@@ -588,6 +631,14 @@ service cloud.firestore {
       match /performanceNotes/{noteId} {
         allow read, write: if isDirector();
       }
+    }
+
+    // =========================================================================
+    // [Director] collectionGroup 쿼리용 — contracts
+    // =========================================================================
+    match /{path=**}/contracts/{contractId} {
+      allow read: if isDirector() ||
+        (isStaff() && resource.data.assignedTo == request.auth.uid);
     }
 
     // =========================================================================
@@ -619,6 +670,54 @@ service cloud.firestore {
       allow read: if isDirector();
       allow create: if isLoggedIn();
       allow update, delete: if false;
+    }
+
+    // =========================================================================
+    // [Director] Employee Onboarding Tokens
+    // =========================================================================
+    match /employeeOnboardingTokens/{tokenId} {
+      allow read, write: if isDirector() || isStaff();
+      allow read: if true;
+      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['status', 'employeeId'])
+        && request.resource.data.status == 'completed'
+        && resource.data.status == 'pending'
+        && resource.data.expiresAt > request.time;
+      allow create, delete: if isDirector() || isStaff();
+    }
+
+    // =========================================================================
+    // [Director] Employee Contract Signing Tokens
+    // =========================================================================
+    match /employeeContractSigningTokens/{tokenId} {
+      allow read, write: if isDirector() || isStaff();
+      allow read: if true;
+      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['status'])
+        && request.resource.data.status == 'signed'
+        && resource.data.status == 'pending'
+        && resource.data.expiresAt > request.time;
+      allow create, delete: if isDirector() || isStaff();
+    }
+
+    // =========================================================================
+    // [Director] Employees + 서브컬렉션
+    // =========================================================================
+    match /employees/{employeeId} {
+      allow read: if isLoggedIn();
+      allow write: if isDirector();
+      allow create: if request.resource.data.status == 'onboarding';
+      allow get: if true;
+
+      match /contracts/{contractId} {
+        allow read: if isDirector() ||
+          (isStaff() && resource.data.assignedTo == request.auth.uid);
+        allow write: if isDirector();
+        allow get: if true;
+        allow update: if request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['signatures', 'status', 'updatedAt'])
+          && request.resource.data.status in ['ready', 'signed'];
+      }
     }
 
     // =========================================================================

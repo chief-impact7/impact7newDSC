@@ -2110,6 +2110,7 @@ function _getAbsenceStatusGroup(r) {
     if (r.resolution === '보충') {
         if (r.makeup_status === '미등원') return { order: 3, label: '보충 미등원', badgeClass: 'noshow' };
         if (r.makeup_status === '완료') return { order: 4, label: '보충 완료', badgeClass: 'completed' };
+        if (r.makeup_date === 'undecided' || !r.makeup_date) return { order: 2, label: '보충입력대기', badgeClass: 'makeup' };
         return { order: 2, label: '보충 예정', badgeClass: 'makeup' };
     }
     if (r.resolution === '정산') return { order: 5, label: '정산 대기', badgeClass: 'settlement' };
@@ -3868,6 +3869,62 @@ window.updateReturnConsultNote = function(studentId, value) {
     }, 600);
 };
 
+// 1단계 유효성: 상담내용 + 사유 입력 후 정당/부당 설정 가능
+window.validateAndSetReasonValid = async function(docId, value, studentId) {
+    const r = absenceRecords.find(x => x.docId === docId);
+    if (!r) return;
+    // 버튼 클릭 시점의 실시간 입력값을 DOM에서 읽기
+    const idx = absenceRecords.filter(x => x.student_id === studentId).indexOf(r);
+    const cardEl = document.querySelector(`[data-absence-idx="${idx}"]`);
+    let noteVal = r.consultation_note || '';
+    let reasonVal = r.reason || '';
+    if (cardEl) {
+        const ta = cardEl.querySelector('[data-field="consultation-note"]');
+        const inp = cardEl.querySelector('[data-field="reason"]');
+        if (ta) noteVal = ta.value;
+        if (inp) reasonVal = inp.value;
+    }
+    const missing = [];
+    if (!noteVal.trim()) missing.push('상담 내용');
+    if (!reasonVal.trim()) missing.push('결석 사유');
+    if (missing.length > 0) {
+        alert(`${missing.join(', ')}을(를) 먼저 입력해주세요.`);
+        return;
+    }
+    // 배치 업데이트: 한 번의 Firestore 호출 + 한 번의 렌더링
+    const newVal = r.reason_valid === value ? '' : value;
+    const updates = {};
+    if (noteVal.trim() !== (r.consultation_note || '')) updates.consultation_note = noteVal.trim();
+    if (reasonVal.trim() !== (r.reason || '')) updates.reason = reasonVal.trim();
+    updates.reason_valid = newVal;
+    showSaveIndicator('saving');
+    try {
+        await updateDoc(doc(db, 'absence_records', docId), {
+            ...updates,
+            updated_by: currentUser?.email || '',
+            updated_at: serverTimestamp()
+        });
+        Object.assign(r, updates);
+        renderStudentDetail(studentId);
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('결석대장 1단계 저장 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
+// 2단계 유효성: 상담완료 + 보충/정산 둘 다 필요
+window.validateAndSetResolution = function(docId, resolution, studentId) {
+    const r = absenceRecords.find(x => x.docId === docId);
+    if (!r) return;
+    if (!r.consultation_done) {
+        alert('상담완료를 먼저 체크해주세요.');
+        return;
+    }
+    setAbsenceResolution(docId, resolution, studentId);
+};
+
 window.setAbsenceResolution = async function(docId, resolution, studentId) {
     const r = absenceRecords.find(x => x.docId === docId);
     if (!r) return;
@@ -5083,6 +5140,34 @@ function renderReportCard(records) {
     contentEl.innerHTML = attendanceHtml + oxGridHtml;
 }
 
+// ─── 결석대장 단계 뱃지 헬퍼 ─────────────────────────────────────────────────
+
+function _renderStepBadge(number, isDone, primaryColor = 'var(--primary)') {
+    const bg = isDone ? 'var(--success)' : primaryColor;
+    const check = isDone ? '<span class="material-symbols-outlined" style="font-size:14px;color:var(--success);">check</span>' : '';
+    return `<span style="background:${bg};color:#fff;border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;">${number}</span> ${check}`;
+}
+
+// ─── 결석대장 카드 expanded 상태 보존 헬퍼 ──────────────────────────────────
+
+function _getExpandedAbsenceIndices() {
+    const indices = [];
+    document.querySelectorAll('[data-absence-idx]').forEach(el => {
+        if (el.classList.contains('expanded')) {
+            indices.push(el.getAttribute('data-absence-idx'));
+        }
+    });
+    return indices;
+}
+
+function _restoreExpandedAbsenceIndices(indices) {
+    if (!indices || indices.length === 0) return;
+    indices.forEach(idx => {
+        const el = document.querySelector(`[data-absence-idx="${idx}"]`);
+        if (el) el.classList.add('expanded');
+    });
+}
+
 // ─── 결석대장 카드 (학생 상세) ───────────────────────────────────────────────
 
 function renderAbsenceRecordCard(studentId) {
@@ -5092,115 +5177,154 @@ function renderAbsenceRecordCard(studentId) {
     const rows = records.map((r, idx) => {
         const group = _getAbsenceStatusGroup(r);
         const validityBadge = _renderValidityBadge(r.reason_valid);
-
-        // 상담 메모
         const consultChecked = r.consultation_done ? 'checked' : '';
-        const consultMemoHtml = `
-            <textarea class="field-input" style="width:100%;min-height:40px;resize:vertical;font-size:12px;margin-bottom:6px;"
-                placeholder="상담 내용..."
-                onchange="updateAbsenceField('${escAttr(r.docId)}', 'consultation_note', this.value, '${escAttr(studentId)}')">${esc(r.consultation_note || '')}</textarea>`;
 
-        // 사유 + 정당/부당
-        const reasonHtml = `
-            <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px;">
-                <input type="text" class="field-input" style="flex:1;font-size:12px;" placeholder="결석 사유"
-                    value="${escAttr(r.reason || '')}"
-                    onchange="updateAbsenceField('${escAttr(r.docId)}', 'reason', this.value, '${escAttr(studentId)}')" />
-                <button class="hw-fail-type-btn ${r.reason_valid === '정당' ? 'active' : ''}" style="font-size:11px;${r.reason_valid === '정당' ? 'background:#16a34a;border-color:#16a34a;color:#fff;' : ''}"
-                    onclick="updateAbsenceField('${escAttr(r.docId)}', 'reason_valid', '${r.reason_valid === '정당' ? '' : '정당'}', '${escAttr(studentId)}')">정당</button>
-                <button class="hw-fail-type-btn ${r.reason_valid === '부당' ? 'active' : ''}" style="font-size:11px;${r.reason_valid === '부당' ? 'background:#dc2626;border-color:#dc2626;color:#fff;' : ''}"
-                    onclick="updateAbsenceField('${escAttr(r.docId)}', 'reason_valid', '${r.reason_valid === '부당' ? '' : '부당'}', '${escAttr(studentId)}')">부당</button>
+        // ── 1단계: 상담내용, 결석사유, 정당/부당 (항상 표시) ──
+        const stage1Done = !!(r.consultation_note && r.reason && r.reason_valid);
+        const stage1Html = `
+            <div style="margin-bottom:8px;">
+                <div style="font-size:10px;color:var(--text-sec);font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:4px;">
+                    ${_renderStepBadge(1, stage1Done)}
+                    상담 · 사유
+                </div>
+                <textarea class="field-input" data-field="consultation-note" style="width:100%;min-height:40px;resize:vertical;font-size:12px;margin-bottom:6px;"
+                    placeholder="상담 내용..."
+                    onchange="updateAbsenceField('${escAttr(r.docId)}', 'consultation_note', this.value, '${escAttr(studentId)}')">${esc(r.consultation_note || '')}</textarea>
+                <div style="display:flex;align-items:center;gap:4px;">
+                    <input type="text" class="field-input" data-field="reason" style="flex:1;font-size:12px;" placeholder="결석 사유"
+                        value="${escAttr(r.reason || '')}"
+                        onchange="updateAbsenceField('${escAttr(r.docId)}', 'reason', this.value, '${escAttr(studentId)}')" />
+                    <button class="hw-fail-type-btn ${r.reason_valid === '정당' ? 'active' : ''}" style="font-size:11px;${r.reason_valid === '정당' ? 'background:#16a34a;border-color:#16a34a;color:#fff;' : ''}"
+                        onclick="validateAndSetReasonValid('${escAttr(r.docId)}', '정당', '${escAttr(studentId)}')">정당</button>
+                    <button class="hw-fail-type-btn ${r.reason_valid === '부당' ? 'active' : ''}" style="font-size:11px;${r.reason_valid === '부당' ? 'background:#dc2626;border-color:#dc2626;color:#fff;' : ''}"
+                        onclick="validateAndSetReasonValid('${escAttr(r.docId)}', '부당', '${escAttr(studentId)}')">부당</button>
+                </div>
             </div>`;
 
-        // 상담완료 + 처리방법 (한 줄)
-        const resolutionHtml = `
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-                <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;white-space:nowrap;">
-                    <input type="checkbox" ${consultChecked} onchange="toggleConsultation('${escAttr(r.docId)}', '${escAttr(studentId)}')" />
-                    상담완료
-                </label>
-                <span style="width:1px;height:16px;background:var(--border);margin:0 2px;"></span>
-                <span style="font-size:11px;color:var(--text-sec);white-space:nowrap;">처리방법:</span>
-                <button class="hw-fail-type-btn ${r.resolution === '보충' ? 'active' : ''}" style="font-size:11px;${r.resolution === '보충' ? 'background:#2563eb;border-color:#2563eb;color:#fff;' : ''}"
-                    onclick="setAbsenceResolution('${escAttr(r.docId)}', '보충', '${escAttr(studentId)}')">보충</button>
-                <button class="hw-fail-type-btn ${r.resolution === '정산' ? 'active' : ''}" style="font-size:11px;${r.resolution === '정산' ? 'background:#7c3aed;border-color:#7c3aed;color:#fff;' : ''}"
-                    onclick="setAbsenceResolution('${escAttr(r.docId)}', '정산', '${escAttr(studentId)}')">정산</button>
+        // ── 2단계 조건: 1단계 모두 입력 시 표시 ──
+        const stage2Done = !!(stage1Done && r.consultation_done && r.resolution && r.resolution !== 'pending');
+        const stage2Html = !stage1Done ? '' : `
+            <div style="margin-bottom:8px;padding-top:8px;border-top:1px dashed var(--border);">
+                <div style="font-size:10px;color:var(--text-sec);font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:4px;">
+                    ${_renderStepBadge(2, stage2Done)}
+                    상담완료 · 처리방법
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;white-space:nowrap;">
+                        <input type="checkbox" ${consultChecked} onchange="toggleConsultation('${escAttr(r.docId)}', '${escAttr(studentId)}')" />
+                        상담완료
+                    </label>
+                    <span style="width:1px;height:16px;background:var(--border);margin:0 2px;"></span>
+                    <span style="font-size:11px;color:var(--text-sec);white-space:nowrap;">처리방법:</span>
+                    <button class="hw-fail-type-btn ${r.resolution === '보충' ? 'active' : ''}" style="font-size:11px;${r.resolution === '보충' ? 'background:#2563eb;border-color:#2563eb;color:#fff;' : ''}"
+                        onclick="validateAndSetResolution('${escAttr(r.docId)}', '보충', '${escAttr(studentId)}')">보충</button>
+                    <button class="hw-fail-type-btn ${r.resolution === '정산' ? 'active' : ''}" style="font-size:11px;${r.resolution === '정산' ? 'background:#7c3aed;border-color:#7c3aed;color:#fff;' : ''}"
+                        onclick="validateAndSetResolution('${escAttr(r.docId)}', '정산', '${escAttr(studentId)}')">정산</button>
+                </div>
             </div>`;
 
-        // 보충 세부 (보충 선택 시)
-        let makeupHtml = '';
-        if (r.resolution === '보충') {
-            const makeupDateVal = r.makeup_date || '';
+        // ── 3단계: 2단계 완료 후, 보충 선택 시 일시/시간 + 미정 버튼, 정산 선택 시 정산 메모 ──
+        let stage3Html = '';
+        if (stage2Done && r.resolution === '보충') {
+            const isUndecided = r.makeup_date === 'undecided';
+            const makeupDateVal = isUndecided ? '' : (r.makeup_date || '');
             const makeupTimeVal = r.makeup_time || '16:00';
+            const hasMakeupDate = !!r.makeup_date && !isUndecided;
+
+            // 보충완료/미등원은 날짜 입력 후에만 표시
             let makeupActions = '';
-            if (r.makeup_status === 'pending') {
-                makeupActions = `
-                    <button class="hw-fail-type-btn active" style="background:var(--success);border-color:var(--success);font-size:11px;"
-                        onclick="completeAbsenceMakeup('${escAttr(r.docId)}', '${escAttr(studentId)}')">
-                        <span class="material-symbols-outlined" style="font-size:13px;">check_circle</span>보충완료
-                    </button>
-                    <button class="hw-fail-type-btn" style="font-size:11px;background:#dc2626;border-color:#dc2626;color:#fff;"
-                        onclick="markAbsenceNoShow('${escAttr(r.docId)}', '${escAttr(studentId)}')">
-                        <span class="material-symbols-outlined" style="font-size:13px;">person_off</span>미등원
-                    </button>`;
-            } else if (r.makeup_status === '미등원') {
-                makeupActions = `
-                    <button class="hw-fail-type-btn" style="font-size:11px;background:#7c3aed;border-color:#7c3aed;color:#fff;"
-                        onclick="openAbsenceRescheduleModal('${escAttr(r.docId)}', '${escAttr(studentId)}')">
-                        <span class="material-symbols-outlined" style="font-size:13px;">event</span>재예약
-                    </button>
-                    <button class="hw-fail-type-btn" style="font-size:11px;"
-                        onclick="switchToSettlement('${escAttr(r.docId)}', '${escAttr(studentId)}')">정산전환</button>`;
-            } else if (r.makeup_status === '완료') {
-                makeupActions = `<span style="font-size:11px;color:var(--success);font-weight:600;">보충 완료됨</span>`;
+            if (hasMakeupDate) {
+                if (r.makeup_status === 'pending') {
+                    makeupActions = `
+                        <button class="hw-fail-type-btn active" style="background:var(--success);border-color:var(--success);font-size:11px;"
+                            onclick="completeAbsenceMakeup('${escAttr(r.docId)}', '${escAttr(studentId)}')">
+                            <span class="material-symbols-outlined" style="font-size:13px;">check_circle</span>보충완료
+                        </button>
+                        <button class="hw-fail-type-btn" style="font-size:11px;background:#dc2626;border-color:#dc2626;color:#fff;"
+                            onclick="markAbsenceNoShow('${escAttr(r.docId)}', '${escAttr(studentId)}')">
+                            <span class="material-symbols-outlined" style="font-size:13px;">person_off</span>미등원
+                        </button>`;
+                } else if (r.makeup_status === '미등원') {
+                    makeupActions = `
+                        <button class="hw-fail-type-btn" style="font-size:11px;background:#7c3aed;border-color:#7c3aed;color:#fff;"
+                            onclick="openAbsenceRescheduleModal('${escAttr(r.docId)}', '${escAttr(studentId)}')">
+                            <span class="material-symbols-outlined" style="font-size:13px;">event</span>재예약
+                        </button>
+                        <button class="hw-fail-type-btn" style="font-size:11px;"
+                            onclick="switchToSettlement('${escAttr(r.docId)}', '${escAttr(studentId)}')">정산전환</button>`;
+                } else if (r.makeup_status === '완료') {
+                    makeupActions = `<span style="font-size:11px;color:var(--success);font-weight:600;">보충 완료됨</span>`;
+                }
             }
-            makeupHtml = `
-                <div style="background:#eff6ff;border-radius:6px;padding:8px;margin-bottom:6px;">
-                    <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">
-                        <input type="date" class="field-input" style="font-size:12px;width:130px;" value="${escAttr(makeupDateVal)}"
-                            onchange="updateAbsenceField('${escAttr(r.docId)}', 'makeup_date', this.value, '${escAttr(studentId)}')" />
-                        <input type="time" class="field-input" style="font-size:12px;width:100px;" value="${escAttr(makeupTimeVal)}"
-                            onchange="updateAbsenceField('${escAttr(r.docId)}', 'makeup_time', this.value, '${escAttr(studentId)}')" />
+
+            const makeupDone = hasMakeupDate || isUndecided;
+            stage3Html = `
+                <div style="margin-bottom:8px;padding-top:8px;border-top:1px dashed var(--border);">
+                    <div style="font-size:10px;color:var(--text-sec);font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:4px;">
+                        ${_renderStepBadge(3, makeupDone, '#2563eb')}
+                        보충 일시
                     </div>
-                    <div style="display:flex;align-items:center;gap:4px;">${makeupActions}</div>
+                    <div style="background:#eff6ff;border-radius:6px;padding:8px;">
+                        <div style="display:flex;align-items:center;gap:4px;${makeupActions ? 'margin-bottom:4px;' : ''}">
+                            <input type="date" class="field-input" style="font-size:12px;width:130px;" value="${escAttr(makeupDateVal)}"
+                                onchange="updateAbsenceField('${escAttr(r.docId)}', 'makeup_date', this.value, '${escAttr(studentId)}')" />
+                            <input type="time" class="field-input" style="font-size:12px;width:100px;" value="${escAttr(makeupTimeVal)}"
+                                onchange="updateAbsenceField('${escAttr(r.docId)}', 'makeup_time', this.value, '${escAttr(studentId)}')" />
+                            ${isUndecided ? `<span style="font-size:11px;color:var(--warning);font-weight:600;">미정</span>` :
+                              !hasMakeupDate ? `<button class="hw-fail-type-btn" style="font-size:11px;color:var(--text-sec);"
+                                onclick="updateAbsenceField('${escAttr(r.docId)}', 'makeup_date', 'undecided', '${escAttr(studentId)}')">미정</button>` : ''}
+                        </div>
+                        ${makeupActions ? `<div style="display:flex;align-items:center;gap:4px;">${makeupActions}</div>` : ''}
+                    </div>
+                </div>`;
+        } else if (stage2Done && r.resolution === '정산') {
+            stage3Html = `
+                <div style="margin-bottom:8px;padding-top:8px;border-top:1px dashed var(--border);">
+                    <div style="font-size:10px;color:var(--text-sec);font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:4px;">
+                        ${_renderStepBadge(3, true, '#7c3aed')}
+                        정산
+                    </div>
+                    <div style="background:#f5f3ff;border-radius:6px;padding:8px;">
+                        <textarea class="field-input" style="width:100%;min-height:36px;resize:vertical;font-size:12px;"
+                            placeholder="정산 메모..."
+                            onchange="updateAbsenceField('${escAttr(r.docId)}', 'settlement_memo', this.value, '${escAttr(studentId)}')">${esc(r.settlement_memo || '')}</textarea>
+                    </div>
                 </div>`;
         }
 
-        // 정산 세부
-        let settlementHtml = '';
-        if (r.resolution === '정산') {
-            settlementHtml = `
-                <div style="background:#f5f3ff;border-radius:6px;padding:8px;margin-bottom:6px;">
-                    <textarea class="field-input" style="width:100%;min-height:36px;resize:vertical;font-size:12px;"
-                        placeholder="정산 메모..."
-                        onchange="updateAbsenceField('${escAttr(r.docId)}', 'settlement_memo', this.value, '${escAttr(studentId)}')">${esc(r.settlement_memo || '')}</textarea>
-                </div>`;
-        }
-
-        // 재지정 이력
+        // ── 4단계: 수정/행정완료 ──
+        // 2단계 완료 + (보충: 일시 입력 또는 미정 / 정산: 바로)
+        const stage3Done = stage2Done && (r.resolution === '정산' ||
+            (r.resolution === '보충' && !!r.makeup_date));
         const historyHtml = _renderRescheduleHistory(r.reschedule_history);
-
-        // 입력자 + 타임스탬프
         const createdBy = getTeacherName(r.created_by);
         const updatedBy = getTeacherName(r.updated_by);
-        const metaHtml = `
-            <div style="font-size:10px;color:var(--text-sec);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap;">
-                ${createdBy ? `<span>등록: ${esc(createdBy)} ${_fmtTs(r.created_at, true)}</span>` : ''}
-                ${updatedBy && updatedBy !== createdBy ? `<span>수정: ${esc(updatedBy)} ${_fmtTs(r.updated_at, true)}</span>` : ''}
-            </div>`;
 
-        // 수정 + 행정완료 버튼
-        const closeBtn = `
-            ${metaHtml}
-            <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:4px;">
-                <button class="hw-fail-type-btn" style="font-size:11px;"
+        // 입력 완료 여부: stage3Done이 이미 stage2Done(consultation_done 포함)을 내포
+        const actionBtn = stage3Done
+            ? `<button class="hw-fail-type-btn" style="font-size:11px;"
                     onclick="event.preventDefault(); showSaveIndicator('saved');">
                     <span class="material-symbols-outlined" style="font-size:13px;">edit</span>수정
-                </button>
-                <button class="hw-fail-type-btn" style="font-size:11px;background:#6b7280;border-color:#6b7280;color:#fff;"
-                    onclick="closeAbsenceRecord('${escAttr(r.docId)}', '${escAttr(studentId)}')">
-                    <span class="material-symbols-outlined" style="font-size:13px;">archive</span>행정완료
-                </button>
+                </button>`
+            : `<button class="hw-fail-type-btn" style="font-size:11px;background:var(--primary);border-color:var(--primary);color:#fff;"
+                    onclick="this.closest('.pending-task-row').classList.remove('expanded'); showSaveIndicator('saved');">
+                    <span class="material-symbols-outlined" style="font-size:13px;">save</span>저장
+                </button>`;
+
+        const stage4Html = !stage3Done ? '' : `
+            <div style="padding-top:8px;border-top:1px dashed var(--border);">
+                ${historyHtml}
+                <div style="font-size:10px;color:var(--text-sec);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap;">
+                    ${createdBy ? `<span>등록: ${esc(createdBy)} ${_fmtTs(r.created_at, true)}</span>` : ''}
+                    ${updatedBy && updatedBy !== createdBy ? `<span>수정: ${esc(updatedBy)} ${_fmtTs(r.updated_at, true)}</span>` : ''}
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:4px;">
+                    ${actionBtn}
+                    <button class="hw-fail-type-btn" style="font-size:11px;background:#6b7280;border-color:#6b7280;color:#fff;"
+                        onclick="closeAbsenceRecord('${escAttr(r.docId)}', '${escAttr(studentId)}')">
+                        <span class="material-symbols-outlined" style="font-size:13px;">archive</span>행정완료
+                    </button>
+                </div>
             </div>`;
 
         return `
@@ -5214,13 +5338,10 @@ function renderAbsenceRecordCard(studentId) {
                     <span class="pending-task-arrow material-symbols-outlined" style="font-size:16px;color:var(--text-sec);">expand_more</span>
                 </div>
                 <div class="pending-task-expand">
-                    ${consultMemoHtml}
-                    ${reasonHtml}
-                    ${resolutionHtml}
-                    ${makeupHtml}
-                    ${settlementHtml}
-                    ${historyHtml}
-                    ${closeBtn}
+                    ${stage1Html}
+                    ${stage2Html}
+                    ${stage3Html}
+                    ${stage4Html}
                 </div>
             </div>`;
     }).join('');
@@ -5384,6 +5505,9 @@ function renderStudentDetail(studentId) {
         document.getElementById('detail-content').style.display = 'none';
         return;
     }
+
+    // 결석대장 카드 expanded 상태 보존
+    const expandedAbsenceIndices = _getExpandedAbsenceIndices();
 
     document.getElementById('detail-empty').style.display = 'none';
     document.getElementById('detail-content').style.display = '';
@@ -5726,6 +5850,9 @@ function renderStudentDetail(studentId) {
     document.getElementById('detail-cards').style.display = detailTab === 'daily' ? '' : 'none';
     const reportTabEl = document.getElementById('report-tab');
     if (reportTabEl) reportTabEl.style.display = detailTab === 'report' ? '' : 'none';
+
+    // 결석대장 카드 expanded 상태 복원
+    _restoreExpandedAbsenceIndices(expandedAbsenceIndices);
 
     // 모바일에서 패널 보이기
     document.getElementById('detail-panel').classList.add('mobile-visible');
