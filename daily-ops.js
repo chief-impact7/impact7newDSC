@@ -2879,7 +2879,16 @@ function renderListPanel() {
         if (LEAVE_STATUSES.includes(s.status)) {
             leaveBadge = `<span class="tag tag-leave">${esc(s.status)}</span>`;
         } else if (s.status === '퇴원') {
-            leaveBadge = `<span class="tag" style="background:#dc2626;color:#fff;">퇴원</span>`;
+            // 이번 학기 enrollment이 있거나 퇴원 1개월 이내 → 퇴원, 그 외 → 과거
+            const hasCurrentSemester = s.enrollments.some(e => !selectedSemester || e.semester === selectedSemester);
+            const wdLr = leaveRequests.find(lr => lr.student_id === s.docId && lr.status === 'approved' &&
+                (lr.request_type === '퇴원요청' || lr.request_type === '휴원→퇴원'));
+            const isRecentWithdrawal = wdLr && !_isOlderThanOneMonth(wdLr.approved_at);
+            if (hasCurrentSemester || isRecentWithdrawal) {
+                leaveBadge = `<span class="tag" style="background:#dc2626;color:#fff;">퇴원</span>`;
+            } else {
+                leaveBadge = `<span class="tag-past">과거</span>`;
+            }
         }
 
         // 신규 학생 뱃지 (enrollment start_date가 14일 이내)
