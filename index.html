@@ -863,5 +863,43 @@
             </div>
         </div>
     </div>
+    <!-- 복귀요청 모달 -->
+    <div id="return-from-leave-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="복귀요청" onclick="closeModal('return-from-leave-modal', event)" style="display:none;">
+        <div class="modal-content" style="max-width:420px;">
+            <div class="modal-header">
+                <h3>복귀 요청</h3>
+                <button class="modal-close" onclick="closeModal('return-from-leave-modal')">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;">
+                <!-- 학생 정보 -->
+                <div id="rfl-student-info" style="background:var(--bg-secondary);border-radius:8px;padding:10px;">
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                        <span id="rfl-student-name" style="font-weight:600;font-size:14px;"></span>
+                        <span id="rfl-student-class" style="font-size:12px;color:var(--text-sec);"></span>
+                        <span id="rfl-student-status" style="font-size:11px;"></span>
+                    </div>
+                    <div id="rfl-leave-period" style="font-size:12px;color:var(--text-sec);"></div>
+                </div>
+                <!-- 복귀일 -->
+                <div>
+                    <label id="rfl-date-label" style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">복귀일</label>
+                    <input type="date" id="rfl-return-date" class="field-input" style="width:100%;">
+                </div>
+                <!-- 상담내용 -->
+                <div>
+                    <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">상담내용</label>
+                    <textarea id="rfl-consultation-note" class="field-input" style="width:100%;min-height:60px;resize:vertical;" placeholder="복귀 상담 내용을 입력하세요..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;">
+                <button class="lr-btn lr-btn-text" onclick="closeModal('return-from-leave-modal')">취소</button>
+                <button class="lr-btn lr-btn-tonal" onclick="submitReturnFromLeave()">
+                    <span class="material-symbols-outlined">send</span>요청
+                </button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
