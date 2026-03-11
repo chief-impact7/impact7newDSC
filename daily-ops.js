@@ -1450,7 +1450,11 @@ function getSubFilterCount(filterKey) {
     if (currentCategory === 'admin') {
         switch (filterKey) {
             case 'absence_ledger': {
-                let filtered = [...absenceRecords];
+                const _approvedLeaveIds = new Set(
+                    leaveRequests.filter(lr => lr.status === 'approved' && (lr.request_type === '퇴원요청' || lr.request_type === '휴원→퇴원'))
+                        .map(lr => lr.student_id)
+                );
+                let filtered = absenceRecords.filter(r => !_approvedLeaveIds.has(r.student_id));
                 if (selectedBranch) filtered = filtered.filter(r => r.branch === selectedBranch);
                 return { count: filtered.length, total: 0 };
             }
@@ -2193,6 +2197,8 @@ function _renderValidityBadge(reasonValid) {
 }
 
 function _getAbsenceStatusGroup(r) {
+    // 퇴원요청 학생 체크
+    if (r._hasLeaveRequest) return { order: 7, label: '퇴원요청', badgeClass: 'noshow' };
     if (!r.consultation_done) return { order: 0, label: '미상담', badgeClass: 'unconsulted' };
     if (r.resolution === 'pending') return { order: 1, label: '처리 미결정', badgeClass: 'undecided' };
     if (r.resolution === '보충') {
@@ -2210,8 +2216,21 @@ function renderAbsenceLedgerList() {
     const countEl = document.getElementById('list-count');
     renderFilterChips();
 
-    let records = [...absenceRecords];
+    // 퇴원승인 학생 제외, 퇴원요청 학생 플래그
+    const approvedLeaveStudentIds = new Set(
+        leaveRequests.filter(lr => lr.status === 'approved' && (lr.request_type === '퇴원요청' || lr.request_type === '휴원→퇴원'))
+            .map(lr => lr.student_id)
+    );
+    const requestedLeaveStudentIds = new Set(
+        leaveRequests.filter(lr => lr.status === 'requested' && (lr.request_type === '퇴원요청' || lr.request_type === '휴원→퇴원'))
+            .map(lr => lr.student_id)
+    );
+
+    let records = absenceRecords.filter(r => !approvedLeaveStudentIds.has(r.student_id));
     if (selectedBranch) records = records.filter(r => r.branch === selectedBranch);
+
+    // 퇴원요청 플래그 부여
+    records.forEach(r => { r._hasLeaveRequest = requestedLeaveStudentIds.has(r.student_id); });
 
     countEl.textContent = `${records.length}건`;
 
