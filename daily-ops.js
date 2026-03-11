@@ -5548,7 +5548,29 @@ function renderReturnConsultCard(studentId) {
 
 function renderLeaveRequestCard(studentId) {
     const records = leaveRequests.filter(r => r.student_id === studentId);
-    if (records.length === 0) return '';
+    const student = allStudents.find(s => s.docId === studentId);
+    const stu_status = student?.status || '';
+    const isWithdrawnStu = stu_status === '퇴원';
+    const isLeaveStu = LEAVE_STATUSES.includes(stu_status);
+
+    // 카드 제목 + 버튼
+    let cardTitle = '휴퇴원요청서';
+    let actionBtn = '';
+    if (isWithdrawnStu) {
+        cardTitle = '퇴원요청서';
+        actionBtn = `<button class="lr-btn lr-btn-tonal" style="font-size:11px;padding:2px 8px;margin-left:auto;"
+            onclick="openReEnrollModal('${escAttr(studentId)}')">
+            <span class="material-symbols-outlined" style="font-size:14px;">person_add</span>재등원
+        </button>`;
+    } else if (isLeaveStu) {
+        cardTitle = '휴원요청서';
+        actionBtn = `<button class="lr-btn lr-btn-tonal" style="font-size:11px;padding:2px 8px;margin-left:auto;"
+            onclick="openReturnFromLeaveModal('${escAttr(studentId)}')">
+            <span class="material-symbols-outlined" style="font-size:14px;">undo</span>복귀
+        </button>`;
+    }
+
+    if (records.length === 0 && !actionBtn) return '';
 
     const rows = records.map((r, idx) => {
         const typeBadge = _leaveRequestTypeBadge(r);
@@ -5625,9 +5647,10 @@ function renderLeaveRequestCard(studentId) {
 
     return `
         <div class="detail-card">
-            <div class="detail-card-title">
+            <div class="detail-card-title" style="display:flex;align-items:center;gap:6px;">
                 <span class="material-symbols-outlined" style="color:#2563eb;font-size:18px;">description</span>
-                휴퇴원요청서 <span style="font-size:12px;color:var(--text-sec);">(${records.length}건)</span>
+                ${cardTitle} <span style="font-size:12px;color:var(--text-sec);">(${records.length}건)</span>
+                ${actionBtn}
             </div>
             ${rows}
         </div>`;
@@ -6884,6 +6907,62 @@ async function cancelLeaveRequest(docId, studentId) {
     } catch (err) {
         alert('취소 실패: ' + err.message);
         console.error(err);
+    }
+}
+
+// ─── 재등원 / 휴원복귀 모달 ─────────────────────────────────────────────────
+
+function openReEnrollModal(studentId) {
+    // 퇴원→휴원 타입으로 기존 모달 활용
+    document.getElementById('lr-request-type').value = '퇴원→휴원';
+    document.getElementById('lr-sub-type').value = '실휴원';
+    document.getElementById('lr-consultation-note').value = '';
+    onLeaveRequestTypeChange();
+    // 학생 자동 선택
+    selectLeaveRequestStudentById(studentId);
+    document.getElementById('leave-request-modal').style.display = 'flex';
+}
+
+async function openReturnFromLeaveModal(studentId) {
+    const student = allStudents.find(s => s.docId === studentId);
+    if (!student) { alert('학생 정보를 찾을 수 없습니다.'); return; }
+
+    if (!confirm(`${student.name} 학생을 재원 상태로 복귀시키겠습니까?`)) return;
+
+    try {
+        showSaveIndicator('saving');
+        const beforeStatus = student.status;
+
+        // 1. Firestore 업데이트
+        await Promise.all([
+            updateDoc(doc(db, 'students', studentId), {
+                status: '재원',
+                pause_start_date: deleteField(),
+                pause_end_date: deleteField(),
+                updated_at: serverTimestamp()
+            }),
+            addDoc(collection(db, 'history_logs'), {
+                doc_id: studentId,
+                change_type: 'RETURN',
+                before: JSON.stringify({ status: beforeStatus, pause_start_date: student.pause_start_date || '', pause_end_date: student.pause_end_date || '' }),
+                after: JSON.stringify({ status: '재원' }),
+                google_login_id: currentUser?.email || 'system',
+                timestamp: serverTimestamp()
+            })
+        ]);
+
+        // 2. 로컬 캐시 업데이트
+        student.status = '재원';
+        delete student.pause_start_date;
+        delete student.pause_end_date;
+
+        showSaveIndicator('saved');
+        renderSubFilters();
+        renderStudentDetail(studentId);
+    } catch (err) {
+        alert('복귀 처리 실패: ' + err.message);
+        console.error(err);
+        showSaveIndicator('error');
     }
 }
 
@@ -8368,6 +8447,8 @@ window.selectLeaveRequest = selectLeaveRequest;
 window.selectReturnUpcomingStudent = selectReturnUpcomingStudent;
 window.approveLeaveRequest = approveLeaveRequest;
 window.cancelLeaveRequest = cancelLeaveRequest;
+window.openReEnrollModal = openReEnrollModal;
+window.openReturnFromLeaveModal = openReturnFromLeaveModal;
 
 // ─── 학부모 알림 메시지 생성 ────────────────────────────────────────────────
 
