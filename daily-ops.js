@@ -1655,6 +1655,9 @@ function getScheduledVisits() {
         });
     }
 
+    // 학생 이름 조회용 Map (동명이인 구분을 위해 실시간 이름 사용)
+    const studentNameMap = new Map(allStudents.map(s => [s.docId, s.name]));
+
     // 2) 숙제미통과 등원 (hwFailTasks)
     const today = todayStr();
     const isToday = selectedDate === today;
@@ -1670,7 +1673,7 @@ function getScheduledVisits() {
             sourceLabel: '숙제미통과',
             sourceColor: '#dc2626',
             studentId: t.student_id,
-            name: t.student_name || t.student_id,
+            name: studentNameMap.get(t.student_id) || t.student_name || t.student_id,
             time: t.scheduled_time || '',
             detail: `${t.domain || ''} (${_stripYear(t.source_date)})`,
             status: (t.status === '완료' || t.status === '기타') ? 'completed' : 'pending',
@@ -1696,7 +1699,7 @@ function getScheduledVisits() {
             sourceLabel: '테스트미통과',
             sourceColor: '#ea580c',
             studentId: t.student_id,
-            name: t.student_name || t.student_id,
+            name: studentNameMap.get(t.student_id) || t.student_name || t.student_id,
             time: t.scheduled_time || '',
             detail: `${t.item || t.domain || ''} (${_stripYear(t.source_date)})`,
             status: (t.status === '완료' || t.status === '기타') ? 'completed' : 'pending',
@@ -1742,7 +1745,7 @@ function getScheduledVisits() {
             sourceLabel: '결석보충',
             sourceColor: '#dc2626',
             studentId: r.student_id,
-            name: r.student_name || r.student_id,
+            name: studentNameMap.get(r.student_id) || r.student_name || r.student_id,
             time: r.makeup_time || '',
             detail: `${r.class_code || ''} (${_stripYear(r.absence_date)})`,
             status: r.makeup_status === '완료' ? 'completed' : 'pending',
