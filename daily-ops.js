@@ -2122,7 +2122,14 @@ function renderScheduledVisitList() {
             ? (() => {
                 const vs = _visitLabel(v.visitStatus || '완료', v.source);
                 const { cls, sty } = _visitBtnStyles(vs);
-                return `<button class="toggle-btn ${cls}" style="${sty}pointer-events:none;opacity:0.7;">${esc(vs)}</button><button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;color:var(--text-sec);border-color:var(--border);" onclick="event.stopPropagation(); resetScheduledVisit('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">초기화</button>`;
+                const isIncomplete = v.visitStatus === '미완료' || v.visitStatus === 'pending';
+                let rescheduleBtn = '';
+                if (isIncomplete && v.source === 'temp') {
+                    rescheduleBtn = `<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;background:#2563eb;color:#fff;border-color:#2563eb;" onclick="event.stopPropagation(); _showDiagnosticActionModal('${escAttr(v.docId)}')">재지정</button>`;
+                } else if (isIncomplete && (v.source === 'hw_fail' || v.source === 'test_fail')) {
+                    rescheduleBtn = `<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;background:#2563eb;color:#fff;border-color:#2563eb;" onclick="event.stopPropagation(); rescheduleVisit('${escAttr(v.source)}', '${escAttr(v.docId)}')">재지정</button>`;
+                }
+                return `<button class="toggle-btn ${cls}" style="${sty}pointer-events:none;opacity:0.7;">${esc(vs)}</button>${rescheduleBtn}<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;color:var(--text-sec);border-color:var(--border);" onclick="event.stopPropagation(); resetScheduledVisit('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">초기화</button>`;
             })()
             : v.overdue
             ? (() => {
@@ -9308,6 +9315,7 @@ window.confirmDiagnosticCancel = async function() {
 };
 
 window.rescheduleVisit = rescheduleVisit;
+window._showDiagnosticActionModal = _showDiagnosticActionModal;
 window.completeScheduledVisit = completeScheduledVisit;
 window.resetScheduledVisit = resetScheduledVisit;
 window.cycleVisitStatus = cycleVisitStatus;
