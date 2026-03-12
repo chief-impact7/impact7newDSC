@@ -75,9 +75,18 @@ function _toVisitStatus(rawStatus) {
 }
 
 function _visitBtnStyles(status) {
-    const cls = status === '완료' ? 'active-present' : status === '기타' ? 'active-other' : '';
-    const sty = (status === 'pending' || status === '미완료') ? 'color:var(--text-sec);border-color:var(--border);' : '';
+    const cls = status === '완료' ? 'active-present' : status === '시행' ? 'active-present' : status === '기타' ? 'active-other' : '';
+    const sty = (status === 'pending' || status === '미완료' || status === '미시행') ? 'color:var(--text-sec);border-color:var(--border);' : '';
     return { cls, sty: `padding:2px 10px;font-size:12px;min-width:auto;${sty}` };
+}
+
+function _visitLabel(status, source) {
+    if (source === 'temp') {
+        if (status === 'pending' || status === '미완료') return '미시행';
+        if (status === '완료') return '시행';
+        return status; // '기타'
+    }
+    return status === 'pending' ? '미완료' : status;
 }
 
 function nextOXValue(current) {
@@ -2111,19 +2120,19 @@ function renderScheduledVisitList() {
 
         const confirmBtn = isCompleted
             ? (() => {
-                const vs = v.visitStatus || '완료';
+                const vs = _visitLabel(v.visitStatus || '완료', v.source);
                 const { cls, sty } = _visitBtnStyles(vs);
                 return `<button class="toggle-btn ${cls}" style="${sty}pointer-events:none;opacity:0.7;">${esc(vs)}</button><button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;color:var(--text-sec);border-color:var(--border);" onclick="event.stopPropagation(); resetScheduledVisit('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">초기화</button>`;
             })()
             : v.overdue
             ? (() => {
-                const vs = v.visitStatus || '미완료';
+                const vs = _visitLabel(v.visitStatus || '미완료', v.source);
                 const { cls, sty } = _visitBtnStyles(vs);
                 const sid = v.studentId ? `'${escAttr(v.studentId)}'` : 'null';
                 return `<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;background:#2563eb;color:#fff;border-color:#2563eb;" onclick="event.stopPropagation(); rescheduleVisit('${escAttr(v.source)}', '${escAttr(v.docId)}')">재지정</button><button class="toggle-btn ${cls}" data-visit-id="${escAttr(v.docId)}" style="${sty}margin-left:4px;" onclick="event.stopPropagation(); cycleVisitStatus('${escAttr(v.source)}', '${escAttr(v.docId)}', ${sid})">${esc(vs)}</button><button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;" onclick="event.stopPropagation(); confirmVisitStatus('${escAttr(v.docId)}')">확인</button>`;
             })()
             : (() => {
-                const vs = v.visitStatus || '미완료';
+                const vs = _visitLabel(v.visitStatus || '미완료', v.source);
                 const { cls, sty } = _visitBtnStyles(vs);
                 const sid = v.studentId ? `'${escAttr(v.studentId)}'` : 'null';
                 return `<button class="toggle-btn ${cls}" data-visit-id="${escAttr(v.docId)}" style="${sty}" onclick="event.stopPropagation(); cycleVisitStatus('${escAttr(v.source)}', '${escAttr(v.docId)}', ${sid})">${esc(vs)}</button><button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;" onclick="event.stopPropagation(); confirmVisitStatus('${escAttr(v.docId)}')">확인</button>`;
@@ -9123,8 +9132,8 @@ function cycleVisitStatus(source, docId, studentId) {
                 // 원래 상태로 되돌리기: nextStatus의 이전 상태
                 const prevIdx = (VISIT_STATUS_CYCLE.indexOf(old.nextStatus) - 1 + VISIT_STATUS_CYCLE.length) % VISIT_STATUS_CYCLE.length;
                 const prevStatus = VISIT_STATUS_CYCLE[prevIdx];
-                const label = prevStatus === 'pending' ? '미완료' : prevStatus;
-                const { cls, sty } = _visitBtnStyles(prevStatus);
+                const label = _visitLabel(prevStatus, old.source);
+                const { cls, sty } = _visitBtnStyles(label);
                 oldBtn.textContent = label;
                 oldBtn.className = `toggle-btn ${cls}`.trim();
                 oldBtn.style.cssText = sty;
@@ -9137,8 +9146,8 @@ function cycleVisitStatus(source, docId, studentId) {
     // 버튼 텍스트+스타일 즉시 변경
     const btn = document.querySelector(`[data-visit-id="${docId}"]`);
     if (btn) {
-        const label = nextStatus === 'pending' ? '미완료' : nextStatus;
-        const { cls, sty } = _visitBtnStyles(nextStatus);
+        const label = _visitLabel(nextStatus, source);
+        const { cls, sty } = _visitBtnStyles(label);
         btn.textContent = label;
         btn.className = `toggle-btn ${cls}`.trim();
         btn.style.cssText = sty;
@@ -9163,6 +9172,9 @@ async function confirmVisitStatus(docId) {
     } else if (nextStatus === '미완료' && (source === 'hw_fail' || source === 'test_fail')) {
         // 미완료 확인 → 재지정 모달 열기
         rescheduleVisit(source, docId);
+    } else if (nextStatus === '미완료' && source === 'temp') {
+        // 진단평가 미시행 확인 → 재지정/시험취소 선택
+        _showDiagnosticActionModal(docId);
     } else if (nextStatus === '완료') {
         await completeScheduledVisit(source, docId, studentId);
     } else {
@@ -9212,6 +9224,88 @@ function rescheduleVisit(source, docId) {
     if (!t) return;
     openRescheduleModal(collection, docId, t.student_id);
 }
+
+let _diagnosticActionDocId = null;
+
+function _closeDiagnosticModal() {
+    document.getElementById('diagnostic-action-modal').style.display = 'none';
+    _diagnosticActionDocId = null;
+    _scheduledVisitsCache = null;
+    _subFilterBase = null;
+    renderSubFilters();
+    renderListPanel();
+}
+
+function _showDiagnosticActionModal(docId) {
+    _diagnosticActionDocId = docId;
+    document.getElementById('diagnostic-reschedule-fields').style.display = 'none';
+    const ta = tempAttendances.find(t => t.docId === docId);
+    document.getElementById('diagnostic-reschedule-time').value = ta?.temp_time || '10:00';
+    document.getElementById('diagnostic-reschedule-date').value = '';
+    const btn = document.getElementById('diagnostic-reschedule-btn');
+    btn.textContent = '재지정';
+    btn.onclick = toggleDiagnosticReschedule;
+    document.getElementById('diagnostic-action-modal').style.display = 'flex';
+}
+
+window.toggleDiagnosticReschedule = function() {
+    const fields = document.getElementById('diagnostic-reschedule-fields');
+    const btn = document.getElementById('diagnostic-reschedule-btn');
+    if (fields.style.display === 'none') {
+        fields.style.display = 'block';
+        btn.textContent = '저장';
+        btn.onclick = saveDiagnosticReschedule;
+    } else {
+        fields.style.display = 'none';
+        btn.textContent = '재지정';
+        btn.onclick = toggleDiagnosticReschedule;
+    }
+};
+
+window.saveDiagnosticReschedule = async function() {
+    if (!_diagnosticActionDocId) return;
+    const newDate = document.getElementById('diagnostic-reschedule-date').value;
+    if (!newDate) { alert('날짜를 선택하세요.'); return; }
+    const newTime = document.getElementById('diagnostic-reschedule-time').value;
+    showSaveIndicator('saving');
+    try {
+        await updateDoc(doc(db, 'temp_attendance', _diagnosticActionDocId), {
+            temp_date: newDate,
+            temp_time: newTime || '',
+            visit_status: 'pending',
+            arrival_status: ''
+        });
+        const ta = tempAttendances.find(t => t.docId === _diagnosticActionDocId);
+        if (ta) Object.assign(ta, { temp_date: newDate, temp_time: newTime || '', visit_status: 'pending', arrival_status: '' });
+        _closeDiagnosticModal();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('진단평가 재지정 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
+window.confirmDiagnosticCancel = async function() {
+    if (!_diagnosticActionDocId) return;
+    showSaveIndicator('saving');
+    try {
+        const completedBy = (currentUser?.email || '').split('@')[0];
+        const completedAt = new Date().toISOString();
+        await updateDoc(doc(db, 'temp_attendance', _diagnosticActionDocId), {
+            visit_status: '기타',
+            completed_by: completedBy,
+            completed_at: completedAt,
+            cancel_reason: '시험취소'
+        });
+        const ta = tempAttendances.find(t => t.docId === _diagnosticActionDocId);
+        if (ta) Object.assign(ta, { visit_status: '기타', completed_by: completedBy, completed_at: completedAt, cancel_reason: '시험취소' });
+        _closeDiagnosticModal();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('진단평가 시험취소 실패:', err);
+        showSaveIndicator('error');
+    }
+};
 
 window.rescheduleVisit = rescheduleVisit;
 window.completeScheduledVisit = completeScheduledVisit;
