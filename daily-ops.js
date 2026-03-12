@@ -2110,7 +2110,11 @@ function renderScheduledVisitList() {
         }
 
         const confirmBtn = isCompleted
-            ? `<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;color:var(--text-sec);border-color:var(--border);" onclick="event.stopPropagation(); resetScheduledVisit('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">초기화</button>`
+            ? (() => {
+                const vs = v.visitStatus || '완료';
+                const { cls, sty } = _visitBtnStyles(vs);
+                return `<button class="toggle-btn ${cls}" style="${sty}pointer-events:none;opacity:0.7;">${esc(vs)}</button><button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;color:var(--text-sec);border-color:var(--border);" onclick="event.stopPropagation(); resetScheduledVisit('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">초기화</button>`;
+            })()
             : v.overdue
             ? (() => {
                 const vs = v.visitStatus || '미완료';
@@ -9156,6 +9160,9 @@ async function confirmVisitStatus(docId) {
 
     if (nextStatus === 'pending') {
         await resetScheduledVisit(source, docId, studentId);
+    } else if (nextStatus === '미완료' && (source === 'hw_fail' || source === 'test_fail')) {
+        // 미완료 확인 → 재지정 모달 열기
+        rescheduleVisit(source, docId);
     } else if (nextStatus === '완료') {
         await completeScheduledVisit(source, docId, studentId);
     } else {
