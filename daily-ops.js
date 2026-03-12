@@ -6493,6 +6493,17 @@ function checkCanEditGrading(studentId) {
     return false;
 }
 
+function _isVisitAttended(source, docId, studentId) {
+    if (source === 'temp') {
+        const ta = tempAttendances.find(t => t.docId === docId);
+        return isAttendedStatus(ta?.temp_arrival);
+    }
+    if (studentId) {
+        return isAttendedStatus(dailyRecords[studentId]?.attendance?.status);
+    }
+    return false;
+}
+
 function toggleHomework(studentId, hwIndex, status) {
     if (!checkCanEditGrading(studentId)) return;
     const rec = dailyRecords[studentId] || {};
@@ -9021,6 +9032,10 @@ window.resetPromptToDefault = resetPromptToDefault;
 // ─── 비정규 완료 처리 ─────────────────────────────────────────────────────
 
 async function completeScheduledVisit(source, docId, studentId) {
+    if (!_isVisitAttended(source, docId, studentId)) {
+        alert('등원(출석, 지각, 조퇴) 상태에서만 완료/시행 처리할 수 있습니다.');
+        return;
+    }
     showSaveIndicator('saving');
     try {
         const completedBy = (currentUser?.email || '').split('@')[0];
@@ -9126,9 +9141,14 @@ function cycleVisitStatus(source, docId, studentId) {
         currentStatus = dailyRecords[docId]?.extra_visit?.visit_status || 'pending';
     }
 
-    // 다음 상태로 토글
-    const nextIdx = (VISIT_STATUS_CYCLE.indexOf(currentStatus) + 1) % VISIT_STATUS_CYCLE.length;
-    const nextStatus = VISIT_STATUS_CYCLE[nextIdx];
+    // 다음 상태로 토글 (미등원 시 '완료' 건너뜀)
+    const attended = _isVisitAttended(source, docId, studentId);
+    let nextIdx = (VISIT_STATUS_CYCLE.indexOf(currentStatus) + 1) % VISIT_STATUS_CYCLE.length;
+    let nextStatus = VISIT_STATUS_CYCLE[nextIdx];
+    if (!attended && nextStatus === '완료') {
+        nextIdx = (nextIdx + 1) % VISIT_STATUS_CYCLE.length;
+        nextStatus = VISIT_STATUS_CYCLE[nextIdx];
+    }
     // 이전 pending 상태 모두 클리어 (마지막 토글만 유지)
     for (const key of Object.keys(_visitStatusPending)) {
         if (key !== docId) {
@@ -9164,15 +9184,22 @@ function cycleVisitStatus(source, docId, studentId) {
 async function confirmVisitStatus(docId) {
     let pending = _visitStatusPending[docId];
     if (!pending) {
-        // 토글 안 했으면 현재 상태 그대로 '완료' 처리
+        // 토글 안 했으면: 등원 시 '완료', 미등원 시 '미완료'
         const visits = getScheduledVisits();
         const v = visits.find(vi => vi.docId === docId);
         if (!v) return;
-        pending = { source: v.source, nextStatus: '완료', studentId: v.studentId };
+        const attended = _isVisitAttended(v.source, docId, v.studentId);
+        pending = { source: v.source, nextStatus: attended ? '완료' : '미완료', studentId: v.studentId };
     }
     delete _visitStatusPending[docId];
 
     const { source, nextStatus, studentId } = pending;
+
+    // 미등원 상태에서 완료 시도 차단
+    if (nextStatus === '완료' && !_isVisitAttended(source, docId, studentId)) {
+        alert('등원(출석, 지각, 조퇴) 상태에서만 완료/시행 처리할 수 있습니다.');
+        return;
+    }
 
     if (nextStatus === 'pending') {
         await resetScheduledVisit(source, docId, studentId);
