@@ -2528,6 +2528,16 @@ textarea.field-input {
   white-space: nowrap;
   flex-shrink: 0;
 }
+.visit-overdue-badge {
+  font-size: 10px;
+  color: #fff;
+  background: #dc2626;
+  padding: 1px 6px;
+  border-radius: 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
 .visit-caller-badge {
   font-size: 11px;
   color: var(--text-sec);

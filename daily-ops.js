@@ -579,6 +579,37 @@ async function autoCloseOldRecords() {
         console.log(`휴퇴원요청 자동 승인: ${oldRequests.length}건`);
     }
 
+    // 숙제미통과/테스트미통과 등원: 1개월 경과 pending → 자동 기타 처리
+    const oldHwTasks = hwFailTasks.filter(t => t.status === 'pending' && t.scheduled_date && _isOlderThanOneMonth(t.scheduled_date));
+    for (const t of oldHwTasks) {
+        try {
+            await updateDoc(doc(db, 'hw_fail_tasks', t.docId), {
+                status: '기타',
+                completed_by: 'system_auto',
+                completed_at: new Date().toISOString()
+            });
+            t.status = '기타';
+        } catch (err) {
+            console.error('숙제미통과 자동종료 실패:', t.docId, err);
+        }
+    }
+    if (oldHwTasks.length > 0) console.log(`숙제미통과 등원 자동 기타처리: ${oldHwTasks.length}건`);
+
+    const oldTestTasks = testFailTasks.filter(t => t.status === 'pending' && t.scheduled_date && _isOlderThanOneMonth(t.scheduled_date));
+    for (const t of oldTestTasks) {
+        try {
+            await updateDoc(doc(db, 'test_fail_tasks', t.docId), {
+                status: '기타',
+                completed_by: 'system_auto',
+                completed_at: new Date().toISOString()
+            });
+            t.status = '기타';
+        } catch (err) {
+            console.error('테스트미통과 자동종료 실패:', t.docId, err);
+        }
+    }
+    if (oldTestTasks.length > 0) console.log(`테스트미통과 등원 자동 기타처리: ${oldTestTasks.length}건`);
+
     // 결석대장 중복 제거: 같은 학생+같은 날짜에 open 건이 여러 개인 경우 입력된 건 유지, 나머지 삭제
     const absenceMap = new Map();
     for (const r of absenceRecords) {
@@ -1373,8 +1404,13 @@ function hasRegularEnrollmentToday(student) {
 function isVisitStudent(docId) {
     const hwFail = dailyRecords[docId]?.hw_fail_action || {};
     if (Object.values(hwFail).some(a => a.type === '등원' && a.scheduled_date === selectedDate)) return true;
-    if (hwFailTasks.some(t => t.student_id === docId && t.type === '등원' && t.scheduled_date === selectedDate && t.status === 'pending')) return true;
-    if (testFailTasks.some(t => t.student_id === docId && t.type === '등원' && t.scheduled_date === selectedDate && t.status === 'pending')) return true;
+    const today = todayStr();
+    const isToday = selectedDate === today;
+    // 오늘 예정이거나, 오늘 볼 때 지연된(overdue) pending task도 포함
+    if (hwFailTasks.some(t => t.student_id === docId && t.type === '등원' && t.status === 'pending' &&
+        (t.scheduled_date === selectedDate || (isToday && t.scheduled_date && t.scheduled_date < today)))) return true;
+    if (testFailTasks.some(t => t.student_id === docId && t.type === '등원' && t.status === 'pending' &&
+        (t.scheduled_date === selectedDate || (isToday && t.scheduled_date && t.scheduled_date < today)))) return true;
     if (dailyRecords[docId]?.extra_visit?.date === selectedDate) return true;
     return false;
 }
@@ -1611,8 +1647,14 @@ function getScheduledVisits() {
     }
 
     // 2) 숙제미통과 등원 (hwFailTasks)
+    const today = todayStr();
+    const isToday = selectedDate === today;
     for (const t of hwFailTasks) {
-        if (t.type !== '등원' || t.scheduled_date !== selectedDate || (t.status !== 'pending' && t.status !== '완료' && t.status !== '기타')) continue;
+        if (t.type !== '등원' || (t.status !== 'pending' && t.status !== '완료' && t.status !== '기타')) continue;
+        // 해당 날짜 task이거나, 오늘 볼 때 지연된(overdue) pending task 포함
+        const isScheduledToday = t.scheduled_date === selectedDate;
+        const isOverdue = isToday && t.status === 'pending' && t.scheduled_date && t.scheduled_date < today;
+        if (!isScheduledToday && !isOverdue) continue;
         visits.push({
             id: `hw_fail_${t.docId}`,
             source: 'hw_fail',
@@ -1627,13 +1669,18 @@ function getScheduledVisits() {
             caller: callerName(t.created_by || ''),
             completedBy: callerName(t.completed_by || ''),
             completedAt: t.completed_at || '',
-            docId: t.docId
+            docId: t.docId,
+            overdue: isOverdue,
+            originalDate: isOverdue ? t.scheduled_date : null
         });
     }
 
     // 3) 테스트미통과 등원 (testFailTasks)
     for (const t of testFailTasks) {
-        if (t.type !== '등원' || t.scheduled_date !== selectedDate || (t.status !== 'pending' && t.status !== '완료' && t.status !== '기타')) continue;
+        if (t.type !== '등원' || (t.status !== 'pending' && t.status !== '완료' && t.status !== '기타')) continue;
+        const isScheduledToday = t.scheduled_date === selectedDate;
+        const isOverdue = isToday && t.status === 'pending' && t.scheduled_date && t.scheduled_date < today;
+        if (!isScheduledToday && !isOverdue) continue;
         visits.push({
             id: `test_fail_${t.docId}`,
             source: 'test_fail',
@@ -1648,7 +1695,9 @@ function getScheduledVisits() {
             caller: callerName(t.created_by || ''),
             completedBy: callerName(t.completed_by || ''),
             completedAt: t.completed_at || '',
-            docId: t.docId
+            docId: t.docId,
+            overdue: isOverdue,
+            originalDate: isOverdue ? t.scheduled_date : null
         });
     }
 
@@ -1992,7 +2041,8 @@ function renderScheduledVisitList() {
         const st = dailyRecords[v.studentId]?.attendance?.status || '미확인';
         return st === '미확인';
     };
-    const pendingVisits = visits.filter(v => v.status === 'pending');
+    const pendingVisits = visits.filter(v => v.status === 'pending' && !v.overdue);
+    const overdueVisits = visits.filter(v => v.status === 'pending' && v.overdue);
     const completedVisits = visits.filter(v => v.status === 'completed');
     const preArrival = pendingVisits.filter(v => isPreArrival(v));
     const arrived = pendingVisits.filter(v => !isPreArrival(v));
@@ -2017,6 +2067,7 @@ function renderScheduledVisitList() {
             ? `onclick="selectedStudentId='${escAttr(v.studentId)}'; renderStudentDetail('${escAttr(v.studentId)}'); document.querySelectorAll('.list-item').forEach(el=>el.classList.remove('active')); this.classList.add('active');"`
             : (v.source === 'temp' ? `onclick="renderTempAttendanceDetail('${escAttr(v.docId)}'); document.querySelectorAll('.list-item').forEach(el=>el.classList.remove('active')); this.classList.add('active');"` : '');
         const guestBadge = !v.studentId ? '<span class="visit-guest-badge">비등록</span>' : '';
+        const overdueBadge = v.overdue ? `<span class="visit-overdue-badge">지연 ${_stripYear(v.originalDate)}</span>` : '';
         const callerBadge = v.caller ? `<span class="visit-caller-badge">(${esc(v.caller)})</span>` : '';
         const completedInfo = isCompleted ? formatCompletedBadge(v.completedBy, v.completedAt) : '';
         const dataId = v.studentId || v.id;
@@ -2070,7 +2121,7 @@ function renderScheduledVisitList() {
         return `<div class="list-item visit-item ${completedClass}" data-id="${escAttr(dataId)}" ${clickHandler} style="${(v.studentId || v.source === 'temp') ? 'cursor:pointer;' : ''}">
             <div class="item-info">
                 <span class="item-title">${esc(v.name)}</span>
-                <span class="item-desc"><span class="visit-source-badge" style="background:${v.sourceColor};">${esc(v.sourceLabel)}</span> ${guestBadge}</span>
+                <span class="item-desc"><span class="visit-source-badge" style="background:${v.sourceColor};">${esc(v.sourceLabel)}</span> ${guestBadge}${overdueBadge}</span>
             </div>
             ${timeHtml}
             ${toggleHtml}
@@ -2082,6 +2133,11 @@ function renderScheduledVisitList() {
     };
 
     let html = '';
+    // 0) 지연 (overdue): 예정일이 지났지만 미완료인 건
+    if (overdueVisits.length > 0) {
+        html += `<div class="leave-section-divider" style="color:#dc2626;"><span>지연 — 미완료 (${overdueVisits.length}건)</span></div>`;
+        html += overdueVisits.map(renderVisitItem).join('');
+    }
     // 1) 등원전: 시간임박순
     if (preArrival.length > 0) {
         html += preArrival.map(renderVisitItem).join('');
