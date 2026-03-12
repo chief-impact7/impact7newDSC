@@ -548,6 +548,39 @@ function _isOlderThanOneMonth(timestamp) {
     return d < oneMonthAgo;
 }
 
+async function syncTaskStudentNames() {
+    const nameMap = new Map(allStudents.map(s => [s.docId, s.name]));
+    const updates = [];
+    for (const t of hwFailTasks) {
+        const realName = nameMap.get(t.student_id);
+        if (realName && realName !== t.student_name) {
+            updates.push({ col: 'hw_fail_tasks', docId: t.docId, name: realName, task: t });
+        }
+    }
+    for (const t of testFailTasks) {
+        const realName = nameMap.get(t.student_id);
+        if (realName && realName !== t.student_name) {
+            updates.push({ col: 'test_fail_tasks', docId: t.docId, name: realName, task: t });
+        }
+    }
+    for (const r of absenceRecords) {
+        const realName = nameMap.get(r.student_id);
+        if (realName && realName !== r.student_name) {
+            updates.push({ col: 'absence_records', docId: r.docId, name: realName, task: r });
+        }
+    }
+    if (updates.length === 0) return;
+    console.log(`[syncTaskStudentNames] ${updates.length}건 이름 동기화`);
+    for (const u of updates) {
+        try {
+            await updateDoc(doc(db, u.col, u.docId), { student_name: u.name });
+            u.task.student_name = u.name;
+        } catch (err) {
+            console.error('이름 동기화 실패:', u.col, u.docId, err);
+        }
+    }
+}
+
 async function autoCloseOldRecords() {
     // 결석대장: 1개월 경과 → 행정완료
     const oldAbsences = absenceRecords.filter(r => _isOlderThanOneMonth(r.created_at));
@@ -7879,6 +7912,7 @@ onAuthStateChanged(auth, async (user) => {
         await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers(), loadContacts()]);
         await syncAbsenceRecords();
         autoCloseOldRecords();  // 1개월 경과 건 자동 처리 (비동기, 백그라운드)
+        syncTaskStudentNames(); // task의 student_name을 학생 DB와 동기화 (비동기, 백그라운드)
         await loadRoleMemos().catch(() => {});
         updateDateDisplay();
         updateReadonlyBanner();
