@@ -2111,6 +2111,13 @@ function renderScheduledVisitList() {
 
         const confirmBtn = isCompleted
             ? `<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;color:var(--text-sec);border-color:var(--border);" onclick="event.stopPropagation(); resetScheduledVisit('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">초기화</button>`
+            : v.overdue
+            ? (() => {
+                const vs = v.visitStatus || '미완료';
+                const { cls, sty } = _visitBtnStyles(vs);
+                const sid = v.studentId ? `'${escAttr(v.studentId)}'` : 'null';
+                return `<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;background:#2563eb;color:#fff;border-color:#2563eb;" onclick="event.stopPropagation(); rescheduleVisit('${escAttr(v.source)}', '${escAttr(v.docId)}')">재지정</button><button class="toggle-btn ${cls}" data-visit-id="${escAttr(v.docId)}" style="${sty}margin-left:4px;" onclick="event.stopPropagation(); cycleVisitStatus('${escAttr(v.source)}', '${escAttr(v.docId)}', ${sid})">${esc(vs)}</button><button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;" onclick="event.stopPropagation(); confirmVisitStatus('${escAttr(v.docId)}')">확인</button>`;
+            })()
             : (() => {
                 const vs = v.visitStatus || '미완료';
                 const { cls, sty } = _visitBtnStyles(vs);
@@ -3958,8 +3965,11 @@ window.saveReschedule = async function() {
 
         document.getElementById('reschedule-modal').style.display = 'none';
         _rescheduleTarget = null;
-        renderStudentDetail(studentId);
+        _scheduledVisitsCache = null;
+        _subFilterBase = null;
+        renderSubFilters();
         renderListPanel();
+        if (studentId) renderStudentDetail(studentId);
         showSaveIndicator('saved');
     } catch (err) {
         console.error('재지정 저장 실패:', err);
@@ -9186,6 +9196,17 @@ async function confirmVisitStatus(docId) {
     }
 }
 
+function rescheduleVisit(source, docId) {
+    const collectionMap = { hw_fail: 'hw_fail_tasks', test_fail: 'test_fail_tasks' };
+    const collection = collectionMap[source];
+    if (!collection) return;
+    const arr = source === 'hw_fail' ? hwFailTasks : testFailTasks;
+    const t = arr.find(x => x.docId === docId);
+    if (!t) return;
+    openRescheduleModal(collection, docId, t.student_id);
+}
+
+window.rescheduleVisit = rescheduleVisit;
 window.completeScheduledVisit = completeScheduledVisit;
 window.resetScheduledVisit = resetScheduledVisit;
 window.cycleVisitStatus = cycleVisitStatus;
