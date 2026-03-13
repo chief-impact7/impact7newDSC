@@ -454,6 +454,8 @@ async function loadDailyRecords(date) {
     try {
         const q = query(collection(db, 'daily_records'), where('date', '==', date));
         const snap = await getDocs(q);
+        // 비동기 쿼리 중 날짜가 변경된 경우 결과 폐기 (동시 호출 경합 방지)
+        if (date !== selectedDate) return;
         snap.forEach(d => {
             const data = d.data();
             dailyRecords[data.student_id] = { docId: d.id, ...data };
@@ -4560,11 +4562,22 @@ window.closeAbsenceRecord = async function(docId, studentId) {
     if (!r) return;
     showSaveIndicator('saving');
     try {
+        const absenceDate = r.absence_date || selectedDate;
         await updateDoc(doc(db, 'absence_records', docId), {
             status: 'closed',
             updated_by: currentUser?.email || '',
             updated_at: serverTimestamp()
         });
+        // daily_records에 absence_closed 마커 저장 → syncAbsenceRecords가 재생성하지 않도록
+        const dailyDocId = makeDailyRecordId(studentId, absenceDate);
+        await setDoc(doc(db, 'daily_records', dailyDocId), {
+            student_id: studentId,
+            date: absenceDate,
+            absence_closed: true,
+            updated_by: currentUser?.email || '',
+            updated_at: serverTimestamp()
+        }, { merge: true });
+        if (dailyRecords[studentId]) dailyRecords[studentId].absence_closed = true;
         absenceRecords = absenceRecords.filter(x => x.docId !== docId);
         renderStudentDetail(studentId);
         renderSubFilters();
@@ -5841,7 +5854,9 @@ function renderAbsenceRecordCard(studentId) {
         const stage3Done = stage2Done && (r.resolution === '정산' ||
             (r.resolution === '보충' && !!r.makeup_date));
         const historyHtml = _renderRescheduleHistory(r.reschedule_history);
-        const createdBy = getTeacherName(r.created_by);
+        // 결석을 실제 체크한 사람 (marked_absent_by 우선, 없으면 created_by 폴백)
+        const markedBy = getTeacherName(r.marked_absent_by || r.created_by);
+        const markedAt = r.marked_absent_at || r.created_at;
         const updatedBy = getTeacherName(r.updated_by);
 
         // 입력 완료 여부: stage3Done이 이미 stage2Done(consultation_done 포함)을 내포
@@ -5859,8 +5874,8 @@ function renderAbsenceRecordCard(studentId) {
             <div style="padding-top:8px;border-top:1px dashed var(--border);">
                 ${historyHtml}
                 <div style="font-size:10px;color:var(--text-sec);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap;">
-                    ${createdBy ? `<span>등록: ${esc(createdBy)} ${_fmtTs(r.created_at, true)}</span>` : ''}
-                    ${updatedBy && updatedBy !== createdBy ? `<span>수정: ${esc(updatedBy)} ${_fmtTs(r.updated_at, true)}</span>` : ''}
+                    ${markedBy ? `<span>결석체크: ${esc(markedBy)} ${_fmtTs(markedAt, true)}</span>` : ''}
+                    ${updatedBy && updatedBy !== markedBy ? `<span>수정: ${esc(updatedBy)} ${_fmtTs(r.updated_at, true)}</span>` : ''}
                 </div>
                 <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:4px;">
                     ${actionBtn}
@@ -6674,6 +6689,9 @@ async function autoCreateAbsenceRecord(studentId, overrides) {
     // 결정적 문서 ID — 동일 학생+날짜 조합은 항상 같은 ID → race condition 방지
     const absDocId = `${studentId}_${selectedDate}`;
 
+    // 행정완료 마커 체크 — 이미 종료된 건은 재생성하지 않음
+    if (dailyRecords[studentId]?.absence_closed) return;
+
     // 메모리 중복 체크
     const exists = absenceRecords.some(r => r.student_id === studentId && r.absence_date === selectedDate);
     if (exists) return;
@@ -6750,6 +6768,9 @@ async function autoCreateAbsenceRecord(studentId, overrides) {
             makeup_completed_at: '',
             reschedule_history: [],
             status: 'open',
+            // 결석을 체크한 사람/시간 (daily_records 기준, syncAbsenceRecords 실행자가 아닌 실제 체크자)
+            marked_absent_by: dailyRecords[studentId]?.updated_by || currentUser?.email || '',
+            marked_absent_at: dailyRecords[studentId]?.updated_at || '',
             created_by: currentUser?.email || '',
             updated_by: currentUser?.email || ''
         };
@@ -6787,7 +6808,7 @@ async function autoRemoveAbsenceRecord(studentId) {
 // Self-healing: dailyRecords에서 결석인데 absence_records에 없는 건 자동 보충
 async function syncAbsenceRecords() {
     const absentEntries = Object.entries(dailyRecords)
-        .filter(([, v]) => v?.attendance?.status === '결석');
+        .filter(([, v]) => v?.attendance?.status === '결석' && v?.date === selectedDate && !v?.absence_closed);
 
     const tasks = absentEntries
         .filter(([studentId]) =>
