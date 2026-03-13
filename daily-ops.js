@@ -168,8 +168,7 @@ const escAttr = (str) => {
 };
 
 function todayStr() {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
 }
 
 function getDayName(dateStr) {
@@ -6110,14 +6109,34 @@ function renderTempClassOverrideCard(studentId) {
     `;
 }
 
+// 특정 날짜의 요일에 수업이 있는 반 코드 목록 (학생 본인의 반 제외)
+function getClassCodesForDate(dateStr, excludeStudentId) {
+    const dayName = getDayName(dateStr);
+    const codes = new Set();
+    allStudents.forEach(s => {
+        if (s.status === '퇴원') return;
+        if (!matchesBranchFilter(s)) return;
+        getActiveEnrollments(s, dateStr).forEach(e => {
+            if (!e.day.includes(dayName)) return;
+            if (selectedSemester && e.semester !== selectedSemester) return;
+            const code = enrollmentCode(e);
+            if (code) codes.add(code);
+        });
+    });
+    if (excludeStudentId) {
+        const student = allStudents.find(s => s.docId === excludeStudentId);
+        if (student) {
+            getActiveEnrollments(student, dateStr).forEach(e => {
+                codes.delete(enrollmentCode(e));
+            });
+        }
+    }
+    return [...codes].sort();
+}
+
 window.openTempClassOverrideModal = function(studentId) {
     const student = allStudents.find(s => s.docId === studentId);
     if (!student) return;
-    const enrollments = getActiveEnrollments(student, selectedDate);
-    const classCodes = enrollments.map(e => enrollmentCode(e)).filter(Boolean);
-    const allCodes = getUniqueClassCodes().filter(c => !classCodes.includes(c));
-
-    const classOptions = allCodes.map(c => `<option value="${escAttr(c)}">${esc(c)}</option>`).join('');
 
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -6132,13 +6151,14 @@ window.openTempClassOverrideModal = function(studentId) {
             </div>
             <div class="modal-body">
                 <div class="form-field">
-                    <label class="field-label">대상 반</label>
-                    <select class="field-input" id="ovr-target-class">${classOptions}</select>
-                </div>
-                <div class="form-field">
-                    <label class="field-label">날짜 (쉼표로 여러 날짜 입력)</label>
+                    <label class="field-label">날짜</label>
                     <input type="date" class="field-input" id="ovr-date" value="${selectedDate}">
                     <div style="font-size:11px;color:var(--text-sec);margin-top:4px;">여러 날짜는 추가 후 반복 등록하세요</div>
+                </div>
+                <div class="form-field">
+                    <label class="field-label">대상 반 <span id="ovr-day-label" style="color:var(--text-sec);font-weight:normal;">(${getDayName(selectedDate)}요일)</span></label>
+                    <select class="field-input" id="ovr-target-class"></select>
+                    <div id="ovr-no-class" style="font-size:11px;color:var(--warning);margin-top:4px;display:none;">선택한 날짜에 수업이 있는 반이 없습니다.</div>
                 </div>
                 <div class="form-field">
                     <label class="field-label">사유 (선택)</label>
@@ -6147,11 +6167,35 @@ window.openTempClassOverrideModal = function(studentId) {
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">취소</button>
-                <button class="btn btn-primary" onclick="submitTempClassOverrideFromModal('${escAttr(studentId)}')">등록</button>
+                <button class="btn btn-primary" id="ovr-submit-btn" onclick="submitTempClassOverrideFromModal('${escAttr(studentId)}')">등록</button>
             </div>
         </div>
     `;
     document.body.appendChild(overlay);
+
+    function updateClassOptions() {
+        const dateVal = document.getElementById('ovr-date')?.value;
+        if (!dateVal) return;
+        const codes = getClassCodesForDate(dateVal, studentId);
+        const sel = document.getElementById('ovr-target-class');
+        const noMsg = document.getElementById('ovr-no-class');
+        const dayLabel = document.getElementById('ovr-day-label');
+        const submitBtn = document.getElementById('ovr-submit-btn');
+        if (dayLabel) dayLabel.textContent = `(${getDayName(dateVal)}요일)`;
+        sel.innerHTML = codes.map(c => `<option value="${escAttr(c)}">${esc(c)}</option>`).join('');
+        if (codes.length === 0) {
+            noMsg.style.display = '';
+            submitBtn.disabled = true;
+            submitBtn.style.opacity = '0.5';
+        } else {
+            noMsg.style.display = 'none';
+            submitBtn.disabled = false;
+            submitBtn.style.opacity = '';
+        }
+    }
+
+    document.getElementById('ovr-date').addEventListener('change', updateClassOptions);
+    updateClassOptions();
 };
 
 window.submitTempClassOverrideFromModal = async function(studentId) {
@@ -7517,7 +7561,7 @@ function _openReturnModal(studentId, type) {
     }
     document.getElementById('rfl-leave-period').textContent = periodText;
 
-    const today = selectedDate || new Date().toISOString().slice(0, 10);
+    const today = selectedDate || todayStr();
     document.getElementById('rfl-return-date').value = today;
     document.getElementById('rfl-consultation-note').value = '';
 
