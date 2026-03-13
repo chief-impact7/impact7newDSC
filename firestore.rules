@@ -169,6 +169,30 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // [DSC] Temp Class Overrides (임시 타반수업)
+    // =========================================================================
+    match /temp_class_overrides/{docId} {
+
+      function hasOnlyAllowedTempClassOverrideFields() {
+        return request.resource.data.keys().hasOnly([
+          'student_id', 'student_name', 'original_class_code', 'target_class_code',
+          'target_start_time', 'override_date', 'reason', 'status',
+          'created_by', 'created_at'
+        ]);
+      }
+
+      allow read: if isAuthorized();
+
+      allow create, update: if isAuthorized()
+        && hasOnlyAllowedTempClassOverrideFields()
+        && request.resource.data.status is string
+        && request.resource.data.status in ['active', 'cancelled']
+        && withinFieldLimit(15);
+
+      allow delete: if isAuthorized();
+    }
+
+    // =========================================================================
     // [DSC] Daily Records (일일 기록)
     // =========================================================================
     match /daily_records/{docId} {

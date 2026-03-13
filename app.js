@@ -11,6 +11,7 @@ let currentUser = null;
 let allStudents = [];          // students 컬렉션 전체 캐시
 let dailyChecks = {};          // docId → daily_check 데이터
 let postponedTasks = [];       // 해당 날짜의 연기 작업
+let tempClassOverrides = [];   // 해당 날짜의 타반수업 오버라이드
 let selectedDate = todayStr(); // YYYY-MM-DD
 let saveTimers = {};           // 디바운스 타이머
 
@@ -315,28 +316,17 @@ window.applyFilters = () => {
 async function loadDailyData() {
     dailyChecks = {};
     postponedTasks = [];
+    tempClassOverrides = [];
 
     try {
-        // daily_checks for selected date
-        const checksQ = query(
-            collection(db, 'daily_checks'),
-            where('date', '==', selectedDate)
-        );
-        const checksSnap = await getDocs(checksQ);
-        checksSnap.forEach(docSnap => {
-            dailyChecks[docSnap.id] = docSnap.data();
-        });
-
-        // postponed_tasks for selected date
-        const ptQ = query(
-            collection(db, 'postponed_tasks'),
-            where('scheduled_date', '==', selectedDate),
-            where('status', '==', 'pending')
-        );
-        const ptSnap = await getDocs(ptQ);
-        ptSnap.forEach(docSnap => {
-            postponedTasks.push({ id: docSnap.id, ...docSnap.data() });
-        });
+        const [checksSnap, ptSnap, ovrSnap] = await Promise.all([
+            getDocs(query(collection(db, 'daily_checks'), where('date', '==', selectedDate))),
+            getDocs(query(collection(db, 'postponed_tasks'), where('scheduled_date', '==', selectedDate), where('status', '==', 'pending'))),
+            getDocs(query(collection(db, 'temp_class_overrides'), where('override_date', '==', selectedDate), where('status', '==', 'active'))),
+        ]);
+        checksSnap.forEach(docSnap => { dailyChecks[docSnap.id] = docSnap.data(); });
+        ptSnap.forEach(docSnap => { postponedTasks.push({ id: docSnap.id, ...docSnap.data() }); });
+        ovrSnap.forEach(docSnap => { tempClassOverrides.push({ id: docSnap.id, ...docSnap.data() }); });
     } catch (err) {
         console.error('[LOAD DAILY ERROR]', err);
     }
@@ -364,6 +354,11 @@ function getStudentsForDay(branchFilter, classFilter) {
             const code = enrollmentCode(e);
             if (classFilter && code !== classFilter) return;
 
+            // 이 학생이 이 반에서 타반수업으로 빠지는지 확인
+            const overrideOut = tempClassOverrides.find(o =>
+                o.student_id === s.id && o.original_class_code === code
+            );
+
             // 원래 enrollments 배열에서의 index를 찾아 checkId에 사용
             const origIdx = (s.enrollments || []).indexOf(e);
             rows.push({
@@ -374,7 +369,31 @@ function getStudentsForDay(branchFilter, classFilter) {
                 branch,
                 checkId: makeDailyCheckId(selectedDate, s.id, origIdx >= 0 ? origIdx : idx),
                 startTime: e.start_time || '',
+                isOverridingOut: !!overrideOut,
+                overrideTargetClass: overrideOut?.target_class_code || '',
             });
+        });
+    });
+
+    // 타반수업 override-in 학생 추가
+    tempClassOverrides.forEach(o => {
+        const s = allStudents.find(st => st.id === o.student_id);
+        if (!s || s.status === '퇴원') return;
+
+        const branch = branchFromStudent(s);
+        if (branchFilter && branch !== branchFilter) return;
+        if (classFilter && o.target_class_code !== classFilter) return;
+
+        rows.push({
+            student: s,
+            enrollment: null,
+            enrollIdx: -1,
+            code: o.target_class_code,
+            branch,
+            checkId: `${selectedDate}_${s.id}_ovr`,
+            startTime: o.target_start_time || '',
+            isOverrideIn: true,
+            overrideOriginalClass: o.original_class_code || '',
         });
     });
 
@@ -433,21 +452,38 @@ function renderTable(rows) {
     rows.forEach(row => {
         const checkData = dailyChecks[row.checkId] || {};
         const tr = document.createElement('tr');
-        if (checkData.attendance === '결석') tr.className = 'absent-row';
+        if (row.isOverridingOut) {
+            tr.className = 'override-out-row';
+        } else if (checkData.attendance === '결석') {
+            tr.className = 'absent-row';
+        }
 
         let html = '';
-        // Sticky cols
-        html += `<td class="sticky-col col-name">${esc(row.student.name)}</td>`;
+        // Sticky cols — 타반수업 배지 표시
+        const nameBadge = row.isOverrideIn
+            ? ` <span class="override-in-badge">타반(${esc(row.overrideOriginalClass)})</span>`
+            : row.isOverridingOut
+            ? ` <span class="override-badge">타반수업→${esc(row.overrideTargetClass)}</span>`
+            : '';
+        html += `<td class="sticky-col col-name">${esc(row.student.name)}${nameBadge}</td>`;
         html += `<td class="sticky-col col-class">${esc(row.code)}</td>`;
         html += `<td class="sticky-col col-time">${esc(row.startTime)}</td>`;
 
-        // Data fields
-        SECTIONS.forEach(section => {
-            section.fields.forEach(field => {
-                const val = checkData[field.key] || '';
-                html += renderTableCell(field, val, row.checkId);
+        // Data fields — override-out 학생은 비활성
+        if (row.isOverridingOut) {
+            SECTIONS.forEach(section => {
+                section.fields.forEach(() => {
+                    html += `<td style="background:#f5f5f5;color:#bbb;text-align:center;">—</td>`;
+                });
             });
-        });
+        } else {
+            SECTIONS.forEach(section => {
+                section.fields.forEach(field => {
+                    const val = checkData[field.key] || '';
+                    html += renderTableCell(field, val, row.checkId);
+                });
+            });
+        }
 
         tr.innerHTML = html;
         tbody.appendChild(tr);
@@ -608,27 +644,35 @@ function renderCards(rows) {
         const checkData = dailyChecks[row.checkId] || {};
         const card = document.createElement('div');
         card.className = 'student-card';
+        if (row.isOverridingOut) card.style.opacity = '0.5';
 
         const attVal = checkData.attendance || '';
         const attClass = attVal === '출석' ? 'present' : attVal === '결석' ? 'absent' : attVal === '지각' ? 'late' : 'none';
-        const attLabel = attVal || '—';
+        const attLabel = row.isOverridingOut ? '타반수업' : (attVal || '—');
+
+        const overrideBadge = row.isOverrideIn
+            ? `<span class="override-in-badge">타반(${esc(row.overrideOriginalClass)})</span>`
+            : row.isOverridingOut
+            ? `<span class="override-badge">→${esc(row.overrideTargetClass)}</span>`
+            : '';
 
         card.innerHTML = `
             <div class="card-header" onclick="toggleCard(this)">
                 <div class="card-header-left">
                     <span class="card-name">${esc(row.student.name)}</span>
+                    ${overrideBadge}
                     <span class="card-class">${esc(row.code)}</span>
                     <span class="card-time">${esc(row.startTime)}</span>
                 </div>
-                <span class="card-att-badge ${attClass}">${esc(attLabel)}</span>
+                <span class="card-att-badge ${row.isOverridingOut ? 'none' : attClass}">${esc(attLabel)}</span>
             </div>
             <div class="card-body">
-                ${renderCardSections(row.checkId, checkData)}
-                <div class="card-actions">
+                ${row.isOverridingOut ? '<p style="color:var(--text-sec);font-size:13px;padding:8px 0;">타반수업 중 — 입력 비활성</p>' : renderCardSections(row.checkId, checkData)}
+                ${row.isOverridingOut ? '' : `<div class="card-actions">
                     <button class="btn btn-secondary btn-sm" onclick="openPostponeModal('${escAttr(row.student.id)}', '${escAttr(row.student.name)}', ${row.enrollIdx})">
                         연기/보강
                     </button>
-                </div>
+                </div>`}
             </div>
         `;
         container.appendChild(card);

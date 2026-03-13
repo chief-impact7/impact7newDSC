@@ -16,6 +16,7 @@ let hwFailTasks = [];           // hw_fail_tasks 전체
 let testFailTasks = [];         // test_fail_tasks 전체
 let tempAttendances = [];       // temp_attendance 전체 (해당 날짜)
 let absenceRecords = [];        // absence_records (open 상태)
+let tempClassOverrides = [];    // temp_class_overrides (해당 날짜, active)
 let leaveRequests = [];          // leave_requests (requested + approved)
 let withdrawnStudents = [];      // 퇴원 학생 (퇴원→휴원 검색용)
 let selectedDate = todayStr();
@@ -511,6 +512,105 @@ async function loadTempAttendances(date) {
     }
 }
 
+async function loadTempClassOverrides(date) {
+    tempClassOverrides = [];
+    try {
+        const q = query(collection(db, 'temp_class_overrides'),
+            where('override_date', '==', date),
+            where('status', '==', 'active'));
+        const snap = await getDocs(q);
+        snap.forEach(d => tempClassOverrides.push({ docId: d.id, ...d.data() }));
+    } catch (err) {
+        console.error('temp_class_overrides 로드 실패:', err.message);
+    }
+}
+
+// ─── Temp Class Override 헬퍼 ────────────────────────────────────────────────
+
+function getStudentOverrides(studentId, date) {
+    return tempClassOverrides.filter(o => o.student_id === studentId && o.override_date === (date || selectedDate));
+}
+
+function getOverrideStudentsForClass(classCode, date) {
+    return tempClassOverrides.filter(o => o.target_class_code === classCode && o.override_date === (date || selectedDate));
+}
+
+function getOverridingOutFromClass(classCode, date) {
+    return tempClassOverrides.filter(o => o.original_class_code === classCode && o.override_date === (date || selectedDate));
+}
+
+function addOverrideInStudents(students) {
+    const studentIds = new Set(students.map(s => s.docId));
+    tempClassOverrides.forEach(o => {
+        if (!studentIds.has(o.student_id)) {
+            const s = allStudents.find(st => st.docId === o.student_id);
+            if (s && s.status !== '퇴원') {
+                students.push(s);
+                studentIds.add(s.docId);
+            }
+        }
+    });
+}
+
+window.createTempClassOverride = async function(studentId, targetClassCode, dates, reason) {
+    const student = allStudents.find(s => s.docId === studentId);
+    if (!student) return;
+
+    // 원래 반 코드 찾기
+    const enrollments = getActiveEnrollments(student, selectedDate);
+    const originalCode = enrollments.length > 0 ? enrollmentCode(enrollments[0]) : '';
+
+    // 임시 반의 기본 시간 찾기
+    const targetTime = classSettings[targetClassCode]?.default_time || '';
+
+    showSaveIndicator('saving');
+    try {
+        const batch = writeBatch(db);
+        for (const date of dates) {
+            const docRef = doc(collection(db, 'temp_class_overrides'));
+            batch.set(docRef, {
+                student_id: studentId,
+                student_name: student.name || '',
+                original_class_code: originalCode,
+                target_class_code: targetClassCode,
+                target_start_time: targetTime,
+                override_date: date,
+                reason: reason || '',
+                status: 'active',
+                created_by: currentUser?.email || '',
+                created_at: serverTimestamp()
+            });
+        }
+        await batch.commit();
+        await loadTempClassOverrides(selectedDate);
+        renderSubFilters();
+        renderListPanel();
+        if (selectedStudentId) renderStudentDetail(selectedStudentId);
+        if (currentCategory === 'class_mgmt' && selectedClassCode) renderClassDetail(selectedClassCode);
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('타반수업 생성 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
+window.cancelTempClassOverride = async function(docId, studentId) {
+    if (!confirm('이 타반수업을 취소하시겠습니까?')) return;
+    showSaveIndicator('saving');
+    try {
+        await updateDoc(doc(db, 'temp_class_overrides', docId), { status: 'cancelled' });
+        await loadTempClassOverrides(selectedDate);
+        renderSubFilters();
+        renderListPanel();
+        if (studentId && selectedStudentId === studentId) renderStudentDetail(studentId);
+        if (currentCategory === 'class_mgmt' && selectedClassCode) renderClassDetail(selectedClassCode);
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('타반수업 취소 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
 async function loadAbsenceRecords() {
     absenceRecords = [];
     try {
@@ -837,6 +937,10 @@ function getUniqueClassCodes() {
             if (code) codes.add(code);
         });
     });
+    // 타반수업 target_class_code도 포함
+    tempClassOverrides.forEach(o => {
+        if (o.target_class_code) codes.add(o.target_class_code);
+    });
     return [...codes].sort();
 }
 
@@ -848,13 +952,24 @@ function getClassMgmtCount(filterKey) {
         )
     );
     students = students.filter(s => matchesBranchFilter(s));
-    if (filterKey === 'all') return students.length;
-    return students.filter(s =>
-        getActiveEnrollments(s, selectedDate).some(e =>
+    if (filterKey === 'all') {
+        // override-in 학생 중 정규 목록에 없는 학생만 추가
+        const ids = new Set(students.map(s => s.docId));
+        const extraCount = tempClassOverrides.filter(o => !ids.has(o.student_id)).length;
+        return students.length + extraCount;
+    }
+    const regularIds = new Set();
+    let count = students.filter(s => {
+        const match = getActiveEnrollments(s, selectedDate).some(e =>
             e.day.includes(dayName) && enrollmentCode(e) === filterKey &&
             (!selectedSemester || e.semester === selectedSemester)
-        )
-    ).length;
+        );
+        if (match) regularIds.add(s.docId);
+        return match;
+    }).length;
+    // override-in 학생 수 추가 (정규 학생과 중복 제외)
+    count += tempClassOverrides.filter(o => o.target_class_code === filterKey && !regularIds.has(o.student_id)).length;
+    return count;
 }
 
 // ─── Category & SubFilter ──────────────────────────────────────────────────
@@ -1844,6 +1959,8 @@ function getFilteredStudents() {
                 e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
             )
         );
+        // 타반수업 override-in 학생 추가 (정규 목록에 없는 학생만)
+        addOverrideInStudents(students);
         students = students.filter(s => matchesBranchFilter(s));
         if (searchQuery) {
             const q = searchQuery.trim().toLowerCase();
@@ -1859,11 +1976,17 @@ function getFilteredStudents() {
             });
         }
         if (currentSubFilter.size > 0 && !currentSubFilter.has('all')) {
-            students = students.filter(s =>
-                getActiveEnrollments(s, selectedDate).some(e =>
+            students = students.filter(s => {
+                // 정규 enrollment 매칭
+                const hasRegular = getActiveEnrollments(s, selectedDate).some(e =>
                     e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && currentSubFilter.has(enrollmentCode(e))
-                )
-            );
+                );
+                // 타반수업 override-in 매칭
+                const hasOverride = tempClassOverrides.some(o =>
+                    o.student_id === s.docId && currentSubFilter.has(o.target_class_code)
+                );
+                return hasRegular || hasOverride;
+            });
         }
         return students;
     }
@@ -1885,6 +2008,8 @@ function getFilteredStudents() {
                 e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
             )
         );
+        // 타반수업 override-in 학생 추가
+        addOverrideInStudents(students);
     }
 
     // 소속 글로벌 필터
@@ -1892,11 +2017,15 @@ function getFilteredStudents() {
 
     // 반 글로벌 필터 (검색 시에는 반 필터 무시)
     if (selectedClassCode && !searchQuery) {
-        students = students.filter(s =>
-            getActiveEnrollments(s, selectedDate).some(e =>
+        students = students.filter(s => {
+            const hasRegular = getActiveEnrollments(s, selectedDate).some(e =>
                 e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === selectedClassCode
-            )
-        );
+            );
+            const hasOverride = tempClassOverrides.some(o =>
+                o.student_id === s.docId && o.target_class_code === selectedClassCode
+            );
+            return hasRegular || hasOverride;
+        });
     }
 
     // 검색어 필터
@@ -2730,6 +2859,16 @@ function renderListPanel() {
         const code = getActiveEnrollments(s, selectedDate).filter(e => e.day.includes(dayN) && (!selectedSemester || e.semester === selectedSemester)).map(e => enrollmentCode(e)).join(', ') || getActiveEnrollments(s, selectedDate).map(e => enrollmentCode(e)).join(', ');
         const branch = branchFromStudent(s);
 
+        // 타반수업 배지
+        const studentOverrides = getStudentOverrides(s.docId, selectedDate);
+        const overrideBadge = studentOverrides.length > 0
+            ? studentOverrides.map(o => `<span class="override-badge">→${esc(o.target_class_code)}</span>`).join('')
+            : '';
+        const overrideInEntries = tempClassOverrides.filter(o => o.student_id === s.docId);
+        const overrideInBadge = overrideInEntries.length > 0 && !getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayN))
+            ? overrideInEntries.map(o => `<span class="override-in-badge">타반(${esc(o.original_class_code)})</span>`).join('')
+            : '';
+
         let toggleHtml = '';
         const isLeave = LEAVE_STATUSES.includes(s.status);
 
@@ -3037,7 +3176,7 @@ function renderListPanel() {
         return `<div class="list-item ${isActive}${bulkMode ? ' bulk-mode' : ''}${selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}" onclick="handleListItemClick(event, '${escAttr(s.docId)}')">
             <input type="checkbox" class="list-item-checkbox" ${selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">
             <div class="item-info">
-                <span class="item-title">${esc(s.name)}${newBadge}${leaveBadge}${siblingIcon}${hwFailIconHtml} ${teacherBadge}</span>
+                <span class="item-title">${esc(s.name)}${newBadge}${leaveBadge}${siblingIcon}${hwFailIconHtml}${overrideBadge}${overrideInBadge} ${teacherBadge}</span>
                 <span class="item-desc">${esc(code)}${todayEnroll?.class_type ? ' · ' + esc(todayEnroll.class_type) : ''}${studentShortLabel(s) ? ' · ' + esc(studentShortLabel(s)) : ''}</span>
             </div>
             ${timeHtml}
@@ -3195,6 +3334,140 @@ function getClassTestSections(classCode) {
     return sections;
 }
 
+function renderClassTempOverrideSection(classCode) {
+    const overrideIn = getOverrideStudentsForClass(classCode, selectedDate);
+    const overrideOut = getOverridingOutFromClass(classCode, selectedDate);
+
+    if (overrideIn.length === 0 && overrideOut.length === 0) {
+        return `
+            <div class="detail-card">
+                <div class="detail-card-title">
+                    <span class="material-symbols-outlined" style="color:var(--warning);font-size:18px;">swap_horiz</span>
+                    임시 수업 학생
+                </div>
+                <div style="font-size:12px;color:var(--text-sec);padding:4px 0;">오늘 타반수업 학생 없음</div>
+                <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="openClassTempOverrideModal('${escAttr(classCode)}')">
+                    <span class="material-symbols-outlined" style="font-size:14px;">add</span> 타반 학생 추가
+                </button>
+            </div>
+        `;
+    }
+
+    const inHtml = overrideIn.map(o => `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 8px;background:#e3f2fd;border-radius:6px;">
+            <span class="material-symbols-outlined" style="font-size:16px;color:#1565c0;">arrow_forward</span>
+            <span style="font-size:13px;font-weight:600;">${esc(o.student_name)}</span>
+            <span style="font-size:12px;color:var(--text-sec);">← ${esc(o.original_class_code)}</span>
+            ${o.reason ? `<span style="font-size:11px;color:var(--text-third);">(${esc(o.reason)})</span>` : ''}
+            <button class="btn btn-sm" style="margin-left:auto;color:var(--danger);padding:2px 6px;" onclick="cancelTempClassOverride('${escAttr(o.docId)}', '${escAttr(o.student_id)}')">취소</button>
+        </div>
+    `).join('');
+
+    const outHtml = overrideOut.map(o => `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 8px;background:#fff3e0;border-radius:6px;">
+            <span class="material-symbols-outlined" style="font-size:16px;color:#e65100;">arrow_back</span>
+            <span style="font-size:13px;font-weight:600;">${esc(o.student_name)}</span>
+            <span style="font-size:12px;color:var(--text-sec);">→ ${esc(o.target_class_code)}</span>
+        </div>
+    `).join('');
+
+    return `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:var(--warning);font-size:18px;">swap_horiz</span>
+                임시 수업 학생
+            </div>
+            ${overrideIn.length > 0 ? `<div style="font-size:11px;font-weight:600;color:#1565c0;margin-bottom:4px;">들어오는 학생 (${overrideIn.length}명)</div>${inHtml}` : ''}
+            ${overrideOut.length > 0 ? `<div style="font-size:11px;font-weight:600;color:#e65100;margin-bottom:4px;${overrideIn.length > 0 ? 'margin-top:8px;' : ''}">나가는 학생 (${overrideOut.length}명)</div>${outHtml}` : ''}
+            <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="openClassTempOverrideModal('${escAttr(classCode)}')">
+                <span class="material-symbols-outlined" style="font-size:14px;">add</span> 타반 학생 추가
+            </button>
+        </div>
+    `;
+}
+
+window.openClassTempOverrideModal = function(classCode) {
+    // 반에 등록되지 않은 학생 검색 가능한 모달
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    overlay.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>타반 학생 추가 — ${esc(classCode)}</h3>
+                <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-field">
+                    <label class="field-label">학생 검색</label>
+                    <input type="text" class="field-input" id="ovr-class-student-search" placeholder="학생 이름 검색" oninput="filterClassOverrideStudents()">
+                </div>
+                <div id="ovr-class-student-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:4px;"></div>
+                <div class="form-field" style="margin-top:12px;">
+                    <label class="field-label">날짜</label>
+                    <input type="date" class="field-input" id="ovr-class-date" value="${selectedDate}">
+                </div>
+                <div class="form-field">
+                    <label class="field-label">사유 (선택)</label>
+                    <input type="text" class="field-input" id="ovr-class-reason" placeholder="사유 입력">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">취소</button>
+                <button class="btn btn-primary" onclick="submitClassTempOverrideFromModal('${escAttr(classCode)}')">등록</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    // 초기 목록 표시
+    filterClassOverrideStudents();
+};
+
+window.filterClassOverrideStudents = function() {
+    const searchVal = (document.getElementById('ovr-class-student-search')?.value || '').trim().toLowerCase();
+    const listEl = document.getElementById('ovr-class-student-list');
+    if (!listEl) return;
+
+    const filtered = allStudents.filter(s =>
+        s.status !== '퇴원' && s.name?.toLowerCase().includes(searchVal)
+    ).slice(0, 20);
+
+    listEl.innerHTML = filtered.length === 0
+        ? '<div style="padding:8px;color:var(--text-sec);font-size:12px;">검색 결과 없음</div>'
+        : filtered.map(s => {
+            const codes = getActiveEnrollments(s, selectedDate).map(e => enrollmentCode(e)).filter(Boolean).join(', ');
+            return `<div class="ovr-student-option" data-id="${escAttr(s.docId)}" onclick="selectClassOverrideStudent(this)" style="padding:6px 8px;cursor:pointer;border-radius:4px;display:flex;align-items:center;gap:8px;">
+                <span style="font-weight:500;">${esc(s.name)}</span>
+                <span style="font-size:11px;color:var(--text-sec);">${esc(codes)}</span>
+            </div>`;
+        }).join('');
+};
+
+window.selectClassOverrideStudent = function(el) {
+    document.querySelectorAll('.ovr-student-option').forEach(opt => {
+        if (opt === el) {
+            opt.style.background = 'var(--primary-light)';
+            opt.dataset.selected = 'true';
+        } else {
+            opt.style.background = '';
+            delete opt.dataset.selected;
+        }
+    });
+};
+
+window.submitClassTempOverrideFromModal = async function(classCode) {
+    const selectedEl = document.querySelector('.ovr-student-option[data-selected="true"]');
+    if (!selectedEl) { alert('학생을 선택해주세요.'); return; }
+    const studentId = selectedEl.dataset.id;
+    const dateVal = document.getElementById('ovr-class-date')?.value;
+    const reason = document.getElementById('ovr-class-reason')?.value || '';
+    if (!dateVal) { alert('날짜를 선택해주세요.'); return; }
+    document.querySelector('.modal-overlay')?.remove();
+    await window.createTempClassOverride(studentId, classCode, [dateVal], reason);
+};
+
 function renderClassDetail(classCode) {
     if (!classCode) {
         document.getElementById('detail-empty').style.display = '';
@@ -3345,6 +3618,8 @@ function renderClassDetail(classCode) {
             </div>
             <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="resetTestSections('${escAttr(classCode)}')">기본값 복원</button>
         </div>
+
+        ${renderClassTempOverrideSection(classCode)}
 
     `;
 
@@ -5788,6 +6063,87 @@ function renderLeaveRequestCard(studentId) {
         </div>`;
 }
 
+function renderTempClassOverrideCard(studentId) {
+    const overrides = getStudentOverrides(studentId, selectedDate);
+    const student = allStudents.find(s => s.docId === studentId);
+    if (!student) return '';
+
+    const listHtml = overrides.length > 0 ? overrides.map(o => `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 8px;background:var(--surface);border-radius:6px;">
+            <span style="font-size:13px;font-weight:600;">${esc(o.override_date)}</span>
+            <span style="font-size:12px;color:var(--text-sec);">${esc(o.original_class_code)} → ${esc(o.target_class_code)}</span>
+            ${o.reason ? `<span style="font-size:11px;color:var(--text-third);">(${esc(o.reason)})</span>` : ''}
+            <button class="btn btn-sm" style="margin-left:auto;color:var(--danger);padding:2px 6px;" onclick="cancelTempClassOverride('${escAttr(o.docId)}', '${escAttr(studentId)}')">취소</button>
+        </div>
+    `).join('') : '<div style="font-size:12px;color:var(--text-sec);padding:4px 0;">등록된 타반수업 없음</div>';
+
+    return `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:var(--warning);font-size:18px;">swap_horiz</span>
+                타반수업
+            </div>
+            ${listHtml}
+            <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="openTempClassOverrideModal('${escAttr(studentId)}')">
+                <span class="material-symbols-outlined" style="font-size:14px;">add</span> 타반수업 추가
+            </button>
+        </div>
+    `;
+}
+
+window.openTempClassOverrideModal = function(studentId) {
+    const student = allStudents.find(s => s.docId === studentId);
+    if (!student) return;
+    const enrollments = getActiveEnrollments(student, selectedDate);
+    const classCodes = enrollments.map(e => enrollmentCode(e)).filter(Boolean);
+    const allCodes = getUniqueClassCodes().filter(c => !classCodes.includes(c));
+
+    const classOptions = allCodes.map(c => `<option value="${escAttr(c)}">${esc(c)}</option>`).join('');
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    overlay.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>타반수업 추가 — ${esc(student.name)}</h3>
+                <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-field">
+                    <label class="field-label">대상 반</label>
+                    <select class="field-input" id="ovr-target-class">${classOptions}</select>
+                </div>
+                <div class="form-field">
+                    <label class="field-label">날짜 (쉼표로 여러 날짜 입력)</label>
+                    <input type="date" class="field-input" id="ovr-date" value="${selectedDate}">
+                    <div style="font-size:11px;color:var(--text-sec);margin-top:4px;">여러 날짜는 추가 후 반복 등록하세요</div>
+                </div>
+                <div class="form-field">
+                    <label class="field-label">사유 (선택)</label>
+                    <input type="text" class="field-input" id="ovr-reason" placeholder="사유 입력">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">취소</button>
+                <button class="btn btn-primary" onclick="submitTempClassOverrideFromModal('${escAttr(studentId)}')">등록</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+};
+
+window.submitTempClassOverrideFromModal = async function(studentId) {
+    const targetClass = document.getElementById('ovr-target-class')?.value;
+    const dateVal = document.getElementById('ovr-date')?.value;
+    const reason = document.getElementById('ovr-reason')?.value || '';
+    if (!targetClass || !dateVal) { alert('대상 반과 날짜를 선택해주세요.'); return; }
+    document.querySelector('.modal-overlay')?.remove();
+    await window.createTempClassOverride(studentId, targetClass, [dateVal], reason);
+};
+
 function renderStudentDetail(studentId) {
     if (!studentId) {
         document.getElementById('detail-empty').style.display = '';
@@ -6148,6 +6504,9 @@ function renderStudentDetail(studentId) {
 
         <!-- 개별 등원시간 카드 -->
         ${arrivalTimeHtml}
+
+        <!-- 타반수업 카드 -->
+        ${renderTempClassOverrideCard(studentId)}
 
         <!-- 영역별 숙제 카드 -->
         ${domainHwHtml}
@@ -6648,7 +7007,7 @@ function updateDateDisplay() {
 async function reloadForDate() {
     _visitStatusPending = {};
 
-    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadAbsenceRecords(), loadRoleMemos(), loadClassNextHw(selectedDate), loadClassSettings(), loadTeachers()]);
+    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadTempClassOverrides(selectedDate), loadAbsenceRecords(), loadRoleMemos(), loadClassNextHw(selectedDate), loadClassSettings(), loadTeachers()]);
     await syncAbsenceRecords();
     selectedNextHwClass = null;
     updateDateDisplay();
@@ -7909,7 +8268,7 @@ onAuthStateChanged(auth, async (user) => {
         getCurrentSemester();
         buildSemesterFilter();
         await trackTeacherLogin(user);
-        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers(), loadContacts()]);
+        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadTempClassOverrides(selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers(), loadContacts()]);
         await syncAbsenceRecords();
         autoCloseOldRecords();  // 1개월 경과 건 자동 처리 (비동기, 백그라운드)
         syncTaskStudentNames(); // task의 student_name을 학생 DB와 동기화 (비동기, 백그라운드)
@@ -8580,7 +8939,7 @@ window.refreshData = async () => {
     await loadSemesterSettings();
     getCurrentSemester();
     buildSemesterFilter();
-    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadRoleMemos(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers()]);
+    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadTempClassOverrides(selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadRoleMemos(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers()]);
     await syncAbsenceRecords();
     renderBranchFilter();
     renderSubFilters();

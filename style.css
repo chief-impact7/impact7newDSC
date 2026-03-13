@@ -878,3 +878,39 @@ body {
     background: #e6f4ea;
     color: var(--success);
 }
+
+/* ===== 타반수업 배지 (DSC 입력 화면) ===== */
+.override-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: #fff3e0;
+    color: #e65100;
+    font-weight: 500;
+    white-space: nowrap;
+    margin-left: 4px;
+}
+
+.override-in-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: #e3f2fd;
+    color: #1565c0;
+    font-weight: 500;
+    white-space: nowrap;
+    margin-left: 4px;
+}
+
+.override-out-row {
+    opacity: 0.5;
+    background: #f5f5f5 !important;
+}
+
+.override-out-row:hover {
+    background: #eeeeee !important;
+}
