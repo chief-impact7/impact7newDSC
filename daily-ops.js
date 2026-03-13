@@ -6312,17 +6312,17 @@ async function autoCreateAbsenceRecord(studentId, overrides) {
     const exists = absenceRecords.some(r => r.student_id === studentId && r.absence_date === selectedDate);
     if (exists) return;
 
-    // Firestore 서버 측 중복 체크 (다른 브라우저/세션에서 이미 생성한 경우 방지)
+    // Firestore 서버 측 중복 체크 (open 또는 closed 이미 존재하면 생성하지 않음)
     try {
-        const dupQ = query(collection(db, 'absence_records'),
+        const existQ = query(collection(db, 'absence_records'),
             where('student_id', '==', studentId),
             where('absence_date', '==', selectedDate),
-            where('status', '==', 'open'));
-        const dupSnap = await getDocs(dupQ);
-        if (!dupSnap.empty) {
-            // 서버에 이미 존재 → 메모리에만 추가하고 리턴
-            dupSnap.forEach(d => {
-                if (!absenceRecords.some(r => r.docId === d.id)) {
+            where('status', 'in', ['open', 'closed']));
+        const existSnap = await getDocs(existQ);
+        if (!existSnap.empty) {
+            // open 건이 있으면 메모리에 동기화
+            existSnap.forEach(d => {
+                if (d.data().status === 'open' && !absenceRecords.some(r => r.docId === d.id)) {
                     absenceRecords.push({ docId: d.id, ...d.data() });
                 }
             });

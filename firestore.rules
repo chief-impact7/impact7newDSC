@@ -593,6 +593,14 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // [Director] Assignments (root-level)
+    // =========================================================================
+    match /assignments/{id} {
+      allow read: if isLoggedIn();
+      allow write: if isDirector();
+    }
+
+    // =========================================================================
     // [Director] Staff + 서브컬렉션
     // =========================================================================
     match /staff/{staffId} {
@@ -639,6 +647,13 @@ service cloud.firestore {
     match /{path=**}/contracts/{contractId} {
       allow read: if isDirector() ||
         (isStaff() && resource.data.assignedTo == request.auth.uid);
+    }
+
+    // =========================================================================
+    // [Director] collectionGroup 쿼리용 — documents (서류함)
+    // =========================================================================
+    match /{path=**}/documents/{docId} {
+      allow read: if isDirector();
     }
 
     // =========================================================================
@@ -717,6 +732,10 @@ service cloud.firestore {
         allow update: if request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['signatures', 'status', 'updatedAt'])
           && request.resource.data.status in ['ready', 'signed'];
+      }
+
+      match /performanceNotes/{noteId} {
+        allow read, write: if isDirector();
       }
     }
 
