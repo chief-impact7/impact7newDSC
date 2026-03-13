@@ -216,6 +216,7 @@ function enrollmentCode(e) {
     return `${e.level_symbol || ''}${e.class_number || ''}`;
 }
 const allClassCodes = (s) => (s.enrollments || []).map(e => enrollmentCode(e)).filter(Boolean);
+const activeClassCodes = (s, date) => [...new Set(getActiveEnrollments(s, date).map(e => enrollmentCode(e)).filter(Boolean))];
 
 // 활성 enrollment만 반환.
 // - end_date가 지난 enrollment(내신/특강)은 제외
@@ -2540,8 +2541,9 @@ function renderAbsenceLedgerList() {
         const _teacher = _teacherEmail ? getTeacherName(_teacherEmail) : '';
         const metaStr = _teacher ? ` · ${_teacher}` : '';
 
-        html += `<div class="list-item ${isActive ? 'active' : ''}" data-id="${escAttr(r.student_id)}"
-            onclick="selectedStudentId='${escAttr(r.student_id)}'; renderStudentDetail('${escAttr(r.student_id)}'); document.querySelectorAll('.list-item').forEach(el=>el.classList.remove('active')); this.classList.add('active');">
+        html += `<div class="list-item ${isActive ? 'active' : ''}${bulkMode ? ' bulk-mode' : ''}${selectedStudentIds.has(r.student_id) ? ' bulk-selected' : ''}" data-id="${escAttr(r.student_id)}"
+            onclick="handleListItemClick(event, '${escAttr(r.student_id)}')">
+            <input type="checkbox" class="list-item-checkbox" ${selectedStudentIds.has(r.student_id) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(r.student_id)}', this.checked)">
             <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
                 ${consultBtn}
                 <div style="flex:1;min-width:0;">
@@ -2639,8 +2641,9 @@ function renderLeaveRequestList() {
             const _by = getTeacherName(r.requested_by);
             const tsStr = _fmtTs(r.requested_at);
 
-            html += `<div class="list-item ${isActive ? 'active' : ''}" data-id="${escAttr(r.docId)}"
-                onclick="selectLeaveRequest('${escAttr(r.docId)}')">
+            html += `<div class="list-item ${isActive ? 'active' : ''}${bulkMode ? ' bulk-mode' : ''}${selectedStudentIds.has(r.student_id) ? ' bulk-selected' : ''}" data-id="${escAttr(r.student_id)}" data-leave-id="${escAttr(r.docId)}"
+                onclick="handleListItemClick(event,'${escAttr(r.student_id)}',()=>selectLeaveRequest('${escAttr(r.docId)}'))">
+                <input type="checkbox" class="list-item-checkbox" ${selectedStudentIds.has(r.student_id) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(r.student_id)}', this.checked)">
                 <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
                     <div style="flex:1;min-width:0;">
                         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
@@ -2726,8 +2729,9 @@ function renderReturnUpcomingList() {
             const consultDone = s.return_consult_done;
             const consultIcon = `<span class="return-consult-icon material-symbols-outlined" title="복귀상담" style="color:${consultDone ? '#22c55e' : '#f59e0b'};" onclick="event.stopPropagation();toggleReturnConsult('${escAttr(s.docId)}')">${consultDone ? 'check_circle' : 'phone_in_talk'}</span>`;
 
-            html += `<div class="list-item ${isActive ? 'active' : ''}" data-id="${escAttr(s.docId)}"
-                onclick="selectReturnUpcomingStudent('${escAttr(s.docId)}')">
+            html += `<div class="list-item ${isActive ? 'active' : ''}${bulkMode ? ' bulk-mode' : ''}${selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}"
+                onclick="handleListItemClick(event,'${escAttr(s.docId)}',()=>selectReturnUpcomingStudent('${escAttr(s.docId)}'))">
+                <input type="checkbox" class="list-item-checkbox" ${selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">
                 <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
                     <div style="flex:1;min-width:0;">
                         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
@@ -6667,19 +6671,31 @@ function toggleAttendance(studentId, displayStatus) {
 }
 
 async function autoCreateAbsenceRecord(studentId, overrides) {
+    // 결정적 문서 ID — 동일 학생+날짜 조합은 항상 같은 ID → race condition 방지
+    const absDocId = `${studentId}_${selectedDate}`;
+
     // 메모리 중복 체크
     const exists = absenceRecords.some(r => r.student_id === studentId && r.absence_date === selectedDate);
     if (exists) return;
 
-    // Firestore 서버 측 중복 체크 (open 또는 closed 이미 존재하면 생성하지 않음)
+    // Firestore 서버 측 중복 체크
     try {
+        // 1) 결정적 ID 문서 확인 (빠름)
+        const existDoc = await getDoc(doc(db, 'absence_records', absDocId));
+        if (existDoc.exists()) {
+            const data = existDoc.data();
+            if (data.status === 'open' && !absenceRecords.some(r => r.docId === absDocId)) {
+                absenceRecords.push({ docId: absDocId, ...data });
+            }
+            return;
+        }
+        // 2) 기존 auto-ID 레코드 호환: 필드 기반 쿼리 폴백 (2026-03 배포, 2026-05 이후 제거 가능)
         const existQ = query(collection(db, 'absence_records'),
             where('student_id', '==', studentId),
             where('absence_date', '==', selectedDate),
             where('status', 'in', ['open', 'closed']));
         const existSnap = await getDocs(existQ);
         if (!existSnap.empty) {
-            // open 건이 있으면 메모리에 동기화
             existSnap.forEach(d => {
                 if (d.data().status === 'open' && !absenceRecords.some(r => r.docId === d.id)) {
                     absenceRecords.push({ docId: d.id, ...d.data() });
@@ -6688,7 +6704,8 @@ async function autoCreateAbsenceRecord(studentId, overrides) {
             return;
         }
     } catch (err) {
-        console.warn('결석대장 중복 체크 실패, 생성 진행:', err);
+        console.warn('결석대장 중복 체크 실패:', err);
+        // 체크 실패 시에도 setDoc은 멱등성이 보장되므로 진행
     }
 
     const student = allStudents.find(s => s.docId === studentId);
@@ -6736,17 +6753,19 @@ async function autoCreateAbsenceRecord(studentId, overrides) {
             created_by: currentUser?.email || '',
             updated_by: currentUser?.email || ''
         };
-        const docRef = await addDoc(collection(db, 'absence_records'), {
+        await setDoc(doc(db, 'absence_records', absDocId), {
             ...record,
             created_at: serverTimestamp(),
             updated_at: serverTimestamp()
         });
-        absenceRecords.push({
-            ...record,
-            docId: docRef.id,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-        });
+        if (!absenceRecords.some(r => r.docId === absDocId)) {
+            absenceRecords.push({
+                ...record,
+                docId: absDocId,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            });
+        }
     } catch (err) {
         console.error('결석대장 자동 생성 실패:', err);
     }
@@ -7242,7 +7261,7 @@ async function submitLeaveRequest() {
         student_id: _leaveRequestStudentId,
         student_name: s.name,
         branch: branchFromStudent(s),
-        class_codes: allClassCodes(s),
+        class_codes: activeClassCodes(s, selectedDate),
         request_type: type,
         student_phone: s.student_phone || '',
         parent_phone_1: s.parent_phone_1 || '',
@@ -7509,7 +7528,7 @@ async function submitReturnFromLeave() {
             student_id: _returnModalStudentId,
             student_name: student.name,
             branch: branchFromStudent(student),
-            class_codes: allClassCodes(student),
+            class_codes: activeClassCodes(student, selectedDate),
             request_type: _returnModalType,
             return_date: returnDate,
             student_phone: student.student_phone || '',
@@ -8904,7 +8923,7 @@ window.cancelBulkAction = () => {
     _bulkModalType = null;
 };
 
-window.handleListItemClick = (e, docId) => {
+window.handleListItemClick = (e, docId, fallbackFn) => {
     if (bulkMode) {
         const cb = e.currentTarget.querySelector('.list-item-checkbox');
         if (cb && e.target !== cb) {
@@ -8913,7 +8932,8 @@ window.handleListItemClick = (e, docId) => {
         }
         return;
     }
-    selectStudent(docId);
+    if (fallbackFn) fallbackFn(docId);
+    else selectStudent(docId);
 };
 
 window.changeDate = changeDate;
