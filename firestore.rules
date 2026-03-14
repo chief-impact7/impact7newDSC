@@ -642,11 +642,11 @@ service cloud.firestore {
           (isStaff() && resource.data.assignedTo == request.auth.uid);
         allow write: if isDirector();
 
-        // 비인증: 토큰 기반 계약서 읽기 + 서명 업데이트
+        // 비인증: 토큰 기반 계약서 읽기 + 서명/급여통보/PDF URL 업데이트
         allow get: if true;
         allow update: if request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['signatures', 'status', 'updatedAt'])
-          && request.resource.data.status in ['ready', 'signed'];
+          .hasOnly(['signatures', 'salaryNotification', 'status', 'updatedAt', 'signedPdfUrl', 'salaryPdfUrl'])
+          && request.resource.data.status in ['ready', 'signed', 'salary_sent'];
       }
 
       match /assignments/{id} {
@@ -754,8 +754,8 @@ service cloud.firestore {
         allow write: if isDirector();
         allow get: if true;
         allow update: if request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['signatures', 'status', 'updatedAt'])
-          && request.resource.data.status in ['ready', 'signed'];
+          .hasOnly(['signatures', 'salaryNotification', 'status', 'updatedAt', 'signedPdfUrl', 'salaryPdfUrl'])
+          && request.resource.data.status in ['ready', 'signed', 'salary_sent'];
       }
 
       match /performanceNotes/{noteId} {
