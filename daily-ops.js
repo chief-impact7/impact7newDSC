@@ -167,13 +167,14 @@ const escAttr = (str) => {
     return esc(str).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
 };
 
+const toDateStrKST = (date) => date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
 function todayStr() {
-    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+    return toDateStrKST(new Date());
 }
 
 function getDayName(dateStr) {
     const days = ['일', '월', '화', '수', '목', '금', '토'];
-    return days[new Date(dateStr).getDay()];
+    return days[new Date(dateStr + 'T00:00:00+09:00').getDay()];
 }
 
 function formatTime12h(time24) {
@@ -2678,7 +2679,7 @@ function selectLeaveRequest(docId) {
 let _returnUpcomingCache = null;
 function _getReturnUpcomingStudents() {
     if (_returnUpcomingCache) return _returnUpcomingCache;
-    const now = new Date(); now.setHours(0,0,0,0);
+    const now = new Date(todayStr() + 'T00:00:00+09:00');
     const approvedByStudent = new Map();
     for (const r of leaveRequests) {
         if (r.status === 'approved') approvedByStudent.set(r.student_id, r);
@@ -2687,7 +2688,7 @@ function _getReturnUpcomingStudents() {
     for (const s of allStudents) {
         if (!LEAVE_STATUSES.includes(s.status) || !s.pause_end_date) continue;
         if (selectedBranch && s.branch !== selectedBranch) continue;
-        const end = new Date(s.pause_end_date); end.setHours(0,0,0,0);
+        const end = new Date(s.pause_end_date + 'T00:00:00+09:00');
         const daysLeft = Math.ceil((end - now) / 86400000);
         if (daysLeft < 0 || daysLeft > 14) continue;
         results.push({ student: s, daysLeft, leaveRequest: approvedByStudent.get(s.docId) || null });
@@ -5465,8 +5466,8 @@ function buildStayStatsHtml(student) {
     const firstDate = startDates.length ? startDates[0] : '2026-01-01';
     let periodHtml = '—';
     {
-        const start = new Date(firstDate);
-        const now = new Date();
+        const start = new Date(firstDate + 'T00:00:00+09:00');
+        const now = new Date(todayStr() + 'T00:00:00+09:00');
         const totalMonths = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
         const years = Math.floor(totalMonths / 12);
         const months = totalMonths % 12;
@@ -5477,8 +5478,7 @@ function buildStayStatsHtml(student) {
     }
 
     // 현재 활성 enrollment 구하기 (class_type별 가장 최근 시작된 enrollment)
-    const d = new Date();
-    const today = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const today = todayStr();
     const byType = {};
     for (const e of enrollments) {
         const ct = e.class_type || '정규';
@@ -5924,8 +5924,8 @@ function renderReturnConsultCard(studentId) {
     if (!student || !LEAVE_STATUSES.includes(student.status) || !student.pause_end_date) return '';
 
     // D-day 계산
-    const now = new Date(); now.setHours(0,0,0,0);
-    const end = new Date(student.pause_end_date); end.setHours(0,0,0,0);
+    const now = new Date(todayStr() + 'T00:00:00+09:00');
+    const end = new Date(student.pause_end_date + 'T00:00:00+09:00');
     const daysLeft = Math.ceil((end - now) / 86400000);
     const ddayLabel = daysLeft === 0 ? 'D-Day' : daysLeft > 0 ? `D-${daysLeft}` : `D+${Math.abs(daysLeft)}`;
     const ddayCls = daysLeft <= 7 ? 'urgent' : 'soon';
@@ -7102,9 +7102,9 @@ async function reloadForDate() {
 }
 
 function changeDate(delta) {
-    const d = new Date(selectedDate);
+    const d = new Date(selectedDate + 'T00:00:00+09:00');
     d.setDate(d.getDate() + delta);
-    selectedDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    selectedDate = toDateStrKST(d);
     reloadForDate();
 }
 
@@ -7631,9 +7631,9 @@ let _scheduleTargetIds = [];
 function openScheduleModal(studentIds) {
     _scheduleTargetIds = studentIds;
     // 기본값 설정
-    const d = new Date(selectedDate);
+    const d = new Date(selectedDate + 'T00:00:00+09:00');
     d.setDate(d.getDate() + 1);
-    const nextDay = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const nextDay = toDateStrKST(d);
 
     document.getElementById('schedule-type').value = '재시';
     document.getElementById('schedule-subject').value = '';
@@ -9308,7 +9308,7 @@ function generateDataTemplate(studentId) {
     // 날짜 포맷: "3/4(화)" (연도 제외, 요일 포함)
     const fmtDate = (dateStr) => {
         if (!dateStr) return '';
-        const d = new Date(dateStr);
+        const d = new Date(dateStr + 'T00:00:00+09:00');
         const day = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
         return `${d.getMonth() + 1}/${d.getDate()}(${day})`;
     };

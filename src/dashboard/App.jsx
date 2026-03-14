@@ -3,7 +3,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../../firebase-config.js';
 import { signInWithGoogle, logout } from '../../auth.js';
 import { useStudents, useDashboardData } from './hooks/useFirestore.js';
-import { branchFromStudent, enrollmentCode, todayStr, addDays } from '../shared/firestore-helpers.js';
+import { branchFromStudent, enrollmentCode, todayStr, addDays, toDateStrKST } from '../shared/firestore-helpers.js';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import OverviewCard from './components/OverviewCard.jsx';
 import AttendanceSummary from './components/AttendanceSummary.jsx';
@@ -15,15 +15,14 @@ import PostponedTasks from './components/PostponedTasks.jsx';
 
 // 이번 주 월요일~일요일 구하기
 function getWeekRange(dateStr) {
-    const d = new Date(dateStr);
+    const d = new Date(dateStr + 'T00:00:00+09:00');
     const day = d.getDay();
     const diffToMon = day === 0 ? -6 : 1 - day;
     const monday = new Date(d);
     monday.setDate(d.getDate() + diffToMon);
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
-    const fmt = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-    return { start: fmt(monday), end: fmt(sunday) };
+    return { start: toDateStrKST(monday), end: toDateStrKST(sunday) };
 }
 
 function SkeletonCard() {

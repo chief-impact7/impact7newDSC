@@ -26,13 +26,14 @@ const escAttr = (str) =>
     String(str ?? '').replace(/&/g, '&amp;').replace(/'/g, '&#39;')
         .replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+const toDateStrKST = (date) => date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
 function todayStr() {
-    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+    return toDateStrKST(new Date());
 }
 
 function getDayName(dateStr) {
     const days = ['일', '월', '화', '수', '목', '금', '토'];
-    return days[new Date(dateStr).getDay()];
+    return days[new Date(dateStr + 'T00:00:00+09:00').getDay()];
 }
 
 function normalizeDays(day) {
@@ -257,9 +258,9 @@ function setDate(dateStr) {
 }
 
 window.changeDate = (delta) => {
-    const d = new Date(selectedDate);
+    const d = new Date(selectedDate + 'T00:00:00+09:00');
     d.setDate(d.getDate() + delta);
-    setDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    setDate(toDateStrKST(d));
 };
 
 window.goToday = () => setDate(todayStr());
@@ -739,9 +740,9 @@ window.openPostponeModal = (studentId, studentName, enrollIdx) => {
     document.getElementById('postpone-handler').value = '';
 
     // Default: next day
-    const d = new Date(selectedDate);
+    const d = new Date(selectedDate + 'T00:00:00+09:00');
     d.setDate(d.getDate() + 1);
-    document.getElementById('postpone-date').value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    document.getElementById('postpone-date').value = toDateStrKST(d);
     document.getElementById('postpone-time').value = '16:00';
 
     document.getElementById('postpone-modal').style.display = 'flex';
