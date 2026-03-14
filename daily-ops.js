@@ -6,6 +6,7 @@ import {
 import { auth, db, geminiModel } from './firebase-config.js';
 import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
 import { initHelpGuide } from './help-guide.js';
+import { toDateStrKST, parseDateKST, todayStr, getDayName } from './src/shared/firestore-helpers.js';
 
 // ─── State ──────────────────────────────────────────────────────────────────
 let currentUser = null;
@@ -167,15 +168,6 @@ const escAttr = (str) => {
     return esc(str).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
 };
 
-const toDateStrKST = (date) => date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
-function todayStr() {
-    return toDateStrKST(new Date());
-}
-
-function getDayName(dateStr) {
-    const days = ['일', '월', '화', '수', '목', '금', '토'];
-    return days[new Date(dateStr + 'T00:00:00+09:00').getDay()];
-}
 
 function formatTime12h(time24) {
     if (!time24) return '';
@@ -2679,7 +2671,7 @@ function selectLeaveRequest(docId) {
 let _returnUpcomingCache = null;
 function _getReturnUpcomingStudents() {
     if (_returnUpcomingCache) return _returnUpcomingCache;
-    const now = new Date(todayStr() + 'T00:00:00+09:00');
+    const now = parseDateKST(todayStr());
     const approvedByStudent = new Map();
     for (const r of leaveRequests) {
         if (r.status === 'approved') approvedByStudent.set(r.student_id, r);
@@ -2688,7 +2680,7 @@ function _getReturnUpcomingStudents() {
     for (const s of allStudents) {
         if (!LEAVE_STATUSES.includes(s.status) || !s.pause_end_date) continue;
         if (selectedBranch && s.branch !== selectedBranch) continue;
-        const end = new Date(s.pause_end_date + 'T00:00:00+09:00');
+        const end = parseDateKST(s.pause_end_date);
         const daysLeft = Math.ceil((end - now) / 86400000);
         if (daysLeft < 0 || daysLeft > 14) continue;
         results.push({ student: s, daysLeft, leaveRequest: approvedByStudent.get(s.docId) || null });
@@ -5466,8 +5458,8 @@ function buildStayStatsHtml(student) {
     const firstDate = startDates.length ? startDates[0] : '2026-01-01';
     let periodHtml = '—';
     {
-        const start = new Date(firstDate + 'T00:00:00+09:00');
-        const now = new Date(todayStr() + 'T00:00:00+09:00');
+        const start = parseDateKST(firstDate);
+        const now = parseDateKST(todayStr());
         const totalMonths = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
         const years = Math.floor(totalMonths / 12);
         const months = totalMonths % 12;
@@ -5924,8 +5916,8 @@ function renderReturnConsultCard(studentId) {
     if (!student || !LEAVE_STATUSES.includes(student.status) || !student.pause_end_date) return '';
 
     // D-day 계산
-    const now = new Date(todayStr() + 'T00:00:00+09:00');
-    const end = new Date(student.pause_end_date + 'T00:00:00+09:00');
+    const now = parseDateKST(todayStr());
+    const end = parseDateKST(student.pause_end_date);
     const daysLeft = Math.ceil((end - now) / 86400000);
     const ddayLabel = daysLeft === 0 ? 'D-Day' : daysLeft > 0 ? `D-${daysLeft}` : `D+${Math.abs(daysLeft)}`;
     const ddayCls = daysLeft <= 7 ? 'urgent' : 'soon';
@@ -7102,7 +7094,7 @@ async function reloadForDate() {
 }
 
 function changeDate(delta) {
-    const d = new Date(selectedDate + 'T00:00:00+09:00');
+    const d = parseDateKST(selectedDate);
     d.setDate(d.getDate() + delta);
     selectedDate = toDateStrKST(d);
     reloadForDate();
@@ -7631,7 +7623,7 @@ let _scheduleTargetIds = [];
 function openScheduleModal(studentIds) {
     _scheduleTargetIds = studentIds;
     // 기본값 설정
-    const d = new Date(selectedDate + 'T00:00:00+09:00');
+    const d = parseDateKST(selectedDate);
     d.setDate(d.getDate() + 1);
     const nextDay = toDateStrKST(d);
 
@@ -9308,7 +9300,7 @@ function generateDataTemplate(studentId) {
     // 날짜 포맷: "3/4(화)" (연도 제외, 요일 포함)
     const fmtDate = (dateStr) => {
         if (!dateStr) return '';
-        const d = new Date(dateStr + 'T00:00:00+09:00');
+        const d = parseDateKST(dateStr);
         const day = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
         return `${d.getMonth() + 1}/${d.getDate()}(${day})`;
     };

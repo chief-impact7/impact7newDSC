@@ -3,7 +3,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../../firebase-config.js';
 import { signInWithGoogle, logout } from '../../auth.js';
 import { useStudents, useDashboardData } from './hooks/useFirestore.js';
-import { branchFromStudent, enrollmentCode, todayStr, addDays, toDateStrKST } from '../shared/firestore-helpers.js';
+import { branchFromStudent, enrollmentCode, todayStr, addDays, toDateStrKST, parseDateKST } from '../shared/firestore-helpers.js';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import OverviewCard from './components/OverviewCard.jsx';
 import AttendanceSummary from './components/AttendanceSummary.jsx';
@@ -15,7 +15,7 @@ import PostponedTasks from './components/PostponedTasks.jsx';
 
 // 이번 주 월요일~일요일 구하기
 function getWeekRange(dateStr) {
-    const d = new Date(dateStr + 'T00:00:00+09:00');
+    const d = parseDateKST(dateStr);
     const day = d.getDay();
     const diffToMon = day === 0 ? -6 : 1 - day;
     const monday = new Date(d);

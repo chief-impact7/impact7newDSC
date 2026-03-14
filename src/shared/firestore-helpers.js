@@ -115,23 +115,24 @@ export const branchFromClassNumber = (num) => {
 export const branchFromStudent = (s) =>
     s.branch || (s.enrollments?.[0] ? branchFromClassNumber(s.enrollments[0].class_number) : '');
 
-export function getDayName(dateStr) {
-    const days = ['일', '월', '화', '수', '목', '금', '토'];
-    return days[new Date(dateStr + 'T00:00:00+09:00').getDay()];
-}
-
 export { normalizeDays };
 
 // ─── 날짜 유틸 ───
 
 export const toDateStrKST = (date) => date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+export const parseDateKST = (dateStr) => new Date(dateStr + 'T00:00:00+09:00');
 
 export function todayStr() {
     return toDateStrKST(new Date());
 }
 
+export function getDayName(dateStr) {
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    return days[parseDateKST(dateStr).getDay()];
+}
+
 export function addDays(dateStr, days) {
-    const d = new Date(dateStr + 'T00:00:00+09:00');
+    const d = parseDateKST(dateStr);
     d.setDate(d.getDate() + days);
     return toDateStrKST(d);
 }
