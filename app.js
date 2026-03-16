@@ -226,7 +226,7 @@ window.handleLogin = async () => {
 // ─── Load students (cached) ──────────────────────────────────────────────────
 async function loadAllStudents() {
     try {
-        const snapshot = await getDocs(collection(db, 'students'));
+        const snapshot = await getDocs(query(collection(db, 'students'), where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원'])));
         allStudents = [];
         snapshot.forEach(docSnap => {
             const data = { id: docSnap.id, ...docSnap.data() };
@@ -791,7 +791,9 @@ window.completePostponed = async (taskId) => {
             updated_by: currentUser?.email || 'system',
             updated_at: serverTimestamp(),
         });
-        await loadDailyData();
+        // 로컬 상태만 업데이트 (loadDailyData 재호출 대신)
+        postponedTasks = postponedTasks.filter(t => t.id !== taskId);
+        renderAll();
     } catch (err) {
         alert('처리 실패: ' + err.message);
     }
@@ -805,7 +807,9 @@ window.absentPostponed = async (taskId) => {
             updated_by: currentUser?.email || 'system',
             updated_at: serverTimestamp(),
         });
-        await loadDailyData();
+        // 로컬 상태만 업데이트 (loadDailyData 재호출 대신)
+        postponedTasks = postponedTasks.filter(t => t.id !== taskId);
+        renderAll();
     } catch (err) {
         alert('처리 실패: ' + err.message);
     }

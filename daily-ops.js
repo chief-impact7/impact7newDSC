@@ -257,10 +257,13 @@ function makeDailyRecordId(studentDocId, date) {
 
 // ─── Class Settings (영역 관리) ─────────────────────────────────────────────
 
-async function loadClassSettings() {
+let _classSettingsLoaded = false;
+async function loadClassSettings(force = false) {
+    if (_classSettingsLoaded && !force) return;
     const snap = await getDocs(collection(db, 'class_settings'));
     classSettings = {};
     snap.forEach(d => { classSettings[d.id] = d.data(); });
+    _classSettingsLoaded = true;
 }
 
 function getClassDomains(classCode) {
@@ -396,7 +399,7 @@ async function saveClassSettings(classCode, data) {
 async function loadStudents() {
     let snap;
     try {
-        snap = await getDocs(collection(db, 'students'));
+        snap = await getDocs(query(collection(db, 'students'), where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원'])));
         console.log('[loadStudents] 문서 수:', snap.size);
     } catch (err) {
         console.error('[loadStudents] 로드 실패:', err.message, err);
@@ -460,7 +463,11 @@ async function loadDailyRecords(date) {
 async function loadRetakeSchedules() {
     retakeSchedules = [];
     try {
-        const q = query(collection(db, 'retake_schedule'), where('status', '==', '예정'));
+        // 과거 30일 ~ 미래 7일 범위만 로드 (성능 최적화)
+        const past = new Date();
+        past.setDate(past.getDate() - 30);
+        const pastStr = past.toISOString().slice(0, 10);
+        const q = query(collection(db, 'retake_schedule'), where('status', '==', '예정'), where('scheduled_date', '>=', pastStr));
         const snap = await getDocs(q);
         snap.forEach(d => {
             retakeSchedules.push({ docId: d.id, ...d.data() });
@@ -473,7 +480,7 @@ async function loadRetakeSchedules() {
 async function loadHwFailTasks() {
     hwFailTasks = [];
     try {
-        const q = query(collection(db, 'hw_fail_tasks'), where('status', 'in', ['pending', '완료', '기타']));
+        const q = query(collection(db, 'hw_fail_tasks'), where('status', '==', 'pending'));
         const snap = await getDocs(q);
         snap.forEach(d => {
             hwFailTasks.push({ docId: d.id, ...d.data() });
@@ -486,7 +493,7 @@ async function loadHwFailTasks() {
 async function loadTestFailTasks() {
     testFailTasks = [];
     try {
-        const q = query(collection(db, 'test_fail_tasks'), where('status', 'in', ['pending', '완료', '기타']));
+        const q = query(collection(db, 'test_fail_tasks'), where('status', '==', 'pending'));
         const snap = await getDocs(q);
         snap.forEach(d => {
             testFailTasks.push({ docId: d.id, ...d.data() });
@@ -609,9 +616,13 @@ window.cancelTempClassOverride = async function(docId, studentId) {
 async function loadAbsenceRecords() {
     absenceRecords = [];
     try {
-        const q = query(collection(db, 'absence_records'), where('status', '==', 'open'));
+        // 90일 이내 open 건만 로드 (성능 최적화)
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 90);
+        const cutoffStr = cutoff.toISOString().slice(0, 10);
+        const q = query(collection(db, 'absence_records'), where('status', '==', 'open'), where('absence_date', '>=', cutoffStr));
         const snap = await getDocs(q);
-        const withdrawnIds = new Set(allStudents.filter(s => s.status === '퇴원').map(s => s.docId));
+        const withdrawnIds = new Set(withdrawnStudents.map(s => s.docId));
         snap.forEach(d => {
             if (!withdrawnIds.has(d.data().student_id)) {
                 absenceRecords.push({ docId: d.id, ...d.data() });
@@ -1274,10 +1285,13 @@ function setBranchLevel(level) {
 // ─── 학기 필터 ──────────────────────────────────────────────────────────────
 
 // ─── 학기 설정 (시작일) ──────────────────────────────────────────────────
-async function loadSemesterSettings() {
+let _semesterSettingsLoaded = false;
+async function loadSemesterSettings(force = false) {
+    if (_semesterSettingsLoaded && !force) return;
     const snap = await getDocs(collection(db, 'semester_settings'));
     semesterSettings = {};
     snap.forEach(d => { semesterSettings[d.id] = d.data(); });
+    _semesterSettingsLoaded = true;
 }
 
 function getCurrentSemester() {
@@ -1992,7 +2006,7 @@ function getFilteredStudents() {
     let students;
     if (searchQuery) {
         // 검색 시 퇴원 학생 포함 (enrollment 없어도 이름으로 검색 가능)
-        students = allStudents.filter(s =>
+        students = [...allStudents, ...withdrawnStudents].filter(s =>
             s.status === '퇴원' || getActiveEnrollments(s, selectedDate).some(e =>
                 !selectedSemester || e.semester === selectedSemester
             )
@@ -8339,6 +8353,7 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('user-avatar').textContent = (user.email || 'U')[0].toUpperCase();
 
         await loadStudents();
+        await loadWithdrawnStudents();
         buildSiblingMap();
         await loadSemesterSettings();
         getCurrentSemester();
@@ -9013,10 +9028,10 @@ window.renderStudentDetail = renderStudentDetail;
 window.refreshData = async () => {
     showSaveIndicator('saving');
     await loadStudents();
-    await loadSemesterSettings();
+    await loadSemesterSettings(true);
     getCurrentSemester();
     buildSemesterFilter();
-    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadTempClassOverrides(selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadRoleMemos(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers()]);
+    await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadTempClassOverrides(selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadRoleMemos(), loadClassSettings(true), loadClassNextHw(selectedDate), loadTeachers()]);
     await syncAbsenceRecords();
     renderBranchFilter();
     renderSubFilters();
