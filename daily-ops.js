@@ -1,7 +1,7 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import {
     collection, getDocs, doc, setDoc, getDoc, getDocFromServer, addDoc,
-    query, where, serverTimestamp, updateDoc, writeBatch, arrayUnion, deleteField, Timestamp, deleteDoc
+    query, where, serverTimestamp, updateDoc, writeBatch, arrayUnion, deleteField, Timestamp, deleteDoc, limit
 } from 'firebase/firestore';
 import { auth, db, geminiModel } from './firebase-config.js';
 import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
@@ -40,7 +40,8 @@ let latestSemester = null;       // 가장 최신 학기 (읽기전용 판별용
 let semesterSettings = {};       // semester → { start_date }
 let currentSemester = null;      // 오늘 기준 현재 학기
 let siblingMap = {};             // docId → Set of sibling docIds
-let allContacts = [];            // contacts 컬렉션 캐시
+// allContacts 제거 — on-demand Firestore 쿼리로 대체 (20k reads → 1~50 reads)
+let _contactSearchId = 0;
 let bulkMode = false;
 let selectedStudentIds = new Set();
 let groupViewMode = localStorage.getItem('dsc_groupViewMode') || 'none'; // 'none' | 'branch' | 'class'
@@ -2818,20 +2819,14 @@ function renderListPanel() {
     // 필터 칩 렌더링
     renderFilterChips();
 
-    // 과거 학생 검색: allContacts에서 현재 학기 학생(allStudents 중 학기 일치)을 제외한 나머지
+    // 과거 학생 비동기 검색 (Firestore prefix 쿼리, 초성 제외)
     let pastContactResults = [];
-    if (searchQuery) {
-        const q = searchQuery.trim().toLowerCase();
-        const chosungMode = isChosungOnly(q);
-        // allStudents에 있는 학생 ID → 과거 학생에서 제외 (퇴원 포함)
-        const allStudentIds = new Set(allStudents.map(s => s.docId));
-        pastContactResults = allContacts.filter(c => {
-            if (allStudentIds.has(c.id)) return false;
-            if (chosungMode) return matchChosung(c.name, q) || matchChosung(c.school, q);
-            return (c.name && c.name.toLowerCase().includes(q)) ||
-                (c.school && c.school.toLowerCase().includes(q)) ||
-                (c.student_phone && c.student_phone.includes(q)) ||
-                (c.parent_phone_1 && c.parent_phone_1.includes(q));
+    if (searchQuery && searchQuery.trim().length >= 2 && !isChosungOnly(searchQuery.trim().toLowerCase())) {
+        const searchId = ++_contactSearchId;
+        _searchContactsDSC(searchQuery.trim()).then(results => {
+            if (searchId !== _contactSearchId || results.length === 0) return;
+            pastContactResults = results;
+            _renderPastContacts(results, container);
         });
     }
 
@@ -3287,39 +3282,7 @@ function renderListPanel() {
         container.insertAdjacentHTML('beforeend', otherHtml);
     }
 
-    // 과거 학생 표시 (검색 시, allContacts 기반, 최대 50명)
-    if (pastContactResults.length > 0) {
-        const PAST_LIMIT = 50;
-        const showAll = pastContactResults.length <= PAST_LIMIT;
-        const visiblePast = showAll ? pastContactResults : pastContactResults.slice(0, PAST_LIMIT);
-        const renderPastItem = (c) => {
-            const phone = c.parent_phone_1 || c.student_phone || '';
-            const last4 = phone.replace(/\D/g, '').slice(-4);
-            const schoolGrade = [c.school || '', c.grade ? c.grade + '학년' : ''].filter(Boolean).join(' ');
-            const sub = [schoolGrade, last4 ? `☎${last4}` : ''].filter(Boolean).join(' · ');
-            return `<div class="list-item contact-item" style="cursor:pointer" onclick="window.openContactAsTemp('${escAttr(c.id)}')">
-                <div class="item-info">
-                    <span class="item-title">${esc(c.name || '—')} <span class="tag-past">과거</span></span>
-                    <span class="item-desc">${esc(sub || '—')}</span>
-                </div>
-            </div>`;
-        };
-        let pastHtml = `<div class="leave-section-divider"><span>과거 학생 (${pastContactResults.length}명)</span></div>`;
-        pastHtml += visiblePast.map(renderPastItem).join('');
-        if (!showAll) {
-            pastHtml += `<div class="list-item" style="justify-content:center;cursor:pointer;color:var(--primary)" onclick="window._showAllPastStudents()">
-                <span>+ ${pastContactResults.length - PAST_LIMIT}명 더보기</span>
-            </div>`;
-        }
-        container.insertAdjacentHTML('beforeend', pastHtml);
-        if (!showAll) {
-            window._showAllPastStudents = () => {
-                const moreHtml = pastContactResults.slice(PAST_LIMIT).map(renderPastItem).join('');
-                const btn = container.querySelector('[onclick="window._showAllPastStudents()"]');
-                if (btn) btn.outerHTML = moreHtml;
-            };
-        }
-    }
+    // 과거 학생은 _searchContactsDSC에서 비동기로 렌더링 (위에서 호출됨)
 
     // 반 상세 표시: 반(+소속)만 선택되고, 콘텐츠 서브필터 없을 때
     const allFilters = { ...savedSubFilters };
@@ -8359,7 +8322,7 @@ onAuthStateChanged(auth, async (user) => {
         getCurrentSemester();
         buildSemesterFilter();
         await trackTeacherLogin(user);
-        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadTempClassOverrides(selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers(), loadContacts()]);
+        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadTempClassOverrides(selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers()]);
         await syncAbsenceRecords();
         autoCloseOldRecords();  // 1개월 경과 건 자동 처리 (비동기, 백그라운드)
         syncTaskStudentNames(); // task의 student_name을 학생 DB와 동기화 (비동기, 백그라운드)
@@ -9838,59 +9801,75 @@ window.confirmVisitStatus = confirmVisitStatus;
 
 // ─── contacts 로딩 ────────────────────────────────────────────────────────
 
-async function loadContacts() {
+// contacts on-demand 검색 (Firestore prefix 쿼리, 1~50 reads)
+async function _searchContactsDSC(term) {
+    if (!term || term.length < 2) return [];
+    const currentIds = new Set(allStudents.map(s => s.docId));
+    const results = [];
+    const seenIds = new Set();
     try {
-        const snapshot = await getDocs(collection(db, 'contacts'));
-        allContacts = [];
-        snapshot.forEach((docSnap) => {
-            allContacts.push({ id: docSnap.id, ...docSnap.data() });
-        });
-
-        // allStudents → contacts DB 동기화 (contacts에 없는 학생은 DB에 저장)
-        const contactIdSet = new Set(allContacts.map(c => c.id));
-        const toSync = [];
-        for (const s of allStudents) {
-            if (!contactIdSet.has(s.docId)) {
-                const contactData = {
-                    name: s.name || '',
-                    school: s.school || '',
-                    grade: s.grade || '',
-                    student_phone: s.student_phone || '',
-                    parent_phone_1: s.parent_phone_1 || '',
-                    parent_phone_2: s.parent_phone_2 || '',
-                    guardian_name_1: s.guardian_name_1 || '',
-                    guardian_name_2: s.guardian_name_2 || '',
-                    level: s.level || '',
-                    updated_at: serverTimestamp(),
-                };
-                toSync.push({ id: s.docId, data: contactData });
-                // 메모리에도 즉시 추가
-                allContacts.push({ id: s.docId, ...contactData });
-                contactIdSet.add(s.docId);
+        const nameSnap = await getDocs(query(
+            collection(db, 'contacts'),
+            where('name', '>=', term),
+            where('name', '<=', term + '\uf8ff'),
+            limit(50)
+        ));
+        nameSnap.forEach(d => {
+            if (!currentIds.has(d.id) && !seenIds.has(d.id)) {
+                results.push({ id: d.id, ...d.data() });
+                seenIds.add(d.id);
             }
-        }
-        // DB에 배치 저장 (백그라운드)
-        if (toSync.length > 0) {
-            console.log(`[loadContacts] 새 학생 ${toSync.length}명 → contacts DB 동기화`);
-            (async () => {
-                try {
-                    for (let i = 0; i < toSync.length; i += 500) {
-                        const batch = writeBatch(db);
-                        toSync.slice(i, i + 500).forEach(item => {
-                            batch.set(doc(db, 'contacts', item.id), item.data);
-                        });
-                        await batch.commit();
-                    }
-                    console.log(`[loadContacts] contacts DB 동기화 완료 (${toSync.length}건)`);
-                } catch (e) {
-                    console.warn('[loadContacts] contacts DB 동기화 실패:', e);
+        });
+        if (/\d{3,}/.test(term)) {
+            const phoneSnap = await getDocs(query(
+                collection(db, 'contacts'),
+                where('student_phone', '>=', term),
+                where('student_phone', '<=', term + '\uf8ff'),
+                limit(20)
+            ));
+            phoneSnap.forEach(d => {
+                if (!currentIds.has(d.id) && !seenIds.has(d.id)) {
+                    results.push({ id: d.id, ...d.data() });
+                    seenIds.add(d.id);
                 }
-            })();
+            });
         }
-        console.log(`[loadContacts] contacts=${snapshot.size}, 동기화 후 allContacts=${allContacts.length}`);
-        allContacts.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
-    } catch (error) {
-        console.error('[FIRESTORE ERROR] Failed to load contacts:', error);
+    } catch (e) {
+        console.warn('[searchContacts] 검색 실패:', e);
+    }
+    return results;
+}
+
+function _renderPastContacts(pastContactResults, container) {
+    const PAST_LIMIT = 50;
+    const showAll = pastContactResults.length <= PAST_LIMIT;
+    const visiblePast = showAll ? pastContactResults : pastContactResults.slice(0, PAST_LIMIT);
+    const renderPastItem = (c) => {
+        const phone = c.parent_phone_1 || c.student_phone || '';
+        const last4 = phone.replace(/\D/g, '').slice(-4);
+        const schoolGrade = [c.school || '', c.grade ? c.grade + '학년' : ''].filter(Boolean).join(' ');
+        const sub = [schoolGrade, last4 ? `☎${last4}` : ''].filter(Boolean).join(' · ');
+        return `<div class="list-item contact-item" style="cursor:pointer" onclick="window.openContactAsTemp('${escAttr(c.id)}')">
+            <div class="item-info">
+                <span class="item-title">${esc(c.name || '—')} <span class="tag-past">과거</span></span>
+                <span class="item-desc">${esc(sub || '—')}</span>
+            </div>
+        </div>`;
+    };
+    let pastHtml = `<div class="leave-section-divider"><span>과거 학생 (${pastContactResults.length}명)</span></div>`;
+    pastHtml += visiblePast.map(renderPastItem).join('');
+    if (!showAll) {
+        pastHtml += `<div class="list-item" style="justify-content:center;cursor:pointer;color:var(--primary)" onclick="window._showAllPastStudents()">
+            <span>+ ${pastContactResults.length - PAST_LIMIT}명 더보기</span>
+        </div>`;
+    }
+    container.insertAdjacentHTML('beforeend', pastHtml);
+    if (!showAll) {
+        window._showAllPastStudents = () => {
+            const moreHtml = pastContactResults.slice(PAST_LIMIT).map(renderPastItem).join('');
+            const btn = container.querySelector('[onclick="window._showAllPastStudents()"]');
+            if (btn) btn.outerHTML = moreHtml;
+        };
     }
 }
 
