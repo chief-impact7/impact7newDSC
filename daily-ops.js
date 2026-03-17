@@ -198,6 +198,10 @@ function enrollmentCode(e) {
 }
 const allClassCodes = (s) => (s.enrollments || []).map(e => enrollmentCode(e)).filter(Boolean);
 const activeClassCodes = (s, date) => [...new Set(getActiveEnrollments(s, date).map(e => enrollmentCode(e)).filter(Boolean))];
+const _enrollCodeList = (enrolls) => {
+    const codes = enrolls.flatMap(e => e.class_type === '내신' ? [enrollmentCode(e), '내신'] : [enrollmentCode(e)]);
+    return [...new Set(codes)].join(', ');
+};
 
 // 활성 enrollment만 반환.
 // - end_date가 지난 enrollment(내신/특강)은 제외
@@ -2845,11 +2849,7 @@ function renderListPanel() {
     const renderItemHtml = (s) => {
         const isActive = s.docId === selectedStudentId ? 'active' : '';
         const dayN = getDayName(selectedDate);
-        const _codeList = (enrolls) => {
-            const codes = enrolls.flatMap(e => e.class_type === '내신' ? [enrollmentCode(e), '내신'] : [enrollmentCode(e)]);
-            return [...new Set(codes)].join(', ');
-        };
-        const code = _codeList(getActiveEnrollments(s, selectedDate).filter(e => e.day.includes(dayN) && (!selectedSemester || e.semester === selectedSemester))) || _codeList(getActiveEnrollments(s, selectedDate));
+        const code = _enrollCodeList(getActiveEnrollments(s, selectedDate).filter(e => e.day.includes(dayN) && (!selectedSemester || e.semester === selectedSemester))) || _enrollCodeList(getActiveEnrollments(s, selectedDate));
         const branch = branchFromStudent(s);
 
         // 타반수업 배지
@@ -7359,6 +7359,7 @@ async function submitLeaveRequest() {
 async function teacherApproveLeaveRequest(docId, studentId) {
     const r = leaveRequests.find(lr => lr.docId === docId);
     if (!r) return;
+    if (r.status !== 'requested') { alert('이미 처리된 요청입니다.'); return; }
     const typeLabel = `${r.request_type}${r.leave_sub_type ? ' (' + r.leave_sub_type + ')' : ''}`;
     if (!confirm(`${r.student_name} — ${typeLabel}\n교수부 승인하시겠습니까?`)) return;
 
@@ -7389,6 +7390,7 @@ async function teacherApproveLeaveRequest(docId, studentId) {
 async function approveLeaveRequest(docId, studentId) {
     const r = leaveRequests.find(lr => lr.docId === docId);
     if (!r) return;
+    if (r.status !== 'teacher_approved') { alert('교수부 승인이 먼저 필요합니다.'); return; }
 
     const typeLabel = `${r.request_type}${r.leave_sub_type ? ' (' + r.leave_sub_type + ')' : ''}`;
     if (!confirm(`${r.student_name} — ${typeLabel}\n행정부 최종 승인하시겠습니까?`)) return;
@@ -9034,6 +9036,7 @@ window.renderStudentDetail = renderStudentDetail;
 window.refreshData = async () => {
     showSaveIndicator('saving');
     await loadStudents();
+    await loadWithdrawnStudents();
     await loadSemesterSettings(true);
     getCurrentSemester();
     buildSemesterFilter();
@@ -9927,7 +9930,7 @@ function _makeContactDocId(name, phone) {
 
 let _lastTempAutofillId = null;
 
-function _tryTempContactAutofill() {
+async function _tryTempContactAutofill() {
     const name = document.getElementById('temp-att-name')?.value.trim();
     const phone = document.getElementById('temp-att-parent-phone')?.value.trim();
     if (!name || !phone) return;
@@ -9935,10 +9938,11 @@ function _tryTempContactAutofill() {
     const docId = _makeContactDocId(name, phone);
     if (docId === _lastTempAutofillId) return;
 
-    const contact = allContacts.find(c => c.id === docId);
-    if (!contact) return;
-
-    _lastTempAutofillId = docId;
+    try {
+        const snap = await getDoc(doc(db, 'contacts', docId));
+        if (!snap.exists()) return;
+        const contact = snap.data();
+        _lastTempAutofillId = docId;
 
     const setIfEmpty = (id, val) => {
         const el = document.getElementById(id);
@@ -9962,6 +9966,7 @@ function _tryTempContactAutofill() {
         hint.style.display = 'block';
         setTimeout(() => { hint.style.display = 'none'; }, 3000);
     }
+    } catch (e) { /* getDoc 실패 시 무시 */ }
 }
 
 function openTempAttendanceModal() {
@@ -10157,17 +10162,20 @@ window.openTempAttendanceForEdit = openTempAttendanceForEdit;
 window.saveTempAttendance = saveTempAttendance;
 
 // 과거 연락처 클릭 → 진단평가 모달 열기 + 자동채움
-window.openContactAsTemp = function(contactId) {
-    const c = allContacts.find(ct => ct.id === contactId);
-    if (!c) return;
-    openTempAttendanceModal();
-    document.getElementById('temp-att-name').value = c.name || '';
-    document.getElementById('temp-att-branch').value = c.branch || '';
-    document.getElementById('temp-att-school').value = c.school || '';
-    document.getElementById('temp-att-level').value = c.level || '';
-    document.getElementById('temp-att-grade').value = c.grade || '';
-    document.getElementById('temp-att-student-phone').value = c.student_phone || '';
-    document.getElementById('temp-att-parent-phone').value = c.parent_phone_1 || '';
+window.openContactAsTemp = async function(contactId) {
+    try {
+        const snap = await getDoc(doc(db, 'contacts', contactId));
+        if (!snap.exists()) return;
+        const c = snap.data();
+        openTempAttendanceModal();
+        document.getElementById('temp-att-name').value = c.name || '';
+        document.getElementById('temp-att-branch').value = c.branch || '';
+        document.getElementById('temp-att-school').value = c.school || '';
+        document.getElementById('temp-att-level').value = c.level || '';
+        document.getElementById('temp-att-grade').value = c.grade || '';
+        document.getElementById('temp-att-student-phone').value = c.student_phone || '';
+        document.getElementById('temp-att-parent-phone').value = c.parent_phone_1 || '';
+    } catch (e) { /* 네트워크 오류 시 무시 */ }
 };
 
 // 이름·학부모전화 입력 후 contacts 자동채움 이벤트
