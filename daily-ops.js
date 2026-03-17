@@ -6189,7 +6189,8 @@ function renderStudentDetail(studentId) {
     document.getElementById('detail-empty').style.display = 'none';
     document.getElementById('detail-content').style.display = '';
 
-    const student = allStudents.find(s => s.docId === studentId);
+    const student = allStudents.find(s => s.docId === studentId)
+        || withdrawnStudents.find(s => s.docId === studentId);
     if (!student) {
         document.getElementById('detail-empty').style.display = '';
         document.getElementById('detail-content').style.display = 'none';
