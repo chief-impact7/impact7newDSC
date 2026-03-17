@@ -5954,26 +5954,24 @@ function _renderLRRow(r, idx, studentId) {
         ? `<div style="font-size:12px;margin-top:4px;padding:6px 8px;background:var(--bg-secondary);border-radius:4px;">${esc(r.consultation_note)}</div>`
         : '';
 
-    // 3버튼 UI: 요청취소(항상 outlined), 교수부승인, 행정부승인
+    // 3버튼 UI: 필드 기반 독립 승인
     let actionsHtml = '';
     if (r.status !== 'approved' && r.status !== 'cancelled' && r.status !== 'rejected') {
-        const tApproved = r.status === 'teacher_approved' || r.status === 'approved';
-        const aApproved = r.status === 'approved';
-        const tBtnCls = tApproved ? 'lr-btn-filled' : 'lr-btn-outlined';
-        const aBtnCls = aApproved ? 'lr-btn-filled' : 'lr-btn-outlined';
-        const tClick = tApproved ? '' : `onclick="teacherApproveLeaveRequest('${escAttr(r.docId)}', '${escAttr(studentId)}')"`;
-        const aClick = (tApproved && !aApproved) ? `onclick="approveLeaveRequest('${escAttr(r.docId)}', '${escAttr(studentId)}')"` : '';
+        const tDone = !!r.teacher_approved_by;
+        const aDone = !!r.approved_by;
         actionsHtml = `
             <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:8px;">
                 <button class="lr-btn lr-btn-outlined" style="color:var(--text-sec);"
                     onclick="cancelLeaveRequest('${escAttr(r.docId)}', '${escAttr(studentId)}')">
                     <span class="material-symbols-outlined">close</span>요청 취소
                 </button>
-                <button class="lr-btn ${tBtnCls}" ${tClick} ${tApproved ? 'disabled style="opacity:0.8;"' : ''}>
-                    <span class="material-symbols-outlined">${tApproved ? 'check_circle' : 'check'}</span>교수부
+                <button class="lr-btn ${tDone ? 'lr-btn-filled' : 'lr-btn-outlined'}" style="${tDone ? '' : 'opacity:0.6;'}"
+                    ${tDone ? 'disabled' : `onclick="teacherApproveLeaveRequest('${escAttr(r.docId)}', '${escAttr(studentId)}')"`}>
+                    <span class="material-symbols-outlined">${tDone ? 'check_circle' : 'radio_button_unchecked'}</span>교수부
                 </button>
-                <button class="lr-btn ${aBtnCls}" ${aClick} ${!tApproved || aApproved ? 'disabled style="opacity:0.5;"' : ''}>
-                    <span class="material-symbols-outlined">${aApproved ? 'check_circle' : 'check'}</span>행정부
+                <button class="lr-btn ${aDone ? 'lr-btn-filled' : 'lr-btn-outlined'}" style="${aDone ? '' : 'opacity:0.6;'}"
+                    ${aDone ? 'disabled' : `onclick="approveLeaveRequest('${escAttr(r.docId)}', '${escAttr(studentId)}')"`}>
+                    <span class="material-symbols-outlined">${aDone ? 'check_circle' : 'radio_button_unchecked'}</span>행정부
                 </button>
             </div>`;
     }
