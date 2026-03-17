@@ -7419,6 +7419,20 @@ async function approveLeaveRequest(docId, studentId) {
             studentUpdate.status = '재원';
             studentUpdate.pause_start_date = deleteField();
             studentUpdate.pause_end_date = deleteField();
+            // 재등원 시 동명이인 재원생 체크 → 이름에 숫자 접미사 추가
+            const studentName = cachedStudent?.name || '';
+            const baseName = studentName.replace(/\d+$/, '');
+            const escapedBase = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const variantRe = new RegExp(`^${escapedBase}\\d*$`);
+            const activeVariants = allStudents.filter(s =>
+                s.docId !== studentId && variantRe.test(s.name) && s.status === '재원'
+            );
+            if (activeVariants.length > 0) {
+                const usedNumbers = [cachedStudent, ...activeVariants]
+                    .map(s => { const m = s.name.match(/(\d+)$/); return m ? parseInt(m[1], 10) : 1; });
+                const nextNum = Math.max(...usedNumbers) + 1;
+                studentUpdate.name = `${baseName}${nextNum}`;
+            }
         } else if (isWithdrawal) {
             studentUpdate.status = '퇴원';
             studentUpdate.withdrawal_date = r.withdrawal_date || todayStr();
