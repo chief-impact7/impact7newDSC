@@ -144,7 +144,7 @@ body {
 .app-bar-center {
   flex: 1;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   min-width: 0;
 }
 
