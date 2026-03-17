@@ -5954,23 +5954,24 @@ function _renderLRRow(r, idx, studentId) {
         ? `<div style="font-size:12px;margin-top:4px;padding:6px 8px;background:var(--bg-secondary);border-radius:4px;">${esc(r.consultation_note)}</div>`
         : '';
 
-    // 3버튼 UI: 필드 기반 독립 승인
+    // 3버튼 토글 UI
     let actionsHtml = '';
-    if (r.status !== 'approved' && r.status !== 'cancelled' && r.status !== 'rejected') {
+    if (r.status !== 'approved' && r.status !== 'rejected') {
+        const cDone = r.status === 'cancelled';
         const tDone = !!r.teacher_approved_by;
         const aDone = !!r.approved_by;
         actionsHtml = `
             <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:8px;">
-                <button class="lr-btn lr-btn-outlined" style="color:var(--text-sec);"
-                    onclick="cancelLeaveRequest('${escAttr(r.docId)}', '${escAttr(studentId)}')">
-                    <span class="material-symbols-outlined">close</span>요청 취소
+                <button class="lr-btn ${cDone ? 'lr-btn-filled' : 'lr-btn-outlined'}" style="${cDone ? '' : 'opacity:0.5;'}"
+                    onclick="toggleCancelLeaveRequest('${escAttr(r.docId)}', '${escAttr(studentId)}')">
+                    <span class="material-symbols-outlined">${cDone ? 'cancel' : 'radio_button_unchecked'}</span>취소
                 </button>
-                <button class="lr-btn ${tDone ? 'lr-btn-filled' : 'lr-btn-outlined'}" style="${tDone ? '' : 'opacity:0.6;'}"
-                    ${tDone ? 'disabled' : `onclick="teacherApproveLeaveRequest('${escAttr(r.docId)}', '${escAttr(studentId)}')"`}>
+                <button class="lr-btn ${tDone ? 'lr-btn-filled' : 'lr-btn-outlined'}" style="${tDone ? '' : 'opacity:0.5;'}"
+                    onclick="teacherApproveLeaveRequest('${escAttr(r.docId)}', '${escAttr(studentId)}')">
                     <span class="material-symbols-outlined">${tDone ? 'check_circle' : 'radio_button_unchecked'}</span>교수부
                 </button>
-                <button class="lr-btn ${aDone ? 'lr-btn-filled' : 'lr-btn-outlined'}" style="${aDone ? '' : 'opacity:0.6;'}"
-                    ${aDone ? 'disabled' : `onclick="approveLeaveRequest('${escAttr(r.docId)}', '${escAttr(studentId)}')"`}>
+                <button class="lr-btn ${aDone ? 'lr-btn-filled' : 'lr-btn-outlined'}" style="${aDone ? '' : 'opacity:0.5;'}"
+                    onclick="approveLeaveRequest('${escAttr(r.docId)}', '${escAttr(studentId)}')">
                     <span class="material-symbols-outlined">${aDone ? 'check_circle' : 'radio_button_unchecked'}</span>행정부
                 </button>
             </div>`;
@@ -7350,11 +7351,39 @@ async function submitLeaveRequest() {
 
 // ─── 휴퇴원 승인/취소 (3단계: 요청 → 교수부승인 → 행정부승인) ─────────────────
 
-// 교수부 승인 (순서 무관, 행정부와 독립)
+// 요청취소 토글
+async function toggleCancelLeaveRequest(docId, studentId) {
+    const r = leaveRequests.find(lr => lr.docId === docId);
+    if (!r) return;
+    const isCancelled = r.status === 'cancelled';
+    try {
+        await updateDoc(doc(db, 'leave_requests', docId), { status: isCancelled ? 'requested' : 'cancelled', updated_at: serverTimestamp() });
+        const lrIdx = leaveRequests.findIndex(lr => lr.docId === docId);
+        if (lrIdx >= 0) leaveRequests[lrIdx].status = isCancelled ? 'requested' : 'cancelled';
+        showSaveIndicator('saved');
+        renderSubFilters();
+        if (currentCategory === 'admin' && currentSubFilter.has('leave_request')) renderLeaveRequestList();
+        renderStudentDetail(studentId);
+    } catch (err) { alert('처리 실패: ' + err.message); }
+}
+
+// 교수부 승인 토글
 async function teacherApproveLeaveRequest(docId, studentId) {
     const r = leaveRequests.find(lr => lr.docId === docId);
     if (!r) return;
-    if (r.teacher_approved_by) { alert('이미 교수부 승인되었습니다.'); return; }
+    // 토글: 이미 승인 → 취소
+    if (r.teacher_approved_by) {
+        try {
+            await updateDoc(doc(db, 'leave_requests', docId), { teacher_approved_by: deleteField(), teacher_approved_at: deleteField(), updated_at: serverTimestamp() });
+            const lrIdx = leaveRequests.findIndex(lr => lr.docId === docId);
+            if (lrIdx >= 0) { delete leaveRequests[lrIdx].teacher_approved_by; delete leaveRequests[lrIdx].teacher_approved_at; }
+            showSaveIndicator('saved');
+            renderSubFilters();
+            if (currentCategory === 'admin' && currentSubFilter.has('leave_request')) renderLeaveRequestList();
+            renderStudentDetail(studentId);
+        } catch (err) { alert('교수부 승인 취소 실패: ' + err.message); }
+        return;
+    }
     const typeLabel = `${r.request_type}${r.leave_sub_type ? ' (' + r.leave_sub_type + ')' : ''}`;
     if (!confirm(`${r.student_name} — ${typeLabel}\n교수부 승인하시겠습니까?`)) return;
 
@@ -7384,11 +7413,23 @@ async function teacherApproveLeaveRequest(docId, studentId) {
     }
 }
 
-// 행정부 승인 (순서 무관, 교수부와 독립)
+// 행정부 승인 토글
 async function approveLeaveRequest(docId, studentId) {
     const r = leaveRequests.find(lr => lr.docId === docId);
     if (!r) return;
-    if (r.approved_by) { alert('이미 행정부 승인되었습니다.'); return; }
+    // 토글: 이미 승인 → 취소
+    if (r.approved_by) {
+        try {
+            await updateDoc(doc(db, 'leave_requests', docId), { approved_by: deleteField(), approved_at: deleteField(), updated_at: serverTimestamp() });
+            const lrIdx = leaveRequests.findIndex(lr => lr.docId === docId);
+            if (lrIdx >= 0) { delete leaveRequests[lrIdx].approved_by; delete leaveRequests[lrIdx].approved_at; }
+            showSaveIndicator('saved');
+            renderSubFilters();
+            if (currentCategory === 'admin' && currentSubFilter.has('leave_request')) renderLeaveRequestList();
+            renderStudentDetail(studentId);
+        } catch (err) { alert('행정부 승인 취소 실패: ' + err.message); }
+        return;
+    }
 
     const typeLabel = `${r.request_type}${r.leave_sub_type ? ' (' + r.leave_sub_type + ')' : ''}`;
     if (!confirm(`${r.student_name} — ${typeLabel}\n행정부 승인하시겠습니까?`)) return;
@@ -9092,6 +9133,7 @@ window.selectLeaveRequestStudentById = selectLeaveRequestStudentById;
 window.submitLeaveRequest = submitLeaveRequest;
 window.selectLeaveRequest = selectLeaveRequest;
 window.selectReturnUpcomingStudent = selectReturnUpcomingStudent;
+window.toggleCancelLeaveRequest = toggleCancelLeaveRequest;
 window.teacherApproveLeaveRequest = teacherApproveLeaveRequest;
 window.approveLeaveRequest = approveLeaveRequest;
 window.cancelLeaveRequest = cancelLeaveRequest;
