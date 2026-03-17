@@ -44,7 +44,6 @@ const TABS = [
           <li><strong>이름</strong> &mdash; 학생 이름 전체 또는 일부 입력 (예: 김민준)</li>
           <li><strong>학교명</strong> &mdash; 학교 이름으로 검색 (예: 진명여고)</li>
           <li><strong>전화번호</strong> &mdash; 학부모 또는 학생 연락처 입력</li>
-          <li><strong>초성 검색</strong> &mdash; 한글 초성만 입력 (예: ㄱㅁㅈ &rarr; 김민준)</li>
           <li><strong>담당 선생님</strong> &mdash; 담당 선생님 이름으로 해당 반 학생 검색 (예: 김선생)</li>
         </ul>
         <p class="help-guide-desc" style="margin-top:8px;">

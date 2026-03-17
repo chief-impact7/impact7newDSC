@@ -40,7 +40,7 @@
             <div class="app-bar-center">
                 <div class="search-pill">
                     <span class="material-symbols-outlined">search</span>
-                    <input type="text" id="search-input" placeholder="이름, 학교, 전화번호 또는 초성(ㄱㄴㄷ)으로 검색..." oninput="handleSearch(this.value)">
+                    <input type="text" id="search-input" placeholder="이름, 학교, 전화번호로 검색..." oninput="handleSearch(this.value)">
                     <button class="search-clear" id="search-clear" onclick="clearSearch()" style="display:none" aria-label="검색 지우기">
                         <span class="material-symbols-outlined">close</span>
                     </button>
@@ -862,7 +862,7 @@
                 <!-- 학생 검색 -->
                 <div>
                     <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">학생 검색</label>
-                    <input type="text" id="lr-student-search" class="field-input" style="width:100%;" placeholder="이름 또는 초성으로 검색..." oninput="searchLeaveRequestStudent(this.value)">
+                    <input type="text" id="lr-student-search" class="field-input" style="width:100%;" placeholder="이름으로 검색..." oninput="searchLeaveRequestStudent(this.value)">
                     <div id="lr-student-results" style="max-height:150px;overflow-y:auto;margin-top:4px;"></div>
                 </div>
                 <!-- 선택된 학생 정보 -->

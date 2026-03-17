@@ -104,18 +104,6 @@ function oxDisplayClass(value) {
     return 'ox-empty';
 }
 
-// ─── 한글 초성 검색 헬퍼 ───────────────────────────────────────────────────
-const CHO = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
-const getChosung = (str) => [...(str || '')].map(ch => {
-    const code = ch.charCodeAt(0);
-    if (code >= 0xAC00 && code <= 0xD7A3) return CHO[Math.floor((code - 0xAC00) / 588)];
-    return ch;
-}).join('');
-const isChosungOnly = (str) => str && [...str].every(ch => CHO.includes(ch));
-const matchChosung = (target, term) => {
-    if (!target || !term) return false;
-    return getChosung(target).includes(term);
-};
 
 // ─── 형제 맵 빌드 ──────────────────────────────────────────────────────────
 function buildSiblingMap() {
@@ -1974,9 +1962,7 @@ function getFilteredStudents() {
         students = students.filter(s => matchesBranchFilter(s));
         if (searchQuery) {
             const q = searchQuery.trim().toLowerCase();
-            const chosungMode = isChosungOnly(q);
             students = students.filter(s => {
-                if (chosungMode) return matchChosung(s.name, q) || matchChosung(s.school, q);
                 return (s.name?.toLowerCase().includes(q)) ||
                     (s.school?.toLowerCase().includes(q)) ||
                     (s.student_phone?.includes(q)) ||
@@ -2040,9 +2026,7 @@ function getFilteredStudents() {
     // 검색어 필터
     if (searchQuery) {
         const q = searchQuery.trim().toLowerCase();
-        const chosungMode = isChosungOnly(q);
         students = students.filter(s => {
-            if (chosungMode) return matchChosung(s.name, q) || matchChosung(s.school, q);
             return (s.name?.toLowerCase().includes(q)) ||
                 (s.school?.toLowerCase().includes(q)) ||
                 (s.student_phone?.includes(q)) ||
@@ -2167,9 +2151,7 @@ function getFilteredStudents() {
             let filtered = visitStudents;
             if (searchQuery) {
                 const q = searchQuery.trim().toLowerCase();
-                const chosungMode = isChosungOnly(q);
                 filtered = filtered.filter(s => {
-                    if (chosungMode) return matchChosung(s.name, q) || matchChosung(s.school, q);
                     return (s.name?.toLowerCase().includes(q)) ||
                         (s.school?.toLowerCase().includes(q)) ||
                         s.enrollments.some(e => enrollmentCode(e).toLowerCase().includes(q));
@@ -2818,9 +2800,9 @@ function renderListPanel() {
     // 필터 칩 렌더링
     renderFilterChips();
 
-    // 과거 학생 비동기 검색 (Firestore prefix 쿼리, 초성 제외)
+    // 과거 학생 비동기 검색 (Firestore prefix 쿼리)
     let pastContactResults = [];
-    if (searchQuery && searchQuery.trim().length >= 2 && !isChosungOnly(searchQuery.trim().toLowerCase())) {
+    if (searchQuery && searchQuery.trim().length >= 2) {
         const searchId = ++_contactSearchId;
         _searchContactsDSC(searchQuery.trim()).then(results => {
             if (searchId !== _contactSearchId || results.length === 0) return;
@@ -2862,7 +2844,7 @@ function renderListPanel() {
     const renderItemHtml = (s) => {
         const isActive = s.docId === selectedStudentId ? 'active' : '';
         const dayN = getDayName(selectedDate);
-        const code = getActiveEnrollments(s, selectedDate).filter(e => e.day.includes(dayN) && (!selectedSemester || e.semester === selectedSemester)).map(e => enrollmentCode(e)).join(', ') || getActiveEnrollments(s, selectedDate).map(e => enrollmentCode(e)).join(', ');
+        const code = getActiveEnrollments(s, selectedDate).filter(e => e.day.includes(dayN) && (!selectedSemester || e.semester === selectedSemester)).map(e => e.class_type === '내신' ? '내신' : enrollmentCode(e)).join(', ') || getActiveEnrollments(s, selectedDate).map(e => e.class_type === '내신' ? '내신' : enrollmentCode(e)).join(', ');
         const branch = branchFromStudent(s);
 
         // 타반수업 배지
@@ -7241,11 +7223,7 @@ function searchLeaveRequestStudent(term) {
         pool = allStudents.filter(s => s.status === '재원' || s.status === '등원예정');
     }
 
-    const isChosung = isChosungOnly(term);
-    const matched = pool.filter(s => {
-        if (isChosung) return matchChosung(s.name, term);
-        return s.name.includes(term);
-    }).slice(0, 10);
+    const matched = pool.filter(s => s.name.includes(term)).slice(0, 10);
 
     if (matched.length === 0) {
         results.innerHTML = '<div style="padding:8px;font-size:12px;color:var(--text-sec);">결과 없음</div>';
@@ -7377,6 +7355,7 @@ async function approveLeaveRequest(docId, studentId) {
             studentUpdate.pause_end_date = deleteField();
         } else if (isWithdrawal) {
             studentUpdate.status = '퇴원';
+            studentUpdate.withdrawal_date = r.withdrawal_date || todayStr();
             studentUpdate.pause_start_date = deleteField();
             studentUpdate.pause_end_date = deleteField();
         } else if (_isLeaveExtension(r.request_type)) {
