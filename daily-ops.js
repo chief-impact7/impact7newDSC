@@ -2584,7 +2584,7 @@ function _leaveRequestStatusBadge(status) {
     const map = {
         'requested': { label: '대기', cls: 'absence-status-badge unconsulted' },
         'teacher_approved': { label: '교수부승인', cls: 'absence-status-badge pending' },
-        'approved': { label: '최종승인', cls: 'absence-status-badge completed' },
+        'approved': { label: '승인완료', cls: 'absence-status-badge completed' },
         'rejected': { label: '반려', cls: 'absence-status-badge noshow' },
         'cancelled': { label: '취소', cls: 'absence-status-badge undecided' }
     };
