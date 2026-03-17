@@ -2580,15 +2580,16 @@ function _leaveTypeBadgeOrFallback(lr, statusText) {
     return lr ? _leaveRequestTypeBadge(lr) : `<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;color:#fff;background:#6b7280;">${esc(statusText)}</span>`;
 }
 
-function _leaveRequestStatusBadge(status) {
-    const map = {
-        'requested': { label: '승인대기', cls: 'absence-status-badge unconsulted' },
-        'approved': { label: '승인완료', cls: 'absence-status-badge completed' },
-        'rejected': { label: '반려', cls: 'absence-status-badge noshow' },
-        'cancelled': { label: '취소', cls: 'absence-status-badge undecided' }
-    };
-    const m = map[status] || { label: status, cls: '' };
-    return `<span class="${m.cls}">${esc(m.label)}</span>`;
+function _leaveRequestStatusBadge(r) {
+    if (typeof r === 'string') r = { status: r }; // 하위 호환
+    if (r.status === 'approved') return `<span class="absence-status-badge completed">승인완료</span>`;
+    if (r.status === 'cancelled') return `<span class="absence-status-badge undecided">취소</span>`;
+    if (r.status === 'rejected') return `<span class="absence-status-badge noshow">반려</span>`;
+    const pending = [];
+    if (!r.teacher_approved_by) pending.push('교수부');
+    if (!r.approved_by) pending.push('행정부');
+    const label = pending.length > 0 ? `${pending.join('·')}대기` : '승인대기';
+    return `<span class="absence-status-badge unconsulted">${esc(label)}</span>`;
 }
 
 let _selectedLeaveRequestId = null;
@@ -2643,7 +2644,7 @@ function renderLeaveRequestList() {
                         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
                             <span style="font-weight:600;font-size:13px;">${esc(r.student_name)}</span>
                             ${_leaveRequestTypeBadge(r)}
-                            ${_leaveRequestStatusBadge(r.status)}
+                            ${_leaveRequestStatusBadge(r)}
                         </div>
                         <div style="font-size:11px;color:var(--text-sec);margin-top:2px;">
                             ${esc(classCodes)}${_by ? ' · ' + esc(_by) : ''} · ${esc(tsStr)}
@@ -6000,7 +6001,7 @@ function _renderLRRow(r, idx, studentId) {
     return `
         <div class="pending-task-row" data-lr-idx="${idx}" style="background:#f0f5ff;">
             <div class="pending-task-summary" onclick="this.parentElement.classList.toggle('expanded')">
-                <span>${typeBadge} ${_leaveRequestStatusBadge(r.status)} <span style="font-size:12px;color:var(--text-sec);margin-left:4px;">${esc(dateStr)}</span></span>
+                <span>${typeBadge} ${_leaveRequestStatusBadge(r)} <span style="font-size:12px;color:var(--text-sec);margin-left:4px;">${esc(dateStr)}</span></span>
                 <span class="pending-task-arrow material-symbols-outlined" style="font-size:16px;color:var(--text-sec);">expand_more</span>
             </div>
             <div class="pending-task-expand">
