@@ -2003,12 +2003,11 @@ function getFilteredStudents() {
 
     const dayName = getDayName(selectedDate);
 
-    // 검색어가 있으면 요일 무관, 현재 학기 학생만 (과거 학생은 allContacts에서 별도 검색)
+    // 검색어가 있으면 요일 무관, 현재 학기 학생만 (퇴원생은 contacts 검색에서 표시)
     let students;
     if (searchQuery) {
-        // 검색 시 퇴원 학생 포함 (enrollment 없어도 이름으로 검색 가능)
-        students = [...allStudents, ...withdrawnStudents].filter(s =>
-            s.status === '퇴원' || getActiveEnrollments(s, selectedDate).some(e =>
+        students = allStudents.filter(s =>
+            getActiveEnrollments(s, selectedDate).some(e =>
                 !selectedSemester || e.semester === selectedSemester
             )
         );
