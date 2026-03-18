@@ -67,6 +67,16 @@ const SV_SOURCE_MAP = {
     sv_fail: ['hw_fail', 'test_fail']
 };
 const SV_L3_KEYS = Object.keys(SV_SOURCE_MAP);
+const SOURCE_PRIORITY = { extra: 0, temp: 1, hw_fail: 2, test_fail: 3, absence_makeup: 4 };
+const SOURCE_SHORT = { extra: '클리닉', temp: '진단', hw_fail: '숙제', test_fail: '테스트', absence_makeup: '보충' };
+
+function _attToggleClass(status) {
+    const d = status === '미확인' ? '등원전' : status;
+    if (d === '출석') return { display: d, cls: 'active-present' };
+    if (d === '지각') return { display: d, cls: 'active-late' };
+    if (d === '결석') return { display: d, cls: 'active-absent' };
+    return { display: d, cls: 'active-other' };
+}
 
 // ─── OX Helpers ─────────────────────────────────────────────────────────────
 const OX_CYCLE = ['O', '△', 'X', ''];
@@ -2180,7 +2190,125 @@ function formatCompletedBadge(completedBy, completedAt) {
     return `<span class="visit-caller-badge">(${esc(completedBy)}${timeStr ? ': ' + timeStr : ''} 확인)</span>`;
 }
 
+function groupVisitsByStudent(visits) {
+    const grouped = {};   // studentId → visit[]
+    const ungrouped = []; // studentId===null (진단평가 등)
+    for (const v of visits) {
+        if (!v.studentId) { ungrouped.push(v); continue; }
+        if (!grouped[v.studentId]) grouped[v.studentId] = [];
+        grouped[v.studentId].push(v);
+    }
+    // 각 그룹 내부: 소스 순서 유지 (extra → temp → hw_fail → test_fail → absence_makeup)
+    for (const sid of Object.keys(grouped)) {
+        grouped[sid].sort((a, b) => (SOURCE_PRIORITY[a.source] ?? 9) - (SOURCE_PRIORITY[b.source] ?? 9));
+    }
+    // 그룹 목록: 가장 빠른 시간 기준 정렬
+    const groups = Object.entries(grouped).sort((a, b) => {
+        const timeA = a[1][0]?.time || '99:99';
+        const timeB = b[1][0]?.time || '99:99';
+        return timeA.localeCompare(timeB);
+    });
+    return { groups, ungrouped };
+}
+
+function renderVisitConfirmBtn(v) {
+    const isCompleted = v.status === 'completed';
+    if (isCompleted) {
+        const vs = _visitLabel(v.visitStatus || '완료', v.source);
+        const { cls, sty } = _visitBtnStyles(vs);
+        const isIncomplete = v.visitStatus === '미완료' || v.visitStatus === 'pending';
+        let rescheduleBtn = '';
+        if (isIncomplete && v.source === 'temp') {
+            rescheduleBtn = `<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;background:#2563eb;color:#fff;border-color:#2563eb;" onclick="event.stopPropagation(); _showDiagnosticActionModal('${escAttr(v.docId)}')">재지정</button>`;
+        } else if (isIncomplete && (v.source === 'hw_fail' || v.source === 'test_fail')) {
+            rescheduleBtn = `<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;background:#2563eb;color:#fff;border-color:#2563eb;" onclick="event.stopPropagation(); rescheduleVisit('${escAttr(v.source)}', '${escAttr(v.docId)}')">재지정</button>`;
+        }
+        return `<button class="toggle-btn ${cls}" style="${sty}pointer-events:none;opacity:0.7;">${esc(vs)}</button>${rescheduleBtn}<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;color:var(--text-sec);border-color:var(--border);" onclick="event.stopPropagation(); resetScheduledVisit('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">초기화</button>`;
+    }
+    if (v.overdue) {
+        const vs = _visitLabel(v.visitStatus || '미완료', v.source);
+        const { cls, sty } = _visitBtnStyles(vs);
+        const sid = v.studentId ? `'${escAttr(v.studentId)}'` : 'null';
+        return `<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;background:#2563eb;color:#fff;border-color:#2563eb;" onclick="event.stopPropagation(); rescheduleVisit('${escAttr(v.source)}', '${escAttr(v.docId)}')">재지정</button><button class="toggle-btn ${cls}" data-visit-id="${escAttr(v.docId)}" style="${sty}margin-left:4px;" onclick="event.stopPropagation(); cycleVisitStatus('${escAttr(v.source)}', '${escAttr(v.docId)}', ${sid})">${esc(vs)}</button><button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;" onclick="event.stopPropagation(); confirmVisitStatus('${escAttr(v.docId)}')">확인</button>`;
+    }
+    // pending (normal)
+    const vs = _visitLabel(v.visitStatus || '미완료', v.source);
+    const { cls, sty } = _visitBtnStyles(vs);
+    const sid = v.studentId ? `'${escAttr(v.studentId)}'` : 'null';
+    return `<button class="toggle-btn ${cls}" data-visit-id="${escAttr(v.docId)}" style="${sty}" onclick="event.stopPropagation(); cycleVisitStatus('${escAttr(v.source)}', '${escAttr(v.docId)}', ${sid})">${esc(vs)}</button><button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;" onclick="event.stopPropagation(); confirmVisitStatus('${escAttr(v.docId)}')">확인</button>`;
+}
+
+let _cachedToday = '';
+function renderVisitSubitem(v) {
+    const isCompleted = v.status === 'completed';
+    const completedClass = isCompleted ? 'visit-completed' : '';
+    const overdueBadge = v.overdue ? `<span class="visit-overdue-badge">지연 ${_stripYear(v.originalDate)}</span>` : '';
+    const callerBadge = v.caller ? `<span class="visit-caller-badge">(${esc(v.caller)})</span>` : '';
+    const completedInfo = isCompleted ? formatCompletedBadge(v.completedBy, v.completedAt) : '';
+    const confirmBtn = renderVisitConfirmBtn(v);
+    // 날짜 표시 (overdue가 아닌 경우에도 originalDate가 오늘이 아니면 표시)
+    let dateInfo = '';
+    if (v.originalDate && v.originalDate !== _cachedToday) {
+        dateInfo = ` (${_stripYear(v.originalDate)})`;
+    }
+
+    return `<div class="visit-group-subitem ${completedClass}" data-visit-id="${escAttr(v.docId)}">
+        <span class="visit-source-badge" style="background:${v.sourceColor};flex-shrink:0;">${esc(v.sourceLabel)}</span>
+        <span class="visit-subitem-detail">${overdueBadge}${esc(v.detail)}${dateInfo} ${callerBadge}${completedInfo}</span>
+        <span class="visit-subitem-actions">${confirmBtn}</span>
+    </div>`;
+}
+
+function renderVisitGroup(studentId, visits) {
+    const name = visits[0].name;
+    const isCompleted = visits.every(v => v.status === 'completed');
+    const completedClass = isCompleted ? 'visit-completed' : '';
+
+    // 클릭 → 학생 상세
+    const clickHandler = `onclick="selectedStudentId='${escAttr(studentId)}'; renderStudentDetail('${escAttr(studentId)}'); document.querySelectorAll('.list-item').forEach(el=>el.classList.remove('active')); this.closest('.visit-group').classList.add('active');"`;
+
+    // 소스 배지 모음 (중복 제거)
+    const uniqueSources = [...new Set(visits.map(v => v.source))];
+    const sourceBadges = uniqueSources.map(src => {
+        const v = visits.find(x => x.source === src);
+        return `<span class="visit-source-badge" style="background:${v.sourceColor};font-size:9px;">${esc(SOURCE_SHORT[src] || src)}</span>`;
+    }).join('');
+
+    // 시간 블록 + 출결 토글 (학생 단위)
+    let timeHtml = '';
+    const rec = dailyRecords[studentId];
+    const arrivalTime = rec?.arrival_time;
+    if (arrivalTime) {
+        timeHtml = `<div class="item-time-block arrived">
+            <span class="item-time-label">등원</span>
+            <span class="item-time-value">${esc(formatTime12h(arrivalTime))}</span>
+        </div>`;
+    } else if (visits[0].time) {
+        timeHtml = `<div class="item-time-block">
+            <span class="item-time-label">예정</span>
+            <span class="item-time-value">${esc(formatTime12h(visits[0].time))}</span>
+        </div>`;
+    }
+    const { display: currentDisplay, cls: activeClass } = _attToggleClass(rec?.attendance?.status || '미확인');
+    const toggleHtml = `<button class="toggle-btn ${activeClass}" style="min-width:48px;" onclick="event.stopPropagation(); cycleVisitAttendance('${escAttr(studentId)}')">${currentDisplay}</button>`;
+
+    const subitemsHtml = visits.map(renderVisitSubitem).join('');
+
+    return `<div class="visit-group ${completedClass}" data-id="${escAttr(studentId)}">
+        <div class="visit-group-header" ${clickHandler} style="cursor:pointer;">
+            <div class="item-info">
+                <span class="item-title">${esc(name)}</span>
+                <span class="item-desc">${sourceBadges} <span style="font-size:11px;color:var(--text-sec);">${visits.length}건</span></span>
+            </div>
+            ${timeHtml}
+            ${toggleHtml}
+        </div>
+        <div class="visit-group-items">${subitemsHtml}</div>
+    </div>`;
+}
+
 function renderScheduledVisitList() {
+    _cachedToday = todayStr();
     let visits = getScheduledVisits();
 
     // L3 필터 적용
@@ -2193,8 +2321,19 @@ function renderScheduledVisitList() {
     const container = document.getElementById('list-items');
     const countEl = document.getElementById('list-count');
 
+    // 고유 학생 수 계산
+    const uniqueStudentIds = new Set();
+    let ungroupedCount = 0;
+    for (const v of visits) {
+        if (v.studentId) uniqueStudentIds.add(v.studentId);
+        else ungroupedCount++;
+    }
+    const totalStudents = uniqueStudentIds.size + ungroupedCount;
+
     renderFilterChips();
-    countEl.textContent = `${visits.length}건`;
+    countEl.textContent = totalStudents === visits.length
+        ? `${visits.length}건`
+        : `${totalStudents}명 ${visits.length}건`;
 
     if (visits.length === 0) {
         container.innerHTML = `<div class="empty-state">
@@ -2204,7 +2343,7 @@ function renderScheduledVisitList() {
         return;
     }
 
-    // 등원전 / 소스별 그룹 / 확인완료 분리
+    // 등원전 / 등원완료 / 확인완료 분리
     const isPreArrival = (v) => {
         if (!v.studentId) return true; // 비등록(진단평가 등)은 등원전 취급
         const st = dailyRecords[v.studentId]?.attendance?.status || '미확인';
@@ -2216,19 +2355,7 @@ function renderScheduledVisitList() {
     const preArrival = pendingVisits.filter(v => isPreArrival(v));
     const arrived = pendingVisits.filter(v => !isPreArrival(v));
 
-    // 소스별 라벨
-    const SOURCE_LABELS = {
-        extra: '클리닉', temp: '진단평가',
-        hw_fail: '숙제미통과', test_fail: '테스트미통과', absence_makeup: '결석보충'
-    };
-    // 소스별 그룹핑 (순서: 클리닉 → 진단평가 → 숙제미통과 → 테스트미통과 → 결석보충)
-    const SOURCE_ORDER = ['extra', 'temp', 'hw_fail', 'test_fail', 'absence_makeup'];
-    const arrivedBySource = {};
-    for (const v of arrived) {
-        if (!arrivedBySource[v.source]) arrivedBySource[v.source] = [];
-        arrivedBySource[v.source].push(v);
-    }
-
+    // 단일 항목 렌더 (1건 학생 + ungrouped)
     const renderVisitItem = (v) => {
         const isCompleted = v.status === 'completed';
         const completedClass = isCompleted ? 'visit-completed' : '';
@@ -2241,7 +2368,6 @@ function renderScheduledVisitList() {
         const completedInfo = isCompleted ? formatCompletedBadge(v.completedBy, v.completedAt) : '';
         const dataId = v.studentId || v.id;
 
-        // 시간 블록 + 출결 토글 (studentId가 있는 경우만)
         let timeHtml = '';
         let toggleHtml = '';
         const rec = v.studentId ? dailyRecords[v.studentId] : null;
@@ -2259,13 +2385,7 @@ function renderScheduledVisitList() {
         }
 
         if (v.studentId) {
-            const attStatus = rec?.attendance?.status || '미확인';
-            const currentDisplay = attStatus === '미확인' ? '등원전' : attStatus;
-            let activeClass = '';
-            if (currentDisplay === '출석') activeClass = 'active-present';
-            else if (currentDisplay === '지각') activeClass = 'active-late';
-            else if (currentDisplay === '결석') activeClass = 'active-absent';
-            else activeClass = 'active-other';
+            const { display: currentDisplay, cls: activeClass } = _attToggleClass(rec?.attendance?.status || '미확인');
             toggleHtml = `<button class="toggle-btn ${activeClass}" style="min-width:48px;" onclick="event.stopPropagation(); cycleVisitAttendance('${escAttr(v.studentId)}')">${currentDisplay}</button>`;
         } else if (v.source === 'temp') {
             const ta = tempAttendances.find(t => t.docId === v.docId);
@@ -2278,32 +2398,7 @@ function renderScheduledVisitList() {
             toggleHtml = `<button class="toggle-btn ${activeClass}" style="min-width:48px;" onclick="event.stopPropagation(); cycleTempArrival('${escAttr(v.docId)}')">${arrDisplay}</button>`;
         }
 
-        const confirmBtn = isCompleted
-            ? (() => {
-                const vs = _visitLabel(v.visitStatus || '완료', v.source);
-                const { cls, sty } = _visitBtnStyles(vs);
-                const isIncomplete = v.visitStatus === '미완료' || v.visitStatus === 'pending';
-                let rescheduleBtn = '';
-                if (isIncomplete && v.source === 'temp') {
-                    rescheduleBtn = `<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;background:#2563eb;color:#fff;border-color:#2563eb;" onclick="event.stopPropagation(); _showDiagnosticActionModal('${escAttr(v.docId)}')">재지정</button>`;
-                } else if (isIncomplete && (v.source === 'hw_fail' || v.source === 'test_fail')) {
-                    rescheduleBtn = `<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;background:#2563eb;color:#fff;border-color:#2563eb;" onclick="event.stopPropagation(); rescheduleVisit('${escAttr(v.source)}', '${escAttr(v.docId)}')">재지정</button>`;
-                }
-                return `<button class="toggle-btn ${cls}" style="${sty}pointer-events:none;opacity:0.7;">${esc(vs)}</button>${rescheduleBtn}<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;color:var(--text-sec);border-color:var(--border);" onclick="event.stopPropagation(); resetScheduledVisit('${escAttr(v.source)}', '${escAttr(v.docId)}', ${v.studentId ? `'${escAttr(v.studentId)}'` : 'null'})">초기화</button>`;
-            })()
-            : v.overdue
-            ? (() => {
-                const vs = _visitLabel(v.visitStatus || '미완료', v.source);
-                const { cls, sty } = _visitBtnStyles(vs);
-                const sid = v.studentId ? `'${escAttr(v.studentId)}'` : 'null';
-                return `<button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;background:#2563eb;color:#fff;border-color:#2563eb;" onclick="event.stopPropagation(); rescheduleVisit('${escAttr(v.source)}', '${escAttr(v.docId)}')">재지정</button><button class="toggle-btn ${cls}" data-visit-id="${escAttr(v.docId)}" style="${sty}margin-left:4px;" onclick="event.stopPropagation(); cycleVisitStatus('${escAttr(v.source)}', '${escAttr(v.docId)}', ${sid})">${esc(vs)}</button><button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;" onclick="event.stopPropagation(); confirmVisitStatus('${escAttr(v.docId)}')">확인</button>`;
-            })()
-            : (() => {
-                const vs = _visitLabel(v.visitStatus || '미완료', v.source);
-                const { cls, sty } = _visitBtnStyles(vs);
-                const sid = v.studentId ? `'${escAttr(v.studentId)}'` : 'null';
-                return `<button class="toggle-btn ${cls}" data-visit-id="${escAttr(v.docId)}" style="${sty}" onclick="event.stopPropagation(); cycleVisitStatus('${escAttr(v.source)}', '${escAttr(v.docId)}', ${sid})">${esc(vs)}</button><button class="toggle-btn" style="padding:2px 10px;font-size:12px;min-width:auto;margin-left:4px;" onclick="event.stopPropagation(); confirmVisitStatus('${escAttr(v.docId)}')">확인</button>`;
-            })();
+        const confirmBtn = renderVisitConfirmBtn(v);
 
         return `<div class="list-item visit-item ${completedClass}" data-id="${escAttr(dataId)}" ${clickHandler} style="${(v.studentId || v.source === 'temp') ? 'cursor:pointer;' : ''}">
             <div class="item-info">
@@ -2319,27 +2414,42 @@ function renderScheduledVisitList() {
         </div>`;
     };
 
+    // 섹션 렌더 헬퍼: 학생별 그룹핑 적용
+    const renderVisitSection = (sectionVisits) => {
+        const { groups, ungrouped } = groupVisitsByStudent(sectionVisits);
+        let out = '';
+        for (const [sid, studentVisits] of groups) {
+            if (studentVisits.length >= 2) {
+                out += renderVisitGroup(sid, studentVisits);
+            } else {
+                out += renderVisitItem(studentVisits[0]);
+            }
+        }
+        for (const v of ungrouped) {
+            out += renderVisitItem(v);
+        }
+        return out;
+    };
+
     let html = '';
     // 0) 지연 (overdue): 예정일이 지났지만 미완료인 건
     if (overdueVisits.length > 0) {
         html += `<div class="leave-section-divider" style="color:#dc2626;"><span>지연 — 미완료 (${overdueVisits.length}건)</span></div>`;
-        html += overdueVisits.map(renderVisitItem).join('');
+        html += renderVisitSection(overdueVisits);
     }
     // 1) 등원전: 시간임박순
     if (preArrival.length > 0) {
-        html += preArrival.map(renderVisitItem).join('');
+        html += renderVisitSection(preArrival);
     }
-    // 2) 소스별 그룹
-    for (const src of SOURCE_ORDER) {
-        const group = arrivedBySource[src];
-        if (!group || group.length === 0) continue;
-        html += `<div class="leave-section-divider"><span>${SOURCE_LABELS[src] || src} (${group.length}건)</span></div>`;
-        html += group.map(renderVisitItem).join('');
+    // 2) 등원완료 (소스별 구분자 제거 → 학생별 그룹핑)
+    if (arrived.length > 0) {
+        html += `<div class="leave-section-divider"><span>등원 완료 (${arrived.length}건)</span></div>`;
+        html += renderVisitSection(arrived);
     }
     // 3) 확인 완료
     if (completedVisits.length > 0) {
         html += `<div class="leave-section-divider"><span>확인 완료 (${completedVisits.length}건)</span></div>`;
-        html += completedVisits.map(renderVisitItem).join('');
+        html += renderVisitSection(completedVisits);
     }
     container.innerHTML = html;
 }
