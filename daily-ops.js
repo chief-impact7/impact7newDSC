@@ -2252,7 +2252,7 @@ function renderVisitSubitem(v) {
         dateInfo = ` (${_stripYear(v.originalDate)})`;
     }
 
-    return `<div class="visit-group-subitem ${completedClass}" data-visit-id="${escAttr(v.docId)}">
+    return `<div class="visit-group-subitem ${completedClass}">
         <span class="visit-source-badge" style="background:${v.sourceColor};flex-shrink:0;">${esc(v.sourceLabel)}</span>
         <span class="visit-subitem-detail">${overdueBadge}${esc(v.detail)}${dateInfo} ${callerBadge}${completedInfo}</span>
         <span class="visit-subitem-actions">${confirmBtn}</span>
