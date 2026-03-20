@@ -1,7 +1,7 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import {
     collection, getDocs, doc, setDoc, addDoc,
-    query, where, serverTimestamp, updateDoc
+    query, where, serverTimestamp, updateDoc, onSnapshot
 } from 'firebase/firestore';
 import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
@@ -15,6 +15,7 @@ let postponedTasks = [];       // 해당 날짜의 연기 작업
 let tempClassOverrides = [];   // 해당 날짜의 타반수업 오버라이드
 let selectedDate = todayStr(); // YYYY-MM-DD
 let saveTimers = {};           // 디바운스 타이머
+let unsubDailyChecks = null;   // daily_checks 실시간 리스너 해제 함수
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const esc = (str) => {
@@ -204,6 +205,10 @@ onAuthStateChanged(auth, async (user) => {
         setDate(todayStr());
     } else {
         currentUser = null;
+        if (unsubDailyChecks) {
+            unsubDailyChecks();
+            unsubDailyChecks = null;
+        }
         document.getElementById('login-screen').style.display = 'flex';
         document.getElementById('main-screen').style.display = 'none';
     }
@@ -304,24 +309,99 @@ window.applyFilters = () => {
 
 // ─── Load daily data ─────────────────────────────────────────────────────────
 async function loadDailyData() {
+    // 이전 리스너 해제
+    if (unsubDailyChecks) {
+        unsubDailyChecks();
+        unsubDailyChecks = null;
+    }
+
     dailyChecks = {};
     postponedTasks = [];
     tempClassOverrides = [];
 
+    // postponed_tasks, temp_class_overrides는 일회성 조회 (변경 빈도 낮음)
     try {
-        const [checksSnap, ptSnap, ovrSnap] = await Promise.all([
-            getDocs(query(collection(db, 'daily_checks'), where('date', '==', selectedDate))),
+        const [ptSnap, ovrSnap] = await Promise.all([
             getDocs(query(collection(db, 'postponed_tasks'), where('scheduled_date', '==', selectedDate), where('status', '==', 'pending'))),
             getDocs(query(collection(db, 'temp_class_overrides'), where('override_date', '==', selectedDate), where('status', '==', 'active'))),
         ]);
-        checksSnap.forEach(docSnap => { dailyChecks[docSnap.id] = docSnap.data(); });
         ptSnap.forEach(docSnap => { postponedTasks.push({ id: docSnap.id, ...docSnap.data() }); });
         ovrSnap.forEach(docSnap => { tempClassOverrides.push({ id: docSnap.id, ...docSnap.data() }); });
     } catch (err) {
         console.error('[LOAD DAILY ERROR]', err);
     }
 
-    renderAll();
+    // daily_checks는 실시간 리스너로 구독
+    const checksQuery = query(collection(db, 'daily_checks'), where('date', '==', selectedDate));
+    let isFirstSnapshot = true;
+
+    unsubDailyChecks = onSnapshot(checksQuery, (snapshot) => {
+        if (isFirstSnapshot) {
+            // 최초 로드 — 전체 데이터 세팅 후 풀 렌더
+            snapshot.forEach(docSnap => {
+                dailyChecks[docSnap.id] = docSnap.data();
+            });
+            isFirstSnapshot = false;
+            renderAll();
+        } else {
+            // 이후 변경 — 변경된 셀만 DOM 업데이트 (입력 중 방해 없음)
+            snapshot.docChanges().forEach(change => {
+                const docId = change.doc.id;
+                const newData = change.doc.data();
+
+                if (change.type === 'removed') {
+                    delete dailyChecks[docId];
+                    return;
+                }
+
+                // 로컬에서 저장 대기 중이면 원격 업데이트 무시 (충돌 방지)
+                if (saveTimers[docId]) return;
+
+                const oldData = dailyChecks[docId] || {};
+                dailyChecks[docId] = newData;
+                updateCellsInDOM(docId, oldData, newData);
+            });
+        }
+    }, (err) => {
+        console.error('[SNAPSHOT ERROR]', err);
+    });
+}
+
+// ─── 원격 변경 시 개별 셀만 DOM 업데이트 ─────────────────────────────────────
+function updateCellsInDOM(checkId, oldData, newData) {
+    const escapedId = CSS.escape(checkId);
+    const elements = document.querySelectorAll(`[data-check-id="${escapedId}"]`);
+    if (elements.length === 0) return;
+
+    elements.forEach(el => {
+        const field = el.dataset.field;
+        const newVal = newData[field] || '';
+        const oldVal = oldData[field] || '';
+
+        if (newVal === oldVal) return;
+
+        // 현재 포커스된 요소는 건드리지 않음 (사용자가 입력 중)
+        if (el === document.activeElement) return;
+
+        if (el.tagName === 'SELECT' || el.tagName === 'INPUT') {
+            el.value = newVal;
+        } else if (el.classList.contains('cell-ox')) {
+            el.dataset.value = newVal;
+            el.textContent = newVal;
+            el.className = 'cell-ox ' + (newVal === 'O' ? 'att-present' : newVal === 'X' ? 'att-absent' : newVal === '\u25B3' ? 'att-late' : '');
+        }
+    });
+
+    // 출결 상태에 따른 행 스타일 업데이트
+    const firstEl = elements[0];
+    const row = firstEl?.closest('tr');
+    if (row && !row.classList.contains('postponed-row') && !row.classList.contains('override-out-row')) {
+        if (newData.attendance === '결석') {
+            row.classList.add('absent-row');
+        } else {
+            row.classList.remove('absent-row');
+        }
+    }
 }
 
 // ─── Get students for selected day ──────────────────────────────────────────
