@@ -5503,7 +5503,10 @@ function renderTempAttendanceDetail(docId) {
     }
 
     cardsContainer.innerHTML = `
-        <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px;">
+            <button class="btn btn-secondary" style="font-size:13px;padding:6px 14px;color:#dc2626;border-color:#dc2626;" onclick="deleteTempAttendance('${docId}')">
+                <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">delete</span> 삭제
+            </button>
             <button class="btn btn-secondary" style="font-size:13px;padding:6px 14px;" onclick="openTempAttendanceForEdit('${docId}')">
                 <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">edit</span> 수정
             </button>
@@ -5525,6 +5528,25 @@ function renderTempAttendanceDetail(docId) {
     `;
 }
 window.renderTempAttendanceDetail = renderTempAttendanceDetail;
+
+async function deleteTempAttendance(docId) {
+    const ta = tempAttendances.find(t => t.docId === docId);
+    if (!ta) return;
+    if (!confirm(`"${ta.name}" 진단평가 기록을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+    try {
+        await deleteDoc(doc(db, 'temp_attendance', docId));
+        tempAttendances = tempAttendances.filter(t => t.docId !== docId);
+        document.getElementById('detail-content').style.display = 'none';
+        document.getElementById('detail-empty').style.display = '';
+        renderSubFilters();
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('진단평가 삭제 실패:', err);
+        alert(`삭제 실패: ${err.message || err}`);
+    }
+}
+window.deleteTempAttendance = deleteTempAttendance;
 
 // ─── Student Detail Panel ───────────────────────────────────────────────────
 
@@ -9768,25 +9790,7 @@ function cycleVisitStatus(source, docId, studentId) {
         nextIdx = (nextIdx + 1) % VISIT_STATUS_CYCLE.length;
         nextStatus = VISIT_STATUS_CYCLE[nextIdx];
     }
-    // 이전 pending 상태 모두 클리어 (마지막 토글만 유지)
-    for (const key of Object.keys(_visitStatusPending)) {
-        if (key !== docId) {
-            // 이전 항목 UI 원복
-            const oldBtn = document.querySelector(`[data-visit-id="${key}"]`);
-            if (oldBtn) {
-                const old = _visitStatusPending[key];
-                // 원래 상태로 되돌리기: nextStatus의 이전 상태
-                const prevIdx = (VISIT_STATUS_CYCLE.indexOf(old.nextStatus) - 1 + VISIT_STATUS_CYCLE.length) % VISIT_STATUS_CYCLE.length;
-                const prevStatus = VISIT_STATUS_CYCLE[prevIdx];
-                const label = _visitLabel(prevStatus, old.source);
-                const { cls, sty } = _visitBtnStyles(label);
-                oldBtn.textContent = label;
-                oldBtn.className = `toggle-btn ${cls}`.trim();
-                oldBtn.style.cssText = sty;
-            }
-        }
-    }
-    _visitStatusPending = {};
+    // 각 항목 독립적으로 pending 상태 유지
     _visitStatusPending[docId] = { source, nextStatus, studentId };
 
     // 버튼 텍스트+스타일 즉시 변경
@@ -10201,6 +10205,12 @@ async function saveTempAttendance() {
             showSaveIndicator('saved');
         } else {
             // ── 생성 모드 ──
+            // 동일 이름+날짜 중복 체크
+            const duplicate = tempAttendances.find(t => t.name === data.name && t.temp_date === data.temp_date);
+            if (duplicate) {
+                if (!confirm(`"${data.name}" 학생이 ${data.temp_date}에 이미 등록되어 있습니다.\n그래도 추가하시겠습니까?`)) return;
+            }
+
             data.created_at = serverTimestamp();
             data.created_by = currentUser?.email || '';
 
