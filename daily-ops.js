@@ -1897,6 +1897,11 @@ function getScheduledVisits() {
     }
 
     // 5) 결석보충 (absenceRecords) — 등원예정은 정규 쪽으로 이동
+    const _makeupCandidates = absenceRecords.filter(r => r.resolution === '보충' && r.status === 'open');
+    if (_makeupCandidates.length > 0) {
+        console.log('[결석보충 디버그]', `총 ${absenceRecords.length}건 중 보충+open: ${_makeupCandidates.length}건, selectedDate: ${selectedDate}`);
+        _makeupCandidates.forEach(r => console.log(`  - ${r.student_name} | makeup_date="${r.makeup_date}" | match=${r.makeup_date === selectedDate} | docId=${r.docId}`));
+    }
     for (const r of absenceRecords) {
         if (r.resolution !== '보충' || r.makeup_date !== selectedDate || r.status !== 'open') continue;
         visits.push({
