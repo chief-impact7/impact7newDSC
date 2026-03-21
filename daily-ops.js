@@ -1437,7 +1437,9 @@ function renderFilterChips() {
     const categoryLabels = { attendance: '출결', homework: '숙제', test: '테스트', automation: '자동화', admin: '행정' };
     const subFilterLabels = {
         scheduled_visit: '비정규', pre_arrival: '정규', present: '출석', late: '지각', absent: '결석', other: '기타',
-        departure_check: '귀가점검', absence_ledger: '결석대장',
+        departure_check: '귀가점검', enroll_pending: '등원예정',
+        absence_ledger: '결석대장', leave_request: '휴퇴원요청', return_upcoming: '복귀요청',
+        sv_absence_makeup: '결석보충', sv_clinic: '클리닉', sv_diagnostic: '진단평가', sv_fail: '미통과',
         hw_1st: '1차', hw_2nd: '2차', hw_next: '다음숙제',
         test_1st: '1차', test_2nd: '2차',
         auto_hw_missing: '미제출 숙제', auto_retake: '재시 필요', auto_unchecked: '미체크 출석'
@@ -2322,6 +2324,12 @@ function renderScheduledVisitList() {
         visits = visits.filter(v => sources.includes(v.source));
     }
 
+    // 검색 필터
+    if (searchQuery) {
+        const q = searchQuery.trim().toLowerCase();
+        visits = visits.filter(v => v.name?.toLowerCase().includes(q) || v.detail?.toLowerCase().includes(q));
+    }
+
     const container = document.getElementById('list-items');
     const countEl = document.getElementById('list-count');
 
@@ -2477,7 +2485,11 @@ function renderEnrollPendingSection() {
 }
 
 function renderEnrollPendingOnly() {
-    const visits = getEnrollPendingVisits();
+    let visits = getEnrollPendingVisits();
+    if (searchQuery) {
+        const q = searchQuery.trim().toLowerCase();
+        visits = visits.filter(v => v.name?.toLowerCase().includes(q));
+    }
     const container = document.getElementById('list-items');
     const countEl = document.getElementById('list-count');
 
@@ -2611,6 +2623,10 @@ function renderAbsenceLedgerList() {
 
     let records = absenceRecords.filter(r => !approvedLeaveStudentIds.has(r.student_id));
     if (selectedBranch) records = records.filter(r => r.branch === selectedBranch);
+    if (searchQuery) {
+        const q = searchQuery.trim().toLowerCase();
+        records = records.filter(r => r.student_name?.toLowerCase().includes(q) || r.class_code?.toLowerCase().includes(q));
+    }
 
     // 퇴원요청 플래그 부여
     records.forEach(r => { r._hasLeaveRequest = requestedLeaveStudentIds.has(r.student_id); });
@@ -2717,6 +2733,10 @@ function renderLeaveRequestList() {
 
     let records = [...leaveRequests];
     if (selectedBranch) records = records.filter(r => r.branch === selectedBranch);
+    if (searchQuery) {
+        const q = searchQuery.trim().toLowerCase();
+        records = records.filter(r => r.student_name?.toLowerCase().includes(q));
+    }
     countEl.textContent = `${records.length}건`;
 
     // 새 요청 버튼
@@ -2810,7 +2830,11 @@ function renderReturnUpcomingList() {
     const countEl = document.getElementById('list-count');
     renderFilterChips();
 
-    const items = _getReturnUpcomingStudents();
+    let items = _getReturnUpcomingStudents();
+    if (searchQuery) {
+        const q = searchQuery.trim().toLowerCase();
+        items = items.filter(x => x.student.name?.toLowerCase().includes(q));
+    }
     countEl.textContent = `${items.length}건`;
 
     if (items.length === 0) {
@@ -5000,7 +5024,11 @@ function renderNextHwClassList() {
 
     renderFilterChips();
 
-    const classCodes = getUniqueClassCodes();
+    let classCodes = getUniqueClassCodes();
+    if (searchQuery) {
+        const q = searchQuery.trim().toLowerCase();
+        classCodes = classCodes.filter(cc => cc.toLowerCase().includes(q));
+    }
     countEl.textContent = `${classCodes.length}개 반`;
 
     if (classCodes.length === 0) {
