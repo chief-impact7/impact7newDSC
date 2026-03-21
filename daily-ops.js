@@ -4400,6 +4400,7 @@ window.updateAbsenceField = async function(docId, field, value, studentId) {
             updated_at: serverTimestamp()
         });
         r[field] = value;
+        _scheduledVisitsCache = null;
         renderStudentDetail(studentId);
         renderListPanel();
         showSaveIndicator('saved');
@@ -4553,6 +4554,7 @@ window.setAbsenceResolution = async function(docId, resolution, studentId) {
             updated_at: serverTimestamp()
         });
         r.resolution = newRes;
+        _scheduledVisitsCache = null;
         renderStudentDetail(studentId);
         renderListPanel();
         showSaveIndicator('saved');
@@ -4577,6 +4579,7 @@ window.completeAbsenceMakeup = async function(docId, studentId) {
         r.makeup_status = '완료';
         r.makeup_completed_by = currentUser?.email || '';
         r.makeup_completed_at = new Date();
+        _scheduledVisitsCache = null;
         renderStudentDetail(studentId);
         renderListPanel();
         showSaveIndicator('saved');
@@ -4597,6 +4600,7 @@ window.markAbsenceNoShow = async function(docId, studentId) {
             updated_at: serverTimestamp()
         });
         r.makeup_status = '미등원';
+        _scheduledVisitsCache = null;
         renderStudentDetail(studentId);
         renderListPanel();
         showSaveIndicator('saved');
