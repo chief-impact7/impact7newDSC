@@ -4670,6 +4670,37 @@ window.openAbsenceRescheduleModal = function(docId, studentId) {
     window.openRescheduleModal('absence_records', docId, studentId);
 };
 
+window.reopenAbsenceMakeup = async function(docId, studentId) {
+    if (!confirm('보충 완료를 취소하고 재예약하시겠습니까?')) return;
+    const r = absenceRecords.find(x => x.docId === docId);
+    if (!r) return;
+    showSaveIndicator('saving');
+    try {
+        await updateDoc(doc(db, 'absence_records', docId), {
+            makeup_status: 'pending',
+            makeup_date: '',
+            makeup_time: '',
+            makeup_completed_by: '',
+            makeup_completed_at: '',
+            updated_by: currentUser?.email || '',
+            updated_at: serverTimestamp()
+        });
+        r.makeup_status = 'pending';
+        r.makeup_date = '';
+        r.makeup_time = '';
+        r.makeup_completed_by = '';
+        r.makeup_completed_at = '';
+        _scheduledVisitsCache = null;
+        renderStudentDetail(studentId);
+        renderSubFilters();
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('보충 재예약 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
 // ─── Test Fail Action (테스트 2차 미통과 처리) ────────────────────────────────
 
 function renderTestFailActionCard(studentId, testSections, t2nd, testFailAction, mode = 'default') {
@@ -5908,7 +5939,12 @@ function renderAbsenceRecordCard(studentId) {
                         <button class="hw-fail-type-btn" style="font-size:11px;"
                             onclick="switchToSettlement('${escAttr(r.docId)}', '${escAttr(studentId)}')">정산전환</button>`;
                 } else if (r.makeup_status === '완료') {
-                    makeupActions = `<span style="font-size:11px;color:var(--success);font-weight:600;">보충 완료됨</span>`;
+                    makeupActions = `
+                        <span style="font-size:11px;color:var(--success);font-weight:600;">보충 완료됨</span>
+                        <button class="hw-fail-type-btn" style="font-size:11px;background:#7c3aed;border-color:#7c3aed;color:#fff;margin-left:4px;"
+                            onclick="reopenAbsenceMakeup('${escAttr(r.docId)}', '${escAttr(studentId)}')">
+                            <span class="material-symbols-outlined" style="font-size:13px;">event</span>재예약
+                        </button>`;
                 }
             }
 
