@@ -466,14 +466,16 @@ async function loadDailyRecords(date) {
 async function loadRetakeSchedules() {
     retakeSchedules = [];
     try {
-        // 과거 30일 ~ 미래 7일 범위만 로드 (성능 최적화)
+        const q = query(collection(db, 'retake_schedule'), where('status', '==', '예정'));
+        const snap = await getDocs(q);
+        // 과거 30일 이내만 유지 (클라이언트 필터링 — 복합 인덱스 불필요)
         const past = new Date();
         past.setDate(past.getDate() - 30);
         const pastStr = past.toISOString().slice(0, 10);
-        const q = query(collection(db, 'retake_schedule'), where('status', '==', '예정'), where('scheduled_date', '>=', pastStr));
-        const snap = await getDocs(q);
         snap.forEach(d => {
-            retakeSchedules.push({ docId: d.id, ...d.data() });
+            const data = d.data();
+            if (data.scheduled_date < pastStr) return;
+            retakeSchedules.push({ docId: d.id, ...data });
         });
     } catch (err) {
         console.error('retake_schedule 로드 실패:', err.message);
@@ -619,16 +621,18 @@ window.cancelTempClassOverride = async function(docId, studentId) {
 async function loadAbsenceRecords() {
     absenceRecords = [];
     try {
-        // 90일 이내 open 건만 로드 (성능 최적화)
+        const q = query(collection(db, 'absence_records'), where('status', '==', 'open'));
+        const snap = await getDocs(q);
+        const withdrawnIds = new Set(withdrawnStudents.map(s => s.docId));
+        // 90일 이내 건만 유지 (클라이언트 필터링 — 복합 인덱스 불필요)
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - 90);
         const cutoffStr = cutoff.toISOString().slice(0, 10);
-        const q = query(collection(db, 'absence_records'), where('status', '==', 'open'), where('absence_date', '>=', cutoffStr));
-        const snap = await getDocs(q);
-        const withdrawnIds = new Set(withdrawnStudents.map(s => s.docId));
         snap.forEach(d => {
-            if (!withdrawnIds.has(d.data().student_id)) {
-                absenceRecords.push({ docId: d.id, ...d.data() });
+            const data = d.data();
+            if (data.absence_date < cutoffStr) return;
+            if (!withdrawnIds.has(data.student_id)) {
+                absenceRecords.push({ docId: d.id, ...data });
             }
         });
     } catch (err) {
@@ -1897,11 +1901,6 @@ function getScheduledVisits() {
     }
 
     // 5) 결석보충 (absenceRecords) — 등원예정은 정규 쪽으로 이동
-    const _makeupCandidates = absenceRecords.filter(r => r.resolution === '보충' && r.status === 'open');
-    if (_makeupCandidates.length > 0) {
-        console.log('[결석보충 디버그]', `총 ${absenceRecords.length}건 중 보충+open: ${_makeupCandidates.length}건, selectedDate: ${selectedDate}`);
-        _makeupCandidates.forEach(r => console.log(`  - ${r.student_name} | makeup_date="${r.makeup_date}" | match=${r.makeup_date === selectedDate} | docId=${r.docId}`));
-    }
     for (const r of absenceRecords) {
         if (r.resolution !== '보충' || r.makeup_date !== selectedDate || r.status !== 'open') continue;
         visits.push({
