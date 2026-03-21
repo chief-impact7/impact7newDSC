@@ -6952,6 +6952,11 @@ async function autoRemoveAbsenceRecord(studentId) {
     const idx = absenceRecords.findIndex(r => r.student_id === studentId && r.absence_date === selectedDate);
     if (idx === -1) return;
     const record = absenceRecords[idx];
+    // 보충/정산 처리가 진행된 결석대장은 출석 토글로 삭제하지 않음
+    if (record.resolution && record.resolution !== 'pending') {
+        console.warn(`결석대장 삭제 차단: ${record.student_name} — resolution=${record.resolution}, makeup_date=${record.makeup_date}`);
+        return;
+    }
     try {
         await deleteDoc(doc(db, 'absence_records', record.docId));
         absenceRecords.splice(idx, 1);
