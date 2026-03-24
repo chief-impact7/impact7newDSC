@@ -9513,6 +9513,53 @@ function collectStudentDaySummary(studentId) {
     return summary;
 }
 
+// ─── Gemini API 요청 큐 + 재시도 ─────────────────────────────────────────────
+const _geminiQueue = [];
+let _geminiRunning = false;
+const GEMINI_MIN_INTERVAL = 1200; // 요청 간 최소 간격 (ms)
+let _geminiLastCall = 0;
+
+async function _geminiWithRetry(prompt, maxRetries = 3) {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+            const result = await geminiModel.generateContent(prompt);
+            return result;
+        } catch (err) {
+            const is429 = err?.message?.includes('429') || err?.message?.includes('Resource exhausted');
+            if (!is429 || attempt === maxRetries - 1) throw err;
+            const delay = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s
+            console.warn(`Gemini 429 → ${delay / 1000}초 후 재시도 (${attempt + 1}/${maxRetries})`);
+            await new Promise(r => setTimeout(r, delay));
+        }
+    }
+}
+
+function _enqueueGemini(prompt) {
+    return new Promise((resolve, reject) => {
+        _geminiQueue.push({ prompt, resolve, reject });
+        if (!_geminiRunning) _processGeminiQueue();
+    });
+}
+
+async function _processGeminiQueue() {
+    _geminiRunning = true;
+    while (_geminiQueue.length > 0) {
+        const { prompt, resolve, reject } = _geminiQueue.shift();
+        const elapsed = Date.now() - _geminiLastCall;
+        if (elapsed < GEMINI_MIN_INTERVAL) {
+            await new Promise(r => setTimeout(r, GEMINI_MIN_INTERVAL - elapsed));
+        }
+        try {
+            _geminiLastCall = Date.now();
+            const result = await _geminiWithRetry(prompt);
+            resolve(result);
+        } catch (err) {
+            reject(err);
+        }
+    }
+    _geminiRunning = false;
+}
+
 async function generateParentMessage(studentId) {
     const summary = collectStudentDaySummary(studentId);
     if (!summary) return '학생 정보를 찾을 수 없습니다.';
@@ -9532,7 +9579,7 @@ async function generateParentMessage(studentId) {
     const teacherNoteSection = teacherNote ? `\n\n선생님 특이사항:\n${teacherNote}` : '';
     const fullPrompt = `${customPrompt}${noteSection}${teacherNoteSection}\n\n학생 데이터:\n${JSON.stringify(safeSummary, null, 2)}`;
 
-    const result = await geminiModel.generateContent(fullPrompt);
+    const result = await _enqueueGemini(fullPrompt);
     const aiComment = result.response.text().trim();
 
     // AI 코멘트 + 구분선 + 데이터 합치기
