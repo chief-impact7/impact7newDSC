@@ -7582,6 +7582,7 @@ async function teacherApproveLeaveRequest(docId, studentId) {
     if (!r) return;
     // 토글: 이미 승인 → 취소
     if (r.teacher_approved_by) {
+        if (!confirm(`${r.student_name} — 교수부 승인을 취소하시겠습니까?`)) return;
         try {
             await updateDoc(doc(db, 'leave_requests', docId), { teacher_approved_by: deleteField(), teacher_approved_at: deleteField(), updated_at: serverTimestamp() });
             const lrIdx = leaveRequests.findIndex(lr => lr.docId === docId);
@@ -7594,7 +7595,11 @@ async function teacherApproveLeaveRequest(docId, studentId) {
         return;
     }
     const typeLabel = `${r.request_type}${r.leave_sub_type ? ' (' + r.leave_sub_type + ')' : ''}`;
-    if (!confirm(`${r.student_name} — ${typeLabel}\n교수부 승인하시겠습니까?`)) return;
+    const isFinal = !!r.approved_by;
+    const confirmMsg = isFinal
+        ? `⚠️ ${r.student_name} — ${typeLabel}\n\n행정부 승인이 이미 완료되어, 교수부 승인 시 최종 승인 처리됩니다.\n학생 상태가 변경됩니다. 진행하시겠습니까?`
+        : `${r.student_name} — ${typeLabel}\n교수부 승인하시겠습니까?`;
+    if (!confirm(confirmMsg)) return;
 
     try {
         const updates = { teacher_approved_by: currentUser?.email || '', teacher_approved_at: serverTimestamp(), updated_at: serverTimestamp() };
@@ -7628,6 +7633,7 @@ async function approveLeaveRequest(docId, studentId) {
     if (!r) return;
     // 토글: 이미 승인 → 취소
     if (r.approved_by) {
+        if (!confirm(`${r.student_name} — 행정부 승인을 취소하시겠습니까?`)) return;
         try {
             await updateDoc(doc(db, 'leave_requests', docId), { approved_by: deleteField(), approved_at: deleteField(), updated_at: serverTimestamp() });
             const lrIdx = leaveRequests.findIndex(lr => lr.docId === docId);
@@ -7641,7 +7647,11 @@ async function approveLeaveRequest(docId, studentId) {
     }
 
     const typeLabel = `${r.request_type}${r.leave_sub_type ? ' (' + r.leave_sub_type + ')' : ''}`;
-    if (!confirm(`${r.student_name} — ${typeLabel}\n행정부 승인하시겠습니까?`)) return;
+    const isFinal = !!r.teacher_approved_by;
+    const confirmMsg = isFinal
+        ? `⚠️ ${r.student_name} — ${typeLabel}\n\n교수부 승인이 이미 완료되어, 행정부 승인 시 최종 승인 처리됩니다.\n학생 상태가 변경됩니다. 진행하시겠습니까?`
+        : `${r.student_name} — ${typeLabel}\n행정부 승인하시겠습니까?`;
+    if (!confirmMsg || !confirm(confirmMsg)) return;
 
     try {
         const updates = { approved_by: currentUser?.email || '', approved_at: serverTimestamp(), updated_at: serverTimestamp() };
