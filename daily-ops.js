@@ -1,7 +1,8 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import {
     collection, getDocs, doc, setDoc, getDoc, getDocFromServer, addDoc,
-    query, where, serverTimestamp, updateDoc, writeBatch, arrayUnion, deleteField, Timestamp, deleteDoc, limit
+    query, where, serverTimestamp, updateDoc, writeBatch, arrayUnion, deleteField, Timestamp, deleteDoc, limit,
+    onSnapshot
 } from 'firebase/firestore';
 import { auth, db, geminiModel } from './firebase-config.js';
 import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
@@ -447,89 +448,45 @@ async function loadStudents() {
     allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
 }
 
-async function loadDailyRecords(date) {
-    dailyRecords = {};
-    try {
-        const q = query(collection(db, 'daily_records'), where('date', '==', date));
-        const snap = await getDocs(q);
-        // 비동기 쿼리 중 날짜가 변경된 경우 결과 폐기 (동시 호출 경합 방지)
-        if (date !== selectedDate) return;
-        snap.forEach(d => {
-            const data = d.data();
-            dailyRecords[data.student_id] = { docId: d.id, ...data };
-        });
-    } catch (err) {
-        console.error('daily_records 로드 실패:', err.message);
-    }
+function loadDailyRecords(date) {
+    const q = query(collection(db, 'daily_records'), where('date', '==', date));
+    return _listenCollection('daily_records', q, null, (data) => {
+        dailyRecords = {};
+        data.forEach(d => { dailyRecords[d.student_id] = d; });
+    });
 }
 
-async function loadRetakeSchedules() {
-    retakeSchedules = [];
-    try {
-        const q = query(collection(db, 'retake_schedule'), where('status', '==', '예정'));
-        const snap = await getDocs(q);
-        // 과거 30일 이내만 유지 (클라이언트 필터링 — 복합 인덱스 불필요)
-        const past = new Date();
-        past.setDate(past.getDate() - 30);
-        const pastStr = past.toISOString().slice(0, 10);
-        snap.forEach(d => {
-            const data = d.data();
-            if (data.scheduled_date < pastStr) return;
-            retakeSchedules.push({ docId: d.id, ...data });
-        });
-    } catch (err) {
-        console.error('retake_schedule 로드 실패:', err.message);
-    }
+function loadRetakeSchedules() {
+    const q = query(collection(db, 'retake_schedule'), where('status', '==', '예정'));
+    const past = new Date();
+    past.setDate(past.getDate() - 30);
+    const pastStr = past.toISOString().slice(0, 10);
+    return _listenCollection('retake_schedule', q, (d) => {
+        const data = { docId: d.id, ...d.data() };
+        return data.scheduled_date < pastStr ? null : data;
+    }, (data) => { retakeSchedules = data; });
 }
 
-async function loadHwFailTasks() {
-    hwFailTasks = [];
-    try {
-        const q = query(collection(db, 'hw_fail_tasks'), where('status', '==', 'pending'));
-        const snap = await getDocs(q);
-        snap.forEach(d => {
-            hwFailTasks.push({ docId: d.id, ...d.data() });
-        });
-    } catch (err) {
-        console.error('hw_fail_tasks 로드 실패:', err.message);
-    }
+function loadHwFailTasks() {
+    const q = query(collection(db, 'hw_fail_tasks'), where('status', '==', 'pending'));
+    return _listenCollection('hw_fail_tasks', q, null, (data) => { hwFailTasks = data; });
 }
 
-async function loadTestFailTasks() {
-    testFailTasks = [];
-    try {
-        const q = query(collection(db, 'test_fail_tasks'), where('status', '==', 'pending'));
-        const snap = await getDocs(q);
-        snap.forEach(d => {
-            testFailTasks.push({ docId: d.id, ...d.data() });
-        });
-    } catch (err) {
-        console.error('test_fail_tasks 로드 실패:', err.message);
-    }
+function loadTestFailTasks() {
+    const q = query(collection(db, 'test_fail_tasks'), where('status', '==', 'pending'));
+    return _listenCollection('test_fail_tasks', q, null, (data) => { testFailTasks = data; });
 }
 
-async function loadTempAttendances(date) {
-    tempAttendances = [];
-    try {
-        const q = query(collection(db, 'temp_attendance'), where('temp_date', '==', date));
-        const snap = await getDocs(q);
-        snap.forEach(d => tempAttendances.push({ docId: d.id, ...d.data() }));
-    } catch (err) {
-        console.error('temp_attendance 로드 실패:', err.message);
-    }
+function loadTempAttendances(date) {
+    const q = query(collection(db, 'temp_attendance'), where('temp_date', '==', date));
+    return _listenCollection('temp_attendance', q, null, (data) => { tempAttendances = data; });
 }
 
-async function loadTempClassOverrides(date) {
-    tempClassOverrides = [];
-    try {
-        const q = query(collection(db, 'temp_class_overrides'),
-            where('override_date', '==', date),
-            where('status', '==', 'active'));
-        const snap = await getDocs(q);
-        snap.forEach(d => tempClassOverrides.push({ docId: d.id, ...d.data() }));
-    } catch (err) {
-        console.error('temp_class_overrides 로드 실패:', err.message);
-    }
+function loadTempClassOverrides(date) {
+    const q = query(collection(db, 'temp_class_overrides'),
+        where('override_date', '==', date),
+        where('status', '==', 'active'));
+    return _listenCollection('temp_class_overrides', q, null, (data) => { tempClassOverrides = data; });
 }
 
 // ─── Temp Class Override 헬퍼 ────────────────────────────────────────────────
@@ -618,37 +575,65 @@ window.cancelTempClassOverride = async function(docId, studentId) {
     }
 };
 
-async function loadAbsenceRecords() {
-    absenceRecords = [];
-    try {
-        const q = query(collection(db, 'absence_records'), where('status', '==', 'open'));
-        const snap = await getDocs(q);
+function loadAbsenceRecords() {
+    const q = query(collection(db, 'absence_records'), where('status', '==', 'open'));
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 90);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    return _listenCollection('absence_records', q, (d) => {
+        const data = { docId: d.id, ...d.data() };
+        if (data.absence_date < cutoffStr) return null;
         const withdrawnIds = new Set(withdrawnStudents.map(s => s.docId));
-        // 90일 이내 건만 유지 (클라이언트 필터링 — 복합 인덱스 불필요)
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - 90);
-        const cutoffStr = cutoff.toISOString().slice(0, 10);
-        snap.forEach(d => {
-            const data = d.data();
-            if (data.absence_date < cutoffStr) return;
-            if (!withdrawnIds.has(data.student_id)) {
-                absenceRecords.push({ docId: d.id, ...data });
-            }
-        });
-    } catch (err) {
-        console.error('absence_records 로드 실패:', err.message);
-    }
+        if (withdrawnIds.has(data.student_id)) return null;
+        return data;
+    }, (data) => { absenceRecords = data; });
 }
 
-async function loadLeaveRequests() {
-    leaveRequests = [];
-    try {
-        const q = query(collection(db, 'leave_requests'), where('status', 'in', ['requested', 'teacher_approved', 'approved']));
-        const snap = await getDocs(q);
-        snap.forEach(d => leaveRequests.push({ docId: d.id, ...d.data() }));
-    } catch (err) {
-        console.error('leave_requests 로드 실패:', err.message);
-    }
+// ─── 실시간 리스너 공통 인프라 ────────────────────────────────────────────────
+const _unsubs = {};   // 컬렉션별 unsubscribe 함수
+let _rtDebounce = null;
+
+function _realtimeRefreshUI() {
+    // 짧은 시간에 여러 컬렉션이 동시 업데이트되면 1회만 렌더링
+    if (_rtDebounce) return;
+    _rtDebounce = setTimeout(() => {
+        _rtDebounce = null;
+        renderSubFilters();
+        renderListPanel();
+        if (selectedStudentId) renderStudentDetail(selectedStudentId);
+    }, 200);
+}
+
+function _listenCollection(key, q, parser, onData) {
+    return new Promise((resolve) => {
+        if (_unsubs[key]) { _unsubs[key](); delete _unsubs[key]; }
+        let initialLoad = true;
+
+        _unsubs[key] = onSnapshot(q, (snap) => {
+            const results = [];
+            snap.forEach(d => {
+                const parsed = parser ? parser(d) : { docId: d.id, ...d.data() };
+                if (parsed) results.push(parsed);
+            });
+            onData(results);
+
+            if (initialLoad) {
+                initialLoad = false;
+                resolve();
+            } else {
+                console.log(`[${key}] 실시간 업데이트 수신`);
+                _realtimeRefreshUI();
+            }
+        }, (err) => {
+            console.error(`[${key}] 실시간 리스너 실패:`, err.message);
+            resolve();
+        });
+    });
+}
+
+function loadLeaveRequests() {
+    const q = query(collection(db, 'leave_requests'), where('status', 'in', ['requested', 'teacher_approved', 'approved']));
+    return _listenCollection('leave_requests', q, null, (data) => { leaveRequests = data; });
 }
 
 // ─── 1개월 경과 자동 처리 ────────────────────────────────────────────────────
