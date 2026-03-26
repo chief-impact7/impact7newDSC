@@ -4060,6 +4060,7 @@ window.saveHwFailFields = async function(studentId, domain, btnEl) {
     await saveHwFailAction(studentId, dailyRecords[studentId].hw_fail_action);
     const tag = document.getElementById(`hw-fail-saved-${studentId}-${domain}`);
     if (tag) { tag.style.display = ''; setTimeout(() => tag.style.display = 'none', 2000); }
+    renderStudentDetail(studentId);
 };
 
 // Firestore에 hw_fail_action 저장 + hw_fail_tasks 컬렉션에도 동기화
@@ -4892,6 +4893,7 @@ window.saveTestFailFields = async function(studentId, item, btnEl) {
     await saveTestFailAction(studentId, dailyRecords[studentId].test_fail_action);
     const tag = row.querySelector('.hw-fail-saved-tag');
     if (tag) { tag.style.display = ''; setTimeout(() => tag.style.display = 'none', 2000); }
+    renderStudentDetail(studentId);
 };
 
 async function saveTestFailAction(studentId, testFailAction) {
