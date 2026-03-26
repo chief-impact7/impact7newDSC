@@ -60,7 +60,8 @@ service cloud.firestore {
           'first_registered',
           'has_memo',
           'return_consult_done', 'return_consult_note',
-          'return_consult_done_by', 'return_consult_done_at'
+          'return_consult_done_by', 'return_consult_done_at',
+          'updated_at', 'updated_by', 'withdrawal_date'
         ];
         return request.resource.data.keys().hasOnly(allowed);
       }
