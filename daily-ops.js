@@ -4023,26 +4023,20 @@ function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, mode = '
 
 // 처리 유형 선택 (등원 / 대체숙제)
 window.selectHwFailType = async function(studentId, domain, type, btnEl) {
-    console.log('[selectHwFailType]', domain, type);
     if (!checkCanEditGrading(studentId)) return;
     const rec = dailyRecords[studentId] || {};
     const hwFailAction = { ...(rec.hw_fail_action || {}) };
     const current = hwFailAction[domain] || {};
 
-    // 같은 버튼 클릭 시 토글 해제
-    if (current.type === type) {
-        delete hwFailAction[domain];
-    } else {
-        hwFailAction[domain] = {
-            ...current,
-            type,
-            handler: currentUser?.email || '',
-            scheduled_date: current.scheduled_date || '',
-            scheduled_time: current.scheduled_time || (type === '등원' ? '16:00' : ''),
-            alt_hw: current.alt_hw || '',
-            updated_at: new Date().toISOString(),
-        };
-    }
+    hwFailAction[domain] = {
+        ...current,
+        type,
+        handler: current.handler || currentUser?.email || '',
+        scheduled_date: current.scheduled_date || '',
+        scheduled_time: current.scheduled_time || (type === '등원' ? '16:00' : ''),
+        alt_hw: current.alt_hw || '',
+        updated_at: new Date().toISOString(),
+    };
 
     await saveHwFailAction(studentId, hwFailAction);
     renderStudentDetail(studentId);
@@ -4094,11 +4088,11 @@ async function saveHwFailAction(studentId, hwFailAction) {
         // hw_fail_tasks 컬렉션 동기화 (domain당 1개 doc: studentId_domain_sourceDate)
         // 1) 서버 확인이 필요한 항목들을 병렬로 읽기
         const hwTaskEntries = Object.entries(hwFailAction).filter(([, action]) => action.type);
-        console.log('[saveHwFailAction] hwTaskEntries:', hwTaskEntries.length, hwTaskEntries.map(([d, a]) => `${d}:${a.type}`));
+
         const hwTaskChecks = hwTaskEntries.map(([domain, action]) => {
             const taskDocId = `${studentId}_${domain}_${selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
             const existing = hwFailTasks.find(t => t.docId === taskDocId);
-            console.log('[saveHwFailAction] task check:', { taskDocId, existingStatus: existing?.status || 'none' });
+
             return { domain, action, taskDocId, existing };
         });
 
@@ -4131,10 +4125,10 @@ async function saveHwFailAction(studentId, hwFailAction) {
                 hwFailTasks.push({ docId: taskDocId, ...taskData });
             }
         }
-        console.log('[saveHwFailAction] batch write count:', hwWriteCount);
+
         if (hwWriteCount > 0) {
             await hwWriteBatch.commit();
-            console.log('[saveHwFailAction] batch committed OK');
+
         }
 
         // 삭제된 domain의 pending tasks: 타입 제거 시 hw_fail_tasks에서도 상태 업데이트
@@ -4857,26 +4851,20 @@ function renderTestFailActionCard(studentId, testSections, t2nd, testFailAction,
 }
 
 window.selectTestFailType = async function(studentId, item, type, btnEl) {
-    console.log('[selectTestFailType]', item, type);
     if (!checkCanEditGrading(studentId)) return;
     const rec = dailyRecords[studentId] || {};
     const testFailAction = { ...(rec.test_fail_action || {}) };
     const current = testFailAction[item] || {};
-    console.log('[selectTestFailType] current:', JSON.stringify(current), 'toggle?', current.type === type);
 
-    if (current.type === type) {
-        delete testFailAction[item];
-    } else {
-        testFailAction[item] = {
-            ...current,
-            type,
-            handler: currentUser?.email || '',
-            scheduled_date: current.scheduled_date || '',
-            scheduled_time: current.scheduled_time || (type === '등원' ? '16:00' : ''),
-            alt_hw: current.alt_hw || '',
-            updated_at: new Date().toISOString(),
-        };
-    }
+    testFailAction[item] = {
+        ...current,
+        type,
+        handler: current.handler || currentUser?.email || '',
+        scheduled_date: current.scheduled_date || '',
+        scheduled_time: current.scheduled_time || (type === '등원' ? '16:00' : ''),
+        alt_hw: current.alt_hw || '',
+        updated_at: new Date().toISOString(),
+    };
 
     await saveTestFailAction(studentId, testFailAction);
     renderStudentDetail(studentId);
@@ -4926,7 +4914,6 @@ async function saveTestFailAction(studentId, testFailAction) {
         // test_fail_tasks 컬렉션 동기화
         // 1) 서버 확인이 필요한 항목들을 병렬로 읽기
         const testTaskEntries = Object.entries(testFailAction).filter(([, action]) => action.type);
-        console.log('[saveTestFailAction] testTaskEntries:', testTaskEntries.length, testTaskEntries.map(([d, a]) => `${d}:${a.type}`));
         const testTaskChecks = testTaskEntries.map(([item, action]) => {
             const taskDocId = `test_${studentId}_${item}_${selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
             const existing = testFailTasks.find(t => t.docId === taskDocId);
