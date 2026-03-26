@@ -6768,18 +6768,7 @@ function renderStudentDetail(studentId) {
             </div>` : ''}
             ${renderLeaveRequestCard(studentId)}
             ${renderAbsenceRecordCard(studentId)}
-            ${renderStudentMemoCard(studentId)}
-            <div class="detail-card">
-                <div class="detail-card-title">
-                    <span class="material-symbols-outlined" style="color:var(--text-sec);font-size:18px;">sticky_note_2</span>
-                    오늘 메모
-                </div>
-                <textarea class="field-input" id="detail-note-${escAttr(studentId)}" style="width:100%;min-height:60px;resize:vertical;"
-                    placeholder="오늘 메모 입력...">${esc(rec.note || '')}</textarea>
-                <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveDetailNote('${escAttr(studentId)}')">
-                    <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
-                </button>
-            </div>`;
+            ${renderUnifiedMemoCard(studentId)}`;
     }
 
     cardsContainer.innerHTML = isWithdrawn ? withdrawnHtml : `
@@ -6822,21 +6811,8 @@ function renderStudentDetail(studentId) {
         <!-- 클리닉 카드 -->
         ${extraVisitHtml}
 
-        <!-- 고정 메모 카드 -->
-        ${renderStudentMemoCard(studentId)}
-
-        <!-- 오늘 메모 카드 -->
-        <div class="detail-card">
-            <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--text-sec);font-size:18px;">sticky_note_2</span>
-                오늘 메모
-            </div>
-            <textarea class="field-input" id="detail-note-${escAttr(studentId)}" style="width:100%;min-height:60px;resize:vertical;"
-                placeholder="오늘 메모 입력...">${esc(rec.note || '')}</textarea>
-            <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveDetailNote('${escAttr(studentId)}')">
-                <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
-            </button>
-        </div>
+        <!-- 메모 카드 (통합) -->
+        ${renderUnifiedMemoCard(studentId)}
     `;
 
     // 탭 상태 복원
@@ -8539,41 +8515,68 @@ function renderStudentRoleMemoCard(studentId) {
     </div>`;
 }
 
-// ─── 고정 메모 카드 (리스트 형식) ────────────────────────────────────────────
+// ─── 메모 카드 (통합: 고정 + 오늘) ──────────────────────────────────────────
 function normalizeStudentMemos(student) {
     if (!student.memo) return [];
     if (typeof student.memo === 'string') {
         if (!student.memo.trim()) return [];
-        return [{ text: student.memo.trim(), pinned: false, created_at: '', created_by: '' }];
+        return [{ text: student.memo.trim(), pinned: true, created_at: '', created_by: '' }];
     }
     if (Array.isArray(student.memo)) return student.memo;
     return [];
 }
 
-function renderStudentMemoCard(studentId) {
+function renderUnifiedMemoCard(studentId) {
     const student = allStudents.find(s => s.docId === studentId);
     if (!student) return '';
+    const rec = dailyRecords[studentId] || {};
     const memos = normalizeStudentMemos(student);
-    const sorted = [...memos].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+
+    // 고정 메모 + 오늘 메모를 합쳐서 표시
+    const displayItems = [];
+
+    // 1) 고정 메모 (pinned, 항상 표시)
+    memos.forEach((m, idx) => {
+        if (m.pinned) displayItems.push({ ...m, _idx: idx, _source: 'pin' });
+    });
+
+    // 2) 오늘 비고정 메모 (date === selectedDate)
+    memos.forEach((m, idx) => {
+        if (!m.pinned && m.date === selectedDate) displayItems.push({ ...m, _idx: idx, _source: 'today' });
+    });
+
+    // 3) 기존 daily_records.note (레거시, 있으면 표시)
+    if (rec.note) {
+        displayItems.push({ text: rec.note, pinned: false, _source: 'daily', created_by: '', created_at: selectedDate });
+    }
 
     let listHtml = '';
-    if (sorted.length === 0) {
-        listHtml = '<div class="detail-card-empty" style="font-size:12px;color:var(--text-sec);">고정 메모 없음</div>';
+    if (displayItems.length === 0) {
+        listHtml = '<div class="detail-card-empty" style="font-size:12px;color:var(--text-sec);">메모 없음</div>';
     } else {
-        listHtml = sorted.map((m, _) => {
-            const idx = memos.indexOf(m);
+        listHtml = displayItems.map(m => {
             const pinnedCls = m.pinned ? ' pinned' : '';
             const pinIcon = m.pinned ? 'keep' : 'keep_off';
             const byStr = m.created_by ? m.created_by.split('@')[0] : '';
-            const dateStr = m.created_at || '';
-            const meta = [byStr, dateStr].filter(Boolean).join(' · ');
+            const dateLabel = m._source === 'pin' && m.date && m.date !== selectedDate ? m.date : '';
+            const meta = [byStr, dateLabel || m.created_at || ''].filter(Boolean).join(' · ');
+
+            if (m._source === 'daily') {
+                return `<div class="student-memo-item">
+                    <div class="student-memo-content">${esc(m.text)}</div>
+                    <div class="student-memo-bottom">
+                        <span class="student-memo-meta" style="color:var(--text-sec);font-style:italic;">오늘 메모 (레거시)</span>
+                    </div>
+                </div>`;
+            }
+
             return `<div class="student-memo-item${pinnedCls}">
                 <div class="student-memo-content">${esc(m.text || '')}</div>
                 <div class="student-memo-bottom">
                     <span class="student-memo-meta">${esc(meta)}</span>
                     <span class="student-memo-actions">
-                        <span class="material-symbols-outlined student-memo-btn" title="${m.pinned ? '고정 해제' : '고정'}" onclick="toggleStudentMemoPin('${escAttr(studentId)}',${idx})">${pinIcon}</span>
-                        <span class="material-symbols-outlined student-memo-btn delete" title="삭제" onclick="deleteStudentMemo('${escAttr(studentId)}',${idx})">close</span>
+                        <span class="material-symbols-outlined student-memo-btn" title="${m.pinned ? '고정 해제' : '고정'}" onclick="toggleStudentMemoPin('${escAttr(studentId)}',${m._idx})">${pinIcon}</span>
+                        <span class="material-symbols-outlined student-memo-btn delete" title="삭제" onclick="deleteStudentMemo('${escAttr(studentId)}',${m._idx})">close</span>
                     </span>
                 </div>
             </div>`;
@@ -8581,16 +8584,21 @@ function renderStudentMemoCard(studentId) {
     }
 
     return `<div class="detail-card">
-        <div class="detail-card-title">
-            <span class="material-symbols-outlined" style="color:#f59e0b;font-size:18px;">keep</span>
-            고정 메모 (${memos.length})
+        <div class="detail-card-title" style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="display:flex;align-items:center;gap:6px;">
+                <span class="material-symbols-outlined" style="color:var(--text-sec);font-size:18px;">sticky_note_2</span>
+                메모
+            </span>
+            <button class="icon-btn" style="width:28px;height:28px;" onclick="document.getElementById('memo-add-row-${escAttr(studentId)}').style.display=document.getElementById('memo-add-row-${escAttr(studentId)}').style.display==='none'?'':'none'" title="메모 추가">
+                <span class="material-symbols-outlined" style="font-size:20px;">add</span>
+            </button>
         </div>
-        ${listHtml}
-        <div class="student-memo-add">
+        <div class="student-memo-add" id="memo-add-row-${escAttr(studentId)}" style="display:none;">
             <input type="text" class="field-input student-memo-input" id="detail-memo-input-${escAttr(studentId)}"
-                placeholder="메모 입력..." onkeydown="if(event.key==='Enter'){addStudentMemo('${escAttr(studentId)}');event.preventDefault();}">
+                placeholder="메모 입력 후 Enter..." onkeydown="if(event.key==='Enter'){addStudentMemo('${escAttr(studentId)}');event.preventDefault();}">
             <button class="btn btn-primary btn-sm" onclick="addStudentMemo('${escAttr(studentId)}')">추가</button>
         </div>
+        ${listHtml}
     </div>`;
 }
 
@@ -9473,8 +9481,7 @@ window.addStudentMemo = async function(studentId) {
     const student = allStudents.find(s => s.docId === studentId);
     if (!student) return;
     const memos = normalizeStudentMemos(student);
-    const today = new Date().toISOString().slice(0, 10);
-    memos.push({ text: input.value.trim(), pinned: false, created_at: today, created_by: currentUser?.email || '' });
+    memos.push({ text: input.value.trim(), pinned: false, date: selectedDate, created_at: todayStr(), created_by: currentUser?.email || '' });
     await saveStudentMemoArray(studentId, memos);
 };
 window.deleteStudentMemo = async function(studentId, idx) {
