@@ -613,14 +613,25 @@ function loadAbsenceRecords() {
 const _unsubs = {};   // 컬렉션별 unsubscribe 함수
 let _rtDebounce = null;
 
+function _isDetailInputFocused() {
+    const el = document.activeElement;
+    if (!el) return false;
+    const tag = el.tagName;
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') return false;
+    const detailPanel = document.getElementById('detail-cards') || document.getElementById('detail-content');
+    return detailPanel && detailPanel.contains(el);
+}
+
 function _realtimeRefreshUI() {
-    // 짧은 시간에 여러 컬렉션이 동시 업데이트되면 1회만 렌더링
     if (_rtDebounce) return;
     _rtDebounce = setTimeout(() => {
         _rtDebounce = null;
         renderSubFilters();
         renderListPanel();
-        if (selectedStudentId) renderStudentDetail(selectedStudentId);
+        // 상세패널 입력 중이면 리렌더 건너뜀 (입력 내용 유실 방지)
+        if (selectedStudentId && !_isDetailInputFocused()) {
+            renderStudentDetail(selectedStudentId);
+        }
     }, 200);
 }
 
