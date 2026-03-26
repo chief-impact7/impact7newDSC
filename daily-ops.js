@@ -6740,11 +6740,22 @@ function renderStudentDetail(studentId) {
             ${renderAbsenceRecordCard(studentId)}
             <div class="detail-card">
                 <div class="detail-card-title">
+                    <span class="material-symbols-outlined" style="color:#f59e0b;font-size:18px;">keep</span>
+                    고정 메모
+                </div>
+                <textarea class="field-input" id="detail-memo-${escAttr(studentId)}" style="width:100%;min-height:60px;resize:vertical;"
+                    placeholder="날짜와 무관하게 유지되는 메모...">${esc(student.memo || '')}</textarea>
+                <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveStudentMemo('${escAttr(studentId)}')">
+                    <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
+                </button>
+            </div>
+            <div class="detail-card">
+                <div class="detail-card-title">
                     <span class="material-symbols-outlined" style="color:var(--text-sec);font-size:18px;">sticky_note_2</span>
-                    메모
+                    오늘 메모
                 </div>
                 <textarea class="field-input" id="detail-note-${escAttr(studentId)}" style="width:100%;min-height:60px;resize:vertical;"
-                    placeholder="메모 입력...">${esc(rec.note || '')}</textarea>
+                    placeholder="오늘 메모 입력...">${esc(rec.note || '')}</textarea>
                 <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveDetailNote('${escAttr(studentId)}')">
                     <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
                 </button>
@@ -6791,14 +6802,27 @@ function renderStudentDetail(studentId) {
         <!-- 클리닉 카드 -->
         ${extraVisitHtml}
 
-        <!-- 메모 카드 -->
+        <!-- 고정 메모 카드 -->
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:#f59e0b;font-size:18px;">keep</span>
+                고정 메모
+            </div>
+            <textarea class="field-input" id="detail-memo-${escAttr(studentId)}" style="width:100%;min-height:60px;resize:vertical;"
+                placeholder="날짜와 무관하게 유지되는 메모...">${esc(student.memo || '')}</textarea>
+            <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveStudentMemo('${escAttr(studentId)}')">
+                <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
+            </button>
+        </div>
+
+        <!-- 오늘 메모 카드 -->
         <div class="detail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--text-sec);font-size:18px;">sticky_note_2</span>
-                메모
+                오늘 메모
             </div>
             <textarea class="field-input" id="detail-note-${escAttr(studentId)}" style="width:100%;min-height:60px;resize:vertical;"
-                placeholder="메모 입력...">${esc(rec.note || '')}</textarea>
+                placeholder="오늘 메모 입력...">${esc(rec.note || '')}</textarea>
             <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveDetailNote('${escAttr(studentId)}')">
                 <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
             </button>
@@ -9365,6 +9389,19 @@ window.saveDetailNote = async function(studentId) {
     const ta = document.getElementById(`detail-note-${studentId}`);
     if (!ta) return;
     await saveDailyRecord(studentId, { note: ta.value });
+};
+window.saveStudentMemo = async function(studentId) {
+    const ta = document.getElementById(`detail-memo-${studentId}`);
+    if (!ta) return;
+    try {
+        await updateDoc(doc(db, 'students', studentId), { memo: ta.value, updated_at: serverTimestamp() });
+        const s = allStudents.find(s => s.docId === studentId);
+        if (s) s.memo = ta.value;
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('고정 메모 저장 실패:', err);
+        showSaveIndicator('error');
+    }
 };
 window.handleAttendanceChange = handleAttendanceChange;
 window.handleHomeworkStatusChange = handleHomeworkStatusChange;

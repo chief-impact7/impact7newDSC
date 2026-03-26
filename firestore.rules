@@ -58,7 +58,7 @@ service cloud.firestore {
           'day', 'class_type', 'level_code', 'level_symbol', 'class_number',
           'start_date', 'special_start_date', 'special_end_date',
           'first_registered',
-          'has_memo',
+          'has_memo', 'memo',
           'return_consult_done', 'return_consult_note',
           'return_consult_done_by', 'return_consult_done_at',
           'updated_at', 'updated_by', 'withdrawal_date'
