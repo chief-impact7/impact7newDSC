@@ -4862,6 +4862,7 @@ window.selectTestFailType = async function(studentId, item, type, btnEl) {
     const rec = dailyRecords[studentId] || {};
     const testFailAction = { ...(rec.test_fail_action || {}) };
     const current = testFailAction[item] || {};
+    console.log('[selectTestFailType] current:', JSON.stringify(current), 'toggle?', current.type === type);
 
     if (current.type === type) {
         delete testFailAction[item];
