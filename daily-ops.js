@@ -3942,11 +3942,28 @@ function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, mode = '
         `;
     }
 
+    // 이미 pending task가 있는 영역은 후속대책 카드에서 제외 (밀린 Task 카드에서 표시)
+    const filteredDomains = failDomains.filter(domain =>
+        !hwFailTasks.find(t => t.student_id === studentId && t.domain === domain && t.source_date === selectedDate && t.status === 'pending')
+    );
+
+    if (filteredDomains.length === 0) {
+        return `
+            <div class="detail-card hw-fail-card">
+                <div class="detail-card-title">
+                    <span class="material-symbols-outlined" style="color:var(--success);font-size:18px;">task_alt</span>
+                    ${titleLabel}
+                </div>
+                <div class="detail-card-empty" style="color:var(--text-sec);">모두 처리됨</div>
+            </div>
+        `;
+    }
+
     const descLabel = is1stOnly
         ? '1차 미통과 영역에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.'
         : '2차 미통과 영역에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.';
 
-    const rows = failDomains.map(domain => {
+    const rows = filteredDomains.map(domain => {
         const action = hwFailAction[domain] || {};
         const type = action.type || '';
         const isVisit = type === '등원';
@@ -4011,7 +4028,7 @@ function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, mode = '
         <div class="detail-card hw-fail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--danger);font-size:18px;">assignment_late</span>
-                ${is1stOnly ? '후속대책' : '숙제 미통과'} (${failDomains.length}개 영역)
+                ${is1stOnly ? '후속대책' : '숙제 미통과'} (${filteredDomains.length}개 영역)
             </div>
             <div class="hw-fail-desc" style="font-size:12px;color:var(--text-sec);margin-bottom:10px;">
                 ${descLabel}
@@ -4772,11 +4789,28 @@ function renderTestFailActionCard(studentId, testSections, t2nd, testFailAction,
         `;
     }
 
+    // 이미 pending task가 있는 항목은 후속대책 카드에서 제외 (밀린 Task 카드에서 표시)
+    const filteredItems = failItems.filter(item =>
+        !testFailTasks.find(t => t.student_id === studentId && t.domain === item && t.source_date === selectedDate && t.status === 'pending')
+    );
+
+    if (filteredItems.length === 0) {
+        return `
+            <div class="detail-card hw-fail-card">
+                <div class="detail-card-title">
+                    <span class="material-symbols-outlined" style="color:var(--success);font-size:18px;">task_alt</span>
+                    ${titleLabel}
+                </div>
+                <div class="detail-card-empty" style="color:var(--text-sec);">모두 처리됨</div>
+            </div>
+        `;
+    }
+
     const descLabel = is1stOnly
         ? '1차 미통과 항목에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.'
         : '2차 미통과 항목에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.';
 
-    const rows = failItems.map(item => {
+    const rows = filteredItems.map(item => {
         const action = testFailAction[item] || {};
         const type = action.type || '';
         const isVisit = type === '등원';
@@ -4840,7 +4874,7 @@ function renderTestFailActionCard(studentId, testSections, t2nd, testFailAction,
         <div class="detail-card hw-fail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--danger);font-size:18px;">quiz</span>
-                ${is1stOnly ? '후속대책' : '테스트 미통과'} (${failItems.length}개)
+                ${is1stOnly ? '후속대책' : '테스트 미통과'} (${filteredItems.length}개)
             </div>
             <div class="hw-fail-desc" style="font-size:12px;color:var(--text-sec);margin-bottom:10px;">
                 ${descLabel}
@@ -6734,17 +6768,7 @@ function renderStudentDetail(studentId) {
             </div>` : ''}
             ${renderLeaveRequestCard(studentId)}
             ${renderAbsenceRecordCard(studentId)}
-            <div class="detail-card">
-                <div class="detail-card-title">
-                    <span class="material-symbols-outlined" style="color:#f59e0b;font-size:18px;">keep</span>
-                    고정 메모
-                </div>
-                <textarea class="field-input" id="detail-memo-${escAttr(studentId)}" style="width:100%;min-height:60px;resize:vertical;"
-                    placeholder="날짜와 무관하게 유지되는 메모...">${esc(student.memo || '')}</textarea>
-                <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveStudentMemo('${escAttr(studentId)}')">
-                    <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
-                </button>
-            </div>
+            ${renderStudentMemoCard(studentId)}
             <div class="detail-card">
                 <div class="detail-card-title">
                     <span class="material-symbols-outlined" style="color:var(--text-sec);font-size:18px;">sticky_note_2</span>
@@ -6799,17 +6823,7 @@ function renderStudentDetail(studentId) {
         ${extraVisitHtml}
 
         <!-- 고정 메모 카드 -->
-        <div class="detail-card">
-            <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:#f59e0b;font-size:18px;">keep</span>
-                고정 메모
-            </div>
-            <textarea class="field-input" id="detail-memo-${escAttr(studentId)}" style="width:100%;min-height:60px;resize:vertical;"
-                placeholder="날짜와 무관하게 유지되는 메모...">${esc(student.memo || '')}</textarea>
-            <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveStudentMemo('${escAttr(studentId)}')">
-                <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
-            </button>
-        </div>
+        ${renderStudentMemoCard(studentId)}
 
         <!-- 오늘 메모 카드 -->
         <div class="detail-card">
@@ -8525,6 +8539,61 @@ function renderStudentRoleMemoCard(studentId) {
     </div>`;
 }
 
+// ─── 고정 메모 카드 (리스트 형식) ────────────────────────────────────────────
+function normalizeStudentMemos(student) {
+    if (!student.memo) return [];
+    if (typeof student.memo === 'string') {
+        if (!student.memo.trim()) return [];
+        return [{ text: student.memo.trim(), pinned: false, created_at: '', created_by: '' }];
+    }
+    if (Array.isArray(student.memo)) return student.memo;
+    return [];
+}
+
+function renderStudentMemoCard(studentId) {
+    const student = allStudents.find(s => s.docId === studentId);
+    if (!student) return '';
+    const memos = normalizeStudentMemos(student);
+    const sorted = [...memos].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+
+    let listHtml = '';
+    if (sorted.length === 0) {
+        listHtml = '<div class="detail-card-empty" style="font-size:12px;color:var(--text-sec);">고정 메모 없음</div>';
+    } else {
+        listHtml = sorted.map((m, _) => {
+            const idx = memos.indexOf(m);
+            const pinnedCls = m.pinned ? ' pinned' : '';
+            const pinIcon = m.pinned ? 'keep' : 'keep_off';
+            const byStr = m.created_by ? m.created_by.split('@')[0] : '';
+            const dateStr = m.created_at || '';
+            const meta = [byStr, dateStr].filter(Boolean).join(' · ');
+            return `<div class="student-memo-item${pinnedCls}">
+                <div class="student-memo-content">${esc(m.text || '')}</div>
+                <div class="student-memo-bottom">
+                    <span class="student-memo-meta">${esc(meta)}</span>
+                    <span class="student-memo-actions">
+                        <span class="material-symbols-outlined student-memo-btn" title="${m.pinned ? '고정 해제' : '고정'}" onclick="toggleStudentMemoPin('${escAttr(studentId)}',${idx})">${pinIcon}</span>
+                        <span class="material-symbols-outlined student-memo-btn delete" title="삭제" onclick="deleteStudentMemo('${escAttr(studentId)}',${idx})">close</span>
+                    </span>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    return `<div class="detail-card">
+        <div class="detail-card-title">
+            <span class="material-symbols-outlined" style="color:#f59e0b;font-size:18px;">keep</span>
+            고정 메모 (${memos.length})
+        </div>
+        ${listHtml}
+        <div class="student-memo-add">
+            <input type="text" class="field-input student-memo-input" id="detail-memo-input-${escAttr(studentId)}"
+                placeholder="메모 입력..." onkeydown="if(event.key==='Enter'){addStudentMemo('${escAttr(studentId)}');event.preventDefault();}">
+            <button class="btn btn-primary btn-sm" onclick="addStudentMemo('${escAttr(studentId)}')">추가</button>
+        </div>
+    </div>`;
+}
+
 // ─── Enrollment 편집 ─────────────────────────────────────────────────────────
 let editingEnrollment = { studentId: null, enrollIdx: 0 };
 
@@ -9386,18 +9455,44 @@ window.saveDetailNote = async function(studentId) {
     if (!ta) return;
     await saveDailyRecord(studentId, { note: ta.value });
 };
-window.saveStudentMemo = async function(studentId) {
-    const ta = document.getElementById(`detail-memo-${studentId}`);
-    if (!ta) return;
+async function saveStudentMemoArray(studentId, memos) {
     try {
-        await updateDoc(doc(db, 'students', studentId), { memo: ta.value, updated_at: serverTimestamp() });
+        await updateDoc(doc(db, 'students', studentId), { memo: memos, updated_at: serverTimestamp() });
         const s = allStudents.find(s => s.docId === studentId);
-        if (s) s.memo = ta.value;
+        if (s) s.memo = memos;
         showSaveIndicator('saved');
+        renderStudentDetail(studentId);
     } catch (err) {
         console.error('고정 메모 저장 실패:', err);
         showSaveIndicator('error');
     }
+}
+window.addStudentMemo = async function(studentId) {
+    const input = document.getElementById(`detail-memo-input-${studentId}`);
+    if (!input || !input.value.trim()) return;
+    const student = allStudents.find(s => s.docId === studentId);
+    if (!student) return;
+    const memos = normalizeStudentMemos(student);
+    const today = new Date().toISOString().slice(0, 10);
+    memos.push({ text: input.value.trim(), pinned: false, created_at: today, created_by: currentUser?.email || '' });
+    await saveStudentMemoArray(studentId, memos);
+};
+window.deleteStudentMemo = async function(studentId, idx) {
+    if (!confirm('이 메모를 삭제하시겠습니까?')) return;
+    const student = allStudents.find(s => s.docId === studentId);
+    if (!student) return;
+    const memos = normalizeStudentMemos(student);
+    if (idx < 0 || idx >= memos.length) return;
+    memos.splice(idx, 1);
+    await saveStudentMemoArray(studentId, memos);
+};
+window.toggleStudentMemoPin = async function(studentId, idx) {
+    const student = allStudents.find(s => s.docId === studentId);
+    if (!student) return;
+    const memos = normalizeStudentMemos(student);
+    if (idx < 0 || idx >= memos.length) return;
+    memos[idx].pinned = !memos[idx].pinned;
+    await saveStudentMemoArray(studentId, memos);
 };
 window.handleAttendanceChange = handleAttendanceChange;
 window.handleHomeworkStatusChange = handleHomeworkStatusChange;

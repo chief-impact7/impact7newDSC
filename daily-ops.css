@@ -3474,3 +3474,63 @@ textarea.field-input {
     transition: background 0.15s;
 }
 .return-consult-icon:hover { background: var(--bg-hover, rgba(0,0,0,0.06)); }
+
+/* ===== Student Memo List ===== */
+.student-memo-item {
+    padding: 6px 8px;
+    border-left: 3px solid var(--border);
+    margin-bottom: 4px;
+    border-radius: 4px;
+    background: var(--surface);
+    font-size: 13px;
+    line-height: 1.4;
+}
+.student-memo-item.pinned {
+    border-left-color: #f59e0b;
+    background: #fffbeb;
+}
+.student-memo-content {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.student-memo-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 2px;
+}
+.student-memo-meta {
+    font-size: 11px;
+    color: var(--text-sec);
+}
+.student-memo-actions {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+}
+.student-memo-btn {
+    font-size: 16px;
+    cursor: pointer;
+    color: var(--text-sec);
+    padding: 2px;
+    border-radius: 4px;
+    transition: background 0.15s, color 0.15s;
+    user-select: none;
+}
+.student-memo-btn:hover {
+    background: rgba(0,0,0,0.06);
+    color: var(--text-main);
+}
+.student-memo-btn.delete:hover {
+    color: var(--danger);
+}
+.student-memo-add {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-top: 8px;
+}
+.student-memo-input {
+    flex: 1;
+    min-width: 0;
+}
