@@ -4093,17 +4093,11 @@ async function saveHwFailAction(studentId, hwFailAction) {
         // hw_fail_tasks 컬렉션 동기화 (domain당 1개 doc: studentId_domain_sourceDate)
         // 1) 서버 확인이 필요한 항목들을 병렬로 읽기
         const hwTaskEntries = Object.entries(hwFailAction).filter(([, action]) => action.type);
-        const hwTaskChecks = await Promise.all(hwTaskEntries.map(async ([domain, action]) => {
+        const hwTaskChecks = hwTaskEntries.map(([domain, action]) => {
             const taskDocId = `${studentId}_${domain}_${selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
             const existing = hwFailTasks.find(t => t.docId === taskDocId);
-            if (existing && existing.status !== 'pending') return null; // 스킵
-            let serverSnap = null;
-            if (!existing) {
-                serverSnap = await getDoc(doc(db, 'hw_fail_tasks', taskDocId));
-                if (serverSnap.exists() && serverSnap.data().status !== 'pending') return null; // 스킵
-            }
             return { domain, action, taskDocId, existing };
-        }));
+        });
 
         // 2) 쓰기를 배치로 모아서 커밋
         const hwWriteBatch = writeBatch(db);
@@ -4925,17 +4919,11 @@ async function saveTestFailAction(studentId, testFailAction) {
         // test_fail_tasks 컬렉션 동기화
         // 1) 서버 확인이 필요한 항목들을 병렬로 읽기
         const testTaskEntries = Object.entries(testFailAction).filter(([, action]) => action.type);
-        const testTaskChecks = await Promise.all(testTaskEntries.map(async ([item, action]) => {
+        const testTaskChecks = testTaskEntries.map(([item, action]) => {
             const taskDocId = `test_${studentId}_${item}_${selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
             const existing = testFailTasks.find(t => t.docId === taskDocId);
-            if (existing && existing.status !== 'pending') return null; // 스킵
-            let serverSnap = null;
-            if (!existing) {
-                serverSnap = await getDoc(doc(db, 'test_fail_tasks', taskDocId));
-                if (serverSnap.exists() && serverSnap.data().status !== 'pending') return null; // 스킵
-            }
             return { item, action, taskDocId, existing };
-        }));
+        });
 
         // 2) 쓰기를 배치로 모아서 커밋
         const testWriteBatch = writeBatch(db);
