@@ -5635,10 +5635,12 @@ function buildStayStatsHtml(student) {
     {
         const start = parseDateKST(firstDate);
         const now = parseDateKST(todayStr());
+        const diffDays = Math.floor((now - start) / (1000 * 60 * 60 * 24));
         const totalMonths = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
         const years = Math.floor(totalMonths / 12);
         const months = totalMonths % 12;
-        const duration = totalMonths <= 0 ? '등원예정'
+        const duration = diffDays < 0 ? '등원예정'
+            : totalMonths < 1 ? `${diffDays}일`
             : years > 0 ? `${years}년${months > 0 ? ' ' + months + '개월' : ''}`
             : `${totalMonths}개월`;
         periodHtml = `${firstDate} 부터 &nbsp;&middot;&nbsp; <strong>${duration}</strong>`;
