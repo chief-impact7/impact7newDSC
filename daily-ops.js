@@ -4023,6 +4023,7 @@ function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, mode = '
 
 // 처리 유형 선택 (등원 / 대체숙제)
 window.selectHwFailType = async function(studentId, domain, type, btnEl) {
+    console.log('[selectHwFailType]', domain, type);
     if (!checkCanEditGrading(studentId)) return;
     const rec = dailyRecords[studentId] || {};
     const hwFailAction = { ...(rec.hw_fail_action || {}) };
@@ -4856,6 +4857,7 @@ function renderTestFailActionCard(studentId, testSections, t2nd, testFailAction,
 }
 
 window.selectTestFailType = async function(studentId, item, type, btnEl) {
+    console.log('[selectTestFailType]', item, type);
     if (!checkCanEditGrading(studentId)) return;
     const rec = dailyRecords[studentId] || {};
     const testFailAction = { ...(rec.test_fail_action || {}) };
@@ -4923,6 +4925,7 @@ async function saveTestFailAction(studentId, testFailAction) {
         // test_fail_tasks 컬렉션 동기화
         // 1) 서버 확인이 필요한 항목들을 병렬로 읽기
         const testTaskEntries = Object.entries(testFailAction).filter(([, action]) => action.type);
+        console.log('[saveTestFailAction] testTaskEntries:', testTaskEntries.length, testTaskEntries.map(([d, a]) => `${d}:${a.type}`));
         const testTaskChecks = testTaskEntries.map(([item, action]) => {
             const taskDocId = `test_${studentId}_${item}_${selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
             const existing = testFailTasks.find(t => t.docId === taskDocId);
