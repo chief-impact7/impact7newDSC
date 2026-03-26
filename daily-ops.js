@@ -4093,13 +4093,14 @@ async function saveHwFailAction(studentId, hwFailAction) {
         // hw_fail_tasks 컬렉션 동기화 (domain당 1개 doc: studentId_domain_sourceDate)
         // 1) 서버 확인이 필요한 항목들을 병렬로 읽기
         const hwTaskEntries = Object.entries(hwFailAction).filter(([, action]) => action.type);
+        console.log('[saveHwFailAction] hwTaskEntries:', hwTaskEntries.length, hwTaskEntries.map(([d, a]) => `${d}:${a.type}`));
         const hwTaskChecks = hwTaskEntries.map(([domain, action]) => {
             const taskDocId = `${studentId}_${domain}_${selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
             const existing = hwFailTasks.find(t => t.docId === taskDocId);
+            console.log('[saveHwFailAction] task check:', { taskDocId, existingStatus: existing?.status || 'none' });
             return { domain, action, taskDocId, existing };
         });
 
-        // 2) 쓰기를 배치로 모아서 커밋
         const hwWriteBatch = writeBatch(db);
         let hwWriteCount = 0;
         for (const check of hwTaskChecks) {
@@ -4122,7 +4123,6 @@ async function saveHwFailAction(studentId, hwFailAction) {
             };
             hwWriteBatch.set(doc(db, 'hw_fail_tasks', taskDocId), taskData, { merge: true });
             hwWriteCount++;
-            // 로컬 캐시 갱신
             const idx = hwFailTasks.findIndex(t => t.docId === taskDocId);
             if (idx >= 0) {
                 hwFailTasks[idx] = { docId: taskDocId, ...taskData };
@@ -4130,7 +4130,11 @@ async function saveHwFailAction(studentId, hwFailAction) {
                 hwFailTasks.push({ docId: taskDocId, ...taskData });
             }
         }
-        if (hwWriteCount > 0) await hwWriteBatch.commit();
+        console.log('[saveHwFailAction] batch write count:', hwWriteCount);
+        if (hwWriteCount > 0) {
+            await hwWriteBatch.commit();
+            console.log('[saveHwFailAction] batch committed OK');
+        }
 
         // 삭제된 domain의 pending tasks: 타입 제거 시 hw_fail_tasks에서도 상태 업데이트
         const hwCancelTargets = hwFailTasks.filter(t => t.student_id === studentId && t.source_date === selectedDate && t.status === 'pending' && (!hwFailAction[t.domain] || !hwFailAction[t.domain].type));
