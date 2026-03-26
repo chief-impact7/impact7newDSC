@@ -296,7 +296,7 @@ service cloud.firestore {
         return request.resource.data.keys().hasOnly([
           'type', 'student_id', 'student_name', 'content',
           'sender_email', 'sender_role', 'target_roles',
-          'date', 'read_by', 'created_at', 'updated_at'
+          'date', 'pinned', 'read_by', 'created_at', 'updated_at'
         ]);
       }
 
