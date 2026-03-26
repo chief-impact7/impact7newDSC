@@ -448,6 +448,26 @@ async function loadStudents() {
     allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
 }
 
+async function promoteEnrollPending() {
+    const today = todayStr();
+    const pending = allStudents.filter(s =>
+        s.status === '등원예정' &&
+        (s.enrollments || []).some(e => e.start_date && e.start_date <= today)
+    );
+    if (pending.length === 0) return;
+    const batch = writeBatch(db);
+    for (const s of pending) {
+        batch.update(doc(db, 'students', s.docId), { status: '재원', updated_at: serverTimestamp() });
+        s.status = '재원';
+    }
+    try {
+        await batch.commit();
+        console.log(`[promoteEnrollPending] ${pending.length}명 등원예정→재원 전환:`, pending.map(s => s.name));
+    } catch (err) {
+        console.error('[promoteEnrollPending] 전환 실패:', err);
+    }
+}
+
 function loadDailyRecords(date) {
     const q = query(collection(db, 'daily_records'), where('date', '==', date));
     return _listenCollection('daily_records', q, null, (data) => {
@@ -8625,6 +8645,7 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('user-avatar').textContent = (user.email || 'U')[0].toUpperCase();
 
         await loadStudents();
+        await promoteEnrollPending();
         await loadWithdrawnStudents();
         buildSiblingMap();
         await loadSemesterSettings();
@@ -9300,6 +9321,7 @@ window.renderStudentDetail = renderStudentDetail;
 window.refreshData = async () => {
     showSaveIndicator('saving');
     await loadStudents();
+    await promoteEnrollPending();
     await loadWithdrawnStudents();
     await loadSemesterSettings(true);
     getCurrentSemester();
