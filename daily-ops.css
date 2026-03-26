@@ -1549,6 +1549,12 @@ textarea.field-input {
   font-size: 12px;
 }
 
+.detail-save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
 /* ===== Icon Button ===== */
 .icon-btn {
   width: 36px;
@@ -2097,6 +2103,57 @@ textarea.field-input {
 .memo-item-content.expanded {
   white-space: normal;
   word-break: break-word;
+}
+
+.memo-item.pinned {
+  border-left: 3px solid #f59e0b;
+  background: #fffbeb;
+}
+[data-theme="dark"] .memo-item.pinned {
+  background: #292524;
+}
+.memo-item.pinned.unread {
+  border-left: 3px solid #f59e0b;
+}
+
+.memo-pin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--text-sec);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+.memo-pin-btn:hover {
+  color: #f59e0b;
+}
+.memo-pin-btn.active {
+  color: #f59e0b;
+}
+
+.memo-item-pin-date {
+  font-size: 10px;
+  color: var(--text-sec);
+  background: var(--bg-secondary);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.memo-pin-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-sec);
+  cursor: pointer;
+  margin-top: 4px;
+}
+.memo-pin-label input[type="checkbox"] {
+  margin: 0;
 }
 
 .memo-send-btn {

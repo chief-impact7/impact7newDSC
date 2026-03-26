@@ -3945,28 +3945,30 @@ function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, mode = '
                     <div class="hw-fail-detail">
                         <div class="hw-fail-detail-row">
                             <label class="field-label" style="font-size:11px;color:var(--text-sec);flex-shrink:0;">등원일시</label>
-                            <input type="date" class="field-input hw-fail-input" style="flex:1;padding:4px 8px;font-size:12px;"
-                                value="${escAttr(action.scheduled_date || '')}"
-                                onchange="updateHwFailField('${escAttr(studentId)}', '${escapedDomain}', 'scheduled_date', this.value)">
-                            <input type="time" class="field-input hw-fail-input" style="width:90px;padding:4px 8px;font-size:12px;"
-                                value="${escAttr(action.scheduled_time || '16:00')}"
-                                onchange="updateHwFailField('${escAttr(studentId)}', '${escapedDomain}', 'scheduled_time', this.value)">
+                            <input type="date" class="field-input hw-fail-input" data-hw-field="scheduled_date" style="flex:1;padding:4px 8px;font-size:12px;"
+                                value="${escAttr(action.scheduled_date || '')}">
+                            <input type="time" class="field-input hw-fail-input" data-hw-field="scheduled_time" style="width:90px;padding:4px 8px;font-size:12px;"
+                                value="${escAttr(action.scheduled_time || '16:00')}">
                         </div>
                         <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc((action.handler || currentUser?.email || '').split('@')[0])}</div>
+                        <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveHwFailFields('${escAttr(studentId)}', '${escapedDomain}', this)">
+                            <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
+                        </button>
                     </div>
                 ` : isAlt ? `
                     <div class="hw-fail-detail">
-                        <input type="text" class="field-input hw-fail-input" style="width:100%;padding:4px 8px;font-size:12px;"
+                        <input type="text" class="field-input hw-fail-input" data-hw-field="alt_hw" style="width:100%;padding:4px 8px;font-size:12px;"
                             placeholder="대체 숙제 내용 (예: 단어장 50개)"
-                            value="${escAttr(action.alt_hw || '')}"
-                            onchange="updateHwFailField('${escAttr(studentId)}', '${escapedDomain}', 'alt_hw', this.value)">
+                            value="${escAttr(action.alt_hw || '')}">
                         <div class="hw-fail-detail-row" style="margin-top:4px;">
                             <label class="field-label" style="font-size:11px;color:var(--text-sec);flex-shrink:0;">제출기한</label>
-                            <input type="date" class="field-input hw-fail-input" style="flex:1;padding:4px 8px;font-size:12px;"
-                                value="${escAttr(action.scheduled_date || '')}"
-                                onchange="updateHwFailField('${escAttr(studentId)}', '${escapedDomain}', 'scheduled_date', this.value)">
+                            <input type="date" class="field-input hw-fail-input" data-hw-field="scheduled_date" style="flex:1;padding:4px 8px;font-size:12px;"
+                                value="${escAttr(action.scheduled_date || '')}">
                         </div>
                         <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc((action.handler || currentUser?.email || '').split('@')[0])}</div>
+                        <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveHwFailFields('${escAttr(studentId)}', '${escapedDomain}', this)">
+                            <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
+                        </button>
                     </div>
                 ` : ''}
                 <div class="hw-fail-saved-tag" id="hw-fail-saved-${escAttr(studentId)}-${escapedDomain}" style="display:none;font-size:11px;color:var(--success);margin-top:4px;">✓ 저장됨</div>
@@ -4024,23 +4026,20 @@ window.clearHwFailType = async function(studentId, domain) {
     renderStudentDetail(studentId);
 };
 
-// 개별 필드 업데이트 (디바운스 저장)
-let hwFailSaveTimers = {};
-window.updateHwFailField = function(studentId, domain, field, value) {
+window.saveHwFailFields = async function(studentId, domain, btnEl) {
     if (!checkCanEditGrading(studentId)) return;
-    const rec = dailyRecords[studentId] || {};
+    const row = btnEl.closest('.hw-fail-domain-row');
+    if (!row) return;
     if (!dailyRecords[studentId]) dailyRecords[studentId] = {};
     if (!dailyRecords[studentId].hw_fail_action) dailyRecords[studentId].hw_fail_action = {};
     if (!dailyRecords[studentId].hw_fail_action[domain]) dailyRecords[studentId].hw_fail_action[domain] = {};
-    dailyRecords[studentId].hw_fail_action[domain][field] = value;
+    row.querySelectorAll('[data-hw-field]').forEach(el => {
+        dailyRecords[studentId].hw_fail_action[domain][el.dataset.hwField] = el.value;
+    });
     dailyRecords[studentId].hw_fail_action[domain].updated_at = new Date().toISOString();
-
-    const timerKey = `${studentId}_${domain}`;
-    if (hwFailSaveTimers[timerKey]) clearTimeout(hwFailSaveTimers[timerKey]);
-    hwFailSaveTimers[timerKey] = setTimeout(async () => {
-        await saveHwFailAction(studentId, dailyRecords[studentId].hw_fail_action);
-        delete hwFailSaveTimers[timerKey];
-    }, 1500);
+    await saveHwFailAction(studentId, dailyRecords[studentId].hw_fail_action);
+    const tag = document.getElementById(`hw-fail-saved-${studentId}-${domain}`);
+    if (tag) { tag.style.display = ''; setTimeout(() => tag.style.display = 'none', 2000); }
 };
 
 // Firestore에 hw_fail_action 저장 + hw_fail_tasks 컬렉션에도 동기화
@@ -4782,28 +4781,30 @@ function renderTestFailActionCard(studentId, testSections, t2nd, testFailAction,
                     <div class="hw-fail-detail">
                         <div class="hw-fail-detail-row">
                             <label class="field-label" style="font-size:11px;color:var(--text-sec);flex-shrink:0;">등원일시</label>
-                            <input type="date" class="field-input hw-fail-input" style="flex:1;padding:4px 8px;font-size:12px;"
-                                value="${escAttr(action.scheduled_date || '')}"
-                                onchange="updateTestFailField('${escAttr(studentId)}', '${escapedItem}', 'scheduled_date', this.value)">
-                            <input type="time" class="field-input hw-fail-input" style="width:90px;padding:4px 8px;font-size:12px;"
-                                value="${escAttr(action.scheduled_time || '16:00')}"
-                                onchange="updateTestFailField('${escAttr(studentId)}', '${escapedItem}', 'scheduled_time', this.value)">
+                            <input type="date" class="field-input hw-fail-input" data-test-field="scheduled_date" style="flex:1;padding:4px 8px;font-size:12px;"
+                                value="${escAttr(action.scheduled_date || '')}">
+                            <input type="time" class="field-input hw-fail-input" data-test-field="scheduled_time" style="width:90px;padding:4px 8px;font-size:12px;"
+                                value="${escAttr(action.scheduled_time || '16:00')}">
                         </div>
                         <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc((action.handler || currentUser?.email || '').split('@')[0])}</div>
+                        <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveTestFailFields('${escAttr(studentId)}', '${escapedItem}', this)">
+                            <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
+                        </button>
                     </div>
                 ` : isAlt ? `
                     <div class="hw-fail-detail">
-                        <input type="text" class="field-input hw-fail-input" style="width:100%;padding:4px 8px;font-size:12px;"
+                        <input type="text" class="field-input hw-fail-input" data-test-field="alt_hw" style="width:100%;padding:4px 8px;font-size:12px;"
                             placeholder="대체 숙제 내용 (예: 단어장 50개)"
-                            value="${escAttr(action.alt_hw || '')}"
-                            onchange="updateTestFailField('${escAttr(studentId)}', '${escapedItem}', 'alt_hw', this.value)">
+                            value="${escAttr(action.alt_hw || '')}">
                         <div class="hw-fail-detail-row" style="margin-top:4px;">
                             <label class="field-label" style="font-size:11px;color:var(--text-sec);flex-shrink:0;">제출기한</label>
-                            <input type="date" class="field-input hw-fail-input" style="flex:1;padding:4px 8px;font-size:12px;"
-                                value="${escAttr(action.scheduled_date || '')}"
-                                onchange="updateTestFailField('${escAttr(studentId)}', '${escapedItem}', 'scheduled_date', this.value)">
+                            <input type="date" class="field-input hw-fail-input" data-test-field="scheduled_date" style="flex:1;padding:4px 8px;font-size:12px;"
+                                value="${escAttr(action.scheduled_date || '')}">
                         </div>
                         <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc((action.handler || currentUser?.email || '').split('@')[0])}</div>
+                        <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveTestFailFields('${escAttr(studentId)}', '${escapedItem}', this)">
+                            <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
+                        </button>
                     </div>
                 ` : ''}
             </div>
@@ -4857,21 +4858,20 @@ window.clearTestFailType = async function(studentId, item) {
     renderStudentDetail(studentId);
 };
 
-let testFailSaveTimers = {};
-window.updateTestFailField = function(studentId, item, field, value) {
+window.saveTestFailFields = async function(studentId, item, btnEl) {
     if (!checkCanEditGrading(studentId)) return;
+    const row = btnEl.closest('.hw-fail-domain-row');
+    if (!row) return;
     if (!dailyRecords[studentId]) dailyRecords[studentId] = {};
     if (!dailyRecords[studentId].test_fail_action) dailyRecords[studentId].test_fail_action = {};
     if (!dailyRecords[studentId].test_fail_action[item]) dailyRecords[studentId].test_fail_action[item] = {};
-    dailyRecords[studentId].test_fail_action[item][field] = value;
+    row.querySelectorAll('[data-test-field]').forEach(el => {
+        dailyRecords[studentId].test_fail_action[item][el.dataset.testField] = el.value;
+    });
     dailyRecords[studentId].test_fail_action[item].updated_at = new Date().toISOString();
-
-    const timerKey = `test_${studentId}_${item}`;
-    if (testFailSaveTimers[timerKey]) clearTimeout(testFailSaveTimers[timerKey]);
-    testFailSaveTimers[timerKey] = setTimeout(async () => {
-        await saveTestFailAction(studentId, dailyRecords[studentId].test_fail_action);
-        delete testFailSaveTimers[timerKey];
-    }, 1500);
+    await saveTestFailAction(studentId, dailyRecords[studentId].test_fail_action);
+    const tag = row.querySelector('.hw-fail-saved-tag');
+    if (tag) { tag.style.display = ''; setTimeout(() => tag.style.display = 'none', 2000); }
 };
 
 async function saveTestFailAction(studentId, testFailAction) {
@@ -6721,9 +6721,11 @@ function renderStudentDetail(studentId) {
                     <span class="material-symbols-outlined" style="color:var(--text-sec);font-size:18px;">sticky_note_2</span>
                     메모
                 </div>
-                <textarea class="field-input" style="width:100%;min-height:60px;resize:vertical;"
-                    placeholder="메모 입력..."
-                    onchange="saveDailyRecord('${studentId}', { note: this.value })">${esc(rec.note || '')}</textarea>
+                <textarea class="field-input" id="detail-note-${escAttr(studentId)}" style="width:100%;min-height:60px;resize:vertical;"
+                    placeholder="메모 입력...">${esc(rec.note || '')}</textarea>
+                <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveDetailNote('${escAttr(studentId)}')">
+                    <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
+                </button>
             </div>`;
     }
 
@@ -6773,9 +6775,11 @@ function renderStudentDetail(studentId) {
                 <span class="material-symbols-outlined" style="color:var(--text-sec);font-size:18px;">sticky_note_2</span>
                 메모
             </div>
-            <textarea class="field-input" style="width:100%;min-height:60px;resize:vertical;"
-                placeholder="메모 입력..."
-                onchange="saveDailyRecord('${studentId}', { note: this.value })">${esc(rec.note || '')}</textarea>
+            <textarea class="field-input" id="detail-note-${escAttr(studentId)}" style="width:100%;min-height:60px;resize:vertical;"
+                placeholder="메모 입력...">${esc(rec.note || '')}</textarea>
+            <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveDetailNote('${escAttr(studentId)}')">
+                <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
+            </button>
         </div>
     `;
 
@@ -8089,31 +8093,46 @@ async function loadRoleMemos() {
     roleMemos = [];
 
     try {
-        const q = query(
+        const qDate = query(
             collection(db, 'role_memos'),
             where('date', '==', selectedDate)
         );
-        const snap = await getDocs(q);
-        snap.forEach(d => {
+        const qPinned = query(
+            collection(db, 'role_memos'),
+            where('pinned', '==', true)
+        );
+        const [snapDate, snapPinned] = await Promise.all([getDocs(qDate), getDocs(qPinned)]);
+
+        const seen = new Set();
+        const addMemo = (d) => {
+            if (seen.has(d.id)) return;
+            seen.add(d.id);
             const data = d.data();
-            // 내가 보낸 것 OR 나에게 온 것
             const isSent = data.sender_email === currentUser.email;
             const isReceived = data.target_roles?.includes(currentRole);
             if (isSent || isReceived) {
                 roleMemos.push({ docId: d.id, ...data, _isSent: isSent, _isReceived: isReceived });
             }
-        });
-        roleMemos.sort((a, b) => {
-            const ta = a.created_at?.toMillis?.() || 0;
-            const tb = b.created_at?.toMillis?.() || 0;
-            return tb - ta;
-        });
+        };
+        snapDate.forEach(addMemo);
+        snapPinned.forEach(addMemo);
+        sortRoleMemos();
     } catch (err) {
         console.error('메모 로드 실패:', err);
     }
 
     updateMemoBadge();
     renderMemoPanel();
+}
+
+function sortRoleMemos() {
+    roleMemos.sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        const ta = a.created_at?.toMillis?.() || 0;
+        const tb = b.created_at?.toMillis?.() || 0;
+        return tb - ta;
+    });
 }
 
 function updateMemoBadge() {
@@ -8222,10 +8241,22 @@ function renderMemoList(container) {
                 ? '→ ' + esc(targets)
                 : esc(m.sender_email?.split('@')[0] || '') + ' (' + esc(m.sender_role || '') + ')';
 
-            return `<div class="memo-item ${isUnread ? 'unread' : ''}" onclick="expandMemo('${m.docId}', this)">
+            const isPinned = !!m.pinned;
+            const pinClass = isPinned ? ' pinned' : '';
+            const pinIcon = isPinned ? 'keep' : 'keep_off';
+            const pinTitle = isPinned ? '고정 해제' : '고정';
+            const dateLabel = m.date !== selectedDate ? `<span class="memo-item-pin-date">${esc(m.date || '')}</span>` : '';
+
+            return `<div class="memo-item${pinClass} ${isUnread ? 'unread' : ''}" onclick="expandMemo('${m.docId}', this)">
                 <div class="memo-item-header">
                     <span class="memo-item-sender">${senderLabel}</span>
-                    <span class="memo-item-date">${esc(timeStr)}</span>
+                    <span style="display:flex;align-items:center;gap:4px;">
+                        ${dateLabel}
+                        <span class="memo-item-date">${esc(timeStr)}</span>
+                        <button class="memo-pin-btn${isPinned ? ' active' : ''}" onclick="event.stopPropagation();toggleMemoPin('${m.docId}',${!isPinned})" title="${pinTitle}">
+                            <span class="material-symbols-outlined" style="font-size:16px;">${pinIcon}</span>
+                        </button>
+                    </span>
                 </div>
                 ${studentLabel}
                 <div class="memo-item-content">${esc(m.content || '')}</div>
@@ -8255,6 +8286,21 @@ async function expandMemo(memoDocId, el) {
     }
 }
 
+async function toggleMemoPin(memoDocId, pinned) {
+    try {
+        await updateDoc(doc(db, 'role_memos', memoDocId), {
+            pinned: pinned,
+            updated_at: serverTimestamp()
+        });
+        const memo = roleMemos.find(m => m.docId === memoDocId);
+        if (memo) memo.pinned = pinned;
+        sortRoleMemos();
+        renderMemoPanel();
+    } catch (err) {
+        console.error('메모 고정 실패:', err);
+    }
+}
+
 async function markMemoRead(memoDocId) {
     if (!currentUser) return;
     const memo = roleMemos.find(m => m.docId === memoDocId);
@@ -8279,6 +8325,8 @@ function openMemoModal(studentId) {
     document.getElementById('memo-student-id').value = studentId || '';
     document.getElementById('memo-student-dropdown').style.display = 'none';
     document.getElementById('memo-content-input').value = '';
+    const pinCheck = document.getElementById('memo-pin-check');
+    if (pinCheck) pinCheck.checked = false;
 
     // 학생 지정 시 자동 선택
     const selectedEl = document.getElementById('memo-student-selected');
@@ -8370,6 +8418,7 @@ async function sendMemo() {
 
     showSaveIndicator('saving');
     try {
+        const pinChecked = document.getElementById('memo-pin-check')?.checked || false;
         await addDoc(collection(db, 'role_memos'), {
             type,
             student_id: studentId,
@@ -8379,6 +8428,7 @@ async function sendMemo() {
             sender_role: currentRole,
             target_roles: targetRoles,
             date: selectedDate,
+            pinned: pinChecked,
             read_by: [],
             created_at: serverTimestamp(),
             updated_at: serverTimestamp()
@@ -9287,6 +9337,11 @@ window.saveSchedule = saveScheduleFromModal;
 window.saveHomework = saveHomeworkFromModal;
 window.saveTest = saveTestFromModal;
 window.saveDailyRecord = saveDailyRecord;
+window.saveDetailNote = async function(studentId) {
+    const ta = document.getElementById(`detail-note-${studentId}`);
+    if (!ta) return;
+    await saveDailyRecord(studentId, { note: ta.value });
+};
 window.handleAttendanceChange = handleAttendanceChange;
 window.handleHomeworkStatusChange = handleHomeworkStatusChange;
 window.openScheduleModal = openScheduleModal;
@@ -9328,6 +9383,7 @@ window.searchMemoStudent = searchMemoStudent;
 window.selectMemoStudent = selectMemoStudent;
 window.markMemoRead = markMemoRead;
 window.expandMemo = expandMemo;
+window.toggleMemoPin = toggleMemoPin;
 
 // 휴퇴원요청서
 window.openLeaveRequestModal = openLeaveRequestModal;
