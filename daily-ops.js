@@ -8595,8 +8595,7 @@ function renderUnifiedMemoCard(studentId) {
         </div>
         <div class="student-memo-add" id="memo-add-row-${escAttr(studentId)}" style="display:none;">
             <input type="text" class="field-input student-memo-input" id="detail-memo-input-${escAttr(studentId)}"
-                placeholder="메모 입력 후 Enter..." onkeydown="if(event.key==='Enter'){addStudentMemo('${escAttr(studentId)}');event.preventDefault();}">
-            <button class="btn btn-primary btn-sm" onclick="addStudentMemo('${escAttr(studentId)}')">추가</button>
+                placeholder="메모 입력 후 Enter..." onkeydown="if(event.key==='Enter'){event.preventDefault();addStudentMemo('${escAttr(studentId)}');}">
         </div>
         ${listHtml}
     </div>`;
@@ -9475,14 +9474,18 @@ async function saveStudentMemoArray(studentId, memos) {
         showSaveIndicator('error');
     }
 }
+let _addMemoLock = false;
 window.addStudentMemo = async function(studentId) {
+    if (_addMemoLock) return;
     const input = document.getElementById(`detail-memo-input-${studentId}`);
     if (!input || !input.value.trim()) return;
+    _addMemoLock = true;
     const student = allStudents.find(s => s.docId === studentId);
-    if (!student) return;
+    if (!student) { _addMemoLock = false; return; }
     const memos = normalizeStudentMemos(student);
     memos.push({ text: input.value.trim(), pinned: false, date: selectedDate, created_at: todayStr(), created_by: currentUser?.email || '' });
     await saveStudentMemoArray(studentId, memos);
+    _addMemoLock = false;
 };
 window.deleteStudentMemo = async function(studentId, idx) {
     if (!confirm('이 메모를 삭제하시겠습니까?')) return;
