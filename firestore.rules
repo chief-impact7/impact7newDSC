@@ -119,7 +119,7 @@ service cloud.firestore {
           && data.doc_id is string
           && data.doc_id.size() > 0
           && data.change_type is string
-          && data.change_type in ['ENROLL', 'UPDATE', 'WITHDRAW', 'DELETE']
+          && data.change_type in ['ENROLL', 'UPDATE', 'WITHDRAW', 'DELETE', 'RETURN']
           && data.before is string
           && data.after is string
           && data.google_login_id is string
@@ -433,6 +433,7 @@ service cloud.firestore {
           'makeup_date', 'makeup_time',
           'makeup_status', 'makeup_completed_by', 'makeup_completed_at',
           'reschedule_history',
+          'marked_absent_by', 'marked_absent_at',
           'status', 'created_by', 'created_at', 'updated_by', 'updated_at'
         ]);
       }
@@ -462,6 +463,8 @@ service cloud.firestore {
           'consultation_note', 'status',
           'requested_by', 'requested_at',
           'approved_by', 'approved_at',
+          'teacher_approved_by', 'teacher_approved_at',
+          'return_date',
           'previous_status', 'created_at', 'updated_at'
         ]);
       }
@@ -490,7 +493,8 @@ service cloud.firestore {
           'temp_date', 'temp_time', 'visit_status', 'temp_arrival',
           'created_at', 'created_by',
           'completed_by', 'completed_at',
-          'updated_by', 'updated_at', 'edit_history'
+          'updated_by', 'updated_at', 'edit_history',
+          'arrival_status', 'cancel_reason'
         ])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
