@@ -4923,7 +4923,8 @@ window.selectTestFailType = async function(studentId, item, type, btnEl) {
         updated_at: new Date().toISOString(),
     };
 
-    await saveTestFailAction(studentId, testFailAction);
+    // 타입 선택 단계: daily_records에만 저장 (test_fail_tasks는 "저장" 버튼 시 생성)
+    await _saveTestFailActionOnly(studentId, testFailAction);
     renderStudentDetail(studentId);
 };
 
@@ -4952,6 +4953,28 @@ window.saveTestFailFields = async function(studentId, item, btnEl) {
     if (tag) { tag.style.display = ''; setTimeout(() => tag.style.display = 'none', 2000); }
     renderStudentDetail(studentId);
 };
+
+// daily_records에만 test_fail_action 저장 (타입 선택 단계용, task 생성 없음)
+async function _saveTestFailActionOnly(studentId, testFailAction) {
+    const docId = makeDailyRecordId(studentId, selectedDate);
+    const student = allStudents.find(s => s.docId === studentId);
+    try {
+        await setDoc(doc(db, 'daily_records', docId), {
+            student_id: studentId,
+            date: selectedDate,
+            branch: branchFromStudent(student || {}),
+            test_fail_action: testFailAction,
+            updated_by: currentUser.email,
+            updated_at: serverTimestamp()
+        }, { merge: true });
+        if (!dailyRecords[studentId]) dailyRecords[studentId] = { student_id: studentId, date: selectedDate };
+        dailyRecords[studentId].test_fail_action = testFailAction;
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('test_fail_action 저장 실패:', err);
+        showSaveIndicator('error');
+    }
+}
 
 async function saveTestFailAction(studentId, testFailAction) {
     const docId = makeDailyRecordId(studentId, selectedDate);
