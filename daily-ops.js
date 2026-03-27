@@ -4055,7 +4055,8 @@ window.selectHwFailType = async function(studentId, domain, type, btnEl) {
         updated_at: new Date().toISOString(),
     };
 
-    await saveHwFailAction(studentId, hwFailAction);
+    // 타입 선택 단계: daily_records에만 저장 (hw_fail_tasks는 "저장" 버튼 시 생성)
+    await _saveHwFailActionOnly(studentId, hwFailAction);
     renderStudentDetail(studentId);
 };
 
@@ -4085,6 +4086,28 @@ window.saveHwFailFields = async function(studentId, domain, btnEl) {
     if (tag) { tag.style.display = ''; setTimeout(() => tag.style.display = 'none', 2000); }
     renderStudentDetail(studentId);
 };
+
+// daily_records에만 hw_fail_action 저장 (타입 선택 단계용, task 생성 없음)
+async function _saveHwFailActionOnly(studentId, hwFailAction) {
+    const docId = makeDailyRecordId(studentId, selectedDate);
+    const student = allStudents.find(s => s.docId === studentId);
+    try {
+        await setDoc(doc(db, 'daily_records', docId), {
+            student_id: studentId,
+            date: selectedDate,
+            branch: branchFromStudent(student || {}),
+            hw_fail_action: hwFailAction,
+            updated_by: currentUser.email,
+            updated_at: serverTimestamp()
+        }, { merge: true });
+        if (!dailyRecords[studentId]) dailyRecords[studentId] = { student_id: studentId, date: selectedDate };
+        dailyRecords[studentId].hw_fail_action = hwFailAction;
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('hw_fail_action 저장 실패:', err);
+        showSaveIndicator('error');
+    }
+}
 
 // Firestore에 hw_fail_action 저장 + hw_fail_tasks 컬렉션에도 동기화
 async function saveHwFailAction(studentId, hwFailAction) {
