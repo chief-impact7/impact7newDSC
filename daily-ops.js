@@ -8802,13 +8802,13 @@ onAuthStateChanged(auth, async (user) => {
             await trackTeacherLogin(user);
             await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadTempClassOverrides(selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers()]);
             await syncAbsenceRecords();
-            autoCloseOldRecords();
-            syncTaskStudentNames();
             await loadRoleMemos().catch(() => {});
         } catch (err) {
             console.error('[init] 데이터 로드 중 오류:', err);
-            alert('데이터 로드 중 오류가 발생했습니다.\n' + err.message + '\n\n페이지를 새로고침해주세요.');
         }
+        // 백그라운드 후처리 (실패해도 앱 동작에 영향 없음)
+        autoCloseOldRecords().catch(e => console.warn('[autoClose]', e));
+        syncTaskStudentNames().catch(e => console.warn('[syncNames]', e));
         updateDateDisplay();
         updateReadonlyBanner();
         renderBranchFilter();
