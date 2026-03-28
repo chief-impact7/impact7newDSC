@@ -8788,19 +8788,27 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('user-email').textContent = user.email;
         document.getElementById('user-avatar').textContent = (user.email || 'U')[0].toUpperCase();
 
-        await loadStudents();
-        await promoteEnrollPending();
-        await loadWithdrawnStudents();
-        buildSiblingMap();
-        await loadSemesterSettings();
-        getCurrentSemester();
-        buildSemesterFilter();
-        await trackTeacherLogin(user);
-        await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadTempClassOverrides(selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers()]);
-        await syncAbsenceRecords();
-        autoCloseOldRecords();  // 1개월 경과 건 자동 처리 (비동기, 백그라운드)
-        syncTaskStudentNames(); // task의 student_name을 학생 DB와 동기화 (비동기, 백그라운드)
-        await loadRoleMemos().catch(() => {});
+        // 날짜/UI는 데이터 로드 실패와 무관하게 반드시 표시
+        updateDateDisplay();
+
+        try {
+            await loadStudents();
+            await promoteEnrollPending();
+            await loadWithdrawnStudents();
+            buildSiblingMap();
+            await loadSemesterSettings();
+            getCurrentSemester();
+            buildSemesterFilter();
+            await trackTeacherLogin(user);
+            await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadTempClassOverrides(selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers()]);
+            await syncAbsenceRecords();
+            autoCloseOldRecords();
+            syncTaskStudentNames();
+            await loadRoleMemos().catch(() => {});
+        } catch (err) {
+            console.error('[init] 데이터 로드 중 오류:', err);
+            alert('데이터 로드 중 오류가 발생했습니다.\n' + err.message + '\n\n페이지를 새로고침해주세요.');
+        }
         updateDateDisplay();
         updateReadonlyBanner();
         renderBranchFilter();
