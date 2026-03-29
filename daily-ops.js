@@ -877,6 +877,7 @@ function saveDailyRecord(studentId, updates) {
         } catch (err) {
             console.error('저장 실패:', err);
             showSaveIndicator('error');
+            alert('저장 실패: ' + (err.code || '') + ' ' + (err.message || err));
         }
     }, 2000);
 }
