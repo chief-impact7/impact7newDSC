@@ -665,7 +665,7 @@ function _listenCollection(key, q, parser, onData) {
 }
 
 function loadLeaveRequests() {
-    const q = query(collection(db, 'leave_requests'), where('status', 'in', ['requested', 'teacher_approved', 'approved']));
+    const q = query(collection(db, 'leave_requests'), where('status', 'in', ['requested', 'teacher_approved', 'approved', 'cancelled']));
     return _listenCollection('leave_requests', q, null, (data) => { leaveRequests = data; });
 }
 
