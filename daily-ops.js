@@ -13,6 +13,8 @@ import { toDateStrKST, parseDateKST, todayStr, getDayName } from './src/shared/f
 let currentUser = null;
 let allStudents = [];           // students 컬렉션 캐시
 let dailyRecords = {};          // studentDocId → daily_record 데이터
+// 디버그용 전역 노출
+window._debug = { get allStudents() { return allStudents; }, get dailyRecords() { return dailyRecords; }, get hwFailTasks() { return hwFailTasks; }, get testFailTasks() { return testFailTasks; } };
 let retakeSchedules = [];       // retake_schedule 전체
 let hwFailTasks = [];           // hw_fail_tasks 전체
 let testFailTasks = [];         // test_fail_tasks 전체
