@@ -7286,14 +7286,28 @@ function applyHwDomainOX(studentId, field, domain, forceValue) {
     const newVal = forceValue !== undefined ? forceValue : nextOXValue(currentVal);
     domainData[domain] = newVal;
 
+    const updates = { [field]: domainData };
+
+    // 1차에서 'O' 입력 시, 2차에 해당 항목이 있으면 자동 정리
+    const secondField = field === 'hw_domains_1st' ? 'hw_domains_2nd'
+        : field === 'test_domains_1st' ? 'test_domains_2nd' : null;
+    if (secondField && newVal === 'O' && rec[secondField]?.[domain]) {
+        const secondData = { ...(rec[secondField] || {}) };
+        delete secondData[domain];
+        updates[secondField] = secondData;
+    }
+
     // 즉시 저장
-    saveImmediately(studentId, { [field]: domainData });
+    saveImmediately(studentId, updates);
 
     // 로컬 캐시 업데이트
     if (!dailyRecords[studentId]) {
         dailyRecords[studentId] = { student_id: studentId, date: selectedDate };
     }
     dailyRecords[studentId][field] = domainData;
+    if (secondField && updates[secondField]) {
+        dailyRecords[studentId][secondField] = updates[secondField];
+    }
 
     // DOM 직접 업데이트 (버튼만 갱신)
     const btn = document.querySelector(`.hw-domain-ox[data-student="${CSS.escape(studentId)}"][data-field="${CSS.escape(field)}"][data-domain="${CSS.escape(domain)}"]`);
