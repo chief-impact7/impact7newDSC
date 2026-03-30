@@ -490,12 +490,12 @@ function loadRetakeSchedules() {
 }
 
 function loadHwFailTasks() {
-    const q = query(collection(db, 'hw_fail_tasks'), where('status', '==', 'pending'));
+    const q = query(collection(db, 'hw_fail_tasks'), where('status', 'in', ['pending', '완료', '기타']));
     return _listenCollection('hw_fail_tasks', q, null, (data) => { hwFailTasks = data; });
 }
 
 function loadTestFailTasks() {
-    const q = query(collection(db, 'test_fail_tasks'), where('status', '==', 'pending'));
+    const q = query(collection(db, 'test_fail_tasks'), where('status', 'in', ['pending', '완료', '기타']));
     return _listenCollection('test_fail_tasks', q, null, (data) => { testFailTasks = data; });
 }
 
