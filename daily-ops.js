@@ -3999,7 +3999,7 @@ function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, mode = '
                             <input type="date" class="field-input hw-fail-input" data-hw-field="scheduled_date" style="flex:1;padding:4px 8px;font-size:12px;"
                                 value="${escAttr(action.scheduled_date || '')}">
                             <input type="time" class="field-input hw-fail-input" data-hw-field="scheduled_time" style="width:90px;padding:4px 8px;font-size:12px;"
-                                value="${escAttr(action.scheduled_time || '16:00')}">
+                                value="${escAttr(action.scheduled_time || '')}" placeholder="시간">
                         </div>
                         <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc((action.handler || currentUser?.email || '').split('@')[0])}</div>
                         <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveHwFailFields('${escAttr(studentId)}', '${escapedDomain}', this)">
@@ -4053,7 +4053,7 @@ window.selectHwFailType = async function(studentId, domain, type, btnEl) {
         type,
         handler: current.handler || currentUser?.email || '',
         scheduled_date: current.scheduled_date || '',
-        scheduled_time: current.scheduled_time || (type === '등원' ? '16:00' : ''),
+        scheduled_time: current.scheduled_time || '',
         alt_hw: current.alt_hw || '',
         updated_at: new Date().toISOString(),
     };
@@ -4084,7 +4084,7 @@ window.saveHwFailFields = async function(studentId, domain, btnEl) {
         dailyRecords[studentId].hw_fail_action[domain][el.dataset.hwField] = el.value;
     });
     dailyRecords[studentId].hw_fail_action[domain].updated_at = new Date().toISOString();
-    await saveHwFailAction(studentId, dailyRecords[studentId].hw_fail_action);
+    await saveHwFailAction(studentId, dailyRecords[studentId].hw_fail_action, domain);
     const tag = document.getElementById(`hw-fail-saved-${studentId}-${domain}`);
     if (tag) { tag.style.display = ''; setTimeout(() => tag.style.display = 'none', 2000); }
     renderStudentDetail(studentId);
@@ -4113,7 +4113,8 @@ async function _saveHwFailActionOnly(studentId, hwFailAction) {
 }
 
 // Firestore에 hw_fail_action 저장 + hw_fail_tasks 컬렉션에도 동기화
-async function saveHwFailAction(studentId, hwFailAction) {
+// onlyDomain: 지정 시 해당 영역만 task 생성/업데이트
+async function saveHwFailAction(studentId, hwFailAction, onlyDomain) {
     const docId = makeDailyRecordId(studentId, selectedDate);
     const student = allStudents.find(s => s.docId === studentId);
     try {
@@ -4130,7 +4131,7 @@ async function saveHwFailAction(studentId, hwFailAction) {
 
         // hw_fail_tasks 컬렉션 동기화 (domain당 1개 doc: studentId_domain_sourceDate)
         // 1) 서버 확인이 필요한 항목들을 병렬로 읽기
-        const hwTaskEntries = Object.entries(hwFailAction).filter(([, action]) => action.type);
+        const hwTaskEntries = Object.entries(hwFailAction).filter(([domain, action]) => action.type && (!onlyDomain || domain === onlyDomain));
 
         const hwTaskChecks = hwTaskEntries.map(([domain, action]) => {
             const taskDocId = `${studentId}_${domain}_${selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
@@ -4869,7 +4870,7 @@ function renderTestFailActionCard(studentId, testSections, t2nd, testFailAction,
                             <input type="date" class="field-input hw-fail-input" data-test-field="scheduled_date" style="flex:1;padding:4px 8px;font-size:12px;"
                                 value="${escAttr(action.scheduled_date || '')}">
                             <input type="time" class="field-input hw-fail-input" data-test-field="scheduled_time" style="width:90px;padding:4px 8px;font-size:12px;"
-                                value="${escAttr(action.scheduled_time || '16:00')}">
+                                value="${escAttr(action.scheduled_time || '')}" placeholder="시간">
                         </div>
                         <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc((action.handler || currentUser?.email || '').split('@')[0])}</div>
                         <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveTestFailFields('${escAttr(studentId)}', '${escapedItem}', this)">
@@ -4921,7 +4922,7 @@ window.selectTestFailType = async function(studentId, item, type, btnEl) {
         type,
         handler: current.handler || currentUser?.email || '',
         scheduled_date: current.scheduled_date || '',
-        scheduled_time: current.scheduled_time || (type === '등원' ? '16:00' : ''),
+        scheduled_time: current.scheduled_time || '',
         alt_hw: current.alt_hw || '',
         updated_at: new Date().toISOString(),
     };
@@ -4951,7 +4952,7 @@ window.saveTestFailFields = async function(studentId, item, btnEl) {
         dailyRecords[studentId].test_fail_action[item][el.dataset.testField] = el.value;
     });
     dailyRecords[studentId].test_fail_action[item].updated_at = new Date().toISOString();
-    await saveTestFailAction(studentId, dailyRecords[studentId].test_fail_action);
+    await saveTestFailAction(studentId, dailyRecords[studentId].test_fail_action, item);
     const tag = row.querySelector('.hw-fail-saved-tag');
     if (tag) { tag.style.display = ''; setTimeout(() => tag.style.display = 'none', 2000); }
     renderStudentDetail(studentId);
@@ -4979,7 +4980,8 @@ async function _saveTestFailActionOnly(studentId, testFailAction) {
     }
 }
 
-async function saveTestFailAction(studentId, testFailAction) {
+// onlyDomain: 지정 시 해당 영역만 task 생성/업데이트
+async function saveTestFailAction(studentId, testFailAction, onlyDomain) {
     const docId = makeDailyRecordId(studentId, selectedDate);
     const student = allStudents.find(s => s.docId === studentId);
     try {
@@ -4996,7 +4998,7 @@ async function saveTestFailAction(studentId, testFailAction) {
 
         // test_fail_tasks 컬렉션 동기화
         // 1) 서버 확인이 필요한 항목들을 병렬로 읽기
-        const testTaskEntries = Object.entries(testFailAction).filter(([, action]) => action.type);
+        const testTaskEntries = Object.entries(testFailAction).filter(([item, action]) => action.type && (!onlyDomain || item === onlyDomain));
         const testTaskChecks = testTaskEntries.map(([item, action]) => {
             const taskDocId = `test_${studentId}_${item}_${selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
             const existing = testFailTasks.find(t => t.docId === taskDocId);
