@@ -243,7 +243,7 @@ function getActiveEnrollments(s, dateStr) {
 // 학생 등원시간: 개별 시간 → 반 기본 시간 fallback
 function getStudentStartTime(enrollment) {
     if (!enrollment) return '';
-    return enrollment.start_time || classSettings[enrollmentCode(enrollment)]?.default_time || '';
+    return enrollment.start_time || enrollment.time || classSettings[enrollmentCode(enrollment)]?.default_time || '';
 }
 
 // 학교+학부앞글자+학년앞글자 조합 (예: 대일고1, 진명여고1)
@@ -3943,9 +3943,9 @@ function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, mode = '
         `;
     }
 
-    // 이미 pending task가 있는 영역은 후속대책 카드에서 제외 (밀린 Task 카드에서 표시)
+    // pending 또는 완료된 task가 있는 영역은 후속대책 카드에서 제외 (취소만 재생성 허용)
     const filteredDomains = failDomains.filter(domain =>
-        !hwFailTasks.find(t => t.student_id === studentId && t.domain === domain && t.source_date === selectedDate && t.status === 'pending')
+        !hwFailTasks.find(t => t.student_id === studentId && t.domain === domain && t.source_date === selectedDate && (t.status === 'pending' || t.status === '완료'))
     );
 
     if (filteredDomains.length === 0) {
@@ -4813,9 +4813,9 @@ function renderTestFailActionCard(studentId, testSections, t2nd, testFailAction,
         `;
     }
 
-    // 이미 pending task가 있는 항목은 후속대책 카드에서 제외 (밀린 Task 카드에서 표시)
+    // pending 또는 완료된 task가 있는 항목은 후속대책 카드에서 제외 (취소만 재생성 허용)
     const filteredItems = failItems.filter(item =>
-        !testFailTasks.find(t => t.student_id === studentId && t.domain === item && t.source_date === selectedDate && t.status === 'pending')
+        !testFailTasks.find(t => t.student_id === studentId && t.domain === item && t.source_date === selectedDate && (t.status === 'pending' || t.status === '완료'))
     );
 
     if (filteredItems.length === 0) {
@@ -6571,7 +6571,7 @@ function renderStudentDetail(studentId) {
                 const ct = e.class_type || '정규';
                 const days = (e.day || []).join('·');
                 const classDefault = classSettings[code]?.default_time || '';
-                const individual = e.start_time || '';
+                const individual = e.start_time || e.time || '';
                 const isDefault = !individual || individual === classDefault;
                 const displayTime = isDefault ? classDefault : individual;
                 const isToday = (e.day || []).includes(dayNameForDetail);
@@ -8662,7 +8662,7 @@ function openEnrollmentModal(studentId, enrollIdx) {
     document.getElementById('enroll-level').value = enroll.level_symbol || '';
     document.getElementById('enroll-class-num').value = enroll.class_number || '';
     document.getElementById('enroll-class-type').value = enroll.class_type || '정규';
-    document.getElementById('enroll-time').value = enroll.start_time || '';
+    document.getElementById('enroll-time').value = enroll.start_time || enroll.time || '';
     document.getElementById('enroll-start-date').value = enroll.start_date || '';
     document.getElementById('enroll-end-date').value = enroll.end_date || '';
 
