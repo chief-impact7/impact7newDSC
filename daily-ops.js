@@ -6643,7 +6643,7 @@ function renderStudentDetail(studentId) {
                     ${has2ndHw ? `<div class="detail-round-col">
                         <div class="detail-round-label">2차</div>
                         <div class="hw-domain-group">
-                            ${detailDomains.map(d => {
+                            ${detailDomains.filter(d => d1st[d] !== 'O').map(d => {
                                 const val = d2nd[d] || '';
                                 return `<div class="hw-domain-item">
                                     <span class="hw-domain-label">${esc(d)}</span>
@@ -6679,12 +6679,14 @@ function renderStudentDetail(studentId) {
                         return `<div class="detail-round-col">
                             <div class="detail-round-label">${round}</div>
                             ${Object.entries(detailTestSections).map(([secName, items]) => {
-                                const hasAny = items.some(t => data[t]);
+                                // 2차: 1차에서 O인 항목은 제외
+                                const filtered = ri === 1 ? items.filter(t => t1st[t] !== 'O') : items;
+                                const hasAny = filtered.some(t => data[t]);
                                 if (!hasAny) return '';
                                 return `<div style="margin-bottom:6px;">
                                     <span style="font-size:10px;color:var(--text-sec);">${esc(secName)}</span>
                                     <div class="hw-domain-group" style="margin-bottom:2px;">
-                                        ${items.map(t => {
+                                        ${filtered.map(t => {
                                             const val = data[t] || '';
                                             return `<div class="hw-domain-item">
                                                 <span class="hw-domain-label">${esc(t)}</span>
