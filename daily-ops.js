@@ -737,19 +737,28 @@ async function autoCloseOldRecords() {
     );
     for (const r of oldRequests) {
         try {
-            await updateDoc(doc(db, 'leave_requests', r.docId), {
+            const updates = {
                 status: 'approved',
                 approved_by: 'system_auto',
                 approved_at: serverTimestamp(),
                 updated_at: serverTimestamp()
-            });
+            };
+            if (!r.teacher_approved_by) {
+                updates.teacher_approved_by = 'system_auto';
+                updates.teacher_approved_at = serverTimestamp();
+            }
+            await updateDoc(doc(db, 'leave_requests', r.docId), updates);
             r.status = 'approved';
+            if (!r.teacher_approved_by) r.teacher_approved_by = 'system_auto';
+            if (!r.approved_by) r.approved_by = 'system_auto';
+            // 학생 status 실제 변경 (퇴원/휴원 등)
+            await _finalizeLeaveDSC(r, r.student_id);
         } catch (err) {
             console.error('휴퇴원요청 자동승인 실패:', r.docId, err);
         }
     }
     if (oldRequests.length > 0) {
-        console.log(`휴퇴원요청 자동 승인: ${oldRequests.length}건`);
+        console.log(`휴퇴원요청 자동 승인 + 학생 상태 변경: ${oldRequests.length}건`);
     }
 
     // 숙제미통과/테스트미통과 등원: 1개월 경과 pending → 자동 기타 처리
