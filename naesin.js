@@ -33,7 +33,7 @@ function getNaesinInfo(student, selectedDate, dayName) {
     if (!naesinCode) return null;
 
     // class_settings 키: 소속 접두사 + 반코드 (소속이 다른 반은 별도 관리)
-    const csKey = (student.branch || '') + naesinCode;
+    const csKey = (window.branchFromStudent?.(student) || '') + naesinCode;
     const cs = classSettings?.[csKey];
     if (!cs?.naesin_start || !cs?.naesin_end) return null;
     if (cs.naesin_start > selectedDate || cs.naesin_end < selectedDate) return null;
@@ -64,7 +64,7 @@ export function getNaesinStudents() {
 
         // 소속 필터
         if (selectedBranch) {
-            const branch = student.branch || '';
+            const branch = window.branchFromStudent?.(student) || '';
             if (branch && branch !== selectedBranch) continue;
         }
 
@@ -208,7 +208,7 @@ export function renderNaesinDetail(studentId) {
     const info = getNaesinInfo(student, selectedDate);
     const enrollment = info?.enrollment || {};
     const code   = info?.naesinCode || '';                                      // 표시용
-    const csKey  = info?.csKey || (student.branch || '') + code;                // Firestore 키
+    const csKey  = info?.csKey || (window.branchFromStudent?.(student) || '') + code;  // Firestore 키
     const cs = info?.cs || classSettings?.[csKey] || {};
     const days = Object.keys(cs.schedule || {});
     const rec = dailyRecords[studentId] || {};
@@ -233,7 +233,7 @@ export function renderNaesinDetail(studentId) {
     if (tagsEl) {
         const teacherEmail = cs.teacher || '';
         const teacherName  = teacherEmail ? teacherEmail.split('@')[0] : '';
-        const branch       = student.branch || '';
+        const branch       = window.branchFromStudent?.(student) || '';
         const schoolGrade  = [student.school, student.grade].filter(Boolean).join(' ');
         tagsEl.innerHTML =
             `<span class="tag-naesin">내신</span>` +

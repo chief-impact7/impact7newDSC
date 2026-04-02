@@ -243,7 +243,7 @@ function getActiveEnrollments(s, dateStr) {
         if (!regularEnroll) return false;
         const nCode = deriveNaesinCode(s, regularEnroll);
         if (!nCode) return false;
-        const cs = classSettings[(s.branch || '') + nCode];
+        const cs = classSettings[branchFromStudent(s) + nCode];
         if (!cs?.naesin_start || !cs?.naesin_end) return false;
         return cs.naesin_start <= today && cs.naesin_end >= today;
     })();
@@ -1334,7 +1334,7 @@ function _getAllClassCodes() {
         if (hasRegular && levelShort && levelShort !== '초') {
             const nCode = deriveNaesinCode(s, (s.enrollments || []).find(e => e.class_type !== '내신' && e.class_number) || {});
             if (nCode) {
-                const key = (s.branch || '') + nCode;
+                const key = branchFromStudent(s) + nCode;
                 if (!naesinCounts.has(key)) naesinCounts.set(key, { displayCode: nCode, count: 0 });
                 naesinCounts.get(key).count++;
             }
@@ -1359,7 +1359,7 @@ function getNaesinStudentsByDerivedCode(classKey) {
         if (!regularEnroll) return;
         const nCode = deriveNaesinCode(s, regularEnroll);
         if (!nCode) return;
-        if ((s.branch || '') + nCode !== classKey) return;
+        if (branchFromStudent(s) + nCode !== classKey) return;
         if (!seen.has(s.docId)) {
             seen.add(s.docId);
             result.push({ student: s });
@@ -1367,6 +1367,7 @@ function getNaesinStudentsByDerivedCode(classKey) {
     });
     return result;
 }
+window.branchFromStudent = branchFromStudent;
 window.deriveNaesinCode = deriveNaesinCode;
 window.getNaesinStudentsByDerivedCode = getNaesinStudentsByDerivedCode;
 
