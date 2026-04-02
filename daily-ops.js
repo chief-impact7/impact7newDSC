@@ -2212,12 +2212,16 @@ function getFilteredStudents() {
     const dayName = getDayName(selectedDate);
 
     // 검색어가 있으면 요일 무관, 현재 학기 학생만 (퇴원생은 contacts 검색에서 표시)
+    // 내신 기간 중에는 getActiveEnrollments가 정규를 숨기므로 만료 여부만 직접 확인
+    const today = selectedDate || todayStr();
+    const validDateStr = (d) => d && /^\d{4}-/.test(d);
     let students;
     if (searchQuery) {
         students = allStudents.filter(s =>
-            getActiveEnrollments(s, selectedDate).some(e =>
-                !selectedSemester || e.semester === selectedSemester
-            )
+            (s.enrollments || []).some(e => {
+                if (validDateStr(e.end_date) && e.end_date < today) return false;
+                return !selectedSemester || e.semester === selectedSemester;
+            })
         );
     } else {
         students = allStudents.filter(s =>
