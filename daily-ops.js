@@ -3196,10 +3196,23 @@ function renderListPanel() {
     const isHw1stFilter = currentCategory === 'homework' && currentSubFilter.has('hw_1st');
     const isTest1stFilter = currentCategory === 'test' && currentSubFilter.has('test_1st');
 
+    // 내신 학생 ID 집합 (오늘 요일 기준): 검색 시 todayStudents 분류 및 반코드 표시에 사용
+    const naesinIds = new Set(
+        (window._getNaesinStudents?.() || []).map(({ student }) => student.docId)
+    );
+
     const renderItemHtml = (s) => {
         const isActive = s.docId === selectedStudentId ? 'active' : '';
         const dayN = getDayName(selectedDate);
-        const code = _enrollCodeList(getActiveEnrollments(s, selectedDate).filter(e => e.day.includes(dayN) && (!selectedSemester || e.semester === selectedSemester))) || _enrollCodeList(getActiveEnrollments(s, selectedDate));
+        const _activeEnrolls = getActiveEnrollments(s, selectedDate);
+        const _todayEnrolls = _activeEnrolls.filter(e => e.day.includes(dayN) && (!selectedSemester || e.semester === selectedSemester));
+        // 내신 기간이라 정규 enrollment가 숨겨진 경우 내신 반코드로 대체
+        const _naesinCodeFallback = (!_todayEnrolls.length && !_activeEnrolls.length && naesinIds.has(s.docId))
+            ? (() => {
+                const re = (s.enrollments || []).find(e => e.class_type !== '내신' && e.class_number);
+                return re ? (deriveNaesinCode(s, re) || '') : '';
+            })() : '';
+        const code = _enrollCodeList(_todayEnrolls) || _enrollCodeList(_activeEnrolls) || _naesinCodeFallback;
         const branch = branchFromStudent(s);
 
         // 타반수업 배지
@@ -3540,7 +3553,9 @@ function renderListPanel() {
     let todayStudents, otherDayStudents;
     if (searchQuery) {
         const dayN = getDayName(selectedDate);
+        // 내신 기간 학생도 포함: getActiveEnrollments가 정규를 숨기므로 naesin.js의 목록도 확인
         todayStudents = students.filter(s =>
+            naesinIds.has(s.docId) ||
             getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayN) && (!selectedSemester || e.semester === selectedSemester))
         );
         const todayIds = new Set(todayStudents.map(s => s.docId));
