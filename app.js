@@ -438,7 +438,7 @@ function getStudentsForDay(branchFilter, classFilter) {
                 code,
                 branch,
                 checkId: makeDailyCheckId(selectedDate, s.id, origIdx >= 0 ? origIdx : idx),
-                startTime: e.start_time || '',
+                startTime: e.start_time || e.time || '',
                 isOverridingOut: !!overrideOut,
                 overrideTargetClass: overrideOut?.target_class_code || '',
             });

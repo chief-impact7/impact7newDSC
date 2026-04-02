@@ -142,13 +142,23 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // [DB] 사용자 역할 (DB/DSC): 자기 문서만 읽기, 생성/수정/삭제는 콘솔에서만
+    // [DB/DSC] 사용자 역할: 자기 문서만 읽기, 생성/수정/삭제는 콘솔에서만
     // =========================================================================
     match /users/{userEmail} {
       allow read: if isAuthorized()
         && request.auth.token.email == userEmail;
 
       allow create, update, delete: if false;
+    }
+
+    // =========================================================================
+    // [Exam] 사용자 프로필 (UID 기반)
+    // =========================================================================
+    match /exam_users/{userId} {
+      allow read: if isLoggedIn();
+      allow write: if isLoggedIn()
+        && (request.auth.uid == userId
+            || get(/databases/$(database)/documents/exam_users/$(request.auth.uid)).data.role == 'owner');
     }
 
     // =========================================================================
@@ -317,7 +327,8 @@ service cloud.firestore {
       function hasOnlyAllowedClassSettingsFields() {
         return request.resource.data.keys().hasOnly([
           'domains', 'test_sections', 'teacher', 'sub_teacher',
-          'default_time', 'default_time_updated_by', 'default_time_updated_at'
+          'default_time', 'default_time_updated_by', 'default_time_updated_at',
+          'naesin_start', 'naesin_end', 'schedule'
         ]);
       }
 
@@ -766,6 +777,58 @@ service cloud.firestore {
       match /performanceNotes/{noteId} {
         allow read, write: if isDirector();
       }
+    }
+
+    // =========================================================================
+    // [Exam] 학부 설정
+    // =========================================================================
+    match /departments/{deptId} {
+      allow read: if isLoggedIn();
+      allow write: if isLoggedIn();
+    }
+
+    // =========================================================================
+    // [Exam] 시험 종류
+    // =========================================================================
+    match /examTypes/{typeId} {
+      allow read: if isLoggedIn();
+      allow write: if isLoggedIn();
+    }
+
+    // =========================================================================
+    // [Exam] 시험
+    // =========================================================================
+    match /exams/{examId} {
+      allow read: if isLoggedIn();
+      allow create, update, delete: if isLoggedIn();
+    }
+
+    // =========================================================================
+    // [Exam] 채점 결과
+    // =========================================================================
+    match /results/{examId} {
+      allow read: if isLoggedIn();
+
+      match /students/{studentId} {
+        allow read: if isLoggedIn();
+        allow write: if isLoggedIn();
+      }
+    }
+
+    // =========================================================================
+    // [Exam] 알림
+    // =========================================================================
+    match /exam_notifications/{notifId} {
+      allow read: if isLoggedIn();
+      allow create: if isLoggedIn();
+    }
+
+    // =========================================================================
+    // [Exam] 템플릿
+    // =========================================================================
+    match /exam_templates/{templateId} {
+      allow read: if isLoggedIn();
+      allow write: if isLoggedIn();
     }
 
     // =========================================================================

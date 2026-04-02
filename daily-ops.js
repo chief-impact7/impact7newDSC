@@ -242,9 +242,17 @@ function getActiveEnrollments(s, dateStr) {
     return current;
 }
 
-// 학생 등원시간: 개별 시간 → 반 기본 시간 fallback
-function getStudentStartTime(enrollment) {
+// 학생 등원시간: 개별 시간 → 반 기본 시간 fallback (내신: 요일별 schedule 지원)
+function getStudentStartTime(enrollment, dayName) {
     if (!enrollment) return '';
+    // 내신: 요일별 schedule 조회
+    if (dayName) {
+        const studentTime = enrollment.schedule?.[dayName];
+        if (studentTime) return studentTime;
+        const classSchedule = classSettings[enrollmentCode(enrollment)]?.schedule;
+        if (classSchedule?.[dayName]) return classSchedule[dayName];
+    }
+    // 정규: 기존 fallback
     return enrollment.start_time || enrollment.time || classSettings[enrollmentCode(enrollment)]?.default_time || '';
 }
 
@@ -967,22 +975,29 @@ async function saveImmediately(studentId, updates) {
 
 function getUniqueClassCodes() {
     const dayName = getDayName(selectedDate);
-    const codes = new Set();
+    const regularCodes = new Set();
+    const naesinCodes = new Set();
     allStudents.forEach(s => {
         if (s.status === '퇴원') return;
         if (!matchesBranchFilter(s)) return;
         getActiveEnrollments(s, selectedDate).forEach(e => {
-            if (!e.day.includes(dayName)) return;
-            if (selectedSemester && e.semester !== selectedSemester) return;
-            const code = enrollmentCode(e);
-            if (code) codes.add(code);
+            const days = normalizeDays(e.day);
+            if (!days.includes(dayName)) return;
+            if (e.class_type === '내신') {
+                const code = enrollmentCode(e);
+                if (code) naesinCodes.add(code);
+            } else {
+                if (selectedSemester && e.semester !== selectedSemester) return;
+                const code = enrollmentCode(e);
+                if (code) regularCodes.add(code);
+            }
         });
     });
     // 타반수업 target_class_code도 포함
     tempClassOverrides.forEach(o => {
-        if (o.target_class_code) codes.add(o.target_class_code);
+        if (o.target_class_code) regularCodes.add(o.target_class_code);
     });
-    return [...codes].sort();
+    return { regular: [...regularCodes].sort(), naesin: [...naesinCodes].sort() };
 }
 
 function getClassMgmtCount(filterKey) {
@@ -1048,6 +1063,9 @@ function setCategory(category) {
         savedSubFilters[currentCategory] = new Set(currentSubFilter);
         savedL2Expanded[currentCategory] = false; // L2는 접지만 필터는 유지
 
+        // 내신 반 설정 모드 리셋 (카테고리 전환 시 필터 누출 방지)
+        if (_classMgmtMode === 'naesin') { _classMgmtMode = null; selectedClassCode = null; }
+
         currentCategory = category;
 
         // 새 카테고리의 저장된 필터 복원
@@ -1103,7 +1121,8 @@ function renderSubFilters() {
                 { key: 'absent', label: '결석' },
                 { key: 'other', label: '기타' },
                 { key: 'departure_check', label: '귀가점검' }
-            ]}
+            ]},
+            { key: 'naesin', label: '내신' }
         ],
         homework: [
             { key: 'hw_1st', label: '1차' },
@@ -1242,6 +1261,114 @@ function renderBranchFilter() {
     branchL1.classList.toggle('has-filter', !!selectedBranch);
 }
 
+let _classMgmtMode = null; // null | 'regular' | 'naesin'
+const LEVEL_SHORT = { '초등': '초', '중등': '중', '고등': '고' };
+
+// 내신 반코드 유도: 학생의 school + level + grade + A/B
+// A/B 판별: 정규반 class_number 끝자리 홀수=A, 짝수=B
+function deriveNaesinCode(student, enrollment) {
+    const school = student.school || '';
+    const levelShort = LEVEL_SHORT[student.level] || '';
+    const grade = student.grade || '';
+    if (!school || !grade) return '';
+
+    // 내신 enrollment의 class_number에서 A/B 판별
+    const cn = enrollment.class_number || '';
+    const lastChar = cn.slice(-1).toUpperCase();
+
+    let group = '';
+    if (lastChar === 'A' || lastChar === 'B') {
+        // 이미 새 형식 (고1A, 중2B)
+        group = lastChar;
+    } else {
+        // 옛 형식: 정규 반번호(103, 202 등)의 끝자리로 판별
+        const lastDigit = parseInt(lastChar);
+        if (!isNaN(lastDigit)) group = lastDigit % 2 === 1 ? 'A' : 'B';
+    }
+
+    // A/B를 알 수 없으면 정규 enrollment에서 추론
+    if (!group) {
+        const regularEnroll = (student.enrollments || []).find(e => e.class_type !== '내신' && e.class_number);
+        if (regularEnroll) {
+            const regLast = parseInt((regularEnroll.class_number || '').slice(-1));
+            if (!isNaN(regLast)) group = regLast % 2 === 1 ? 'A' : 'B';
+        }
+    }
+
+    return `${school}${levelShort}${grade}${group}`;
+}
+
+function _getAllClassCodes() {
+    const regularCodes = new Set();
+    const naesinCodes = new Set();
+    const naesinCounts = new Map();
+    allStudents.forEach(s => {
+        if (s.status === '퇴원') return;
+        if (!matchesBranchFilter(s)) return;
+        const levelShort = LEVEL_SHORT[s.level] || '';
+
+        let hasRegular = false;
+        (s.enrollments || []).forEach(e => {
+            const code = enrollmentCode(e);
+            if (!code) return;
+            if (e.class_type === '내신') return;
+            if (!selectedSemester || e.semester === selectedSemester) {
+                regularCodes.add(code);
+                hasRegular = true;
+            }
+        });
+
+        // 내신 반코드 유도 (초등 제외, 정규 enrollment이 있는 학생만)
+        if (hasRegular && levelShort && levelShort !== '초') {
+            const nCode = deriveNaesinCode(s, (s.enrollments || []).find(e => e.class_type !== '내신' && e.class_number) || {});
+            if (nCode) {
+                naesinCounts.set(nCode, (naesinCounts.get(nCode) || 0) + 1);
+            }
+        }
+    });
+    const naesinWithCounts = [...naesinCounts.entries()].map(([code, count]) => ({ code, count })).sort((a, b) => a.code.localeCompare(b.code, 'ko'));
+    return { regular: [...regularCodes].sort(), naesin: naesinWithCounts };
+}
+
+// 내신 반코드로 학생 목록 조회
+// 학교+학년+A/B가 일치하는 모든 학생 반환 (class_type 무관)
+function getNaesinStudentsByDerivedCode(naesinCode) {
+    if (!naesinCode) return [];
+    // 코드에서 학교, 레벨, 학년, 그룹 파싱: "강서고1B" → school=강서, level=고, grade=1, group=B
+    const match = naesinCode.match(/^(.+?)(초|중|고)(\d+)(A|B)$/);
+    if (!match) return [];
+    const [, school, levelShort, grade, group] = match;
+
+    const result = [];
+    const seen = new Set();
+    allStudents.forEach(s => {
+        if (s.status === '퇴원') return;
+        if (!matchesBranchFilter(s)) return;
+        if ((s.school || '') !== school) return;
+        if ((s.grade || '') !== grade) return;
+        const sLevelShort = LEVEL_SHORT[s.level] || '';
+        if (sLevelShort !== levelShort) return;
+
+        // 정규 enrollment에서 A/B 판별
+        const regularEnroll = (s.enrollments || []).find(e => e.class_type !== '내신' && e.class_number);
+        if (regularEnroll) {
+            const lastDigit = parseInt((regularEnroll.class_number || '').slice(-1));
+            if (!isNaN(lastDigit)) {
+                const sGroup = lastDigit % 2 === 1 ? 'A' : 'B';
+                if (sGroup !== group) return;
+            }
+        }
+
+        if (!seen.has(s.docId)) {
+            seen.add(s.docId);
+            result.push({ student: s });
+        }
+    });
+    return result;
+}
+window.deriveNaesinCode = deriveNaesinCode;
+window.getNaesinStudentsByDerivedCode = getNaesinStudentsByDerivedCode;
+
 function renderClassCodeFilter() {
     let container = document.getElementById('nav-class-l2');
     const classL1 = document.querySelector('.nav-l1[data-category="class_mgmt"]');
@@ -1254,22 +1381,49 @@ function renderClassCodeFilter() {
         classL1.after(container);
     }
 
-    const classCodes = getUniqueClassCodes();
-    const dayName = getDayName(selectedDate);
+    const { regular, naesin } = _getAllClassCodes();
 
-    container.innerHTML = classCodes.map(code => {
-        const isActive = selectedClassCode === code ? 'active' : '';
-        const count = allStudents.filter(s =>
-            s.enrollments.some(e =>
-                e.day.includes(dayName) && enrollmentCode(e) === code &&
-                (!selectedSemester || e.semester === selectedSemester)
-            )
-        ).length;
-        return `<div class="nav-l2 ${isActive}" data-filter="${code}" onclick="setClassCode('${escAttr(code)}')">
-            ${esc(code)}
-            ${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
-        </div>`;
-    }).join('');
+    const regExpanded = _classMgmtMode === 'regular';
+    const naeExpanded = _classMgmtMode === 'naesin';
+
+    let html = '';
+
+    // 정규 L2
+    html += `<div class="nav-l2 l2-parent ${regExpanded ? 'active l2-expanded' : ''}" onclick="window.setClassMgmtMode('regular')">
+        정규<span class="nav-l2-count">${regular.length}</span>
+        <span class="material-symbols-outlined l2-expand-icon">${regExpanded ? 'expand_less' : 'expand_more'}</span>
+    </div>`;
+    if (regExpanded) {
+        html += regular.map(code => {
+            const isActive = selectedClassCode === code ? 'active' : '';
+            const count = getClassMgmtCount(code);
+            return `<div class="nav-l2 nav-l3 ${isActive}" onclick="setClassCode('${escAttr(code)}')">
+                ${esc(code)}${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
+            </div>`;
+        }).join('');
+    }
+
+    // 내신 L2
+    // 선택 요일에 따라 A(홀수=월수금)/B(짝수=화목토) 필터
+    const dayName = getDayName(selectedDate);
+    const dayIdx = ['월','화','수','목','금','토','일'].indexOf(dayName);
+    const todayGroup = (dayIdx >= 0) ? ((dayIdx % 2 === 0) ? 'A' : 'B') : null; // 월(0)수(2)금(4)=A, 화(1)목(3)토(5)=B
+    const filteredNaesin = todayGroup ? naesin.filter(n => n.code.endsWith(todayGroup)) : naesin;
+
+    html += `<div class="nav-l2 l2-parent ${naeExpanded ? 'active l2-expanded' : ''}" onclick="window.setClassMgmtMode('naesin')">
+        내신<span class="nav-l2-count">${filteredNaesin.length}</span>
+        <span class="material-symbols-outlined l2-expand-icon">${naeExpanded ? 'expand_less' : 'expand_more'}</span>
+    </div>`;
+    if (naeExpanded) {
+        html += filteredNaesin.map(({ code, count }) => {
+            const isActive = selectedClassCode === code ? 'active' : '';
+            return `<div class="nav-l2 nav-l3 ${isActive}" onclick="setClassCode('${escAttr(code)}')">
+                ${esc(code)}${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
+            </div>`;
+        }).join('');
+    }
+
+    container.innerHTML = html;
 
     const isExpanded = classL1.classList.contains('expanded');
     container.style.display = isExpanded ? '' : 'none';
@@ -1279,6 +1433,14 @@ function renderClassCodeFilter() {
 
     classL1.classList.toggle('has-filter', !!selectedClassCode);
 }
+
+window.setClassMgmtMode = function(mode) {
+    _classMgmtMode = (_classMgmtMode === mode) ? null : mode; // 토글
+    selectedClassCode = null;
+    renderClassCodeFilter();
+    renderStudentDetail(null);
+    renderListPanel();
+};
 
 function setClassCode(code) {
     selectedClassCode = selectedClassCode === code ? null : code;
@@ -1470,7 +1632,8 @@ function renderFilterChips() {
         sv_absence_makeup: '결석보충', sv_clinic: '클리닉', sv_diagnostic: '진단평가', sv_fail: '미통과',
         hw_1st: '1차', hw_2nd: '2차', hw_next: '다음숙제',
         test_1st: '1차', test_2nd: '2차',
-        auto_hw_missing: '미제출 숙제', auto_retake: '재시 필요', auto_unchecked: '미체크 출석'
+        auto_hw_missing: '미제출 숙제', auto_retake: '재시 필요', auto_unchecked: '미체크 출석',
+        naesin: '내신'
     };
 
     const chips = [];
@@ -1691,6 +1854,10 @@ function getSubFilterCount(filterKey) {
             case 'departure_check': {
                 const departed = regularOnly.filter(s => dailyRecords[s.docId]?.departure?.status === '귀가').length;
                 return { count: departed, total: regularTotal };
+            }
+            case 'naesin': {
+                const naesinStudents = window._getNaesinStudents ? window._getNaesinStudents() : [];
+                return { count: naesinStudents.length, total: naesinStudents.length };
             }
             default: {
                 const svSources = SV_SOURCE_MAP[filterKey];
@@ -1997,7 +2164,12 @@ function getEnrollPendingVisits() {
 // ─── Filtering ──────────────────────────────────────────────────────────────
 
 function getFilteredStudents() {
-    // 반 관리: 오늘 등원 예정 학생만 표시
+    // 반 설정: 내신 반코드 선택 시 (글로벌 필터이므로 currentCategory 무관)
+    if (_classMgmtMode === 'naesin' && selectedClassCode && _isNaesinClassCode(selectedClassCode)) {
+        return getNaesinStudentsByDerivedCode(selectedClassCode).map(({ student }) => student);
+    }
+
+    // 반 설정: 정규 모드 — 현재 학기 학생
     if (currentCategory === 'class_mgmt') {
         const dayName = getDayName(selectedDate);
         let students = allStudents.filter(s =>
@@ -2919,6 +3091,12 @@ function selectReturnUpcomingStudent(studentId) {
 }
 
 function renderListPanel() {
+    // 내신 서브필터 활성 시 내신 리스트로 전환
+    if (currentCategory === 'attendance' && currentSubFilter.has('naesin')) {
+        if (window.renderNaesinList) window.renderNaesinList();
+        return;
+    }
+
     // 비정규 L2 또는 L3(sv_*) 서브필터 활성 시 통합 리스트로 전환
     if (currentCategory === 'attendance' && (
         currentSubFilter.has('scheduled_visit') ||
@@ -3445,11 +3623,16 @@ function renderListPanel() {
     // 과거 학생은 _searchContactsDSC에서 비동기로 렌더링 (위에서 호출됨)
 
     // 반 상세 표시: 반(+소속)만 선택되고, 콘텐츠 서브필터 없을 때
-    const allFilters = { ...savedSubFilters };
-    allFilters[currentCategory] = new Set(currentSubFilter);
-    const hasContentFilter = ['attendance', 'homework', 'test', 'automation', 'admin'].some(cat => allFilters[cat]?.size > 0);
-    if (selectedClassCode && !selectedStudentId && !hasContentFilter) {
+    // 내신 반 설정 모드에서는 항상 반 상세 표시
+    if (_classMgmtMode === 'naesin' && selectedClassCode && _isNaesinClassCode(selectedClassCode) && !selectedStudentId) {
         renderClassDetail(selectedClassCode);
+    } else {
+        const allFilters = { ...savedSubFilters };
+        allFilters[currentCategory] = new Set(currentSubFilter);
+        const hasContentFilter = ['attendance', 'homework', 'test', 'automation', 'admin'].some(cat => allFilters[cat]?.size > 0);
+        if (selectedClassCode && !selectedStudentId && !hasContentFilter) {
+            renderClassDetail(selectedClassCode);
+        }
     }
 }
 
@@ -3607,6 +3790,12 @@ function renderClassDetail(classCode) {
     if (!classCode) {
         document.getElementById('detail-empty').style.display = '';
         document.getElementById('detail-content').style.display = 'none';
+        return;
+    }
+
+    // 내신 반: naesin.js로 위임
+    if (window.renderNaesinClassDetail && _isNaesinClassCode(classCode)) {
+        window.renderNaesinClassDetail(classCode);
         return;
     }
 
@@ -6506,6 +6695,15 @@ function renderStudentDetail(studentId) {
         document.getElementById('detail-empty').style.display = '';
         document.getElementById('detail-content').style.display = 'none';
         return;
+    }
+
+    // 내신 모드: naesin.js로 위임 (출결 내신 필터 또는 반 설정 내신 모드)
+    if ((currentCategory === 'attendance' && currentSubFilter.has('naesin')) ||
+        (_classMgmtMode === 'naesin' && selectedClassCode && _isNaesinClassCode(selectedClassCode))) {
+        if (window.renderNaesinDetail) {
+            window.renderNaesinDetail(studentId);
+            return;
+        }
     }
 
     // 프로필
@@ -10809,5 +11007,45 @@ async function saveBulkNotify() {
 
 window.openBulkNotify = openBulkNotify;
 window.saveBulkNotify = saveBulkNotify;
+
+// 내신 반코드 판별: 유도된 내신 코드(한글 포함)인지 확인
+function _isNaesinClassCode(code) {
+    if (!code) return false;
+    return /[가-힣]/.test(code);
+}
+window._isNaesinClassCode = _isNaesinClassCode;
+
+// ─── 내신 모듈용 state 접근자 ─────────────────────────────────────────────────
+Object.defineProperties(window, {
+    _naesinState: {
+        get() {
+            return {
+                get allStudents() { return allStudents; },
+                get selectedDate() { return selectedDate; },
+                get selectedBranch() { return selectedBranch; },
+                get classSettings() { return classSettings; },
+                get dailyRecords() { return dailyRecords; },
+                get currentUser() { return currentUser; },
+            };
+        },
+        configurable: true,
+    },
+    selectedStudentId: {
+        get() { return selectedStudentId; },
+        set(v) { selectedStudentId = v; },
+        configurable: true,
+    },
+});
+
+// 내신 모듈에서 사용하는 유틸 함수/데이터 노출
+window._attToggleClass = _attToggleClass;
+window.getStudentStartTime = getStudentStartTime;
+window.showSaveIndicator = showSaveIndicator;
+window.renderFilterChips = renderFilterChips;
+window._esc = esc;
+window._escAttr = escAttr;
+window._formatTime12h = formatTime12h;
+window.getTeacherName = getTeacherName;
+Object.defineProperty(window, 'teachersList', { get() { return teachersList; }, configurable: true });
 
 console.log('[DailyOps] App initialized.');
