@@ -1910,7 +1910,7 @@ function getSubFilterCount(filterKey) {
                 return domains.some(d => d1st[d] !== 'O');
             }).length);
             case 'hw_next': {
-                const classCodes = getUniqueClassCodes();
+                const classCodes = getUniqueClassCodes().regular;
                 const filledCount = classCodes.filter(cc => {
                     const { filled, total } = getNextHwStatus(cc);
                     return filled > 0;
@@ -5308,7 +5308,7 @@ function renderNextHwClassList() {
 
     renderFilterChips();
 
-    let classCodes = getUniqueClassCodes();
+    let classCodes = getUniqueClassCodes().regular;
     if (searchQuery) {
         const q = searchQuery.trim().toLowerCase();
         classCodes = classCodes.filter(cc => cc.toLowerCase().includes(q));
