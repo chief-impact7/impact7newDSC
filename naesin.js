@@ -16,7 +16,9 @@ function _state() {
 }
 
 // class_settings 기간/스케줄 기반 내신 정보 조회 (공통 헬퍼)
-// 반환: { enrollment, naesinCode, classDays, cs } 또는 null
+// 반환: { enrollment, naesinCode, csKey, classDays, cs } 또는 null
+// naesinCode: 표시용 (branch 없음, 예: "신목중2A")
+// csKey:      Firestore 키 (branch 포함, 예: "2단지신목중2A")
 function getNaesinInfo(student, selectedDate, dayName) {
     const { classSettings } = _state();
 
@@ -26,12 +28,13 @@ function getNaesinInfo(student, selectedDate, dayName) {
     );
     if (!regularEnroll) return null;
 
-    // 내신 반코드 유도
+    // 내신 반코드 유도 (표시용, branch 없음)
     const naesinCode = window.deriveNaesinCode?.(student, regularEnroll);
     if (!naesinCode) return null;
 
-    // class_settings에서 내신 기간 확인
-    const cs = classSettings?.[naesinCode];
+    // class_settings 키: 소속 접두사 + 반코드 (소속이 다른 반은 별도 관리)
+    const csKey = (student.branch || '') + naesinCode;
+    const cs = classSettings?.[csKey];
     if (!cs?.naesin_start || !cs?.naesin_end) return null;
     if (cs.naesin_start > selectedDate || cs.naesin_end < selectedDate) return null;
 
@@ -40,13 +43,13 @@ function getNaesinInfo(student, selectedDate, dayName) {
     // 오늘 요일이 반 스케줄에 있는지 확인
     if (dayName && !classDays.includes(dayName)) return null;
 
-    return { enrollment: regularEnroll, naesinCode, classDays, cs };
+    return { enrollment: regularEnroll, naesinCode, csKey, classDays, cs };
 }
 
-// 내신 등원 시간 조회: 개별 override → 반 기본 순
-function getNaesinTime(enrollment, naesinCode, dayName, classSettings) {
+// 내신 등원 시간 조회: 개별 override → 반 기본 순 (csKey로 class_settings 조회)
+function getNaesinTime(enrollment, csKey, dayName, classSettings) {
     return enrollment.naesin_schedule?.[dayName] ||
-           classSettings?.[naesinCode]?.schedule?.[dayName] || '';
+           classSettings?.[csKey]?.schedule?.[dayName] || '';
 }
 
 // ─── Core functions ───────────────────────────────────────────────────────────
@@ -71,7 +74,8 @@ export function getNaesinStudents() {
         result.push({
             student,
             enrollment: info.enrollment,
-            naesinCode: info.naesinCode,
+            naesinCode: info.naesinCode,  // 표시용 (branch 없음)
+            naesinKey:  info.csKey,       // Firestore 키 (branch 포함)
         });
     }
 
@@ -82,13 +86,14 @@ export function getNaesinClasses(students) {
     if (!students) students = getNaesinStudents();
     const countMap = new Map();
 
-    for (const { naesinCode } of students) {
-        if (!naesinCode) continue;
-        countMap.set(naesinCode, (countMap.get(naesinCode) ?? 0) + 1);
+    for (const { naesinKey, naesinCode } of students) {
+        if (!naesinKey) continue;
+        if (!countMap.has(naesinKey)) countMap.set(naesinKey, { displayCode: naesinCode, count: 0 });
+        countMap.get(naesinKey).count++;
     }
 
     return [...countMap.entries()]
-        .map(([code, count]) => ({ code, count }))
+        .map(([key, { displayCode, count }]) => ({ code: key, displayCode, count }))
         .sort((a, b) => b.count - a.count);
 }
 
@@ -114,19 +119,19 @@ export function renderNaesinList() {
     const allItems = getNaesinStudents();
     const classes = getNaesinClasses(allItems);
 
-    // 선택된 반으로 필터
+    // 선택된 반으로 필터 (naesinKey = Firestore 키로 비교)
     const selectedClass = window._selectedNaesinClass || null;
     const items = selectedClass
-        ? allItems.filter(({ naesinCode }) => naesinCode === selectedClass)
+        ? allItems.filter(({ naesinKey }) => naesinKey === selectedClass)
         : allItems;
 
     // 카운트 표시
     countEl.textContent = `${items.length}명`;
 
-    // ── L3 반 칩 ──
-    const chipHtml = classes.map(({ code, count }) => {
+    // ── L3 반 칩 (code=Firestore키, displayCode=표시용) ──
+    const chipHtml = classes.map(({ code, displayCode, count }) => {
         const isActive = code === selectedClass ? 'active' : '';
-        return `<button class="nav-l2 ${isActive}" onclick="window.setNaesinClass('${_escAttr(code)}')">${_esc(code)}<span class="nav-l2-count">${count}</span></button>`;
+        return `<button class="nav-l2 ${isActive}" onclick="window.setNaesinClass('${_escAttr(code)}')">${_esc(displayCode)}<span class="nav-l2-count">${count}</span></button>`;
     }).join('');
 
     // ── 학생 목록 ──
@@ -137,7 +142,7 @@ export function renderNaesinList() {
             <p>내신 학생이 없습니다</p>
         </div>`;
     } else {
-        listHtml = items.map(({ student, enrollment, naesinCode }) => {
+        listHtml = items.map(({ student, enrollment, naesinCode, naesinKey }) => {
             const sid = student.docId;
             const rec = dailyRecords?.[sid];
             const attStatus = rec?.attendance?.status || '미확인';
@@ -145,12 +150,12 @@ export function renderNaesinList() {
                 ? window._attToggleClass(attStatus)
                 : { display: attStatus, cls: '' };
 
-            const startTime = getNaesinTime(enrollment, naesinCode, dayName, classSettings);
+            const startTime = getNaesinTime(enrollment, naesinKey, dayName, classSettings);
             const timeText = startTime && window._formatTime12h
                 ? window._formatTime12h(startTime)
                 : startTime;
 
-            const teacherEmail = classSettings?.[naesinCode]?.teacher || '';
+            const teacherEmail = classSettings?.[naesinKey]?.teacher || '';
             const teacherName = teacherEmail ? teacherEmail.split('@')[0] : '';
             const subLine = [naesinCode, teacherName].filter(Boolean).join(' · ');
 
@@ -202,8 +207,9 @@ export function renderNaesinDetail(studentId) {
     const dayName = getDayName(selectedDate);
     const info = getNaesinInfo(student, selectedDate);
     const enrollment = info?.enrollment || {};
-    const code = info?.naesinCode || '';
-    const cs = info?.cs || classSettings?.[code] || {};
+    const code   = info?.naesinCode || '';                                      // 표시용
+    const csKey  = info?.csKey || (student.branch || '') + code;                // Firestore 키
+    const cs = info?.cs || classSettings?.[csKey] || {};
     const days = Object.keys(cs.schedule || {});
     const rec = dailyRecords[studentId] || {};
 
@@ -424,13 +430,13 @@ window.editNaesinTime = async function(studentId, day) {
     const info = getNaesinInfo(student, selectedDate);
     if (!info) return;
 
-    const { enrollment, naesinCode } = info;
+    const { enrollment, naesinCode, csKey } = info;
     const enrollments = (student.enrollments || []).slice();
     const enrollIdx = enrollments.indexOf(enrollment);
     if (enrollIdx === -1) return;
 
     // 현재 시간 결정 (개별 우선, 반 기본 fallback)
-    const currentTime = getNaesinTime(enrollment, naesinCode, day, classSettings);
+    const currentTime = getNaesinTime(enrollment, csKey, day, classSettings);
 
     const newTime = window.prompt(
         `${day}요일 등원시간 수정 (예: 14:00)\n현재: ${currentTime || '없음'}`,
@@ -439,7 +445,7 @@ window.editNaesinTime = async function(studentId, day) {
     if (newTime === null) return; // 취소
 
     const trimmed = newTime.trim();
-    const classDefault = classSettings?.[naesinCode]?.schedule?.[day] || '';
+    const classDefault = classSettings?.[csKey]?.schedule?.[day] || '';
 
     // naesin_schedule 업데이트 (반 기본과 같으면 개별 override 삭제)
     const naesinSchedule = { ...(enrollments[enrollIdx].naesin_schedule || {}) };
@@ -486,9 +492,13 @@ function renderNaesinClassDetail(classCode) {
     // 이 반의 학생 수 (유도된 코드 기준)
     const students = window.getNaesinStudentsByDerivedCode ? window.getNaesinStudentsByDerivedCode(classCode) : [];
 
+    // 표시용 반코드: 소속 접두사(branch) 제거
+    const branch = students[0]?.student?.branch || '';
+    const displayCode = branch && classCode.startsWith(branch) ? classCode.slice(branch.length) : classCode;
+
     // 프로필 헤더
-    document.getElementById('profile-avatar').textContent = classCode[0] || '?';
-    document.getElementById('detail-name').textContent = classCode;
+    document.getElementById('profile-avatar').textContent = displayCode[0] || '?';
+    document.getElementById('detail-name').textContent = displayCode;
     document.getElementById('profile-phones').innerHTML = '';
     const stayStats = document.getElementById('profile-stay-stats');
     if (stayStats) stayStats.innerHTML = '';

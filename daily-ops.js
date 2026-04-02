@@ -243,7 +243,7 @@ function getActiveEnrollments(s, dateStr) {
         if (!regularEnroll) return false;
         const nCode = deriveNaesinCode(s, regularEnroll);
         if (!nCode) return false;
-        const cs = classSettings[nCode];
+        const cs = classSettings[(s.branch || '') + nCode];
         if (!cs?.naesin_start || !cs?.naesin_end) return false;
         return cs.naesin_start <= today && cs.naesin_end >= today;
     })();
@@ -1330,46 +1330,36 @@ function _getAllClassCodes() {
         });
 
         // 내신 반코드 유도 (초등 제외, 정규 enrollment이 있는 학생만)
+        // key = 소속+반코드 (Firestore 키), displayCode = 반코드만 (표시용)
         if (hasRegular && levelShort && levelShort !== '초') {
             const nCode = deriveNaesinCode(s, (s.enrollments || []).find(e => e.class_type !== '내신' && e.class_number) || {});
             if (nCode) {
-                naesinCounts.set(nCode, (naesinCounts.get(nCode) || 0) + 1);
+                const key = (s.branch || '') + nCode;
+                if (!naesinCounts.has(key)) naesinCounts.set(key, { displayCode: nCode, count: 0 });
+                naesinCounts.get(key).count++;
             }
         }
     });
-    const naesinWithCounts = [...naesinCounts.entries()].map(([code, count]) => ({ code, count })).sort((a, b) => a.code.localeCompare(b.code, 'ko'));
+    const naesinWithCounts = [...naesinCounts.entries()]
+        .map(([key, { displayCode, count }]) => ({ code: key, displayCode, count }))
+        .sort((a, b) => a.displayCode.localeCompare(b.displayCode, 'ko'));
     return { regular: [...regularCodes].sort(), naesin: naesinWithCounts };
 }
 
-// 내신 반코드로 학생 목록 조회
-// 학교+학년+A/B가 일치하는 모든 학생 반환 (class_type 무관)
-function getNaesinStudentsByDerivedCode(naesinCode) {
-    if (!naesinCode) return [];
-    // 코드에서 학교, 레벨, 학년, 그룹 파싱: "강서고1B" → school=강서, level=고, grade=1, group=B
-    const match = naesinCode.match(/^(.+?)(초|중|고)(\d+)(A|B)$/);
-    if (!match) return [];
-    const [, school, levelShort, grade, group] = match;
-
+// 내신 반코드(Firestore 키)로 학생 목록 조회
+// classKey = 소속+반코드 (예: "2단지신목중2A"), 빈 소속이면 "신목중2A"
+function getNaesinStudentsByDerivedCode(classKey) {
+    if (!classKey) return [];
     const result = [];
     const seen = new Set();
     allStudents.forEach(s => {
         if (s.status === '퇴원') return;
         if (!matchesBranchFilter(s)) return;
-        if ((s.school || '') !== school) return;
-        if ((s.grade || '') !== grade) return;
-        const sLevelShort = LEVEL_SHORT[s.level] || '';
-        if (sLevelShort !== levelShort) return;
-
-        // 정규 enrollment에서 A/B 판별
         const regularEnroll = (s.enrollments || []).find(e => e.class_type !== '내신' && e.class_number);
-        if (regularEnroll) {
-            const lastDigit = parseInt((regularEnroll.class_number || '').slice(-1));
-            if (!isNaN(lastDigit)) {
-                const sGroup = lastDigit % 2 === 1 ? 'A' : 'B';
-                if (sGroup !== group) return;
-            }
-        }
-
+        if (!regularEnroll) return;
+        const nCode = deriveNaesinCode(s, regularEnroll);
+        if (!nCode) return;
+        if ((s.branch || '') + nCode !== classKey) return;
         if (!seen.has(s.docId)) {
             seen.add(s.docId);
             result.push({ student: s });
@@ -1426,10 +1416,10 @@ function renderClassCodeFilter() {
         <span class="material-symbols-outlined l2-expand-icon">${naeExpanded ? 'expand_less' : 'expand_more'}</span>
     </div>`;
     if (naeExpanded) {
-        html += filteredNaesin.map(({ code, count }) => {
+        html += filteredNaesin.map(({ code, displayCode, count }) => {
             const isActive = selectedClassCode === code ? 'active' : '';
             return `<div class="nav-l2 nav-l3 ${isActive}" onclick="setClassCode('${escAttr(code)}')">
-                ${esc(code)}${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
+                ${esc(displayCode)}${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
             </div>`;
         }).join('');
     }
