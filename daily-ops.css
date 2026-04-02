@@ -3534,3 +3534,36 @@ textarea.field-input {
     flex: 1;
     min-width: 0;
 }
+
+/* ===== 내신 상세패널 ===== */
+.naesin-att-row { display: flex; gap: 6px; }
+.naesin-day-chips { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+.naesin-att-btn { flex: 1; padding: 10px 0; border-radius: 8px; text-align: center; font-size: 13px; font-weight: 600; border: 1.5px solid #d1d5db; color: #64748b; cursor: pointer; background: #fff; }
+.naesin-att-btn.att-present { background: #dcfce7; color: #166534; border-color: #86efac; }
+.naesin-att-btn.att-late { background: #fef9c3; color: #854d0e; border-color: #fde047; }
+.naesin-att-btn.att-absent { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+.naesin-att-btn.att-active { background: #f1f5f9; color: #334155; border-color: #94a3b8; }
+.naesin-schedule-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; }
+.naesin-day-badge { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+.naesin-day-active { background: var(--primary); color: #fff; }
+.naesin-day-today { background: #f59e0b; color: #fff; }
+.naesin-day-inactive { background: #f1f5f9; color: #94a3b8; }
+.naesin-time { font-size: 13px; font-weight: 600; color: var(--text); }
+.naesin-time-override { color: #dc2626; }
+.naesin-time-label { font-size: 11px; color: var(--text-sec); }
+.naesin-edit-btn { font-size: 11px; color: var(--primary); cursor: pointer; text-decoration: underline; margin-left: auto; }
+.naesin-schedule-footer { font-size: 11px; color: var(--text-sec); padding-top: 6px; border-top: 1px solid var(--border); margin-top: 6px; }
+.tag-naesin { background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.tag-class { background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.detail-card-title-row { display: flex; align-items: center; justify-content: space-between; }
+.card-add-btn { width: 24px; height: 24px; border-radius: 6px; border: 1.5px solid var(--border); background: var(--surface); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; color: var(--text-sec); line-height: 1; }
+.card-add-btn:hover { border-color: var(--primary); color: var(--primary); }
+.naesin-memo-item { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+.naesin-memo-meta { font-size: 11px; color: var(--text-sec); margin-top: 4px; }
+.naesin-memo-empty { font-size: 13px; color: var(--text-sec); padding: 8px 0; }
+.naesin-memo-input { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; resize: vertical; min-height: 60px; font-family: inherit; }
+.naesin-memo-submit { margin-top: 6px; padding: 6px 14px; background: var(--primary); color: #fff; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.naesin-clinic-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; }
+.naesin-clinic-status { padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+.clinic-pending { background: #fef3c7; color: #92400e; }
+.clinic-done { background: #dcfce7; color: #166534; }
