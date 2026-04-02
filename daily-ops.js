@@ -232,10 +232,21 @@ function getActiveEnrollments(s, dateStr) {
     });
 
     // 2) 내신이 활성 기간이면 정규를 숨김
-    const hasActiveNaesin = current.some(e =>
-        e.class_type === '내신' &&
-        validDate(e.start_date) && e.start_date <= today
-    );
+    // - 기존: class_type='내신' enrollment
+    // - 신규: class_settings의 naesin_start~naesin_end 자동 감지
+    const hasActiveNaesin = (() => {
+        if (current.some(e =>
+            e.class_type === '내신' &&
+            validDate(e.start_date) && e.start_date <= today
+        )) return true;
+        const regularEnroll = current.find(e => e.class_type !== '내신' && e.class_number);
+        if (!regularEnroll) return false;
+        const nCode = deriveNaesinCode(s, regularEnroll);
+        if (!nCode) return false;
+        const cs = classSettings[nCode];
+        if (!cs?.naesin_start || !cs?.naesin_end) return false;
+        return cs.naesin_start <= today && cs.naesin_end >= today;
+    })();
     if (hasActiveNaesin) {
         return current.filter(e => e.class_type !== '정규');
     }
@@ -11047,5 +11058,59 @@ window._escAttr = escAttr;
 window._formatTime12h = formatTime12h;
 window.getTeacherName = getTeacherName;
 Object.defineProperty(window, 'teachersList', { get() { return teachersList; }, configurable: true });
+
+// ─── 일회성 마이그레이션: class_type='내신' enrollment → 정규 변환 ─────────────
+// 사용법 (브라우저 콘솔):
+//   await window.migrateNaesinEnrollments()         // dry-run (확인만)
+//   await window.migrateNaesinEnrollments(true)     // 실제 저장
+window.migrateNaesinEnrollments = async function(save = false) {
+    const targets = [];
+    for (const student of allStudents) {
+        const enrollments = student.enrollments || [];
+        const naesinIdx = enrollments.findIndex(e => e.class_type === '내신');
+        if (naesinIdx === -1) continue;
+
+        const hasRegular = enrollments.some(
+            (e, i) => i !== naesinIdx && e.class_type !== '내신'
+        );
+        let newEnrollments;
+        if (hasRegular) {
+            // 정규가 이미 있으면 내신 enrollment 제거
+            newEnrollments = enrollments.filter((_, i) => i !== naesinIdx);
+        } else {
+            // 정규가 없으면 class_type을 '정규'로 변경, end_date 제거
+            newEnrollments = enrollments.map((e, i) => {
+                if (i !== naesinIdx) return e;
+                const { class_type, end_date, ...rest } = e;
+                return { class_type: '정규', ...rest };
+            });
+        }
+        targets.push({ student, newEnrollments });
+    }
+
+    console.log(`[migrate] 대상 학생 ${targets.length}명:`);
+    targets.forEach(({ student, newEnrollments }) => {
+        console.log(`  ${student.name} (${student.docId}): ${JSON.stringify(newEnrollments)}`);
+    });
+
+    if (!save) {
+        console.log('[migrate] dry-run 완료. 실제 저장하려면 migrateNaesinEnrollments(true) 실행');
+        return;
+    }
+
+    let ok = 0, fail = 0;
+    for (const { student, newEnrollments } of targets) {
+        try {
+            await updateDoc(doc(db, 'students', student.docId), { enrollments: newEnrollments });
+            student.enrollments = newEnrollments;
+            ok++;
+        } catch (err) {
+            console.error(`  실패: ${student.name}`, err);
+            fail++;
+        }
+    }
+    console.log(`[migrate] 완료: 성공 ${ok}명, 실패 ${fail}명`);
+    if (ok > 0) renderListPanel();
+};
 
 console.log('[DailyOps] App initialized.');

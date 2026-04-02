@@ -45,3 +45,13 @@
 npm run dev          # 개발 서버 (port 5174)
 npm run build        # 빌드
 ```
+
+## 메모리 (계정 공유)
+
+1인 개발. 여러 Claude 계정을 번갈아 사용하지만 동일 사용자.
+작업 기록/피드백은 **이 프로젝트 폴더 안** `.memory/`에 저장한다.
+계정별 `~/.claude-*/projects/*/memory/`에 저장하지 말 것.
+
+- 새 대화 시작 시: `.memory/MEMORY.md` 먼저 읽을 것
+- 메모리 저장 시: `.memory/`에 파일 생성하고 `.memory/MEMORY.md` 인덱스 업데이트
+

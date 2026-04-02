@@ -916,7 +916,8 @@ body {
 }
 
 /* 내신 상세패널 */
-.naesin-att-row { display: flex; gap: 6px; padding: 8px 16px; }
+.naesin-att-row { display: flex; gap: 6px; }
+.naesin-day-chips { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
 .naesin-att-btn { flex: 1; padding: 10px 0; border-radius: 8px; text-align: center; font-size: 13px; font-weight: 600; border: 1.5px solid #d1d5db; color: #64748b; cursor: pointer; background: #fff; }
 .naesin-att-btn.att-present { background: #dcfce7; color: #166534; border-color: #86efac; }
 .naesin-att-btn.att-late { background: #fef9c3; color: #854d0e; border-color: #fde047; }
@@ -932,7 +933,7 @@ body {
 .naesin-time-override { color: #dc2626; }
 .naesin-time-label { font-size: 11px; color: var(--text-sec); }
 .naesin-edit-btn { font-size: 11px; color: var(--primary); cursor: pointer; text-decoration: underline; margin-left: auto; }
-.naesin-schedule-footer { font-size: 11px; color: var(--text-sec); padding-top: 6px; }
+.naesin-schedule-footer { font-size: 11px; color: var(--text-sec); padding-top: 6px; border-top: 1px solid var(--border); margin-top: 6px; }
 
 .tag-naesin { background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
 .tag-class { background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }

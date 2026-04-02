@@ -70,15 +70,35 @@ students/{studentId}
 ├── name: string              # 학생 이름
 ├── status: string            # "재원" | "퇴원" | "휴원"
 ├── branch: string            # "2단지" | "10단지" (optional)
+├── school: string            # 학교명 (optional)
+├── grade: string             # 학년 (optional)
 ├── enrollments: array        # 수강 정보 배열
 │   └── [0]
-│       ├── class_type: string    # "정규" | "특강"
-│       ├── level_symbol: string  # 레벨 기호 (예: "A", "B")
-│       ├── class_number: string  # 반 번호 (예: "101", "202")
-│       ├── day: array<string>    # 수업 요일 ["월", "수", "금"]
-│       ├── start_time: string    # 수업 시작 시간 "16:00"
-│       ├── start_date: string    # 수강 시작일
-│       └── end_date: string      # (특강일 경우) 종료일
+│       ├── class_type: string       # "정규" | "특강"
+│       ├── level_symbol: string     # 레벨 기호 (예: "A", "B")
+│       ├── class_number: string     # 반 번호 (예: "101", "202")
+│       ├── day: array<string>       # 수업 요일 ["월", "수", "금"]
+│       ├── start_time: string       # 수업 시작 시간 "16:00"
+│       ├── start_date: string       # 수강 시작일
+│       ├── end_date: string         # (특강일 경우) 종료일
+│       └── naesin_schedule: map     # 내신 시간 개별 override (optional)
+│           └── {요일}: string       # 예: { "월": "17:30" }
+```
+
+> **내신 반 코드** 자동 유도: `level_symbol` + `school` + `grade` + A/B(홀짝)
+> 내신 기간은 `class_settings` 문서의 `naesin_start ~ naesin_end`로 판단.
+> 내신 기간 중에는 정규 enrollment가 DSC 목록에서 숨겨지고 내신 탭으로 이동.
+
+### `class_settings` 컬렉션 (정규 + 내신 공용)
+```
+class_settings/{classCode}
+├── teacher: string           # 담당 선생님 이메일
+│
+│   # 내신 반 전용 필드 (정규 반에는 없음)
+├── naesin_start: string      # 내신 시작일 "2026-03-09"
+├── naesin_end: string        # 내신 종료일 "2026-05-03"
+└── schedule: map             # 요일별 기본 시간
+    └── {요일}: string        # 예: { "월": "18:00", "수": "17:00" }
 ```
 
 ### `daily_checks` 컬렉션

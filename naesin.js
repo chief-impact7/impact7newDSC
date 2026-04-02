@@ -6,29 +6,47 @@
  *   - src/shared/firestore-helpers.js의 getDayName
  */
 
-import { getDayName, enrollmentCode, normalizeDays } from './src/shared/firestore-helpers.js';
+import { getDayName } from './src/shared/firestore-helpers.js';
 import { db } from './firebase-config.js';
 import { updateDoc, doc } from 'firebase/firestore';
-
-const CLASS_TYPE_NAESIN = '내신';
-const validDate = (d) => d && /^\d{4}-/.test(d);
 
 // ─── State 접근자 ─────────────────────────────────────────────────────────────
 function _state() {
     return window._naesinState;
 }
 
-// 활성 내신 enrollment 찾기 (공통 헬퍼)
-function findActiveNaesinEnrollment(student, selectedDate, dayName) {
-    const enrollments = (student.enrollments || []).filter(
-        e => e.class_type === CLASS_TYPE_NAESIN &&
-             validDate(e.start_date) && e.start_date <= selectedDate &&
-             validDate(e.end_date) && e.end_date >= selectedDate
+// class_settings 기간/스케줄 기반 내신 정보 조회 (공통 헬퍼)
+// 반환: { enrollment, naesinCode, classDays, cs } 또는 null
+function getNaesinInfo(student, selectedDate, dayName) {
+    const { classSettings } = _state();
+
+    // 정규 enrollment 확인 (초등 제외는 class_settings에 naesin 기간 없으면 자연히 걸러짐)
+    const regularEnroll = (student.enrollments || []).find(
+        e => e.class_type !== '내신' && e.class_number
     );
-    if (dayName) {
-        return enrollments.find(e => normalizeDays(e.day).includes(dayName)) || enrollments[0] || null;
-    }
-    return enrollments[0] || null;
+    if (!regularEnroll) return null;
+
+    // 내신 반코드 유도
+    const naesinCode = window.deriveNaesinCode?.(student, regularEnroll);
+    if (!naesinCode) return null;
+
+    // class_settings에서 내신 기간 확인
+    const cs = classSettings?.[naesinCode];
+    if (!cs?.naesin_start || !cs?.naesin_end) return null;
+    if (cs.naesin_start > selectedDate || cs.naesin_end < selectedDate) return null;
+
+    const classDays = Object.keys(cs.schedule || {});
+
+    // 오늘 요일이 반 스케줄에 있는지 확인
+    if (dayName && !classDays.includes(dayName)) return null;
+
+    return { enrollment: regularEnroll, naesinCode, classDays, cs };
+}
+
+// 내신 등원 시간 조회: 개별 override → 반 기본 순
+function getNaesinTime(enrollment, naesinCode, dayName, classSettings) {
+    return enrollment.naesin_schedule?.[dayName] ||
+           classSettings?.[naesinCode]?.schedule?.[dayName] || '';
 }
 
 // ─── Core functions ───────────────────────────────────────────────────────────
@@ -47,23 +65,13 @@ export function getNaesinStudents() {
             if (branch && branch !== selectedBranch) continue;
         }
 
-        const enrollments = student.enrollments || [];
-        enrollments.forEach((enrollment, idx) => {
-            if (enrollment.class_type !== CLASS_TYPE_NAESIN) return;
+        const info = getNaesinInfo(student, selectedDate, dayName);
+        if (!info) continue;
 
-            // 활성 기간 확인
-            if (!validDate(enrollment.start_date) || enrollment.start_date > selectedDate) return;
-            if (!validDate(enrollment.end_date) || enrollment.end_date < selectedDate) return;
-
-            // 요일 확인
-            const days = normalizeDays(enrollment.day);
-            if (!days.includes(dayName)) return;
-
-            result.push({
-                student,
-                enrollment,
-                enrollIdx: idx,
-            });
+        result.push({
+            student,
+            enrollment: info.enrollment,
+            naesinCode: info.naesinCode,
         });
     }
 
@@ -74,10 +82,9 @@ export function getNaesinClasses(students) {
     if (!students) students = getNaesinStudents();
     const countMap = new Map();
 
-    for (const { enrollment } of students) {
-        const code = enrollmentCode(enrollment);
-        if (!code) continue;
-        countMap.set(code, (countMap.get(code) ?? 0) + 1);
+    for (const { naesinCode } of students) {
+        if (!naesinCode) continue;
+        countMap.set(naesinCode, (countMap.get(naesinCode) ?? 0) + 1);
     }
 
     return [...countMap.entries()]
@@ -110,7 +117,7 @@ export function renderNaesinList() {
     // 선택된 반으로 필터
     const selectedClass = window._selectedNaesinClass || null;
     const items = selectedClass
-        ? allItems.filter(({ enrollment }) => enrollmentCode(enrollment) === selectedClass)
+        ? allItems.filter(({ naesinCode }) => naesinCode === selectedClass)
         : allItems;
 
     // 카운트 표시
@@ -130,7 +137,7 @@ export function renderNaesinList() {
             <p>내신 학생이 없습니다</p>
         </div>`;
     } else {
-        listHtml = items.map(({ student, enrollment }) => {
+        listHtml = items.map(({ student, enrollment, naesinCode }) => {
             const sid = student.docId;
             const rec = dailyRecords?.[sid];
             const attStatus = rec?.attendance?.status || '미확인';
@@ -138,17 +145,14 @@ export function renderNaesinList() {
                 ? window._attToggleClass(attStatus)
                 : { display: attStatus, cls: '' };
 
-            const startTime = window.getStudentStartTime
-                ? window.getStudentStartTime(enrollment, dayName)
-                : (enrollment.start_time || '');
+            const startTime = getNaesinTime(enrollment, naesinCode, dayName, classSettings);
             const timeText = startTime && window._formatTime12h
                 ? window._formatTime12h(startTime)
                 : startTime;
 
-            const code = enrollmentCode(enrollment);
-            const teacherEmail = classSettings?.[code]?.teacher || '';
+            const teacherEmail = classSettings?.[naesinCode]?.teacher || '';
             const teacherName = teacherEmail ? teacherEmail.split('@')[0] : '';
-            const subLine = [code, teacherName].filter(Boolean).join(' · ');
+            const subLine = [naesinCode, teacherName].filter(Boolean).join(' · ');
 
             const isSelected = sid === window.selectedStudentId ? 'active' : '';
             const timeHtml = timeText
@@ -196,13 +200,11 @@ export function renderNaesinDetail(studentId) {
     if (!student) return;
 
     const dayName = getDayName(selectedDate);
-    const enrollment = findActiveNaesinEnrollment(student, selectedDate, dayName) || {};
-    const rawCode = enrollmentCode(enrollment);
-    // 유도된 내신 반코드 (학교+학년+A/B)
-    const code = window.deriveNaesinCode ? window.deriveNaesinCode(student, enrollment) : rawCode;
-    const days = normalizeDays(enrollment.day);
-
-    const cs = classSettings?.[code] || classSettings?.[rawCode] || {};
+    const info = getNaesinInfo(student, selectedDate);
+    const enrollment = info?.enrollment || {};
+    const code = info?.naesinCode || '';
+    const cs = info?.cs || classSettings?.[code] || {};
+    const days = Object.keys(cs.schedule || {});
     const rec = dailyRecords[studentId] || {};
 
     // ── 패널 표시 ──
@@ -230,80 +232,69 @@ export function renderNaesinDetail(studentId) {
         tagsEl.innerHTML =
             `<span class="tag-naesin">내신</span>` +
             (code ? `<span class="tag-class">${_esc(code)}</span>` : '') +
-            (schoolGrade ? `<span style="font-size:11px;color:var(--text-sec);padding:2px 6px;">${_esc(schoolGrade)}</span>` : '') +
-            (branch     ? `<span style="font-size:11px;color:var(--text-sec);padding:2px 6px;">${_esc(branch)}</span>` : '') +
-            (teacherName ? `<span style="font-size:11px;color:var(--text-sec);padding:2px 6px;">담당: ${_esc(teacherName)}</span>` : '');
+            (schoolGrade ? `<span class="tag">${_esc(schoolGrade)}</span>` : '') +
+            (branch     ? `<span class="tag">${_esc(branch)}</span>` : '') +
+            (teacherName ? `<span class="tag">담당: ${_esc(teacherName)}</span>` : '');
     }
 
     // ── Section 2: 출결 ──
     const attStatus = rec?.attendance?.status || '미확인';
-    const attColors = {
-        '미확인': { bg: '#f1f5f9', color: '#334155', border: '#94a3b8' },
-        '출석':   { bg: '#dcfce7', color: '#166534', border: '#86efac' },
-        '지각':   { bg: '#fef9c3', color: '#854d0e', border: '#fde047' },
-        '결석':   { bg: '#fee2e2', color: '#991b1b', border: '#fca5a5' },
-    };
+    const attClassMap = { '미확인': 'att-active', '출석': 'att-present', '지각': 'att-late', '결석': 'att-absent' };
     const attButtons = [
         { label: '등원전', value: '미확인' },
         { label: '출석',   value: '출석' },
         { label: '지각',   value: '지각' },
         { label: '결석',   value: '결석' },
     ].map(({ label, value }) => {
-        const isActive = attStatus === value;
-        const c = isActive ? attColors[value] : { bg: '#fff', color: '#64748b', border: '#d1d5db' };
-        return `<div style="flex:1;padding:10px 0;border-radius:8px;text-align:center;font-size:13px;font-weight:${isActive ? '700' : '500'};border:1.5px solid ${c.border};color:${c.color};background:${c.bg};cursor:pointer;"
-            onclick="window.toggleAttendance('${_escAttr(studentId)}', '${_escAttr(value)}')">${_esc(label)}</div>`;
+        const cls = attStatus === value ? attClassMap[value] : '';
+        return `<button class="naesin-att-btn ${cls}"
+            onclick="window.toggleAttendance('${_escAttr(studentId)}', '${_escAttr(value)}')">${_esc(label)}</button>`;
     }).join('');
 
     const attHtml = `
-        <div style="border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:12px;background:#fff;">
-            <div style="font-size:13px;font-weight:600;color:#475569;margin-bottom:10px;display:flex;align-items:center;gap:6px;">
-                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">how_to_reg</span>
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined">how_to_reg</span>
                 출결
             </div>
-            <div style="display:flex;gap:6px;">${attButtons}</div>
+            <div class="naesin-att-row">${attButtons}</div>
         </div>`;
 
     // ── Section 3: 등원요일·시간 ──
     const allDays = ['월', '화', '수', '목', '금', '토', '일'];
     const classSched = cs.schedule || {};
 
-    // 요일 토글 행
-    const dayBadgeStyle = (isActive, isToday) => {
-        const bg = isToday && isActive ? '#f59e0b' : isActive ? '#2563eb' : '#f1f5f9';
-        const color = (isActive || isToday) ? '#fff' : '#94a3b8';
-        return `width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;background:${bg};color:${color};cursor:pointer;`;
-    };
+    // 요일 배지 (반 스케줄 기준, 읽기 전용)
     const dayTogglesHtml = allDays.map(day => {
         const isActive = days.includes(day);
-        const isToday = day === dayName;
-        return `<div style="${dayBadgeStyle(isActive, isToday)}"
-            onclick="window.toggleNaesinDay('${_escAttr(studentId)}', '${_escAttr(day)}')">${_esc(day)}</div>`;
+        const isToday  = day === dayName;
+        const cls = isToday && isActive ? 'naesin-day-today'
+                  : isActive            ? 'naesin-day-active'
+                  :                       'naesin-day-inactive';
+        return `<div class="naesin-day-badge ${cls}">${_esc(day)}</div>`;
     }).join('');
 
     // 활성 요일별 시간 목록
     const timeRowsHtml = days.length > 0 ? days.map(day => {
-        const studentOverride = enrollment.schedule?.[day];
-        const classDefault = classSched[day];
-        let timeText, timeColor, timeLabel;
+        const studentOverride = enrollment.naesin_schedule?.[day];
+        const classDefault    = classSched[day];
+        let timeText, isOverride, timeLabel;
         if (studentOverride) {
-            timeText = studentOverride; timeColor = '#dc2626'; timeLabel = '(개별)';
+            timeText = studentOverride; isOverride = true;  timeLabel = '(개별)';
         } else if (classDefault) {
-            timeText = classDefault; timeColor = '#1e293b'; timeLabel = '(반 기본)';
+            timeText = classDefault;   isOverride = false; timeLabel = '(반 기본)';
         } else {
-            timeText = ''; timeColor = '#1e293b'; timeLabel = '';
+            timeText = '';             isOverride = false; timeLabel = '';
         }
         const formatted = timeText && window._formatTime12h ? window._formatTime12h(timeText) : (timeText || '—');
-        const isToday = day === dayName;
-        const smallBg = isToday ? '#f59e0b' : '#2563eb';
-
-        return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px;">
-            <div style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;background:${smallBg};color:#fff;">${_esc(day)}</div>
-            <span style="font-size:13px;font-weight:600;color:${timeColor};">${_esc(formatted)}</span>
-            <span style="font-size:11px;color:${studentOverride ? '#dc2626' : '#94a3b8'};">${timeLabel}</span>
-            <span style="font-size:11px;color:#2563eb;cursor:pointer;text-decoration:underline;margin-left:auto;" onclick="window.editNaesinTime('${_escAttr(studentId)}', '${_escAttr(day)}')">수정</span>
+        const dayCls    = day === dayName ? 'naesin-day-today' : 'naesin-day-active';
+        return `<div class="naesin-schedule-row">
+            <div class="naesin-day-badge ${dayCls}">${_esc(day)}</div>
+            <span class="naesin-time${isOverride ? ' naesin-time-override' : ''}">${_esc(formatted)}</span>
+            <span class="naesin-time-label${isOverride ? ' naesin-time-override' : ''}">${timeLabel}</span>
+            <span class="naesin-edit-btn" onclick="window.editNaesinTime('${_escAttr(studentId)}', '${_escAttr(day)}')">수정</span>
         </div>`;
-    }).join('') : '<div style="font-size:13px;color:#94a3b8;padding:6px 0;">등원 요일을 선택하세요</div>';
+    }).join('') : '<div class="detail-card-empty">등원 요일을 선택하세요</div>';
 
     // 반 기본 스케줄 요약
     const schedSummary = Object.entries(classSched)
@@ -311,14 +302,14 @@ export function renderNaesinDetail(studentId) {
         .join(' · ');
 
     const schedHtml = `
-        <div style="border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:12px;background:#fff;">
-            <div style="font-size:13px;font-weight:600;color:#475569;margin-bottom:10px;display:flex;align-items:center;gap:6px;">
-                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">calendar_today</span>
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined">calendar_today</span>
                 등원요일·시간
             </div>
-            <div style="display:flex;gap:4px;margin-bottom:8px;">${dayTogglesHtml}</div>
+            <div class="naesin-day-chips">${dayTogglesHtml}</div>
             ${timeRowsHtml}
-            ${schedSummary ? `<div style="font-size:11px;color:#94a3b8;padding-top:6px;border-top:1px solid #f1f5f9;margin-top:6px;">반 기본: ${_esc(schedSummary)}</div>` : ''}
+            ${schedSummary ? `<div class="naesin-schedule-footer">반 기본: ${_esc(schedSummary)}</div>` : ''}
         </div>`;
 
     // ── Section 4: 메모 ──
@@ -330,27 +321,24 @@ export function renderNaesinDetail(studentId) {
         : '';
 
     const memoDisplayHtml = memo
-        ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.5;white-space:pre-wrap;">${_esc(memo)}</div>
-           <div style="font-size:11px;color:#94a3b8;margin-top:4px;">${_esc(memoBy ? memoBy.split('@')[0] : '')} ${_esc(memoAtStr)}</div>`
-        : `<div style="font-size:13px;color:#94a3b8;padding:8px 0;">메모 없음</div>`;
-
-    const addBtnStyle = 'width:24px;height:24px;border-radius:6px;border:1.5px solid #d1d5db;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;color:#64748b;line-height:1;';
+        ? `<div class="naesin-memo-item">${_esc(memo)}</div>
+           <div class="naesin-memo-meta">${_esc(memoBy ? memoBy.split('@')[0] : '')} ${_esc(memoAtStr)}</div>`
+        : `<div class="naesin-memo-empty">메모 없음</div>`;
 
     const memoHtml = `
-        <div style="border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:12px;background:#fff;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-                <span style="font-size:13px;font-weight:600;color:#475569;display:flex;align-items:center;gap:6px;">
-                    <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">sticky_note_2</span>
+        <div class="detail-card">
+            <div class="detail-card-title detail-card-title-row">
+                <span style="display:flex;align-items:center;gap:6px;">
+                    <span class="material-symbols-outlined">sticky_note_2</span>
                     메모
                 </span>
-                <div style="${addBtnStyle}" onclick="window.toggleNaesinMemoInput('${_escAttr(studentId)}')">+</div>
+                <div class="card-add-btn" onclick="window.toggleNaesinMemoInput('${_escAttr(studentId)}')">+</div>
             </div>
             ${memoDisplayHtml}
             <div id="naesin-memo-input-area-${_escAttr(studentId)}" style="display:none;margin-top:8px;">
-                <textarea id="naesin-memo-textarea-${_escAttr(studentId)}" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 12px;font-size:13px;resize:vertical;min-height:60px;font-family:inherit;"
+                <textarea id="naesin-memo-textarea-${_escAttr(studentId)}" class="naesin-memo-input"
                     placeholder="메모를 입력하세요...">${_esc(memo)}</textarea>
-                <div style="margin-top:6px;padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;display:inline-block;"
-                    onclick="window.saveNaesinMemo('${_escAttr(studentId)}')">저장</div>
+                <button class="naesin-memo-submit" onclick="window.saveNaesinMemo('${_escAttr(studentId)}')">저장</button>
             </div>
         </div>`;
 
@@ -363,27 +351,24 @@ export function renderNaesinDetail(studentId) {
         const cvTime   = extraVisit.time || '';
         const cvReason = extraVisit.reason || '';
         const isDone   = extraVisit.status === '완료';
-        const statusBg = isDone ? '#dcfce7' : '#fef3c7';
-        const statusColor = isDone ? '#166534' : '#92400e';
-        const statusText = isDone ? '완료' : '예정';
         clinicBodyHtml = `
-            <div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;">
-                <span style="padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;background:${statusBg};color:${statusColor};">${statusText}</span>
+            <div class="naesin-clinic-item">
+                <span class="naesin-clinic-status ${isDone ? 'clinic-done' : 'clinic-pending'}">${isDone ? '완료' : '예정'}</span>
                 <span>${_esc(cvDate)} ${_esc(cvTime)}</span>
-                ${cvReason ? `<span style="color:#94a3b8;">· ${_esc(cvReason)}</span>` : ''}
+                ${cvReason ? `<span class="naesin-time-label">· ${_esc(cvReason)}</span>` : ''}
             </div>`;
     }
 
     const clinicHtml = `
-        <div style="border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:12px;background:#fff;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-                <span style="font-size:13px;font-weight:600;color:#475569;display:flex;align-items:center;gap:6px;">
-                    <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">schedule</span>
+        <div class="detail-card">
+            <div class="detail-card-title detail-card-title-row">
+                <span style="display:flex;align-items:center;gap:6px;">
+                    <span class="material-symbols-outlined">schedule</span>
                     클리닉
                 </span>
-                <div style="${addBtnStyle}" onclick="window.openNaesinClinic('${_escAttr(studentId)}')">+</div>
+                <div class="card-add-btn" onclick="window.openNaesinClinic('${_escAttr(studentId)}')">+</div>
             </div>
-            ${clinicBodyHtml || '<div style="font-size:13px;color:#94a3b8;padding:8px 0;">클리닉 예정 없음</div>'}
+            ${clinicBodyHtml || '<div class="detail-card-empty">클리닉 예정 없음</div>'}
         </div>`;
 
     // ── 조립 ──
@@ -429,41 +414,6 @@ window.openNaesinClinic = async function(studentId) {
     if (window.renderNaesinDetail) window.renderNaesinDetail(studentId);
 };
 
-// ─── 등원요일 토글 ────────────────────────────────────────────────────────────
-window.toggleNaesinDay = async function(studentId, day) {
-    const { allStudents, selectedDate } = _state();
-    const student = allStudents?.find(s => s.docId === studentId);
-    if (!student) return;
-
-    const found = findActiveNaesinEnrollment(student, selectedDate);
-    if (!found) return;
-    const enrollments = (student.enrollments || []).slice();
-    const enrollIdx = enrollments.indexOf(found);
-    if (enrollIdx === -1) return;
-
-    const currentDays = normalizeDays(enrollments[enrollIdx].day);
-    let newDays;
-    if (currentDays.includes(day)) {
-        newDays = currentDays.filter(d => d !== day);
-    } else {
-        const order = ['월', '화', '수', '목', '금', '토', '일'];
-        newDays = [...currentDays, day].sort((a, b) => order.indexOf(a) - order.indexOf(b));
-    }
-    enrollments[enrollIdx] = { ...enrollments[enrollIdx], day: newDays };
-
-    window.showSaveIndicator?.('saving');
-    try {
-        await updateDoc(doc(db, 'students', studentId), { enrollments });
-        student.enrollments = enrollments;
-        window.showSaveIndicator?.('saved');
-    } catch (err) {
-        console.error('[toggleNaesinDay] 저장 실패:', err);
-        window.showSaveIndicator?.('error');
-        return;
-    }
-    renderNaesinDetail(studentId);
-};
-
 // ─── 등원시간 수정 ────────────────────────────────────────────────────────────
 window.editNaesinTime = async function(studentId, day) {
     const { allStudents, selectedDate, classSettings } = _state();
@@ -471,22 +421,17 @@ window.editNaesinTime = async function(studentId, day) {
     const student = allStudents?.find(s => s.docId === studentId);
     if (!student) return;
 
-    const found = findActiveNaesinEnrollment(student, selectedDate);
-    if (!found) return;
+    const info = getNaesinInfo(student, selectedDate);
+    if (!info) return;
+
+    const { enrollment, naesinCode } = info;
     const enrollments = (student.enrollments || []).slice();
-    const enrollIdx = enrollments.indexOf(found);
+    const enrollIdx = enrollments.indexOf(enrollment);
     if (enrollIdx === -1) return;
-    const enrollment = { ...enrollments[enrollIdx] };
-    const code = enrollmentCode(enrollment);
 
-    // 3. 현재 시간 결정 (개별 우선, 반 기본 fallback)
-    const currentTime =
-        enrollment.schedule?.[day] ||
-        classSettings?.[code]?.schedule?.[day] ||
-        (window.getStudentStartTime ? window.getStudentStartTime(enrollment, day) : '') ||
-        '';
+    // 현재 시간 결정 (개별 우선, 반 기본 fallback)
+    const currentTime = getNaesinTime(enrollment, naesinCode, day, classSettings);
 
-    // 4. prompt로 새 시간 입력
     const newTime = window.prompt(
         `${day}요일 등원시간 수정 (예: 14:00)\n현재: ${currentTime || '없음'}`,
         currentTime
@@ -494,33 +439,27 @@ window.editNaesinTime = async function(studentId, day) {
     if (newTime === null) return; // 취소
 
     const trimmed = newTime.trim();
-    const classDefault = classSettings?.[code]?.schedule?.[day] || '';
+    const classDefault = classSettings?.[naesinCode]?.schedule?.[day] || '';
 
-    // 5. schedule 업데이트
-    const schedule = { ...(enrollment.schedule || {}) };
+    // naesin_schedule 업데이트 (반 기본과 같으면 개별 override 삭제)
+    const naesinSchedule = { ...(enrollments[enrollIdx].naesin_schedule || {}) };
     if (!trimmed || trimmed === classDefault) {
-        // 반 기본과 동일하거나 빈값 → 개별 override 삭제
-        delete schedule[day];
+        delete naesinSchedule[day];
     } else {
-        schedule[day] = trimmed;
+        naesinSchedule[day] = trimmed;
     }
 
-    // schedule이 비었으면 undefined로 정리
-    const newSchedule = Object.keys(schedule).length > 0 ? schedule : undefined;
-
-    const updatedEnrollment = { ...enrollment };
-    if (newSchedule !== undefined) {
-        updatedEnrollment.schedule = newSchedule;
+    const updatedEnrollment = { ...enrollments[enrollIdx] };
+    if (Object.keys(naesinSchedule).length > 0) {
+        updatedEnrollment.naesin_schedule = naesinSchedule;
     } else {
-        delete updatedEnrollment.schedule;
+        delete updatedEnrollment.naesin_schedule;
     }
     enrollments[enrollIdx] = updatedEnrollment;
 
-    // 6. Firestore 업데이트
     window.showSaveIndicator?.('saving');
     try {
         await updateDoc(doc(db, 'students', studentId), { enrollments });
-        // 7. 로컬 캐시 갱신
         student.enrollments = enrollments;
         window.showSaveIndicator?.('saved');
     } catch (err) {
@@ -529,7 +468,6 @@ window.editNaesinTime = async function(studentId, day) {
         return;
     }
 
-    // 8. 상세패널 재렌더
     if (window.renderNaesinDetail) window.renderNaesinDetail(studentId);
 };
 
