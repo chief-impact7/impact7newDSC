@@ -3537,10 +3537,11 @@ function renderListPanel() {
             }
         }
 
+        const naesinBadge = naesinIds.has(s.docId) ? '<span class="tag-naesin">내신</span>' : '';
         return `<div class="list-item ${isActive}${bulkMode ? ' bulk-mode' : ''}${selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}" onclick="handleListItemClick(event, '${escAttr(s.docId)}')">
             <input type="checkbox" class="list-item-checkbox" ${selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">
             <div class="item-info">
-                <span class="item-title">${esc(s.name)}${newBadge}${leaveBadge}${lrPendingTags}${siblingIcon}${hwFailIconHtml}${overrideBadge}${overrideInBadge} ${teacherBadge}</span>
+                <span class="item-title">${esc(s.name)}${newBadge}${naesinBadge}${leaveBadge}${lrPendingTags}${siblingIcon}${hwFailIconHtml}${overrideBadge}${overrideInBadge} ${teacherBadge}</span>
                 <span class="item-desc">${esc(code)}${studentShortLabel(s) ? ' · ' + esc(studentShortLabel(s)) : ''}</span>
             </div>
             ${timeHtml}
