@@ -3,7 +3,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../../firebase-config.js';
 import { signInWithGoogle, logout } from '../../auth.js';
 import { useStudents, useDashboardData } from './hooks/useFirestore.js';
-import { branchFromStudent, enrollmentCode, todayStr, addDays, toDateStrKST, parseDateKST } from '../shared/firestore-helpers.js';
+import { branchFromStudent, enrollmentCode, todayStr, addDays, toDateStrKST, parseDateKST, fetchSemesterSettings, getSemestersForDate } from '../shared/firestore-helpers.js';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import OverviewCard from './components/OverviewCard.jsx';
 import AttendanceSummary from './components/AttendanceSummary.jsx';
@@ -49,6 +49,12 @@ export default function App() {
     const [customEnd, setCustomEnd] = useState(todayStr());
     const [branchFilter, setBranchFilter] = useState('');
     const [classFilter, setClassFilter] = useState('');
+    const [semesterSettings, setSemesterSettings] = useState({});
+
+    // 학기 설정 로드 (1회)
+    useEffect(() => {
+        fetchSemesterSettings().then(setSemesterSettings).catch(() => {});
+    }, []);
 
     // 인증 상태
     useEffect(() => {
@@ -86,6 +92,11 @@ export default function App() {
     // 데이터 로드
     const { students, loading: studentsLoading, error } = useStudents(user);
     const { checks, postponed, loading: dataLoading, error: dashError } = useDashboardData(user, startDate, endDate);
+
+    // 선택 날짜 기준 학기 감지
+    const currentSemesters = useMemo(() =>
+        getSemestersForDate(startDate, semesterSettings),
+    [startDate, semesterSettings]);
 
     // 반 목록 추출
     const classList = useMemo(() => {
@@ -175,6 +186,17 @@ export default function App() {
                     <a href="/" className="dash-link">입력 페이지</a>
                 </div>
                 <div className="dash-header-right">
+                    {Object.entries(currentSemesters).some(([, v]) => v) && (
+                        <div className="dash-semester-badges">
+                            {Object.entries(currentSemesters).map(([level, sem]) =>
+                                sem ? (
+                                    <span key={level} className="dash-semester-badge" title={`${level} 현재 학기`}>
+                                        {level} {sem.split('-').slice(1).join('-')}
+                                    </span>
+                                ) : null
+                            )}
+                        </div>
+                    )}
                     <span className="dash-user-email">{user.email}</span>
                     <button className="dash-avatar" onClick={() => logout()} title="로그아웃">
                         {user.email[0].toUpperCase()}

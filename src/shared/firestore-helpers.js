@@ -3,6 +3,46 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../firebase-config.js';
 
+// 학부별 학기 정의 (impact7db.web.app 설정과 동일하게 유지)
+export const LEVEL_SEMESTERS = {
+    '초등': ['winter', 'spring1', 'spring2', 'summer', 'autumn'],
+    '중등': ['winter', 'spring', 'summer', 'autumn'],
+    '고등': ['winter', 'spring', 'autumn'],
+};
+
+// semester_settings 전체 로드
+export async function fetchSemesterSettings() {
+    const snap = await getDocs(collection(db, 'semester_settings'));
+    const map = {};
+    snap.forEach(d => { map[d.id] = d.data(); });
+    return map;
+}
+
+// 특정 날짜 + 레벨에 해당하는 학기 반환
+// key 형식: `{level}-{year}-{name}` (신규) 또는 `{year}-{Name}` (구형)
+export function getSemesterForDate(dateStr, level, semesterSettings) {
+    const entries = Object.entries(semesterSettings)
+        .filter(([key]) => key.startsWith(`${level}-`))
+        .filter(([, v]) => v.start_date)
+        .sort((a, b) => a[1].start_date.localeCompare(b[1].start_date));
+
+    let result = null;
+    for (const [key, { start_date }] of entries) {
+        if (start_date <= dateStr) result = key;
+    }
+    return result; // e.g. "초등-2026-spring1"
+}
+
+// 날짜 기준 전체 레벨 학기 맵 반환
+export function getSemestersForDate(dateStr, semesterSettings) {
+    return Object.fromEntries(
+        Object.keys(LEVEL_SEMESTERS).map(level => [
+            level,
+            getSemesterForDate(dateStr, level, semesterSettings),
+        ])
+    );
+}
+
 // 학생 전체 목록 (재원 학생만 — 퇴원 제외)
 export async function fetchStudents() {
     const q = query(

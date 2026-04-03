@@ -117,6 +117,16 @@ body {
     align-items: center;
     gap: 8px;
 }
+.dash-semester-badges { display: flex; gap: 4px; }
+.dash-semester-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #e8f5e9;
+    color: #2e7d32;
+    font-weight: 600;
+    white-space: nowrap;
+}
 .dash-user-email { font-size: 13px; color: var(--text-sec); }
 .dash-avatar {
     width: 32px;
