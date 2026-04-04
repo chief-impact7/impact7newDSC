@@ -38,10 +38,6 @@ let teachersList = [];           // teachers 컬렉션 캐시 [{ email, display_
 let selectedBranch = null;       // 소속 글로벌 필터 (null = 전체, '2단지' | '10단지')
 let selectedBranchLevel = null;  // 소속 L3 필터 (null = 전체, '초등' | '중등' | '고등')
 let selectedClassCode = null;    // 반 글로벌 필터 (null = 전체, 'ax104' 등)
-let selectedSemester = null;     // 학기 글로벌 필터 (null = 전체, '2026-Winter' 등)
-let latestSemester = null;       // 가장 최신 학기 (읽기전용 판별용)
-let semesterSettings = {};       // semester → { start_date }
-let currentSemester = null;      // 오늘 기준 현재 학기
 let siblingMap = {};             // docId → Set of sibling docIds
 // allContacts 제거 — on-demand Firestore 쿼리로 대체 (20k reads → 1~50 reads)
 let _contactSearchId = 0;
@@ -880,7 +876,6 @@ async function loadWithdrawnStudents() {
 }
 
 function saveDailyRecord(studentId, updates) {
-    if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     if (saveTimers[studentId]) clearTimeout(saveTimers[studentId]);
     showSaveIndicator('saving');
 
@@ -956,7 +951,6 @@ function showSaveIndicator(status) {
 // ─── Immediate Save (for toggles) ──────────────────────────────────────────
 
 async function saveImmediately(studentId, updates) {
-    if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     showSaveIndicator('saving');
     try {
         const docId = makeDailyRecordId(studentId, selectedDate);
@@ -998,7 +992,6 @@ function getUniqueClassCodes() {
                 const code = enrollmentCode(e);
                 if (code) naesinCodes.add(code);
             } else {
-                if (selectedSemester && e.semester !== selectedSemester) return;
                 const code = enrollmentCode(e);
                 if (code) regularCodes.add(code);
             }
@@ -1015,7 +1008,7 @@ function getClassMgmtCount(filterKey) {
     const dayName = getDayName(selectedDate);
     let students = allStudents.filter(s =>
         s.status !== '퇴원' && getActiveEnrollments(s, selectedDate).some(e =>
-            e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
+            e.day.includes(dayName)
         )
     );
     students = students.filter(s => matchesBranchFilter(s));
@@ -1028,8 +1021,7 @@ function getClassMgmtCount(filterKey) {
     const regularIds = new Set();
     let count = students.filter(s => {
         const match = getActiveEnrollments(s, selectedDate).some(e =>
-            e.day.includes(dayName) && enrollmentCode(e) === filterKey &&
-            (!selectedSemester || e.semester === selectedSemester)
+            e.day.includes(dayName) && enrollmentCode(e) === filterKey
         );
         if (match) regularIds.add(s.docId);
         return match;
@@ -1230,7 +1222,7 @@ function renderBranchFilter() {
     const dayName = getDayName(selectedDate);
     const active = allStudents.filter(s =>
         s.status !== '퇴원' && getActiveEnrollments(s, selectedDate).some(e =>
-            e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
+            e.day.includes(dayName)
         )
     );
 
@@ -1323,10 +1315,8 @@ function _getAllClassCodes() {
             const code = enrollmentCode(e);
             if (!code) return;
             if (e.class_type === '내신') return;
-            if (!selectedSemester || e.semester === selectedSemester) {
-                regularCodes.add(code);
-                hasRegular = true;
-            }
+            regularCodes.add(code);
+            hasRegular = true;
         });
 
         // 내신 반코드 유도 (초등 제외, 정규 enrollment이 있는 학생만)
@@ -1481,146 +1471,6 @@ function setBranchLevel(level) {
     renderListPanel();
 }
 
-// ─── 학기 필터 ──────────────────────────────────────────────────────────────
-
-// ─── 학기 설정 (시작일) ──────────────────────────────────────────────────
-let _semesterSettingsLoaded = false;
-async function loadSemesterSettings(force = false) {
-    if (_semesterSettingsLoaded && !force) return;
-    const snap = await getDocs(collection(db, 'semester_settings'));
-    semesterSettings = {};
-    snap.forEach(d => { semesterSettings[d.id] = d.data(); });
-    _semesterSettingsLoaded = true;
-}
-
-function getCurrentSemester() {
-    const today = todayStr(); // 'YYYY-MM-DD'
-    const entries = Object.entries(semesterSettings)
-        .filter(([, v]) => v.start_date)
-        .sort((a, b) => a[1].start_date.localeCompare(b[1].start_date));
-
-    // 오늘 이하인 가장 최근 start_date의 학기가 현재 학기
-    let result = null;
-    for (const [semester, { start_date }] of entries) {
-        if (start_date <= today) result = semester;
-    }
-    currentSemester = result;
-    return result;
-}
-
-function isPastSemester() {
-    if (!currentSemester) return false;
-    // 1) 학기 필터가 과거 학기인 경우
-    if (selectedSemester && selectedSemester !== currentSemester) return true;
-    // 2) 선택된 날짜가 현재 학기 시작일 이전인 경우
-    const startDate = semesterSettings[currentSemester]?.start_date;
-    if (startDate && selectedDate < startDate) return true;
-    return false;
-}
-
-function buildSemesterFilter() {
-    const sel = document.getElementById('semester-filter');
-    if (!sel) return;
-    const semesters = new Set();
-    allStudents.forEach(s =>
-        (s.enrollments || []).forEach(e => { if (e.semester) semesters.add(e.semester); })
-    );
-    // Spring1/Spring2는 Spring으로 통합되었으므로 필터에서 제외
-    semesters.delete('2026-Spring1');
-    semesters.delete('2026-Spring2');
-    semesters.delete('2027-Spring1');
-    semesters.delete('2027-Spring2');
-    const sorted = [...semesters].sort().reverse();
-    latestSemester = sorted[0] || null;
-    // 전역 변수 → DOM → localStorage 순으로 보존된 값 복원
-    // currentSemester가 있으면 기본값으로 사용
-    const saved = selectedSemester || sel.value || localStorage.getItem('dsc_semester_filter') || currentSemester || '';
-    sel.innerHTML = '<option value="">전체 학기</option>' +
-        sorted.map(s => `<option value="${s}">${s}</option>`).join('');
-    if (saved && sorted.includes(saved)) {
-        sel.value = saved;
-        selectedSemester = saved;
-    } else {
-        sel.value = '';
-        selectedSemester = null;
-    }
-}
-
-function handleSemesterFilter(val) {
-    selectedSemester = val || null;
-    if (val) {
-        localStorage.setItem('dsc_semester_filter', val);
-    } else {
-        localStorage.removeItem('dsc_semester_filter');
-    }
-
-    updateReadonlyBanner();
-    renderFilterChips();
-    renderSubFilters();
-    renderListPanel();
-}
-window.handleSemesterFilter = handleSemesterFilter;
-
-function updateReadonlyBanner() {
-    const banner = document.getElementById('semester-readonly-banner');
-    if (banner) banner.style.display = isPastSemester() ? '' : 'none';
-}
-
-// ─── 학기 시작일 설정 모달 ──────────────────────────────────────────────────
-function openSemesterSettingsModal() {
-    const modal = document.getElementById('semester-settings-modal');
-    const body = document.getElementById('semester-settings-body');
-    if (!modal || !body) return;
-
-    // 학기 목록: enrollment에서 추출된 학기들
-    const semesters = new Set();
-    allStudents.forEach(s =>
-        (s.enrollments || []).forEach(e => { if (e.semester) semesters.add(e.semester); })
-    );
-    semesters.delete('2026-Spring1');
-    semesters.delete('2026-Spring2');
-    semesters.delete('2027-Spring1');
-    semesters.delete('2027-Spring2');
-    const sorted = [...semesters].sort();
-
-    if (sorted.length === 0) {
-        body.innerHTML = '<p style="color:var(--text-sec);font-size:13px;">등록된 학기가 없습니다.</p>';
-    } else {
-        body.innerHTML = sorted.map(sem => {
-            const setting = semesterSettings[sem] || {};
-            const isCurrent = sem === currentSemester;
-            return `<div class="semester-setting-row">
-                <span class="semester-setting-label">${sem}${isCurrent ? '<span class="current-badge">현재</span>' : ''}</span>
-                <input type="date" class="semester-setting-date" value="${setting.start_date || ''}"
-                    onchange="saveSemesterStartDate('${sem}', this.value)">
-            </div>`;
-        }).join('');
-    }
-
-    modal.style.display = 'flex';
-}
-window.openSemesterSettingsModal = openSemesterSettingsModal;
-
-async function saveSemesterStartDate(semester, startDate) {
-    try {
-        if (startDate) {
-            await setDoc(doc(db, 'semester_settings', semester), { start_date: startDate });
-            semesterSettings[semester] = { start_date: startDate };
-        } else {
-            await deleteDoc(doc(db, 'semester_settings', semester));
-            delete semesterSettings[semester];
-        }
-        getCurrentSemester();
-        updateReadonlyBanner();
-        // 모달 내 현재 배지 업데이트
-        openSemesterSettingsModal();
-        showSaveIndicator('saved');
-    } catch (err) {
-        console.error('학기 시작일 저장 실패:', err);
-        showSaveIndicator('error');
-    }
-}
-window.saveSemesterStartDate = saveSemesterStartDate;
 
 function renderFilterChips() {
     const container = document.getElementById('filter-chips');
@@ -1661,8 +1511,6 @@ function renderFilterChips() {
     if (selectedClassCode) {
         chips.push({ label: `반: ${selectedClassCode}`, onRemove: 'clearClassCode' });
     }
-
-    // 학기는 사이드바 드롭다운에서 제어 — 칩에 표시하지 않음
 
     if (chips.length === 0) {
         container.innerHTML = '<span class="filter-chips-empty">전체</span>';
@@ -1714,7 +1562,6 @@ function clearAllFilters() {
         savedL2Expanded[cat] = false;
     }
     l2Expanded = false;
-    // 글로벌 필터 해제 (학기는 사이드바 드롭다운에서만 제어 — 유지)
     selectedBranch = null;
     selectedBranchLevel = null;
     selectedClassCode = null;
@@ -1763,7 +1610,6 @@ function hasRegularEnrollmentToday(student) {
     const dayName = _regularDayCache.dayName;
     return getActiveEnrollments(student, selectedDate).some(e =>
         e.day.includes(dayName) &&
-        (!selectedSemester || e.semester === selectedSemester) &&
         REGULAR_CLASS_TYPES.includes(e.class_type || '정규')
     );
 }
@@ -1792,12 +1638,12 @@ function _getSubFilterBase() {
     const dayName = getDayName(selectedDate);
     let todayStudents = allStudents.filter(s =>
         s.status !== '퇴원' && getActiveEnrollments(s, selectedDate).some(e =>
-            e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
+            e.day.includes(dayName)
         )
     );
     todayStudents = todayStudents.filter(s => matchesBranchFilter(s));
     if (selectedClassCode) todayStudents = todayStudents.filter(s => getActiveEnrollments(s, selectedDate).some(e =>
-        e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === selectedClassCode
+        e.day.includes(dayName) && enrollmentCode(e) === selectedClassCode
     ));
 
     const existingIds = new Set(todayStudents.map(s => s.docId));
@@ -2176,7 +2022,7 @@ function getFilteredStudents() {
         const dayName = getDayName(selectedDate);
         let students = allStudents.filter(s =>
             s.status !== '퇴원' && getActiveEnrollments(s, selectedDate).some(e =>
-                e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
+                e.day.includes(dayName)
             )
         );
         // 타반수업 override-in 학생 추가 (정규 목록에 없는 학생만)
@@ -2197,7 +2043,7 @@ function getFilteredStudents() {
             students = students.filter(s => {
                 // 정규 enrollment 매칭
                 const hasRegular = getActiveEnrollments(s, selectedDate).some(e =>
-                    e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && currentSubFilter.has(enrollmentCode(e))
+                    e.day.includes(dayName) && currentSubFilter.has(enrollmentCode(e))
                 );
                 // 타반수업 override-in 매칭
                 const hasOverride = tempClassOverrides.some(o =>
@@ -2218,15 +2064,12 @@ function getFilteredStudents() {
     let students;
     if (searchQuery) {
         students = allStudents.filter(s =>
-            (s.enrollments || []).some(e => {
-                if (validDateStr(e.end_date) && e.end_date < today) return false;
-                return !selectedSemester || e.semester === selectedSemester;
-            })
+            (s.enrollments || []).some(e => !(validDateStr(e.end_date) && e.end_date < today))
         );
     } else {
         students = allStudents.filter(s =>
             s.status !== '퇴원' && getActiveEnrollments(s, selectedDate).some(e =>
-                e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
+                e.day.includes(dayName)
             )
         );
         // 타반수업 override-in 학생 추가
@@ -2240,7 +2083,7 @@ function getFilteredStudents() {
     if (selectedClassCode && !searchQuery) {
         students = students.filter(s => {
             const hasRegular = getActiveEnrollments(s, selectedDate).some(e =>
-                e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === selectedClassCode
+                e.day.includes(dayName) && enrollmentCode(e) === selectedClassCode
             );
             const hasOverride = tempClassOverrides.some(o =>
                 o.student_id === s.docId && o.target_class_code === selectedClassCode
@@ -2357,8 +2200,8 @@ function getFilteredStudents() {
     if (allF['attendance']?.size > 0 || currentCategory === 'attendance') {
         const dayName = getDayName(selectedDate);
         students.sort((a, b) => {
-            const timeA = getStudentStartTime(getActiveEnrollments(a, selectedDate).find(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester))) || '99:99';
-            const timeB = getStudentStartTime(getActiveEnrollments(b, selectedDate).find(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester))) || '99:99';
+            const timeA = getStudentStartTime(getActiveEnrollments(a, selectedDate).find(e => e.day.includes(dayName))) || '99:99';
+            const timeB = getStudentStartTime(getActiveEnrollments(b, selectedDate).find(e => e.day.includes(dayName))) || '99:99';
             return timeA.localeCompare(timeB);
         });
     }
@@ -2717,12 +2560,12 @@ function renderDepartureCheckList() {
     const dayName = getDayName(selectedDate);
     let students = allStudents.filter(s =>
         s.status !== '퇴원' && s.enrollments.some(e =>
-            e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
+            e.day.includes(dayName)
         )
     );
     students = students.filter(s => matchesBranchFilter(s));
     if (selectedClassCode) students = students.filter(s => s.enrollments.some(e =>
-        e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === selectedClassCode
+        e.day.includes(dayName) && enrollmentCode(e) === selectedClassCode
     ));
     if (searchQuery) {
         const q = searchQuery.toLowerCase();
@@ -3205,7 +3048,7 @@ function renderListPanel() {
         const isActive = s.docId === selectedStudentId ? 'active' : '';
         const dayN = getDayName(selectedDate);
         const _activeEnrolls = getActiveEnrollments(s, selectedDate);
-        const _todayEnrolls = _activeEnrolls.filter(e => e.day.includes(dayN) && (!selectedSemester || e.semester === selectedSemester));
+        const _todayEnrolls = _activeEnrolls.filter(e => e.day.includes(dayN));
         // 내신 기간이라 정규 enrollment가 숨겨진 경우 내신 반코드로 대체
         const _naesinCodeFallback = (!_todayEnrolls.length && !_activeEnrolls.length && naesinIds.has(s.docId))
             ? (() => {
@@ -3443,7 +3286,7 @@ function renderListPanel() {
         let timeHtml = '';
         const rec = dailyRecords[s.docId];
         const dayName = getDayName(selectedDate);
-        const todayEnroll = getActiveEnrollments(s, selectedDate).find(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester));
+        const todayEnroll = getActiveEnrollments(s, selectedDate).find(e => e.day.includes(dayName));
         if (!isLeave) {
             const arrivalTime = rec?.arrival_time;
             const scheduledTime = getStudentStartTime(todayEnroll);
@@ -3493,7 +3336,7 @@ function renderListPanel() {
         const siblingIcon = hasSibling ? `<span class="item-icon item-icon-sibling" title="형제: ${esc(siblingNames)}"><span class="material-symbols-outlined">group</span></span>` : '';
 
         // 담당 뱃지 (첫 번째 반코드 기준)
-        const todayCodes = getActiveEnrollments(s, selectedDate).filter(e => e.day.includes(dayN) && (!selectedSemester || e.semester === selectedSemester)).map(e => enrollmentCode(e));
+        const todayCodes = getActiveEnrollments(s, selectedDate).filter(e => e.day.includes(dayN)).map(e => enrollmentCode(e));
         const primaryCode = todayCodes[0] || allClassCodes(s)[0] || '';
         const teacherEmail = classSettings[primaryCode]?.teacher;
         const teacherBadge = teacherEmail ? `<span class="teacher-badge" title="담당: ${esc(getTeacherName(teacherEmail))}">${esc(getTeacherName(teacherEmail))}</span>` : '';
@@ -3503,7 +3346,7 @@ function renderListPanel() {
             leaveBadge = `<span class="tag tag-leave">${esc(s.status)}</span>`;
         } else if (s.status === '퇴원') {
             // 이번 학기 enrollment이 있거나 퇴원 1개월 이내 → 퇴원, 그 외 → 과거
-            const hasCurrentSemester = s.enrollments.some(e => !selectedSemester || e.semester === selectedSemester);
+            const hasCurrentSemester = s.enrollments.length > 0;
             const wdLr = leaveRequests.find(lr => lr.student_id === s.docId && lr.status === 'approved' &&
                 (lr.request_type === '퇴원요청' || lr.request_type === '휴원→퇴원'));
             const isRecentWithdrawal = wdLr && !_isOlderThanOneMonth(wdLr.approved_at);
@@ -3557,7 +3400,7 @@ function renderListPanel() {
         // 내신 기간 학생도 포함: getActiveEnrollments가 정규를 숨기므로 naesin.js의 목록도 확인
         todayStudents = students.filter(s =>
             naesinIds.has(s.docId) ||
-            getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayN) && (!selectedSemester || e.semester === selectedSemester))
+            getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayN))
         );
         const todayIds = new Set(todayStudents.map(s => s.docId));
         otherDayStudents = students.filter(s => !todayIds.has(s.docId));
@@ -3829,7 +3672,7 @@ function renderClassDetail(classCode) {
     const dayName = getDayName(selectedDate);
     let classStudents = allStudents.filter(s =>
         s.status !== '퇴원' &&
-        getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode)
+        getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayName) && enrollmentCode(e) === classCode)
     );
     classStudents = classStudents.filter(s => matchesBranchFilter(s));
     const domains = getClassDomains(classCode);
@@ -5533,7 +5376,7 @@ function renderNextHwClassDetail(classCode) {
     // 반 소속 학생 목록
     const dayName = getDayName(selectedDate);
     let classStudents = allStudents.filter(s =>
-        s.status !== '퇴원' && getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode)
+        s.status !== '퇴원' && getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayName) && enrollmentCode(e) === classCode)
     );
     classStudents = classStudents.filter(s => matchesBranchFilter(s));
 
@@ -5747,7 +5590,6 @@ function renderChecklistCard(studentId) {
 }
 
 async function confirmDeparture(studentId) {
-    if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     const rec = dailyRecords[studentId] || {};
     const items = getStudentChecklistStatus(studentId);
     const pendingItems = items.filter(i => !i.done && i.key !== 'departure');
@@ -6609,7 +6451,6 @@ function getClassCodesForDate(dateStr, excludeStudentId) {
         if (!matchesBranchFilter(s)) return;
         getActiveEnrollments(s, dateStr).forEach(e => {
             if (!e.day.includes(dayName)) return;
-            if (selectedSemester && e.semester !== selectedSemester) return;
             const code = enrollmentCode(e);
             if (code) codes.add(code);
         });
@@ -6788,9 +6629,7 @@ function renderStudentDetail(studentId) {
     const studentTestTasks = testFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
 
     // 등원 일정 카드 — 요일 + 시간 표시 (휴원 학생 미표시)
-    const semesterEnrollments = student.enrollments.filter(e =>
-        !selectedSemester || e.semester === selectedSemester
-    );
+    const semesterEnrollments = student.enrollments;
     const dayNameForDetail = getDayName(selectedDate);
     const arrivalTimeHtml = (isLeaveStudent || isWithdrawn) ? '' : semesterEnrollments.length > 0 ? `
         <div class="detail-card">
@@ -6937,7 +6776,7 @@ function renderStudentDetail(studentId) {
     // 다음숙제 카드 (반별 내용 표시 + 개인별 오버라이드 편집)
     const dayName2 = getDayName(selectedDate);
     const studentClasses = student.enrollments
-        .filter(e => e.day.includes(dayName2) && (!selectedSemester || e.semester === selectedSemester))
+        .filter(e => e.day.includes(dayName2))
         .map(e => enrollmentCode(e))
         .filter(Boolean);
     const uniqueClasses = [...new Set(studentClasses)];
@@ -7118,7 +6957,6 @@ function renderStudentDetail(studentId) {
 // ─── 클리닉 저장 ────────────────────────────────────────────────────────────
 
 async function saveExtraVisit(studentId, field, value) {
-    if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     const rec = dailyRecords[studentId] || {};
     const extraVisit = { ...(rec.extra_visit || {}) };
     extraVisit[field] = value;
@@ -7195,7 +7033,6 @@ async function cycleTempArrival(docId) {
 window.cycleTempArrival = cycleTempArrival;
 
 function cycleVisitAttendance(studentId) {
-    if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     const cycle = ['등원전', '출석', '지각', '결석'];
     const rec = dailyRecords[studentId] || {};
     const attStatus = rec?.attendance?.status || '미확인';
@@ -7208,7 +7045,6 @@ function cycleVisitAttendance(studentId) {
 }
 
 function toggleAttendance(studentId, displayStatus) {
-    if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     if (bulkMode && selectedStudentIds.size >= 2 && selectedStudentIds.has(studentId)) {
         openBulkModal('attendance');
         return;
@@ -7263,7 +7099,7 @@ async function autoCreateAbsenceRecord(studentId, overrides) {
     if (student) {
         const dayName = getDayName(selectedDate);
         const classCodes = (student.enrollments || [])
-            .filter(e => e.day && e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester))
+            .filter(e => e.day && e.day.includes(dayName))
             .map(e => enrollmentCode(e))
             .filter(Boolean);
         name = student.name || '';
@@ -7500,7 +7336,6 @@ function oxFieldLabel(field) {
 }
 
 function toggleHwDomainOX(studentId, field, domain) {
-    if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     if (!checkCanEditGrading(studentId)) return;
     if (bulkMode && selectedStudentIds.size >= 2 && selectedStudentIds.has(studentId)) {
         openBulkModal('ox', field, domain);
@@ -7554,7 +7389,6 @@ function applyHwDomainOX(studentId, field, domain, forceValue) {
 // ─── Field change handlers ──────────────────────────────────────────────────
 
 function handleAttendanceChange(studentId, field, value) {
-    if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     const rec = dailyRecords[studentId] || {};
     const attendance = { ...(rec.attendance || {}), [field]: value };
     saveDailyRecord(studentId, { attendance });
@@ -7601,7 +7435,6 @@ async function reloadForDate() {
     await syncAbsenceRecords();
     selectedNextHwClass = null;
     updateDateDisplay();
-    updateReadonlyBanner();
     renderSubFilters();
     renderListPanel();
     if (selectedStudentId) renderStudentDetail(selectedStudentId);
@@ -8320,13 +8153,12 @@ async function saveTestFromModal() {
 // ─── 등원예정시간 (학생 상세 패널에서 사용, students 컬렉션에 영구 저장) ──────
 
 async function saveStudentScheduledTime(studentId, classCode, time) {
-    if (isPastSemester()) { alert('과거 학기는 수정할 수 없습니다.'); return; }
     const student = allStudents.find(s => s.docId === studentId);
     if (!student) return;
 
     const dayName = getDayName(selectedDate);
     const enrollments = [...student.enrollments];
-    const idx = enrollments.findIndex(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === classCode);
+    const idx = enrollments.findIndex(e => e.day.includes(dayName) && enrollmentCode(e) === classCode);
     if (idx === -1) return;
 
     // 반 기본시간과 동일하거나 빈값이면 개별시간 제거 (fallback 사용)
@@ -9046,9 +8878,6 @@ onAuthStateChanged(auth, async (user) => {
             await promoteEnrollPending();
             await loadWithdrawnStudents();
             buildSiblingMap();
-            await loadSemesterSettings();
-            getCurrentSemester();
-            buildSemesterFilter();
             await trackTeacherLogin(user);
             await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadTempClassOverrides(selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadUserRole(), loadClassSettings(), loadClassNextHw(selectedDate), loadTeachers()]);
             await syncAbsenceRecords();
@@ -9060,8 +8889,7 @@ onAuthStateChanged(auth, async (user) => {
         autoCloseOldRecords().catch(e => console.warn('[autoClose]', e));
         syncTaskStudentNames().catch(e => console.warn('[syncNames]', e));
         updateDateDisplay();
-        updateReadonlyBanner();
-        renderBranchFilter();
+            renderBranchFilter();
         renderSubFilters();
         updateL1ExpandIcons();
         renderListPanel();
@@ -9150,13 +8978,13 @@ async function exportDailyReport() {
     const dayName = getDayName(selectedDate);
     let students = allStudents.filter(s =>
         s.status !== '퇴원' &&
-        getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester))
+        getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayName))
     );
     students = students.filter(s => matchesBranchFilter(s));
     if (selectedClassCode) {
         students = students.filter(s =>
             getActiveEnrollments(s, selectedDate).some(e =>
-                e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester) && enrollmentCode(e) === selectedClassCode
+                e.day.includes(dayName) && enrollmentCode(e) === selectedClassCode
             )
         );
     }
@@ -9208,7 +9036,7 @@ async function exportDailyReport() {
     };
 
     const dataRows = students.map(s => {
-        const todayEnroll = getActiveEnrollments(s, selectedDate).find(e => e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester));
+        const todayEnroll = getActiveEnrollments(s, selectedDate).find(e => e.day.includes(dayName));
         const code = todayEnroll ? enrollmentCode(todayEnroll) : '';
         const rec = dailyRecords[s.docId] || {};
         const teacher = classSettings[code]?.teacher ? getTeacherName(classSettings[code].teacher) : '';
@@ -9725,9 +9553,6 @@ window.refreshData = async () => {
     await loadStudents();
     await promoteEnrollPending();
     await loadWithdrawnStudents();
-    await loadSemesterSettings(true);
-    getCurrentSemester();
-    buildSemesterFilter();
     await Promise.allSettled([loadDailyRecords(selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(selectedDate), loadTempClassOverrides(selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadRoleMemos(), loadClassSettings(true), loadClassNextHw(selectedDate), loadTeachers()]);
     await syncAbsenceRecords();
     renderBranchFilter();
@@ -10167,7 +9992,7 @@ function generateDataTemplate(studentId) {
     if (student) {
         const dayName = getDayName(selectedDate);
         const todayEnrolls = student.enrollments.filter(e =>
-            e.day.includes(dayName) && (!selectedSemester || e.semester === selectedSemester)
+            e.day.includes(dayName)
         );
         const NEXT_HW_NAMES = {
             'Gr': '문법', 'A/G': '실전문법', 'R/C': '독해',

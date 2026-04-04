@@ -193,7 +193,7 @@ const TABS = [
           <li>선택한 폴더에 구글시트가 자동 생성되고 새 탭으로 열립니다.</li>
         </ol>
         <p class="help-guide-desc" style="margin-top:8px;">
-          현재 필터(소속, 반, 학기)가 적용된 학생 데이터가 내보내집니다.
+          현재 필터(소속, 반)가 적용된 학생 데이터가 내보내집니다.
           처음 사용 시 드라이브 권한을 위해 <strong>로그아웃 후 재로그인</strong>이 필요할 수 있습니다.
         </p>
       </section>
@@ -222,15 +222,6 @@ const TABS = [
 
   function buildSidebarFilters() {
     return `
-      <section class="help-guide-section">
-        <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">calendar_month</span>
-          학기 선택
-        </h3>
-        <p class="help-guide-desc">
-          사이드바 상단의 드롭다운에서 학기를 선택합니다.
-        </p>
-      </section>
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
@@ -362,7 +353,7 @@ const TABS = [
     const faqs = [
       {
         q: '데이터가 안 보여요',
-        a: '먼저 우측 상단에서 <strong>Google 로그인</strong>이 되어 있는지 확인하세요. 로그인 후에도 데이터가 비어 있다면, 사이드바 상단의 <strong>학기 선택</strong>이 올바른지, 그리고 <strong>날짜</strong>에 해당하는 데이터가 있는지 확인하세요.',
+        a: '먼저 우측 상단에서 <strong>Google 로그인</strong>이 되어 있는지 확인하세요. 로그인 후에도 데이터가 비어 있다면, <strong>날짜</strong>에 해당하는 데이터가 있는지 확인하세요.',
       },
       {
         q: '출결 변경이 안 돼요',
