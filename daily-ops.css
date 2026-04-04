@@ -3452,6 +3452,8 @@ textarea.field-input {
 .naesin-att-btn.att-active { background: #f1f5f9; color: #334155; border-color: #94a3b8; }
 .naesin-schedule-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; }
 .naesin-day-badge { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+.naesin-day-toggle { cursor: pointer; transition: transform 0.1s, opacity 0.1s; }
+.naesin-day-toggle:hover { transform: scale(1.15); opacity: 0.85; }
 .naesin-day-active { background: var(--primary); color: #fff; }
 .naesin-day-today { background: #f59e0b; color: #fff; }
 .naesin-day-inactive { background: #f1f5f9; color: #94a3b8; }

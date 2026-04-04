@@ -269,19 +269,24 @@ export function renderNaesinDetail(studentId) {
     // ── Section 3: 등원요일·시간 ──
     const allDays = ['월', '화', '수', '목', '금', '토', '일'];
     const classSched = cs.schedule || {};
+    const studentDays = enrollment.day || [];
 
-    // 요일 배지 (반 스케줄 기준, 읽기 전용)
+    // 요일 배지 (반 스케줄에 있는 요일만 표시, 학생 enrollment.day 기준 토글)
     const dayTogglesHtml = allDays.map(day => {
-        const isActive = days.includes(day);
+        if (!days.includes(day)) return ''; // 반 스케줄에 없는 요일은 표시 안 함
+        const isEnrolled = studentDays.includes(day);
         const isToday  = day === dayName;
-        const cls = isToday && isActive ? 'naesin-day-today'
-                  : isActive            ? 'naesin-day-active'
-                  :                       'naesin-day-inactive';
-        return `<div class="naesin-day-badge ${cls}">${_esc(day)}</div>`;
+        const cls = isToday && isEnrolled ? 'naesin-day-today'
+                  : isEnrolled            ? 'naesin-day-active'
+                  :                         'naesin-day-inactive';
+        return `<div class="naesin-day-badge naesin-day-toggle ${cls}"
+            onclick="window.toggleNaesinDay('${_escAttr(studentId)}', '${_escAttr(day)}')"
+            title="클릭하여 ${isEnrolled ? '제거' : '추가'}">${_esc(day)}</div>`;
     }).join('');
 
-    // 활성 요일별 시간 목록
-    const timeRowsHtml = days.length > 0 ? days.map(day => {
+    // 학생 등록 요일별 시간 목록
+    const enrolledDays = days.filter(d => studentDays.includes(d));
+    const timeRowsHtml = enrolledDays.length > 0 ? enrolledDays.map(day => {
         const studentOverride = enrollment.naesin_schedule?.[day];
         const classDefault    = classSched[day];
         let timeText, isOverride, timeLabel;
@@ -475,6 +480,51 @@ window.editNaesinTime = async function(studentId, day) {
     }
 
     if (window.renderNaesinDetail) window.renderNaesinDetail(studentId);
+};
+
+// ─── 내신 등원요일 토글 ──────────────────────────────────────────────────────
+window.toggleNaesinDay = async function(studentId, day) {
+    const { allStudents, selectedDate, classSettings } = _state();
+
+    const student = allStudents?.find(s => s.docId === studentId);
+    if (!student) return;
+
+    const info = getNaesinInfo(student, selectedDate);
+    if (!info) return;
+
+    const { enrollment } = info;
+    const enrollments = (student.enrollments || []).slice();
+    const enrollIdx = enrollments.indexOf(enrollment);
+    if (enrollIdx === -1) return;
+
+    const currentDays = [...(enrollments[enrollIdx].day || [])];
+    const idx = currentDays.indexOf(day);
+
+    if (idx >= 0) {
+        if (currentDays.length <= 1) {
+            alert('최소 1개 요일은 필요합니다.');
+            return;
+        }
+        currentDays.splice(idx, 1);
+    } else {
+        currentDays.push(day);
+    }
+
+    enrollments[enrollIdx] = { ...enrollments[enrollIdx], day: currentDays };
+
+    window.showSaveIndicator?.('saving');
+    try {
+        await updateDoc(doc(db, 'students', studentId), { enrollments });
+        student.enrollments = enrollments;
+        window.showSaveIndicator?.('saved');
+    } catch (err) {
+        console.error('[toggleNaesinDay] Firestore 저장 실패:', err);
+        window.showSaveIndicator?.('error');
+        return;
+    }
+
+    if (window.renderNaesinDetail) window.renderNaesinDetail(studentId);
+    if (window.renderListPanel) window.renderListPanel();
 };
 
 // ─── 반 관리 상세패널 (내신 반 설정) ──────────────────────────────────────────
