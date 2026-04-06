@@ -6,6 +6,7 @@ import {
 import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
 import { todayStr, getDayName, addDays } from './src/shared/firestore-helpers.js';
+import { auditUpdate, auditSet, auditAdd } from './audit.js';
 
 // ─── State ───────────────────────────────────────────────────────────────────
 let currentUser = null;
@@ -194,6 +195,7 @@ onAuthStateChanged(auth, async (user) => {
         }
 
         currentUser = user;
+        window._auditUser = user.email || null;
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('main-screen').style.display = 'block';
         document.getElementById('user-email').textContent = user.email;
@@ -644,10 +646,8 @@ async function saveDailyCheck(checkId) {
     showSaveIndicator('saving');
 
     try {
-        await setDoc(doc(db, 'daily_checks', checkId), {
+        await auditSet(doc(db, 'daily_checks', checkId), {
             ...data,
-            updated_by: currentUser?.email || 'system',
-            updated_at: serverTimestamp(),
         }, { merge: true });
 
         showSaveIndicator('saved');
@@ -834,7 +834,7 @@ window.savePostponedTask = async () => {
     const student = allStudents.find(s => s.id === _postponeContext.studentId);
 
     try {
-        await addDoc(collection(db, 'postponed_tasks'), {
+        await auditAdd(collection(db, 'postponed_tasks'), {
             student_id: _postponeContext.studentId,
             student_name: student?.name || '',
             original_date: selectedDate,
@@ -865,11 +865,9 @@ window.savePostponedTask = async () => {
 
 window.completePostponed = async (taskId) => {
     try {
-        await updateDoc(doc(db, 'postponed_tasks', taskId), {
+        await auditUpdate(doc(db, 'postponed_tasks', taskId), {
             status: 'done',
             result: '완료',
-            updated_by: currentUser?.email || 'system',
-            updated_at: serverTimestamp(),
         });
         // 로컬 상태만 업데이트 (loadDailyData 재호출 대신)
         postponedTasks = postponedTasks.filter(t => t.id !== taskId);
@@ -881,11 +879,9 @@ window.completePostponed = async (taskId) => {
 
 window.absentPostponed = async (taskId) => {
     try {
-        await updateDoc(doc(db, 'postponed_tasks', taskId), {
+        await auditUpdate(doc(db, 'postponed_tasks', taskId), {
             status: 'absent',
             result: '결석',
-            updated_by: currentUser?.email || 'system',
-            updated_at: serverTimestamp(),
         });
         // 로컬 상태만 업데이트 (loadDailyData 재호출 대신)
         postponedTasks = postponedTasks.filter(t => t.id !== taskId);
