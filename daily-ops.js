@@ -1,7 +1,7 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import {
-    collection, getDocs, doc, setDoc, getDoc, getDocFromServer, addDoc,
-    query, where, serverTimestamp, updateDoc, writeBatch, arrayUnion, deleteField, Timestamp, deleteDoc, limit,
+    collection, getDocs, doc, getDoc, getDocFromServer,
+    query, where, serverTimestamp, writeBatch, arrayUnion, deleteField, Timestamp, limit,
     onSnapshot
 } from 'firebase/firestore';
 import { auth, db, geminiModel } from './firebase-config.js';
@@ -306,7 +306,7 @@ async function loadTeachers() {
 async function trackTeacherLogin(user) {
     if (!user?.email) return;
     try {
-        await setDoc(doc(db, 'teachers', user.email), {
+        await auditSet(doc(db, 'teachers', user.email), {
             email: user.email,
             display_name: user.displayName || user.email.split('@')[0],
             photo_url: user.photoURL || '',
@@ -348,12 +348,10 @@ function saveClassNextHw(classCode, domain, text, immediate = false) {
         showSaveIndicator('saving');
         try {
             const docId = `${classCode}_${selectedDate}`;
-            await setDoc(doc(db, 'class_next_hw', docId), {
+            await auditSet(doc(db, 'class_next_hw', docId), {
                 class_code: classCode,
                 date: selectedDate,
-                domains: classNextHw[classCode].domains,
-                updated_by: currentUser.email,
-                updated_at: serverTimestamp()
+                domains: classNextHw[classCode].domains
             }, { merge: true });
             showSaveIndicator('saved');
         } catch (err) {
@@ -412,7 +410,7 @@ function getStudentTestItems(studentId) {
 }
 
 async function saveClassSettings(classCode, data) {
-    await setDoc(doc(db, 'class_settings', classCode), data, { merge: true });
+    await auditSet(doc(db, 'class_settings', classCode), data, { merge: true });
     classSettings[classCode] = { ...classSettings[classCode], ...data };
 }
 
@@ -475,7 +473,7 @@ async function promoteEnrollPending() {
     if (pending.length === 0) return;
     const batch = writeBatch(db);
     for (const s of pending) {
-        batch.update(doc(db, 'students', s.docId), { status: '재원', updated_at: serverTimestamp() });
+        batchUpdate(batch, doc(db, 'students', s.docId), { status: '재원' });
         s.status = '재원';
     }
     try {
@@ -570,7 +568,7 @@ window.createTempClassOverride = async function(studentId, targetClassCode, date
         const batch = writeBatch(db);
         for (const date of dates) {
             const docRef = doc(collection(db, 'temp_class_overrides'));
-            batch.set(docRef, {
+            batchSet(batch, docRef, {
                 student_id: studentId,
                 student_name: student.name || '',
                 original_class_code: originalCode,
@@ -600,7 +598,7 @@ window.cancelTempClassOverride = async function(docId, studentId) {
     if (!confirm('이 타반수업을 취소하시겠습니까?')) return;
     showSaveIndicator('saving');
     try {
-        await updateDoc(doc(db, 'temp_class_overrides', docId), { status: 'cancelled' });
+        await auditUpdate(doc(db, 'temp_class_overrides', docId), { status: 'cancelled' });
         await loadTempClassOverrides(selectedDate);
         renderSubFilters();
         renderListPanel();
@@ -720,7 +718,7 @@ async function syncTaskStudentNames() {
     console.log(`[syncTaskStudentNames] ${updates.length}건 이름 동기화`);
     for (const u of updates) {
         try {
-            await updateDoc(doc(db, u.col, u.docId), { student_name: u.name });
+            await auditUpdate(doc(db, u.col, u.docId), { student_name: u.name });
             u.task.student_name = u.name;
         } catch (err) {
             console.error('이름 동기화 실패:', u.col, u.docId, err);
@@ -733,10 +731,8 @@ async function autoCloseOldRecords() {
     const oldAbsences = absenceRecords.filter(r => _isOlderThanOneMonth(r.created_at));
     for (const r of oldAbsences) {
         try {
-            await updateDoc(doc(db, 'absence_records', r.docId), {
-                status: 'closed',
-                updated_by: 'system_auto',
-                updated_at: serverTimestamp()
+            await auditUpdate(doc(db, 'absence_records', r.docId), {
+                status: 'closed'
             });
         } catch (err) {
             console.error('결석대장 자동종료 실패:', r.docId, err);
@@ -756,14 +752,13 @@ async function autoCloseOldRecords() {
             const updates = {
                 status: 'approved',
                 approved_by: 'system_auto',
-                approved_at: serverTimestamp(),
-                updated_at: serverTimestamp()
+                approved_at: serverTimestamp()
             };
             if (!r.teacher_approved_by) {
                 updates.teacher_approved_by = 'system_auto';
                 updates.teacher_approved_at = serverTimestamp();
             }
-            await updateDoc(doc(db, 'leave_requests', r.docId), updates);
+            await auditUpdate(doc(db, 'leave_requests', r.docId), updates);
             r.status = 'approved';
             if (!r.teacher_approved_by) r.teacher_approved_by = 'system_auto';
             if (!r.approved_by) r.approved_by = 'system_auto';
@@ -781,7 +776,7 @@ async function autoCloseOldRecords() {
     const oldHwTasks = hwFailTasks.filter(t => t.status === 'pending' && t.scheduled_date && _isOlderThanOneMonth(t.scheduled_date));
     for (const t of oldHwTasks) {
         try {
-            await updateDoc(doc(db, 'hw_fail_tasks', t.docId), {
+            await auditUpdate(doc(db, 'hw_fail_tasks', t.docId), {
                 status: '기타',
                 completed_by: 'system_auto',
                 completed_at: new Date().toISOString()
@@ -796,7 +791,7 @@ async function autoCloseOldRecords() {
     const oldTestTasks = testFailTasks.filter(t => t.status === 'pending' && t.scheduled_date && _isOlderThanOneMonth(t.scheduled_date));
     for (const t of oldTestTasks) {
         try {
-            await updateDoc(doc(db, 'test_fail_tasks', t.docId), {
+            await auditUpdate(doc(db, 'test_fail_tasks', t.docId), {
                 status: '기타',
                 completed_by: 'system_auto',
                 completed_at: new Date().toISOString()
@@ -831,10 +826,8 @@ async function autoCloseOldRecords() {
     }
     for (const r of dupsToRemove) {
         try {
-            await updateDoc(doc(db, 'absence_records', r.docId), {
-                status: 'closed',
-                updated_by: 'system_dedup',
-                updated_at: serverTimestamp()
+            await auditUpdate(doc(db, 'absence_records', r.docId), {
+                status: 'closed'
             });
         } catch (err) {
             console.error('중복 결석대장 정리 실패:', r.docId, err);
@@ -854,7 +847,7 @@ async function autoCloseOldRecords() {
     for (const r of dedupClassCodeRecords) {
         const fixed = [...new Set(r.class_code.split(',').map(s => s.trim()).filter(Boolean))].join(', ');
         try {
-            await updateDoc(doc(db, 'absence_records', r.docId), { class_code: fixed });
+            await auditUpdate(doc(db, 'absence_records', r.docId), { class_code: fixed });
             r.class_code = fixed;
         } catch (err) {
             console.error('class_code 중복 정리 실패:', r.docId, err);
@@ -884,13 +877,11 @@ function saveDailyRecord(studentId, updates) {
         try {
             const docId = makeDailyRecordId(studentId, selectedDate);
             const student = allStudents.find(s => s.docId === studentId);
-            await setDoc(doc(db, 'daily_records', docId), {
+            await auditSet(doc(db, 'daily_records', docId), {
                 student_id: studentId,
                 date: selectedDate,
                 branch: branchFromStudent(student || {}),
-                ...updates,
-                updated_by: currentUser.email,
-                updated_at: serverTimestamp()
+                ...updates
             }, { merge: true });
 
             // 로컬 캐시 업데이트
@@ -911,7 +902,7 @@ function saveDailyRecord(studentId, updates) {
 async function saveRetakeSchedule(data) {
     showSaveIndicator('saving');
     try {
-        const docRef = await addDoc(collection(db, 'retake_schedule'), {
+        const docRef = await auditAdd(collection(db, 'retake_schedule'), {
             ...data,
             created_by: currentUser.email,
             created_at: serverTimestamp()
@@ -956,13 +947,11 @@ async function saveImmediately(studentId, updates) {
     try {
         const docId = makeDailyRecordId(studentId, selectedDate);
         const student = allStudents.find(s => s.docId === studentId);
-        await setDoc(doc(db, 'daily_records', docId), {
+        await auditSet(doc(db, 'daily_records', docId), {
             student_id: studentId,
             date: selectedDate,
             branch: branchFromStudent(student || {}),
-            ...updates,
-            updated_by: currentUser.email,
-            updated_at: serverTimestamp()
+            ...updates
         }, { merge: true });
 
         if (!dailyRecords[studentId]) {
@@ -4159,13 +4148,11 @@ async function _saveHwFailActionOnly(studentId, hwFailAction) {
     const docId = makeDailyRecordId(studentId, selectedDate);
     const student = allStudents.find(s => s.docId === studentId);
     try {
-        await setDoc(doc(db, 'daily_records', docId), {
+        await auditSet(doc(db, 'daily_records', docId), {
             student_id: studentId,
             date: selectedDate,
             branch: branchFromStudent(student || {}),
-            hw_fail_action: hwFailAction,
-            updated_by: currentUser.email,
-            updated_at: serverTimestamp()
+            hw_fail_action: hwFailAction
         }, { merge: true });
         if (!dailyRecords[studentId]) dailyRecords[studentId] = { student_id: studentId, date: selectedDate };
         dailyRecords[studentId].hw_fail_action = hwFailAction;
@@ -4182,13 +4169,11 @@ async function saveHwFailAction(studentId, hwFailAction, onlyDomain) {
     const docId = makeDailyRecordId(studentId, selectedDate);
     const student = allStudents.find(s => s.docId === studentId);
     try {
-        await setDoc(doc(db, 'daily_records', docId), {
+        await auditSet(doc(db, 'daily_records', docId), {
             student_id: studentId,
             date: selectedDate,
             branch: branchFromStudent(student || {}),
-            hw_fail_action: hwFailAction,
-            updated_by: currentUser.email,
-            updated_at: serverTimestamp()
+            hw_fail_action: hwFailAction
         }, { merge: true });
         if (!dailyRecords[studentId]) dailyRecords[studentId] = { student_id: studentId, date: selectedDate };
         dailyRecords[studentId].hw_fail_action = hwFailAction;
@@ -4224,7 +4209,7 @@ async function saveHwFailAction(studentId, hwFailAction, onlyDomain) {
                 created_at: existing?.created_at || new Date().toISOString(),
                 branch: branchFromStudent(student || {}),
             };
-            hwWriteBatch.set(doc(db, 'hw_fail_tasks', taskDocId), taskData, { merge: true });
+            batchSet(hwWriteBatch, doc(db, 'hw_fail_tasks', taskDocId), taskData, { merge: true });
             hwWriteCount++;
             const idx = hwFailTasks.findIndex(t => t.docId === taskDocId);
             if (idx >= 0) {
@@ -4244,7 +4229,7 @@ async function saveHwFailAction(studentId, hwFailAction, onlyDomain) {
         if (hwCancelTargets.length > 0) {
             const cancelBatch = writeBatch(db);
             for (const t of hwCancelTargets) {
-                cancelBatch.update(doc(db, 'hw_fail_tasks', t.docId), {
+                batchUpdate(cancelBatch, doc(db, 'hw_fail_tasks', t.docId), {
                     status: '취소',
                     cancelled_by: (currentUser?.email || '').split('@')[0],
                     cancelled_at: new Date().toISOString()
@@ -4373,7 +4358,7 @@ window.completeHwFailTask = async function(taskDocId, studentId) {
     showSaveIndicator('saving');
     try {
         const completedBy = (currentUser?.email || '').split('@')[0];
-        await updateDoc(doc(db, 'hw_fail_tasks', taskDocId), {
+        await auditUpdate(doc(db, 'hw_fail_tasks', taskDocId), {
             status: '완료',
             completed_by: completedBy,
             completed_at: new Date().toISOString()
@@ -4395,7 +4380,7 @@ window.cancelHwFailTask = async function(taskDocId, studentId) {
     showSaveIndicator('saving');
     try {
         const cancelledBy = (currentUser?.email || '').split('@')[0];
-        await updateDoc(doc(db, 'hw_fail_tasks', taskDocId), {
+        await auditUpdate(doc(db, 'hw_fail_tasks', taskDocId), {
             status: '취소',
             cancelled_by: cancelledBy,
             cancelled_at: new Date().toISOString()
@@ -4465,13 +4450,11 @@ window.saveReschedule = async function() {
 
         showSaveIndicator('saving');
         try {
-            await updateDoc(doc(db, 'absence_records', docId), {
+            await auditUpdate(doc(db, 'absence_records', docId), {
                 makeup_date: newDate,
                 makeup_time: newTime || '',
                 makeup_status: 'pending',
-                reschedule_history: arrayUnion(entry),
-                updated_by: currentUser?.email || '',
-                updated_at: serverTimestamp()
+                reschedule_history: arrayUnion(entry)
             });
             r.makeup_date = newDate;
             r.makeup_time = newTime || '';
@@ -4507,7 +4490,7 @@ window.saveReschedule = async function() {
 
     showSaveIndicator('saving');
     try {
-        await updateDoc(doc(db, col, docId), {
+        await auditUpdate(doc(db, col, docId), {
             scheduled_date: newDate,
             scheduled_time: newTime || '',
             reschedule_history: arrayUnion(entry)
@@ -4539,10 +4522,8 @@ window.updateAbsenceField = async function(docId, field, value, studentId) {
     if (!r) return;
     showSaveIndicator('saving');
     try {
-        await updateDoc(doc(db, 'absence_records', docId), {
-            [field]: value,
-            updated_by: currentUser?.email || '',
-            updated_at: serverTimestamp()
+        await auditUpdate(doc(db, 'absence_records', docId), {
+            [field]: value
         });
         r[field] = value;
         _scheduledVisitsCache = null;
@@ -4562,10 +4543,8 @@ window.toggleConsultation = async function(docId, studentId) {
     const newVal = !r.consultation_done;
     showSaveIndicator('saving');
     try {
-        await updateDoc(doc(db, 'absence_records', docId), {
-            consultation_done: newVal,
-            updated_by: currentUser?.email || '',
-            updated_at: serverTimestamp()
+        await auditUpdate(doc(db, 'absence_records', docId), {
+            consultation_done: newVal
         });
         r.consultation_done = newVal;
         if (sid) renderStudentDetail(sid);
@@ -4592,7 +4571,7 @@ window.toggleReturnConsult = async function(studentId) {
             updateData.return_consult_done_by = deleteField();
             updateData.return_consult_done_at = deleteField();
         }
-        await updateDoc(doc(db, 'students', studentId), updateData);
+        await auditUpdate(doc(db, 'students', studentId), updateData);
         s.return_consult_done = newVal;
         if (newVal) {
             s.return_consult_done_by = currentUser?.email || '';
@@ -4620,7 +4599,7 @@ window.updateReturnConsultNote = function(studentId, value) {
     _returnConsultNoteTimer = setTimeout(async () => {
         showSaveIndicator('saving');
         try {
-            await updateDoc(doc(db, 'students', studentId), {
+            await auditUpdate(doc(db, 'students', studentId), {
                 return_consult_note: value
             });
             showSaveIndicator('saved');
@@ -4661,10 +4640,8 @@ window.validateAndSetReasonValid = async function(docId, value, studentId) {
     updates.reason_valid = newVal;
     showSaveIndicator('saving');
     try {
-        await updateDoc(doc(db, 'absence_records', docId), {
-            ...updates,
-            updated_by: currentUser?.email || '',
-            updated_at: serverTimestamp()
+        await auditUpdate(doc(db, 'absence_records', docId), {
+            ...updates
         });
         Object.assign(r, updates);
         renderStudentDetail(studentId);
@@ -4693,10 +4670,8 @@ window.setAbsenceResolution = async function(docId, resolution, studentId) {
     const newRes = r.resolution === resolution ? 'pending' : resolution;
     showSaveIndicator('saving');
     try {
-        await updateDoc(doc(db, 'absence_records', docId), {
-            resolution: newRes,
-            updated_by: currentUser?.email || '',
-            updated_at: serverTimestamp()
+        await auditUpdate(doc(db, 'absence_records', docId), {
+            resolution: newRes
         });
         r.resolution = newRes;
         _scheduledVisitsCache = null;
@@ -4714,12 +4689,10 @@ window.completeAbsenceMakeup = async function(docId, studentId) {
     if (!r) return;
     showSaveIndicator('saving');
     try {
-        await updateDoc(doc(db, 'absence_records', docId), {
+        await auditUpdate(doc(db, 'absence_records', docId), {
             makeup_status: '완료',
             makeup_completed_by: currentUser?.email || '',
-            makeup_completed_at: serverTimestamp(),
-            updated_by: currentUser?.email || '',
-            updated_at: serverTimestamp()
+            makeup_completed_at: serverTimestamp()
         });
         r.makeup_status = '완료';
         r.makeup_completed_by = currentUser?.email || '';
@@ -4739,10 +4712,8 @@ window.markAbsenceNoShow = async function(docId, studentId) {
     if (!r) return;
     showSaveIndicator('saving');
     try {
-        await updateDoc(doc(db, 'absence_records', docId), {
-            makeup_status: '미등원',
-            updated_by: currentUser?.email || '',
-            updated_at: serverTimestamp()
+        await auditUpdate(doc(db, 'absence_records', docId), {
+            makeup_status: '미등원'
         });
         r.makeup_status = '미등원';
         _scheduledVisitsCache = null;
@@ -4761,11 +4732,9 @@ window.switchToSettlement = async function(docId, studentId) {
     if (!r) return;
     showSaveIndicator('saving');
     try {
-        await updateDoc(doc(db, 'absence_records', docId), {
+        await auditUpdate(doc(db, 'absence_records', docId), {
             resolution: '정산',
-            makeup_status: 'pending',
-            updated_by: currentUser?.email || '',
-            updated_at: serverTimestamp()
+            makeup_status: 'pending'
         });
         r.resolution = '정산';
         r.makeup_status = 'pending';
@@ -4785,19 +4754,15 @@ window.closeAbsenceRecord = async function(docId, studentId) {
     showSaveIndicator('saving');
     try {
         const absenceDate = r.absence_date || selectedDate;
-        await updateDoc(doc(db, 'absence_records', docId), {
-            status: 'closed',
-            updated_by: currentUser?.email || '',
-            updated_at: serverTimestamp()
+        await auditUpdate(doc(db, 'absence_records', docId), {
+            status: 'closed'
         });
         // daily_records에 absence_closed 마커 저장 → syncAbsenceRecords가 재생성하지 않도록
         const dailyDocId = makeDailyRecordId(studentId, absenceDate);
-        await setDoc(doc(db, 'daily_records', dailyDocId), {
+        await auditSet(doc(db, 'daily_records', dailyDocId), {
             student_id: studentId,
             date: absenceDate,
-            absence_closed: true,
-            updated_by: currentUser?.email || '',
-            updated_at: serverTimestamp()
+            absence_closed: true
         }, { merge: true });
         if (dailyRecords[studentId]) dailyRecords[studentId].absence_closed = true;
         absenceRecords = absenceRecords.filter(x => x.docId !== docId);
@@ -4821,14 +4786,12 @@ window.reopenAbsenceMakeup = async function(docId, studentId) {
     if (!r) return;
     showSaveIndicator('saving');
     try {
-        await updateDoc(doc(db, 'absence_records', docId), {
+        await auditUpdate(doc(db, 'absence_records', docId), {
             makeup_status: 'pending',
             makeup_date: '',
             makeup_time: '',
             makeup_completed_by: '',
-            makeup_completed_at: '',
-            updated_by: currentUser?.email || '',
-            updated_at: serverTimestamp()
+            makeup_completed_at: ''
         });
         r.makeup_status = 'pending';
         r.makeup_date = '';
@@ -5027,13 +4990,11 @@ async function _saveTestFailActionOnly(studentId, testFailAction) {
     const docId = makeDailyRecordId(studentId, selectedDate);
     const student = allStudents.find(s => s.docId === studentId);
     try {
-        await setDoc(doc(db, 'daily_records', docId), {
+        await auditSet(doc(db, 'daily_records', docId), {
             student_id: studentId,
             date: selectedDate,
             branch: branchFromStudent(student || {}),
-            test_fail_action: testFailAction,
-            updated_by: currentUser.email,
-            updated_at: serverTimestamp()
+            test_fail_action: testFailAction
         }, { merge: true });
         if (!dailyRecords[studentId]) dailyRecords[studentId] = { student_id: studentId, date: selectedDate };
         dailyRecords[studentId].test_fail_action = testFailAction;
@@ -5049,13 +5010,11 @@ async function saveTestFailAction(studentId, testFailAction, onlyDomain) {
     const docId = makeDailyRecordId(studentId, selectedDate);
     const student = allStudents.find(s => s.docId === studentId);
     try {
-        await setDoc(doc(db, 'daily_records', docId), {
+        await auditSet(doc(db, 'daily_records', docId), {
             student_id: studentId,
             date: selectedDate,
             branch: branchFromStudent(student || {}),
-            test_fail_action: testFailAction,
-            updated_by: currentUser.email,
-            updated_at: serverTimestamp()
+            test_fail_action: testFailAction
         }, { merge: true });
         if (!dailyRecords[studentId]) dailyRecords[studentId] = { student_id: studentId, date: selectedDate };
         dailyRecords[studentId].test_fail_action = testFailAction;
@@ -5091,7 +5050,7 @@ async function saveTestFailAction(studentId, testFailAction, onlyDomain) {
                 created_at: existing?.created_at || new Date().toISOString(),
                 branch: branchFromStudent(student || {}),
             };
-            testWriteBatch.set(doc(db, 'test_fail_tasks', taskDocId), taskData, { merge: true });
+            batchSet(testWriteBatch, doc(db, 'test_fail_tasks', taskDocId), taskData, { merge: true });
             testWriteCount++;
             const idx = testFailTasks.findIndex(t => t.docId === taskDocId);
             if (idx >= 0) {
@@ -5107,7 +5066,7 @@ async function saveTestFailAction(studentId, testFailAction, onlyDomain) {
         if (testCancelTargets.length > 0) {
             const cancelBatch = writeBatch(db);
             for (const t of testCancelTargets) {
-                cancelBatch.update(doc(db, 'test_fail_tasks', t.docId), {
+                batchUpdate(cancelBatch, doc(db, 'test_fail_tasks', t.docId), {
                     status: '취소',
                     cancelled_by: (currentUser?.email || '').split('@')[0],
                     cancelled_at: new Date().toISOString()
@@ -5129,7 +5088,7 @@ window.completeTestFailTask = async function(taskDocId, studentId) {
     showSaveIndicator('saving');
     try {
         const completedBy = (currentUser?.email || '').split('@')[0];
-        await updateDoc(doc(db, 'test_fail_tasks', taskDocId), {
+        await auditUpdate(doc(db, 'test_fail_tasks', taskDocId), {
             status: '완료',
             completed_by: completedBy,
             completed_at: new Date().toISOString()
@@ -5150,7 +5109,7 @@ window.cancelTestFailTask = async function(taskDocId, studentId) {
     showSaveIndicator('saving');
     try {
         const cancelledBy = (currentUser?.email || '').split('@')[0];
-        await updateDoc(doc(db, 'test_fail_tasks', taskDocId), {
+        await auditUpdate(doc(db, 'test_fail_tasks', taskDocId), {
             status: '취소',
             cancelled_by: cancelledBy,
             cancelled_at: new Date().toISOString()
@@ -5750,7 +5709,7 @@ async function deleteTempAttendance(docId) {
     if (!ta) return;
     if (!confirm(`"${ta.name}" 진단평가 기록을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
     try {
-        await deleteDoc(doc(db, 'temp_attendance', docId));
+        await auditDelete(doc(db, 'temp_attendance', docId));
         tempAttendances = tempAttendances.filter(t => t.docId !== docId);
         document.getElementById('detail-content').style.display = 'none';
         document.getElementById('detail-empty').style.display = '';
@@ -6977,13 +6936,11 @@ async function saveExtraVisit(studentId, field, value) {
         const docId = makeDailyRecordId(studentId, targetDate);
         const student = allStudents.find(s => s.docId === studentId);
         try {
-            await setDoc(doc(db, 'daily_records', docId), {
+            await auditSet(doc(db, 'daily_records', docId), {
                 student_id: studentId,
                 date: targetDate,
                 branch: branchFromStudent(student || {}),
-                extra_visit: extraVisit,
-                updated_by: currentUser.email,
-                updated_at: serverTimestamp()
+                extra_visit: extraVisit
             }, { merge: true });
         } catch (err) {
             console.error('클리닉 미래 날짜 저장 실패:', err);
@@ -7020,7 +6977,7 @@ async function cycleTempArrival(docId) {
     showSaveIndicator('saving');
     try {
         const update = next ? { temp_arrival: next } : { temp_arrival: deleteField() };
-        await updateDoc(doc(db, 'temp_attendance', docId), update);
+        await auditUpdate(doc(db, 'temp_attendance', docId), update);
         ta.temp_arrival = next || undefined;
         _scheduledVisitsCache = null;
         renderSubFilters();
@@ -7139,13 +7096,11 @@ async function autoCreateAbsenceRecord(studentId, overrides) {
             // 결석을 체크한 사람/시간 (daily_records 기준, syncAbsenceRecords 실행자가 아닌 실제 체크자)
             marked_absent_by: dailyRecords[studentId]?.updated_by || currentUser?.email || '',
             marked_absent_at: dailyRecords[studentId]?.updated_at || '',
-            created_by: currentUser?.email || '',
-            updated_by: currentUser?.email || ''
+            created_by: currentUser?.email || ''
         };
-        await setDoc(doc(db, 'absence_records', absDocId), {
+        await auditSet(doc(db, 'absence_records', absDocId), {
             ...record,
-            created_at: serverTimestamp(),
-            updated_at: serverTimestamp()
+            created_at: serverTimestamp()
         });
         if (!absenceRecords.some(r => r.docId === absDocId)) {
             absenceRecords.push({
@@ -7170,7 +7125,7 @@ async function autoRemoveAbsenceRecord(studentId) {
         return;
     }
     try {
-        await deleteDoc(doc(db, 'absence_records', record.docId));
+        await auditDelete(doc(db, 'absence_records', record.docId));
         absenceRecords.splice(idx, 1);
         renderSubFilters();
     } catch (err) {
@@ -7488,11 +7443,10 @@ async function completeRetake(retakeDocId) {
     showSaveIndicator('saving');
     try {
         const completedBy = (currentUser?.email || '').split('@')[0];
-        await updateDoc(doc(db, 'retake_schedule', retakeDocId), {
+        await auditUpdate(doc(db, 'retake_schedule', retakeDocId), {
             status: '완료',
             completed_by: completedBy,
-            completed_at: new Date().toISOString(),
-            updated_at: serverTimestamp()
+            completed_at: new Date().toISOString()
         });
         const r = retakeSchedules.find(r => r.docId === retakeDocId);
         if (r) { r.status = '완료'; r.completed_by = completedBy; }
@@ -7510,11 +7464,10 @@ async function cancelRetake(retakeDocId) {
     showSaveIndicator('saving');
     try {
         const cancelledBy = (currentUser?.email || '').split('@')[0];
-        await updateDoc(doc(db, 'retake_schedule', retakeDocId), {
+        await auditUpdate(doc(db, 'retake_schedule', retakeDocId), {
             status: '취소',
             cancelled_by: cancelledBy,
-            cancelled_at: new Date().toISOString(),
-            updated_at: serverTimestamp()
+            cancelled_at: new Date().toISOString()
         });
         const r = retakeSchedules.find(r => r.docId === retakeDocId);
         if (r) { r.status = '취소'; r.cancelled_by = cancelledBy; }
@@ -7671,8 +7624,7 @@ async function submitLeaveRequest() {
         previous_status: s.status || '',
         requested_by: currentUser?.email || '',
         requested_at: serverTimestamp(),
-        created_at: serverTimestamp(),
-        updated_at: serverTimestamp()
+        created_at: serverTimestamp()
     };
 
     if (showSub) {
@@ -7697,7 +7649,7 @@ async function submitLeaveRequest() {
     }
 
     try {
-        const docRef = await addDoc(collection(db, 'leave_requests'), data);
+        const docRef = await auditAdd(collection(db, 'leave_requests'), data);
         leaveRequests.push({ docId: docRef.id, ...data, requested_at: new Date(), created_at: new Date() });
         document.getElementById('leave-request-modal').style.display = 'none';
         showSaveIndicator('saved');
@@ -7717,7 +7669,7 @@ async function toggleCancelLeaveRequest(docId, studentId) {
     if (!r) return;
     const isCancelled = r.status === 'cancelled';
     try {
-        await updateDoc(doc(db, 'leave_requests', docId), { status: isCancelled ? 'requested' : 'cancelled', updated_at: serverTimestamp() });
+        await auditUpdate(doc(db, 'leave_requests', docId), { status: isCancelled ? 'requested' : 'cancelled' });
         const lrIdx = leaveRequests.findIndex(lr => lr.docId === docId);
         if (lrIdx >= 0) leaveRequests[lrIdx].status = isCancelled ? 'requested' : 'cancelled';
         showSaveIndicator('saved');
@@ -7735,7 +7687,7 @@ async function teacherApproveLeaveRequest(docId, studentId) {
     if (r.teacher_approved_by) {
         if (!confirm(`${r.student_name} — 교수부 승인을 취소하시겠습니까?`)) return;
         try {
-            await updateDoc(doc(db, 'leave_requests', docId), { teacher_approved_by: deleteField(), teacher_approved_at: deleteField(), updated_at: serverTimestamp() });
+            await auditUpdate(doc(db, 'leave_requests', docId), { teacher_approved_by: deleteField(), teacher_approved_at: deleteField() });
             const lrIdx = leaveRequests.findIndex(lr => lr.docId === docId);
             if (lrIdx >= 0) { delete leaveRequests[lrIdx].teacher_approved_by; delete leaveRequests[lrIdx].teacher_approved_at; }
             showSaveIndicator('saved');
@@ -7753,9 +7705,9 @@ async function teacherApproveLeaveRequest(docId, studentId) {
     if (!confirm(confirmMsg)) return;
 
     try {
-        const updates = { teacher_approved_by: currentUser?.email || '', teacher_approved_at: serverTimestamp(), updated_at: serverTimestamp() };
+        const updates = { teacher_approved_by: currentUser?.email || '', teacher_approved_at: serverTimestamp() };
         if (r.approved_by) updates.status = 'approved';
-        await updateDoc(doc(db, 'leave_requests', docId), updates);
+        await auditUpdate(doc(db, 'leave_requests', docId), updates);
 
         const lrIdx = leaveRequests.findIndex(lr => lr.docId === docId);
         if (lrIdx >= 0) {
@@ -7786,7 +7738,7 @@ async function approveLeaveRequest(docId, studentId) {
     if (r.approved_by) {
         if (!confirm(`${r.student_name} — 행정부 승인을 취소하시겠습니까?`)) return;
         try {
-            await updateDoc(doc(db, 'leave_requests', docId), { approved_by: deleteField(), approved_at: deleteField(), updated_at: serverTimestamp() });
+            await auditUpdate(doc(db, 'leave_requests', docId), { approved_by: deleteField(), approved_at: deleteField() });
             const lrIdx = leaveRequests.findIndex(lr => lr.docId === docId);
             if (lrIdx >= 0) { delete leaveRequests[lrIdx].approved_by; delete leaveRequests[lrIdx].approved_at; }
             showSaveIndicator('saved');
@@ -7805,9 +7757,9 @@ async function approveLeaveRequest(docId, studentId) {
     if (!confirmMsg || !confirm(confirmMsg)) return;
 
     try {
-        const updates = { approved_by: currentUser?.email || '', approved_at: serverTimestamp(), updated_at: serverTimestamp() };
+        const updates = { approved_by: currentUser?.email || '', approved_at: serverTimestamp() };
         if (r.teacher_approved_by) updates.status = 'approved';
-        await updateDoc(doc(db, 'leave_requests', docId), updates);
+        await auditUpdate(doc(db, 'leave_requests', docId), updates);
 
         const lrIdx = leaveRequests.findIndex(lr => lr.docId === docId);
         if (lrIdx >= 0) {
@@ -7867,8 +7819,8 @@ async function _finalizeLeaveDSC(r, studentId) {
 
     const changeType = isReturn ? 'RETURN' : isWithdrawal ? 'WITHDRAW' : 'UPDATE';
     await Promise.all([
-        updateDoc(doc(db, 'students', studentId), studentUpdate),
-        addDoc(collection(db, 'history_logs'), {
+        auditUpdate(doc(db, 'students', studentId), studentUpdate),
+        auditAdd(collection(db, 'history_logs'), {
             doc_id: studentId, change_type: changeType,
             before: JSON.stringify({ status: beforeStatus, pause_start_date: beforeData.pause_start_date || '', pause_end_date: beforeData.pause_end_date || '' }),
             after: JSON.stringify({ status: studentUpdate.status || beforeStatus, pause_start_date: (isReturn || isWithdrawal) ? '' : (studentUpdate.pause_start_date || ''), pause_end_date: (isReturn || isWithdrawal) ? '' : (studentUpdate.pause_end_date || '') }),
@@ -7902,9 +7854,8 @@ async function _finalizeLeaveDSC(r, studentId) {
 async function cancelLeaveRequest(docId, studentId) {
     if (!confirm('요청을 취소하시겠습니까?')) return;
     try {
-        await updateDoc(doc(db, 'leave_requests', docId), {
-            status: 'cancelled',
-            updated_at: serverTimestamp()
+        await auditUpdate(doc(db, 'leave_requests', docId), {
+            status: 'cancelled'
         });
         leaveRequests = leaveRequests.filter(lr => lr.docId !== docId);
         showSaveIndicator('saved');
@@ -7997,11 +7948,10 @@ async function submitReturnFromLeave() {
             previous_status: student.status || '',
             requested_by: currentUser?.email || '',
             requested_at: serverTimestamp(),
-            created_at: serverTimestamp(),
-            updated_at: serverTimestamp()
+            created_at: serverTimestamp()
         };
 
-        const docRef = await addDoc(collection(db, 'leave_requests'), data);
+        const docRef = await auditAdd(collection(db, 'leave_requests'), data);
         leaveRequests.push({ docId: docRef.id, ...data, requested_at: new Date(), created_at: new Date() });
 
         document.getElementById('return-from-leave-modal').style.display = 'none';
@@ -8173,7 +8123,7 @@ async function saveStudentScheduledTime(studentId, classCode, time) {
 
     showSaveIndicator('saving');
     try {
-        await updateDoc(doc(db, 'students', studentId), { enrollments });
+        await auditUpdate(doc(db, 'students', studentId), { enrollments });
         student.enrollments = enrollments;
         showSaveIndicator('saved');
         renderStudentDetail(studentId);
@@ -8194,7 +8144,7 @@ async function loadUserRole() {
             currentRole = snap.data().role || '행정';
         } else {
             currentRole = '행정';
-            await setDoc(docRef, { role: '행정', updated_at: serverTimestamp() });
+            await auditSet(docRef, { role: '행정' });
         }
         renderRoleSelector();
         updateMemoUI();
@@ -8213,9 +8163,8 @@ async function selectRole(role) {
     updateMemoUI();
 
     try {
-        await setDoc(doc(db, 'user_settings', currentUser.email), {
-            role,
-            updated_at: serverTimestamp()
+        await auditSet(doc(db, 'user_settings', currentUser.email), {
+            role
         }, { merge: true });
     } catch (err) {
         console.error('롤 저장 실패:', err);
@@ -8449,9 +8398,8 @@ async function expandMemo(memoDocId, el) {
 
 async function toggleMemoPin(memoDocId, pinned) {
     try {
-        await updateDoc(doc(db, 'role_memos', memoDocId), {
-            pinned: pinned,
-            updated_at: serverTimestamp()
+        await auditUpdate(doc(db, 'role_memos', memoDocId), {
+            pinned: pinned
         });
         const memo = roleMemos.find(m => m.docId === memoDocId);
         if (memo) memo.pinned = pinned;
@@ -8468,9 +8416,8 @@ async function markMemoRead(memoDocId) {
     if (!memo || memo.read_by?.includes(currentUser.email)) return;
 
     try {
-        await updateDoc(doc(db, 'role_memos', memoDocId), {
-            read_by: arrayUnion(currentUser.email),
-            updated_at: serverTimestamp()
+        await auditUpdate(doc(db, 'role_memos', memoDocId), {
+            read_by: arrayUnion(currentUser.email)
         });
         if (!memo.read_by) memo.read_by = [];
         memo.read_by.push(currentUser.email);
@@ -8580,7 +8527,7 @@ async function sendMemo() {
     showSaveIndicator('saving');
     try {
         const pinChecked = document.getElementById('memo-pin-check')?.checked || false;
-        await addDoc(collection(db, 'role_memos'), {
+        await auditAdd(collection(db, 'role_memos'), {
             type,
             student_id: studentId,
             student_name: studentName,
@@ -8591,8 +8538,7 @@ async function sendMemo() {
             date: selectedDate,
             pinned: pinChecked,
             read_by: [],
-            created_at: serverTimestamp(),
-            updated_at: serverTimestamp()
+            created_at: serverTimestamp()
         });
 
         document.getElementById('memo-modal').style.display = 'none';
@@ -8812,7 +8758,7 @@ async function saveEnrollment() {
 
     showSaveIndicator('saving');
     try {
-        await updateDoc(doc(db, 'students', studentId), { enrollments });
+        await auditUpdate(doc(db, 'students', studentId), { enrollments });
 
         // 로컬 캐시 업데이트
         student.enrollments = enrollments;
@@ -9596,7 +9542,7 @@ window.saveDetailNote = async function(studentId) {
 };
 async function saveStudentMemoArray(studentId, memos) {
     try {
-        await updateDoc(doc(db, 'students', studentId), { memo: memos, updated_at: serverTimestamp() });
+        await auditUpdate(doc(db, 'students', studentId), { memo: memos });
         const s = allStudents.find(s => s.docId === studentId);
         if (s) s.memo = memos;
         showSaveIndicator('saved');
@@ -10153,11 +10099,11 @@ async function completeScheduledVisit(source, docId, studentId) {
         const completedAt = new Date().toISOString();
 
         if (source === 'temp') {
-            await updateDoc(doc(db, 'temp_attendance', docId), { visit_status: '완료', completed_by: completedBy, completed_at: completedAt });
+            await auditUpdate(doc(db, 'temp_attendance', docId), { visit_status: '완료', completed_by: completedBy, completed_at: completedAt });
             const ta = tempAttendances.find(t => t.docId === docId);
             if (ta) { ta.visit_status = '완료'; ta.completed_by = completedBy; ta.completed_at = completedAt; }
         } else if (source === 'hw_fail') {
-            await updateDoc(doc(db, 'hw_fail_tasks', docId), {
+            await auditUpdate(doc(db, 'hw_fail_tasks', docId), {
                 status: '완료',
                 completed_by: completedBy,
                 completed_at: completedAt
@@ -10165,7 +10111,7 @@ async function completeScheduledVisit(source, docId, studentId) {
             const t = hwFailTasks.find(t => t.docId === docId);
             if (t) { t.status = '완료'; t.completed_by = completedBy; t.completed_at = completedAt; }
         } else if (source === 'test_fail') {
-            await updateDoc(doc(db, 'test_fail_tasks', docId), {
+            await auditUpdate(doc(db, 'test_fail_tasks', docId), {
                 status: '완료',
                 completed_by: completedBy,
                 completed_at: completedAt
@@ -10197,11 +10143,11 @@ async function resetScheduledVisit(source, docId, studentId) {
     showSaveIndicator('saving');
     try {
         if (source === 'temp') {
-            await updateDoc(doc(db, 'temp_attendance', docId), { visit_status: 'pending', completed_by: deleteField(), completed_at: deleteField() });
+            await auditUpdate(doc(db, 'temp_attendance', docId), { visit_status: 'pending', completed_by: deleteField(), completed_at: deleteField() });
             const ta = tempAttendances.find(t => t.docId === docId);
             if (ta) { ta.visit_status = 'pending'; delete ta.completed_by; delete ta.completed_at; }
         } else if (source === 'hw_fail') {
-            await updateDoc(doc(db, 'hw_fail_tasks', docId), {
+            await auditUpdate(doc(db, 'hw_fail_tasks', docId), {
                 status: 'pending',
                 completed_by: deleteField(),
                 completed_at: deleteField()
@@ -10209,7 +10155,7 @@ async function resetScheduledVisit(source, docId, studentId) {
             const t = hwFailTasks.find(t => t.docId === docId);
             if (t) { t.status = 'pending'; delete t.completed_by; delete t.completed_at; }
         } else if (source === 'test_fail') {
-            await updateDoc(doc(db, 'test_fail_tasks', docId), {
+            await auditUpdate(doc(db, 'test_fail_tasks', docId), {
                 status: 'pending',
                 completed_by: deleteField(),
                 completed_at: deleteField()
@@ -10312,15 +10258,15 @@ async function confirmVisitStatus(docId) {
             const statusPayload = { completed_by: completedBy, completed_at: completedAt };
 
             if (source === 'temp') {
-                await updateDoc(doc(db, 'temp_attendance', docId), { visit_status: '기타', ...statusPayload });
+                await auditUpdate(doc(db, 'temp_attendance', docId), { visit_status: '기타', ...statusPayload });
                 const ta = tempAttendances.find(t => t.docId === docId);
                 if (ta) Object.assign(ta, { visit_status: '기타', ...statusPayload });
             } else if (source === 'hw_fail') {
-                await updateDoc(doc(db, 'hw_fail_tasks', docId), { status: '기타', ...statusPayload });
+                await auditUpdate(doc(db, 'hw_fail_tasks', docId), { status: '기타', ...statusPayload });
                 const t = hwFailTasks.find(t => t.docId === docId);
                 if (t) Object.assign(t, { status: '기타', ...statusPayload });
             } else if (source === 'test_fail') {
-                await updateDoc(doc(db, 'test_fail_tasks', docId), { status: '기타', ...statusPayload });
+                await auditUpdate(doc(db, 'test_fail_tasks', docId), { status: '기타', ...statusPayload });
                 const t = testFailTasks.find(t => t.docId === docId);
                 if (t) Object.assign(t, { status: '기타', ...statusPayload });
             } else if (source === 'extra') {
@@ -10395,7 +10341,7 @@ window.saveDiagnosticReschedule = async function() {
     const newTime = document.getElementById('diagnostic-reschedule-time').value;
     showSaveIndicator('saving');
     try {
-        await updateDoc(doc(db, 'temp_attendance', _diagnosticActionDocId), {
+        await auditUpdate(doc(db, 'temp_attendance', _diagnosticActionDocId), {
             temp_date: newDate,
             temp_time: newTime || '',
             visit_status: 'pending',
@@ -10417,7 +10363,7 @@ window.confirmDiagnosticCancel = async function() {
     try {
         const completedBy = (currentUser?.email || '').split('@')[0];
         const completedAt = new Date().toISOString();
-        await updateDoc(doc(db, 'temp_attendance', _diagnosticActionDocId), {
+        await auditUpdate(doc(db, 'temp_attendance', _diagnosticActionDocId), {
             visit_status: '기타',
             completed_by: completedBy,
             completed_at: completedAt,
@@ -10588,15 +10534,14 @@ async function _syncContactsForTemp(data) {
         let phone = data.parent_phone_1.replace(/\D/g, '');
         if (phone.length === 11 && phone.startsWith('0')) phone = phone.slice(1);
         const contactDocId = `${data.name}_${phone}`.replace(/\s+/g, '_');
-        await setDoc(doc(db, 'contacts', contactDocId), {
+        await auditSet(doc(db, 'contacts', contactDocId), {
             name: data.name,
             level: data.level || '',
             school: data.school || '',
             grade: data.grade || '',
             student_phone: data.student_phone || '',
             parent_phone_1: data.parent_phone_1,
-            first_registered: data.temp_date,
-            updated_at: serverTimestamp(),
+            first_registered: data.temp_date
         }, { merge: true });
     } catch (contactErr) {
         console.warn('[CONTACTS SYNC]', contactErr);
@@ -10651,10 +10596,8 @@ async function saveTempAttendance() {
             };
 
             await Promise.all([
-                updateDoc(doc(db, 'temp_attendance', _editingTempDocId), {
+                auditUpdate(doc(db, 'temp_attendance', _editingTempDocId), {
                     ...data,
-                    updated_by: currentUser?.email || '',
-                    updated_at: serverTimestamp(),
                     edit_history: arrayUnion(historyEntry)
                 }),
                 _syncContactsForTemp(data)
@@ -10684,7 +10627,7 @@ async function saveTempAttendance() {
             data.created_by = currentUser?.email || '';
 
             await Promise.all([
-                addDoc(collection(db, 'temp_attendance'), data),
+                auditAdd(collection(db, 'temp_attendance'), data),
                 _syncContactsForTemp(data)
             ]);
             document.getElementById('temp-attendance-modal').style.display = 'none';
@@ -10940,7 +10883,7 @@ window.migrateNaesinEnrollments = async function(save = false) {
     let ok = 0, fail = 0;
     for (const { student, newEnrollments } of targets) {
         try {
-            await updateDoc(doc(db, 'students', student.docId), { enrollments: newEnrollments });
+            await auditUpdate(doc(db, 'students', student.docId), { enrollments: newEnrollments });
             student.enrollments = newEnrollments;
             ok++;
         } catch (err) {
