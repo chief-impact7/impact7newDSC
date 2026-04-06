@@ -8,6 +8,7 @@ import { auth, db, geminiModel } from './firebase-config.js';
 import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
 import { initHelpGuide } from './help-guide.js';
 import { toDateStrKST, parseDateKST, todayStr, getDayName } from './src/shared/firestore-helpers.js';
+import { auditUpdate, auditSet, auditAdd, auditDelete, batchUpdate, batchSet } from './audit.js';
 
 // ─── State ──────────────────────────────────────────────────────────────────
 let currentUser = null;
@@ -8865,6 +8866,7 @@ onAuthStateChanged(auth, async (user) => {
         }
 
         currentUser = user;
+        window._auditUser = user.email || null;
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('main-screen').style.display = '';
         document.getElementById('user-email').textContent = user.email;
@@ -8907,6 +8909,7 @@ onAuthStateChanged(auth, async (user) => {
         }
     } else {
         currentUser = null;
+        window._auditUser = null;
         document.getElementById('login-screen').style.display = '';
         document.getElementById('main-screen').style.display = 'none';
     }
