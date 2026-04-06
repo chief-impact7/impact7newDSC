@@ -1,7 +1,7 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import {
-    collection, getDocs, doc, setDoc, addDoc,
-    query, where, serverTimestamp, updateDoc, onSnapshot
+    collection, getDocs, doc,
+    query, where, serverTimestamp, onSnapshot
 } from 'firebase/firestore';
 import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
