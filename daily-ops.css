@@ -286,20 +286,22 @@ body {
   gap: 6px;
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid var(--primary);
+  border: 1px dashed var(--border);
   border-radius: 8px;
-  background: var(--primary-light);
-  color: var(--primary);
+  background: transparent;
+  color: var(--text-sec);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
   text-decoration: none;
-  margin-bottom: 8px;
+  margin-top: 8px;
 }
 
 .btn-class-setup:hover {
-  background: var(--active-bg);
+  background: var(--hover-bg);
+  color: var(--primary);
+  border-color: var(--primary);
 }
 
 .btn-temp-attendance {
