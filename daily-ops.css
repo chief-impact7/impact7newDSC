@@ -280,6 +280,28 @@ body {
   border-top: 1px solid var(--border);
 }
 
+.btn-class-setup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-decoration: none;
+  margin-bottom: 8px;
+}
+
+.btn-class-setup:hover {
+  background: var(--active-bg);
+}
+
 .btn-temp-attendance {
   display: flex;
   align-items: center;

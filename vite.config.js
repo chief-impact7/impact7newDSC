@@ -11,6 +11,7 @@ export default defineConfig({
                 main: resolve(__dirname, 'index.html'),
                 excel: resolve(__dirname, 'excel.html'),
                 dashboard: resolve(__dirname, 'dashboard.html'),
+                classSetup: resolve(__dirname, 'class-setup.html'),
             },
         },
     },

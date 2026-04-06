@@ -29,6 +29,7 @@ service cloud.firestore {
     }
     function isDirector() { return isLoggedIn() && getUserRole() == 'director'; }
     function isStaff() { return isLoggedIn() && getUserRole() == 'staff'; }
+    function isShortTerm() { return isLoggedIn() && getUserRole() == 'shortterm'; }
 
     // =========================================================================
     // [공통] 학생 마스터 컬렉션
@@ -328,7 +329,8 @@ service cloud.firestore {
         return request.resource.data.keys().hasOnly([
           'domains', 'test_sections', 'teacher', 'sub_teacher',
           'default_time', 'default_time_updated_by', 'default_time_updated_at',
-          'naesin_start', 'naesin_end', 'schedule'
+          'naesin_start', 'naesin_end', 'schedule',
+          'class_type', 'updated_at', 'updated_by'
         ]);
       }
 
@@ -641,6 +643,40 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // [Director] 단기 인원
+    // =========================================================================
+    match /shortTermStaff/{docId} {
+      allow read: if isDirector() || isShortTerm();
+      allow write: if isDirector() || isShortTerm();
+
+      // 비인증: 토큰 기반 등록 (필수 필드 검증)
+      allow create: if request.resource.data.keys().hasAll(['name', 'phone', 'email', 'residentNumber', 'address', 'bank', 'accountNumber', 'accountHolder', 'createdAt'])
+        && request.resource.data.name is string
+        && request.resource.data.phone is string;
+
+      match /contracts/{contractId} {
+        allow read: if isDirector() || isShortTerm();
+        allow write: if isDirector() || isShortTerm();
+      }
+    }
+
+    // =========================================================================
+    // [Director] 단기 온보딩 토큰
+    // =========================================================================
+    match /shortTermTokens/{tokenId} {
+      allow read, write: if isDirector() || isShortTerm();
+
+      // 비인증 사용자: 토큰 검증(read) + 완료 처리(update)만 허용
+      allow read: if true;
+      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['status', 'personId'])
+        && request.resource.data.status == 'completed'
+        && resource.data.status == 'pending'
+        && resource.data.expiresAt > request.time;
+
+      allow create, delete: if isDirector() || isShortTerm();
+    }
+
     // [Director] Staff + 서브컬렉션
     // =========================================================================
     match /staff/{staffId} {
@@ -734,7 +770,7 @@ service cloud.firestore {
       allow read, write: if isDirector() || isStaff();
       allow read: if true;
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
-        .hasOnly(['status', 'employeeId'])
+        .hasOnly(['status', 'staffId'])
         && request.resource.data.status == 'completed'
         && resource.data.status == 'pending'
         && resource.data.expiresAt > request.time;

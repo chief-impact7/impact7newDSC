@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>반 편성 도우미 - Impact7 DSC</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="stylesheet" href="class-setup.css">
+</head>
+<body>
+    <!-- ===== 로그인 화면 ===== -->
+    <div id="login-screen" class="login-screen">
+        <div class="login-card">
+            <h1 class="login-title">Impact7 DSC</h1>
+            <p class="login-subtitle">반 편성 도우미</p>
+            <button id="login-btn" class="login-btn" onclick="handleLogin()">
+                <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                Google 로그인
+            </button>
+        </div>
+    </div>
+
+    <!-- ===== 메인 화면 ===== -->
+    <div id="main-screen" class="main-screen" style="display:none;">
+        <!-- App Bar -->
+        <header class="app-bar">
+            <div class="app-bar-left">
+                <a href="/" class="icon-btn" title="DSC 홈으로" aria-label="DSC 홈으로">
+                    <span class="material-symbols-outlined">arrow_back</span>
+                </a>
+                <img src="https://i.imgur.com/a4XeF5x.png" alt="logo" style="height:30px;width:auto;">
+                <span class="app-title">반 편성 도우미</span>
+            </div>
+            <div class="app-bar-right">
+                <span id="user-email" class="user-email"></span>
+                <button class="icon-btn" id="user-avatar" onclick="handleLogout()" title="로그아웃">
+                    <span class="material-symbols-outlined">logout</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- 마법사 컨테이너 -->
+        <main class="wizard-container">
+            <!-- 진행 표시 -->
+            <div class="wizard-progress">
+                <div class="progress-step active" data-step="1">
+                    <div class="step-circle">1</div>
+                    <span class="step-label">반 유형</span>
+                </div>
+                <div class="progress-line"></div>
+                <div class="progress-step" data-step="2">
+                    <div class="step-circle">2</div>
+                    <span class="step-label">반 이름</span>
+                </div>
+                <div class="progress-line"></div>
+                <div class="progress-step" data-step="3">
+                    <div class="step-circle">3</div>
+                    <span class="step-label">학생 추가</span>
+                </div>
+                <div class="progress-line"></div>
+                <div class="progress-step" data-step="4">
+                    <div class="step-circle">4</div>
+                    <span class="step-label">요일</span>
+                </div>
+                <div class="progress-line"></div>
+                <div class="progress-step" data-step="5">
+                    <div class="step-circle">5</div>
+                    <span class="step-label">확인</span>
+                </div>
+            </div>
+
+            <!-- Step 1: 반 유형 선택 -->
+            <section class="wizard-step" id="step-1">
+                <h2 class="step-title">어떤 반을 만드시겠어요?</h2>
+                <div class="type-cards">
+                    <button class="type-card" data-type="정규" onclick="selectClassType('정규')">
+                        <span class="material-symbols-outlined type-icon">school</span>
+                        <span class="type-name">정규</span>
+                        <span class="type-desc">레벨 + 반번호 (예: A101)</span>
+                    </button>
+                    <button class="type-card" data-type="내신" onclick="selectClassType('내신')">
+                        <span class="material-symbols-outlined type-icon">menu_book</span>
+                        <span class="type-name">내신</span>
+                        <span class="type-desc">학교 + 학년 (예: 불곡중1A)</span>
+                    </button>
+                    <button class="type-card" data-type="자유학기" onclick="selectClassType('자유학기')">
+                        <span class="material-symbols-outlined type-icon">explore</span>
+                        <span class="type-name">자유학기</span>
+                        <span class="type-desc">레벨 + 반번호 (정규와 동일 구조)</span>
+                    </button>
+                    <button class="type-card" data-type="특강" onclick="selectClassType('특강')">
+                        <span class="material-symbols-outlined type-icon">bolt</span>
+                        <span class="type-name">특강</span>
+                        <span class="type-desc">자유 텍스트 (예: 여름특강A)</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Step 2: 반 이름 -->
+            <section class="wizard-step" id="step-2" style="display:none;">
+                <h2 class="step-title">반 이름을 설정하세요</h2>
+                <div id="name-form" class="name-form">
+                    <!-- 정규/자유학기: 레벨 + 반번호 -->
+                    <div id="name-regular" style="display:none;">
+                        <div class="form-row">
+                            <div class="form-field">
+                                <label>레벨</label>
+                                <input type="text" id="input-level" placeholder="예: A, B, P">
+                            </div>
+                            <div class="form-field">
+                                <label>반 번호</label>
+                                <input type="text" id="input-class-number" placeholder="예: 101, 202">
+                            </div>
+                        </div>
+                        <div id="free-semester-dates" class="form-row" style="display:none;">
+                            <div class="form-field">
+                                <label>시작일</label>
+                                <input type="date" id="input-free-start">
+                            </div>
+                            <div class="form-field">
+                                <label>종료일</label>
+                                <input type="date" id="input-free-end">
+                            </div>
+                        </div>
+                        <div class="class-preview" id="regular-preview"></div>
+                    </div>
+                    <!-- 내신: 학교 + 학년 + A/B -->
+                    <div id="name-naesin" style="display:none;">
+                        <div class="form-row">
+                            <div class="form-field">
+                                <label>학교</label>
+                                <input type="text" id="input-school" placeholder="예: 불곡중" list="school-list">
+                                <datalist id="school-list"></datalist>
+                            </div>
+                            <div class="form-field">
+                                <label>학년</label>
+                                <select id="input-grade">
+                                    <option value="">선택</option>
+                                    <option value="1">1학년</option>
+                                    <option value="2">2학년</option>
+                                    <option value="3">3학년</option>
+                                </select>
+                            </div>
+                            <div class="form-field">
+                                <label>반 구분</label>
+                                <select id="input-naesin-group">
+                                    <option value="A">A</option>
+                                    <option value="B">B</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-field">
+                                <label>내신 시작일</label>
+                                <input type="date" id="input-naesin-start">
+                            </div>
+                            <div class="form-field">
+                                <label>내신 종료일</label>
+                                <input type="date" id="input-naesin-end">
+                            </div>
+                        </div>
+                        <div class="class-preview" id="naesin-preview"></div>
+                    </div>
+                    <!-- 특강: 자유 텍스트 -->
+                    <div id="name-special" style="display:none;">
+                        <div class="form-row">
+                            <div class="form-field full">
+                                <label>반 이름</label>
+                                <input type="text" id="input-special-name" placeholder="예: 여름특강A, 겨울캠프">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-field">
+                                <label>시작일</label>
+                                <input type="date" id="input-special-start">
+                            </div>
+                            <div class="form-field">
+                                <label>종료일</label>
+                                <input type="date" id="input-special-end">
+                            </div>
+                        </div>
+                        <div class="class-preview" id="special-preview"></div>
+                    </div>
+                    <!-- 담당 선생님 (공통) -->
+                    <div class="form-row" style="margin-top:16px;">
+                        <div class="form-field full">
+                            <label>담당 선생님</label>
+                            <select id="input-teacher">
+                                <option value="">선택</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 3: 학생 추가 -->
+            <section class="wizard-step" id="step-3" style="display:none;">
+                <h2 class="step-title">학생을 추가하세요</h2>
+                <div class="student-search-area">
+                    <div class="search-input-wrap">
+                        <span class="material-symbols-outlined">search</span>
+                        <input type="text" id="student-search" placeholder="이름, 학교로 검색..." oninput="searchStudents(this.value)">
+                    </div>
+                    <div class="search-results" id="search-results"></div>
+                </div>
+                <div class="selected-students" id="selected-students">
+                    <h3 class="selected-title">선택된 학생 (<span id="selected-count">0</span>명)</h3>
+                    <div class="selected-list" id="selected-list"></div>
+                </div>
+            </section>
+
+            <!-- Step 4: 요일 선택 -->
+            <section class="wizard-step" id="step-4" style="display:none;">
+                <h2 class="step-title">수업 요일을 선택하세요</h2>
+                <div class="day-selector">
+                    <button class="day-chip" data-day="월" onclick="toggleDay('월')">월</button>
+                    <button class="day-chip" data-day="화" onclick="toggleDay('화')">화</button>
+                    <button class="day-chip" data-day="수" onclick="toggleDay('수')">수</button>
+                    <button class="day-chip" data-day="목" onclick="toggleDay('목')">목</button>
+                    <button class="day-chip" data-day="금" onclick="toggleDay('금')">금</button>
+                    <button class="day-chip" data-day="토" onclick="toggleDay('토')">토</button>
+                </div>
+                <div class="time-settings" id="time-settings">
+                    <!-- 선택된 요일별 시간 입력 동적 렌더링 -->
+                </div>
+            </section>
+
+            <!-- Step 5: 최종 확인 -->
+            <section class="wizard-step" id="step-5" style="display:none;">
+                <h2 class="step-title">설정을 확인하세요</h2>
+                <div class="summary-card" id="summary-card">
+                    <!-- 동적 렌더링 -->
+                </div>
+            </section>
+
+            <!-- 하단 버튼 -->
+            <div class="wizard-actions">
+                <button class="btn-back" id="btn-back" onclick="prevStep()" style="display:none;">
+                    <span class="material-symbols-outlined">arrow_back</span>
+                    이전
+                </button>
+                <div class="spacer"></div>
+                <button class="btn-next" id="btn-next" onclick="nextStep()">
+                    다음
+                    <span class="material-symbols-outlined">arrow_forward</span>
+                </button>
+                <button class="btn-submit" id="btn-submit" onclick="submitWizard()" style="display:none;">
+                    <span class="material-symbols-outlined">check</span>
+                    반 생성
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <!-- 토스트 -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script type="module" src="class-setup.js"></script>
+</body>
+</html>
