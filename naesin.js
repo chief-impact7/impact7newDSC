@@ -8,7 +8,8 @@
 
 import { getDayName } from './src/shared/firestore-helpers.js';
 import { db } from './firebase-config.js';
-import { updateDoc, doc } from 'firebase/firestore';
+import { doc } from 'firebase/firestore';
+import { auditUpdate, auditSet } from './audit.js';
 
 // ─── State 접근자 ─────────────────────────────────────────────────────────────
 function _state() {
@@ -475,7 +476,7 @@ window.editNaesinTime = async function(studentId, day) {
 
     window.showSaveIndicator?.('saving');
     try {
-        await updateDoc(doc(db, 'students', studentId), { enrollments });
+        await auditUpdate(doc(db, 'students', studentId), { enrollments });
         student.enrollments = enrollments;
         window.showSaveIndicator?.('saved');
     } catch (err) {
@@ -522,7 +523,7 @@ window.toggleNaesinDay = async function(studentId, day) {
 
     window.showSaveIndicator?.('saving');
     try {
-        await updateDoc(doc(db, 'students', studentId), { enrollments });
+        await auditUpdate(doc(db, 'students', studentId), { enrollments });
         student.enrollments = enrollments;
         window.showSaveIndicator?.('saved');
     } catch (err) {
@@ -647,8 +648,7 @@ function renderNaesinClassDetail(classCode) {
 window.saveNaesinClassTeacher = async function(classCode, teacher) {
     window.showSaveIndicator?.('saving');
     try {
-        const { setDoc, doc: fbDoc } = await import('firebase/firestore');
-        await setDoc(fbDoc(db, 'class_settings', classCode), { teacher }, { merge: true });
+        await auditSet(doc(db, 'class_settings', classCode), { teacher }, { merge: true });
         const { classSettings } = _state();
         if (!classSettings[classCode]) classSettings[classCode] = {};
         classSettings[classCode].teacher = teacher;
@@ -662,8 +662,7 @@ window.saveNaesinClassTeacher = async function(classCode, teacher) {
 window.saveNaesinClassPeriod = async function(classCode, field, value) {
     window.showSaveIndicator?.('saving');
     try {
-        const { setDoc, doc: fbDoc } = await import('firebase/firestore');
-        await setDoc(fbDoc(db, 'class_settings', classCode), { [field]: value }, { merge: true });
+        await auditSet(doc(db, 'class_settings', classCode), { [field]: value }, { merge: true });
         const { classSettings } = _state();
         if (!classSettings[classCode]) classSettings[classCode] = {};
         classSettings[classCode][field] = value;
@@ -685,8 +684,7 @@ window.saveNaesinClassSchedule = async function(classCode, day, time) {
     }
     window.showSaveIndicator?.('saving');
     try {
-        const { setDoc, doc: fbDoc } = await import('firebase/firestore');
-        await setDoc(fbDoc(db, 'class_settings', classCode), { schedule }, { merge: true });
+        await auditSet(doc(db, 'class_settings', classCode), { schedule }, { merge: true });
         if (!classSettings[classCode]) classSettings[classCode] = {};
         classSettings[classCode].schedule = schedule;
         window.showSaveIndicator?.('saved');
