@@ -6725,9 +6725,10 @@ function renderStudentDetail(studentId) {
         return;
     }
 
-    // 내신 모드: naesin.js로 위임 (출결 내신 필터 또는 반 설정 내신 모드)
+    // 내신/특강 모드: naesin.js로 위임 (간소화된 상세 패널)
     if ((currentCategory === 'attendance' && currentSubFilter.has('naesin')) ||
-        (_classMgmtMode === 'naesin' && selectedClassCode && _isNaesinClassCode(selectedClassCode))) {
+        (_classMgmtMode === 'naesin' && selectedClassCode && _isNaesinClassCode(selectedClassCode)) ||
+        (_classMgmtMode === 'teukang' && selectedClassCode)) {
         if (window.renderNaesinDetail) {
             window.renderNaesinDetail(studentId);
             return;
