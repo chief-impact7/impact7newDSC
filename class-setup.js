@@ -567,7 +567,7 @@ window.submitWizard = async function () {
 
             if (d.classType === '특강') {
                 newEnrollment.level_symbol = '';
-                newEnrollment.class_number = '';
+                newEnrollment.class_number = d.classCode; // 반 이름 = 코드 (예: '수요특강')
                 if (d.specialStart) newEnrollment.start_date = d.specialStart;
                 if (d.specialEnd) newEnrollment.end_date = d.specialEnd;
             }

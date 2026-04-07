@@ -1086,8 +1086,8 @@ function setCategory(category) {
         savedSubFilters[currentCategory] = new Set(currentSubFilter);
         savedL2Expanded[currentCategory] = false; // L2는 접지만 필터는 유지
 
-        // 내신 반 설정 모드 리셋 (카테고리 전환 시 필터 누출 방지)
-        if (_classMgmtMode === 'naesin') { _classMgmtMode = null; selectedClassCode = null; }
+        // 내신/특강 반 설정 모드 리셋 (카테고리 전환 시 필터 누출 방지)
+        if (_classMgmtMode === 'naesin' || _classMgmtMode === 'teukang') { _classMgmtMode = null; selectedClassCode = null; }
 
         currentCategory = category;
 
@@ -1285,7 +1285,7 @@ function renderBranchFilter() {
     branchL1.classList.toggle('has-filter', !!selectedBranch);
 }
 
-let _classMgmtMode = null; // null | 'regular' | 'naesin'
+let _classMgmtMode = null; // null | 'regular' | 'naesin' | 'teukang'
 const LEVEL_SHORT = { '초등': '초', '중등': '중', '고등': '고' };
 
 // 내신 반코드 유도: 학생의 school + level + grade + A/B
@@ -1322,9 +1322,21 @@ function deriveNaesinCode(student, enrollment) {
     return `${school}${levelShort}${grade}${group}`;
 }
 
+// 특강 학생 조회: enrollmentCode 기반(신규) + schedule 기반(구형 데이터 호환)
+function isInTeukangClass(s, classCode) {
+    // class_settings.schedule은 { day: time } 객체 형태
+    const scheduleDays = new Set(Object.keys(classSettings[classCode]?.schedule || {}));
+    return (s.enrollments || []).some(e => {
+        if (e.class_type !== '특강') return false;
+        const ec = enrollmentCode(e);
+        if (ec) return ec === classCode;
+        // 구형 데이터 호환: class_number가 비어있으면 요일로 매칭
+        return scheduleDays.size > 0 && e.day?.some(d => scheduleDays.has(d));
+    });
+}
+
 function _getAllClassCodes() {
     const regularCodes = new Set();
-    const naesinCodes = new Set();
     const naesinCounts = new Map();
     allStudents.forEach(s => {
         if (s.status === '퇴원') return;
@@ -1335,7 +1347,7 @@ function _getAllClassCodes() {
         (s.enrollments || []).forEach(e => {
             const code = enrollmentCode(e);
             if (!code) return;
-            if (e.class_type === '내신') return;
+            if (e.class_type === '내신' || e.class_type === '특강') return;
             regularCodes.add(code);
             hasRegular = true;
         });
@@ -1354,7 +1366,11 @@ function _getAllClassCodes() {
     const naesinWithCounts = [...naesinCounts.entries()]
         .map(([key, { displayCode, count }]) => ({ code: key, displayCode, count }))
         .sort((a, b) => a.displayCode.localeCompare(b.displayCode, 'ko'));
-    return { regular: [...regularCodes].sort(), naesin: naesinWithCounts };
+    const teukang = Object.entries(classSettings)
+        .filter(([, cs]) => cs.class_type === '특강')
+        .map(([code]) => code)
+        .sort();
+    return { regular: [...regularCodes].sort(), naesin: naesinWithCounts, teukang };
 }
 
 // 내신 반코드(Firestore 키)로 학생 목록 조회
@@ -1394,10 +1410,11 @@ function renderClassCodeFilter() {
         classL1.after(container);
     }
 
-    const { regular, naesin } = _getAllClassCodes();
+    const { regular, naesin, teukang } = _getAllClassCodes();
 
     const regExpanded = _classMgmtMode === 'regular';
     const naeExpanded = _classMgmtMode === 'naesin';
+    const tekExpanded = _classMgmtMode === 'teukang';
 
     let html = '';
 
@@ -1432,6 +1449,21 @@ function renderClassCodeFilter() {
             const isActive = selectedClassCode === code ? 'active' : '';
             return `<div class="nav-l2 nav-l3 ${isActive}" onclick="setClassCode('${escAttr(code)}')">
                 ${esc(displayCode)}${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
+            </div>`;
+        }).join('');
+    }
+
+    // 특강 L2
+    html += `<div class="nav-l2 l2-parent ${tekExpanded ? 'active l2-expanded' : ''}" onclick="window.setClassMgmtMode('teukang')">
+        특강<span class="nav-l2-count">${teukang.length}</span>
+        <span class="material-symbols-outlined l2-expand-icon">${tekExpanded ? 'expand_less' : 'expand_more'}</span>
+    </div>`;
+    if (tekExpanded) {
+        html += teukang.map(code => {
+            const isActive = selectedClassCode === code ? 'active' : '';
+            const count = allStudents.filter(s => s.status !== '퇴원' && matchesBranchFilter(s) && isInTeukangClass(s, code)).length;
+            return `<div class="nav-l2 nav-l3 ${isActive}" onclick="setClassCode('${escAttr(code)}')">
+                ${esc(code)}${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
             </div>`;
         }).join('');
     }
@@ -2047,6 +2079,13 @@ function getEnrollPendingVisits() {
 // ─── Filtering ──────────────────────────────────────────────────────────────
 
 function getFilteredStudents() {
+    // 반 설정: 특강 모드 — 날짜 무관, 특강 반 전체 학생
+    if (_classMgmtMode === 'teukang' && selectedClassCode) {
+        return allStudents.filter(s =>
+            s.status !== '퇴원' && matchesBranchFilter(s) && isInTeukangClass(s, selectedClassCode)
+        );
+    }
+
     // 반 설정: 내신 반코드 선택 시 (글로벌 필터이므로 currentCategory 무관)
     if (_classMgmtMode === 'naesin' && selectedClassCode && _isNaesinClassCode(selectedClassCode)) {
         return getNaesinStudentsByDerivedCode(selectedClassCode).map(({ student }) => student);
@@ -3524,8 +3563,9 @@ function renderListPanel() {
     // 과거 학생은 _searchContactsDSC에서 비동기로 렌더링 (위에서 호출됨)
 
     // 반 상세 표시: 반(+소속)만 선택되고, 콘텐츠 서브필터 없을 때
-    // 내신 반 설정 모드에서는 항상 반 상세 표시
-    if (_classMgmtMode === 'naesin' && selectedClassCode && _isNaesinClassCode(selectedClassCode) && !selectedStudentId) {
+    // 내신/특강 반 설정 모드에서는 항상 반 상세 표시
+    if (((_classMgmtMode === 'naesin' && _isNaesinClassCode(selectedClassCode)) ||
+         _classMgmtMode === 'teukang') && selectedClassCode && !selectedStudentId) {
         renderClassDetail(selectedClassCode);
     } else {
         const allFilters = { ...savedSubFilters };
@@ -3694,8 +3734,11 @@ function renderClassDetail(classCode) {
         return;
     }
 
+    // 특강 반: naesin보다 먼저 체크 (반 이름에 한글 포함되므로 _isNaesinClassCode가 true 반환할 수 있음)
+    const isTeukangClass = classSettings[classCode]?.class_type === '특강';
+
     // 내신 반: naesin.js로 위임
-    if (window.renderNaesinClassDetail && _isNaesinClassCode(classCode)) {
+    if (!isTeukangClass && window.renderNaesinClassDetail && _isNaesinClassCode(classCode)) {
         window.renderNaesinClassDetail(classCode);
         return;
     }
@@ -3706,11 +3749,13 @@ function renderClassDetail(classCode) {
     document.getElementById('detail-content').style.display = '';
 
     const dayName = getDayName(selectedDate);
-    let classStudents = allStudents.filter(s =>
-        s.status !== '퇴원' &&
-        getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayName) && enrollmentCode(e) === classCode)
-    );
-    classStudents = classStudents.filter(s => matchesBranchFilter(s));
+    // 특강은 날짜 무관하게 전체 수강생 표시
+    let classStudents = isTeukangClass
+        ? allStudents.filter(s => s.status !== '퇴원' && matchesBranchFilter(s) && isInTeukangClass(s, classCode))
+        : allStudents.filter(s =>
+            s.status !== '퇴원' &&
+            getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayName) && enrollmentCode(e) === classCode)
+          ).filter(s => matchesBranchFilter(s));
     const domains = getClassDomains(classCode);
     const testSections = getClassTestSections(classCode);
 
