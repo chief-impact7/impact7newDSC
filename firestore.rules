@@ -189,7 +189,7 @@ service cloud.firestore {
         return request.resource.data.keys().hasOnly([
           'student_id', 'student_name', 'original_class_code', 'target_class_code',
           'target_start_time', 'override_date', 'reason', 'status',
-          'created_by', 'created_at'
+          'created_by', 'created_at', 'updated_by', 'updated_at'
         ]);
       }
 
@@ -248,7 +248,7 @@ service cloud.firestore {
           'source_date', 'scheduled_date', 'scheduled_time',
           'alt_hw', 'handler', 'status', 'created_by', 'created_at',
           'completed_by', 'completed_at', 'cancelled_by', 'cancelled_at', 'branch',
-          'reschedule_history'
+          'reschedule_history', 'updated_by', 'updated_at'
         ])
         && request.resource.data.status is string
         && request.resource.data.status in ['pending', '완료', '취소', '기타']
@@ -269,7 +269,7 @@ service cloud.firestore {
           'source_date', 'scheduled_date', 'scheduled_time',
           'alt_hw', 'handler', 'status', 'created_by', 'created_at',
           'completed_by', 'completed_at', 'cancelled_by', 'cancelled_at', 'branch',
-          'reschedule_history'
+          'reschedule_history', 'updated_by', 'updated_at'
         ])
         && request.resource.data.status is string
         && request.resource.data.status in ['pending', '완료', '취소', '기타']
@@ -285,7 +285,7 @@ service cloud.firestore {
 
       function hasOnlyAllowedUserSettingsFields() {
         return request.resource.data.keys().hasOnly([
-          'role', 'updated_at'
+          'role', 'updated_by', 'updated_at'
         ]);
       }
 
@@ -307,7 +307,7 @@ service cloud.firestore {
         return request.resource.data.keys().hasOnly([
           'type', 'student_id', 'student_name', 'content',
           'sender_email', 'sender_role', 'target_roles',
-          'date', 'pinned', 'read_by', 'created_at', 'updated_at'
+          'date', 'pinned', 'read_by', 'created_at', 'updated_by', 'updated_at'
         ]);
       }
 
@@ -330,6 +330,7 @@ service cloud.firestore {
           'domains', 'test_sections', 'teacher', 'sub_teacher',
           'default_time', 'default_time_updated_by', 'default_time_updated_at',
           'naesin_start', 'naesin_end', 'schedule',
+          'free_schedule', 'free_start', 'free_end',
           'class_type', 'updated_at', 'updated_by'
         ]);
       }
@@ -338,7 +339,7 @@ service cloud.firestore {
 
       allow create, update: if isAuthorized()
         && hasOnlyAllowedClassSettingsFields()
-        && withinFieldLimit(15);
+        && withinFieldLimit(18);
 
       allow delete: if isAuthorized();
     }
@@ -478,7 +479,7 @@ service cloud.firestore {
           'approved_by', 'approved_at',
           'teacher_approved_by', 'teacher_approved_at',
           'return_date',
-          'previous_status', 'created_at', 'updated_at'
+          'previous_status', 'created_at', 'updated_by', 'updated_at'
         ]);
       }
 
@@ -524,7 +525,8 @@ service cloud.firestore {
 
       allow create, update: if isAuthorized()
         && request.resource.data.keys().hasOnly([
-          'email', 'display_name', 'photo_url', 'last_login'
+          'email', 'display_name', 'photo_url', 'last_login',
+          'updated_by', 'updated_at'
         ])
         && request.resource.data.email is string
         && withinFieldLimit(10);

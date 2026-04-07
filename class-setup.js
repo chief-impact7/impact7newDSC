@@ -455,15 +455,19 @@ window.submitWizard = async function () {
         }
 
         // 2. class_settings 문서 생성/업데이트
-        const classSettingsData = {
-            teacher: d.teacher || '',
-            class_type: d.classType,
-        };
+        const classSettingsData = { teacher: d.teacher || '' };
         if (d.classType === '내신') {
+            classSettingsData.class_type = '내신';
             classSettingsData.naesin_start = d.naesinStart;
             classSettingsData.naesin_end = d.naesinEnd;
             classSettingsData.schedule = d.schedule;
+        } else if (d.classType === '자유학기') {
+            // 자유학기는 정규와 class_code 공유 → schedule 덮어쓰지 않고 free_schedule에 저장
+            classSettingsData.free_schedule = d.schedule;
+            if (d.freeStart) classSettingsData.free_start = d.freeStart;
+            if (d.freeEnd) classSettingsData.free_end = d.freeEnd;
         } else {
+            classSettingsData.class_type = d.classType;
             classSettingsData.schedule = d.schedule;
         }
         await auditSet(doc(db, 'class_settings', d.classCode), classSettingsData, { merge: true });
@@ -485,6 +489,13 @@ window.submitWizard = async function () {
             if (d.classType === '내신') {
                 newEnrollment.level_symbol = '';
                 newEnrollment.class_number = '';
+                if (d.naesinStart) newEnrollment.start_date = d.naesinStart;
+                if (d.naesinEnd) newEnrollment.end_date = d.naesinEnd;
+            }
+
+            if (d.classType === '자유학기') {
+                if (d.freeStart) newEnrollment.start_date = d.freeStart;
+                if (d.freeEnd) newEnrollment.end_date = d.freeEnd;
             }
 
             if (d.classType === '특강') {

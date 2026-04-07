@@ -247,20 +247,36 @@ function getActiveEnrollments(s, dateStr) {
     if (hasActiveNaesin) {
         return current.filter(e => e.class_type !== '정규');
     }
+
+    // 3) 자유학기가 활성 기간이면 같은 반코드의 정규 숨김
+    const activeFreeEnrolls = current.filter(e =>
+        e.class_type === '자유학기' &&
+        validDate(e.start_date) && e.start_date <= today
+    );
+    if (activeFreeEnrolls.length > 0) {
+        const freeCodes = new Set(activeFreeEnrolls.map(enrollmentCode));
+        return current.filter(e =>
+            e.class_type !== '정규' || !freeCodes.has(enrollmentCode(e))
+        );
+    }
+
     return current;
 }
 
-// 학생 등원시간: 개별 시간 → 반 기본 시간 fallback (내신: 요일별 schedule 지원)
+// 학생 등원시간: 개별 시간 → 반 기본 시간 fallback (내신/자유학기: 요일별 schedule 지원)
 function getStudentStartTime(enrollment, dayName) {
     if (!enrollment) return '';
-    // 내신: 요일별 schedule 조회
     if (dayName) {
         const studentTime = enrollment.schedule?.[dayName];
         if (studentTime) return studentTime;
+        // 자유학기: free_schedule 조회
+        if (enrollment.class_type === '자유학기') {
+            const freeSchedule = classSettings[enrollmentCode(enrollment)]?.free_schedule;
+            if (freeSchedule?.[dayName]) return freeSchedule[dayName];
+        }
         const classSchedule = classSettings[enrollmentCode(enrollment)]?.schedule;
         if (classSchedule?.[dayName]) return classSchedule[dayName];
     }
-    // 정규: 기존 fallback
     return enrollment.start_time || enrollment.time || classSettings[enrollmentCode(enrollment)]?.default_time || '';
 }
 
@@ -1590,7 +1606,8 @@ function setSubFilter(filterKey) {
     renderListPanel();
 }
 
-const REGULAR_CLASS_TYPES = ['정규', '내신', '특강'];
+const REGULAR_CLASS_TYPES = ['정규', '내신', '특강', '자유학기'];
+const DAY_ORDER = ['월', '화', '수', '목', '금', '토'];
 
 let _regularDayCache = { date: null, dayName: null };
 function hasRegularEnrollmentToday(student) {
@@ -3758,6 +3775,8 @@ function renderClassDetail(classCode) {
             </div>
         </div>
 
+        ${renderClassScheduleCard(classCode)}
+
         <div class="detail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined">schedule</span>
@@ -3807,6 +3826,119 @@ function renderClassDetail(classCode) {
         document.getElementById('detail-panel').classList.add('mobile-visible');
     }
 }
+
+// ─── 자유학기/특강 요일 카드 ────────────────────────────────────────────────
+
+function _classScheduleKey(cs) {
+    return cs?.free_schedule !== undefined ? 'free_schedule' : 'schedule';
+}
+
+function renderClassScheduleCard(classCode) {
+    const cs = classSettings[classCode];
+    const isFree = cs?.free_schedule !== undefined;
+    if (!isFree && cs?.class_type !== '특강') return '';
+
+    const scheduleKey = _classScheduleKey(cs);
+    const schedule = cs?.[scheduleKey] || {};
+    const activeDays = Object.keys(schedule).sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b));
+    const label = isFree ? '자유학기 요일/시간' : '특강 요일/시간';
+
+    const rows = activeDays.map(day => `
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+            <span class="naesin-day-badge naesin-day-active" style="flex-shrink:0;">${esc(day)}</span>
+            <input type="time" class="arrival-time-input" style="flex:1;"
+                value="${esc(schedule[day] || '16:00')}"
+                onchange="saveClassDayTime('${escAttr(classCode)}', '${escAttr(day)}', this.value)">
+            <button class="icon-btn" style="width:28px;height:28px;"
+                onclick="toggleClassDay('${escAttr(classCode)}', '${escAttr(day)}', false)"
+                title="${esc(day)} 삭제">
+                <span class="material-symbols-outlined" style="font-size:16px;">close</span>
+            </button>
+        </div>
+    `).join('');
+
+    const addBtns = DAY_ORDER
+        .filter(d => !activeDays.includes(d))
+        .map(d => `<button class="btn btn-secondary btn-sm" style="min-width:32px;padding:2px 6px;"
+            onclick="toggleClassDay('${escAttr(classCode)}', '${escAttr(d)}', true)">${esc(d)}</button>`)
+        .join('');
+
+    return `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined">date_range</span>
+                ${esc(label)}
+            </div>
+            <div>
+                ${rows || '<div class="detail-card-empty">요일 없음</div>'}
+            </div>
+            ${addBtns ? `
+            <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
+                <span style="font-size:11px;color:var(--text-sec);">요일 추가:</span>
+                ${addBtns}
+            </div>` : ''}
+        </div>
+    `;
+}
+
+window.toggleClassDay = async function(classCode, day, isAdd) {
+    const cs = classSettings[classCode] || {};
+    const scheduleKey = _classScheduleKey(cs);
+    const classType = cs.free_schedule !== undefined ? '자유학기' : (cs.class_type || '특강');
+    const schedule = { ...(cs[scheduleKey] || {}) };
+
+    if (isAdd) {
+        if (schedule[day] !== undefined) return;
+        schedule[day] = '16:00';
+    } else {
+        delete schedule[day];
+    }
+
+    try {
+        showSaveIndicator('saving');
+        await saveClassSettings(classCode, { [scheduleKey]: schedule });
+
+        const newDays = Object.keys(schedule).sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b));
+        const batch = writeBatch(db);
+        let hasOps = false;
+        for (const student of allStudents) {
+            if (!student.enrollments?.some(e => enrollmentCode(e) === classCode && e.class_type === classType)) continue;
+            let changed = false;
+            const updated = student.enrollments.map(e => {
+                if (enrollmentCode(e) === classCode && e.class_type === classType) {
+                    changed = true;
+                    return { ...e, day: newDays };
+                }
+                return e;
+            });
+            if (changed) {
+                batchUpdate(batch, doc(db, 'students', student.docId), { enrollments: updated });
+                student.enrollments = updated;
+                hasOps = true;
+            }
+        }
+        if (hasOps) await batch.commit();
+        showSaveIndicator('saved');
+        renderClassDetail(classCode);
+    } catch (err) {
+        console.error('요일 수정 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
+window.saveClassDayTime = async function(classCode, day, time) {
+    const cs = classSettings[classCode] || {};
+    const scheduleKey = _classScheduleKey(cs);
+    const schedule = { ...(cs[scheduleKey] || {}), [day]: time };
+    try {
+        showSaveIndicator('saving');
+        await saveClassSettings(classCode, { [scheduleKey]: schedule });
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('시간 저장 실패:', err);
+        showSaveIndicator('error');
+    }
+};
 
 // ─── Class Detail 핸들러 ────────────────────────────────────────────────────
 

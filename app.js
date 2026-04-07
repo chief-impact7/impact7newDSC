@@ -48,7 +48,7 @@ const branchFromClassNumber = (num) => {
 const branchFromStudent = (s) =>
     s.branch || (s.enrollments?.[0] ? branchFromClassNumber(s.enrollments[0].class_number) : '');
 
-// 활성 enrollment만 반환. 내신이 활성 기간이면 정규를 숨김.
+// 활성 enrollment만 반환. 내신/자유학기가 활성 기간이면 정규를 숨김.
 function getActiveEnrollments(s, dateStr) {
     const enrollments = s.enrollments || [];
     if (enrollments.length === 0) return [];
@@ -61,6 +61,18 @@ function getActiveEnrollments(s, dateStr) {
     );
     if (hasActiveNaesin) {
         return enrollments.filter(e => e.class_type !== '정규');
+    }
+    // 자유학기가 활성 기간이면 같은 반코드의 정규 숨김
+    const activeFreeEnrolls = enrollments.filter(e =>
+        e.class_type === '자유학기' &&
+        validDate(e.start_date) && e.start_date <= today &&
+        (!validDate(e.end_date) || e.end_date >= today)
+    );
+    if (activeFreeEnrolls.length > 0) {
+        const freeCodes = new Set(activeFreeEnrolls.map(enrollmentCode));
+        return enrollments.filter(e =>
+            e.class_type !== '정규' || !freeCodes.has(enrollmentCode(e))
+        );
     }
     return enrollments;
 }
