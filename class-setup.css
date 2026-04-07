@@ -481,6 +481,11 @@ body {
   gap: 8px;
 }
 
+.result-status.withdrawn {
+  background: var(--surface-hover);
+  color: var(--text-sec);
+}
+
 .selected-chip-name {
   font-weight: 500;
 }

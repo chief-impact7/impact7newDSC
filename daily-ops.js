@@ -430,6 +430,11 @@ async function saveClassSettings(classCode, data) {
     classSettings[classCode] = { ...classSettings[classCode], ...data };
 }
 
+function findStudent(studentId) {
+    return allStudents.find(s => s.docId === studentId)
+        || withdrawnStudents.find(s => s.docId === studentId);
+}
+
 // ─── Firebase CRUD ──────────────────────────────────────────────────────────
 
 async function loadStudents() {
@@ -6460,7 +6465,7 @@ function _renderLRRow(r, idx, studentId) {
 
 function renderLeaveRequestCard(studentId) {
     const records = leaveRequests.filter(r => r.student_id === studentId);
-    const student = allStudents.find(s => s.docId === studentId) || withdrawnStudents.find(s => s.docId === studentId);
+    const student = findStudent(studentId);
     const stuStatus = student?.status || '';
     const isWithdrawnStu = stuStatus === '퇴원';
     const isLeaveStu = LEAVE_STATUSES.includes(stuStatus);
@@ -6644,8 +6649,7 @@ function renderStudentDetail(studentId) {
     document.getElementById('detail-empty').style.display = 'none';
     document.getElementById('detail-content').style.display = '';
 
-    const student = allStudents.find(s => s.docId === studentId)
-        || withdrawnStudents.find(s => s.docId === studentId);
+    const student = findStudent(studentId);
     if (!student) {
         document.getElementById('detail-empty').style.display = '';
         document.getElementById('detail-content').style.display = 'none';
@@ -6947,15 +6951,19 @@ function renderStudentDetail(studentId) {
         const wdReason = wdLeaveReq?.reason || '';
         const wdReqBy = wdLeaveReq ? getTeacherName(wdLeaveReq.requested_by) : '';
         const wdAppBy = wdLeaveReq ? getTeacherName(wdLeaveReq.approved_by) : '';
-        const enrollInfo = student.enrollments.map(e => {
+        const enrollInfo = student.enrollments.map((e, idx) => {
             const code = enrollmentCode(e);
             const days = (e.day || []).join('·');
             const ct = e.class_type || '정규';
+            const time = e.start_time || e.time || '';
+            const period = e.end_date ? ` ~${e.end_date.slice(5)}` : '';
             return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
                 <span style="font-size:13px;font-weight:600;">${esc(code)}</span>
                 ${ct !== '정규' ? `<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:${ct === '내신' ? 'var(--warning)' : 'var(--info)'};color:#fff;">${esc(ct)}</span>` : ''}
                 <span style="font-size:12px;color:var(--text-sec);">${esc(days)}</span>
-                <span style="font-size:11px;color:var(--text-sec);">${e.semester || ''}</span>
+                ${time ? `<span style="font-size:12px;">${esc(formatTime12h(time))}</span>` : ''}
+                ${period ? `<span style="font-size:11px;color:var(--text-sec);">${esc(period)}</span>` : ''}
+                <span class="material-symbols-outlined" style="font-size:14px;color:var(--text-sec);cursor:pointer;margin-left:auto;" onclick="openEnrollmentModal('${escAttr(studentId)}', ${idx})">edit</span>
             </div>`;
         }).join('');
         withdrawnHtml = `
@@ -7916,7 +7924,7 @@ async function approveLeaveRequest(docId, studentId) {
 
 // 양쪽 승인 완료 → 학생 상태 변경 (공통)
 async function _finalizeLeaveDSC(r, studentId) {
-    const cachedStudent = allStudents.find(s => s.docId === studentId) || withdrawnStudents.find(s => s.docId === studentId);
+    const cachedStudent = findStudent(studentId);
     const beforeData = cachedStudent || {};
     const beforeStatus = beforeData.status || '';
     const studentUpdate = {};
@@ -8008,9 +8016,7 @@ let _returnModalStudentId = null;
 let _returnModalType = null; // '재등원요청' | '복귀요청'
 
 function _openReturnModal(studentId, type) {
-    // 퇴원 학생은 allStudents + withdrawnStudents 모두에서 검색
-    const student = allStudents.find(s => s.docId === studentId)
-        || withdrawnStudents.find(s => s.docId === studentId);
+    const student = findStudent(studentId);
     if (!student) { alert('학생 정보를 찾을 수 없습니다.'); return; }
 
     _returnModalStudentId = studentId;
@@ -8056,8 +8062,7 @@ function openReturnFromLeaveModal(studentId) {
 async function submitReturnFromLeave() {
     if (!_returnModalStudentId || !_returnModalType) return;
 
-    const student = allStudents.find(s => s.docId === _returnModalStudentId)
-        || withdrawnStudents.find(s => s.docId === _returnModalStudentId);
+    const student = findStudent(_returnModalStudentId);
     if (!student) { alert('학생 정보를 찾을 수 없습니다.'); return; }
 
     const returnDate = document.getElementById('rfl-return-date').value;
@@ -8688,7 +8693,7 @@ function getStudentRoleMemos(studentId) {
 
 function renderStudentRoleMemoCard(studentId) {
     const memos = getStudentRoleMemos(studentId);
-    const student = allStudents.find(s => s.docId === studentId);
+    const student = findStudent(studentId);
 
     let memosHtml = '';
     if (memos.length === 0) {
@@ -8734,7 +8739,7 @@ function normalizeStudentMemos(student) {
 }
 
 function renderUnifiedMemoCard(studentId) {
-    const student = allStudents.find(s => s.docId === studentId);
+    const student = findStudent(studentId);
     if (!student) return '';
     const rec = dailyRecords[studentId] || {};
     const memos = normalizeStudentMemos(student);
@@ -8812,7 +8817,7 @@ function renderUnifiedMemoCard(studentId) {
 let editingEnrollment = { studentId: null, enrollIdx: 0 };
 
 function openEnrollmentModal(studentId, enrollIdx) {
-    const student = allStudents.find(s => s.docId === studentId);
+    const student = findStudent(studentId);
     if (!student) return;
 
     editingEnrollment = { studentId, enrollIdx };
@@ -8837,7 +8842,7 @@ function openEnrollmentModal(studentId, enrollIdx) {
 
 async function saveEnrollment() {
     const { studentId, enrollIdx } = editingEnrollment;
-    const student = allStudents.find(s => s.docId === studentId);
+    const student = findStudent(studentId);
     if (!student) return;
 
     const levelSymbol = document.getElementById('enroll-level').value.trim();

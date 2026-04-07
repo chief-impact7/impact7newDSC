@@ -1,6 +1,6 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import {
-    collection, getDocs, doc, getDoc, query, where, writeBatch, arrayUnion
+    collection, getDocs, doc, getDoc, writeBatch, arrayUnion
 } from 'firebase/firestore';
 import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
@@ -37,6 +37,8 @@ const wizardData = {
 let allStudents = [];
 let teachersList = [];
 
+const ACTIVE_STATUSES = new Set(['재원', '등원예정', '실휴원', '가휴원']);
+
 // ─── Auth ───────────────────────────────────────────────────────────────────
 onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -60,9 +62,7 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 async function loadStudents() {
-    const snap = await getDocs(
-        query(collection(db, 'students'), where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원']))
-    );
+    const snap = await getDocs(collection(db, 'students'));
     allStudents = [];
     snap.forEach(d => {
         const data = d.data();
@@ -291,22 +291,30 @@ function onEnterStep3() {
     renderSelectedStudents();
 }
 
+let _searchTimer = null;
 window.searchStudents = function (q) {
+    clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(() => _doSearchStudents(q), 250);
+};
+
+function _doSearchStudents(q) {
     const results = document.getElementById('search-results');
     q = q.trim().toLowerCase();
     if (!q) { results.innerHTML = ''; return; }
 
     const selectedIds = new Set(wizardData.students.map(s => s.docId));
-    // 재원생 우선 정렬
+    const isSpecial = wizardData.classType === '특강';
+    // 특강: 재원생 우선 + 비원생 포함 / 정규·내신·자유학기: 재원생만
     const filtered = allStudents
         .filter(s => {
+            if (!isSpecial && !ACTIVE_STATUSES.has(s.status)) return false;
             const name = (s.name || '').toLowerCase();
             const school = (s.school || '').toLowerCase();
             return name.includes(q) || school.includes(q);
         })
         .sort((a, b) => {
-            const aActive = a.status === '재원' ? 0 : 1;
-            const bActive = b.status === '재원' ? 0 : 1;
+            const aActive = ACTIVE_STATUSES.has(a.status) ? 0 : 1;
+            const bActive = ACTIVE_STATUSES.has(b.status) ? 0 : 1;
             return aActive - bActive || (a.name || '').localeCompare(b.name || '', 'ko');
         })
         .slice(0, 20);
@@ -314,24 +322,24 @@ window.searchStudents = function (q) {
     results.innerHTML = filtered.map(s => {
         const alreadySelected = selectedIds.has(s.docId);
         const meta = [s.school, s.grade ? `${s.grade}학년` : ''].filter(Boolean).join(' ');
+        const statusClass = ACTIVE_STATUSES.has(s.status) ? '' : 'withdrawn';
         return `<div class="search-result-item ${alreadySelected ? 'already-selected' : ''}"
                      onclick="addStudent('${s.docId}')">
                     <div class="result-info">
                         <span class="result-name">${esc(s.name)}</span>
                         <span class="result-meta">${esc(meta)}</span>
                     </div>
-                    <span class="result-status">${esc(s.status)}</span>
+                    <span class="result-status ${statusClass}">${esc(s.status)}</span>
                 </div>`;
     }).join('');
-};
+}
 
 window.addStudent = function (docId) {
     if (wizardData.students.some(s => s.docId === docId)) return;
-    const s = allStudents.find(s => s.docId === docId);
-    if (!s) return;
-    wizardData.students.push(s);
+    const found = allStudents.find(s => s.docId === docId);
+    if (!found) return;
+    wizardData.students.push(found);
     renderSelectedStudents();
-    // 검색 결과 갱신
     const searchInput = document.getElementById('student-search');
     if (searchInput.value) window.searchStudents(searchInput.value);
 };
