@@ -68,7 +68,8 @@ impact7newDSC/
 ```
 students/{studentId}
 ├── name: string              # 학생 이름
-├── status: string            # "재원" | "퇴원" | "휴원"
+├── status: string            # "등원예정" | "재원" | "실휴원" | "가휴원" | "퇴원" | "종강"
+├── status2: string           # "특강" | null  — 현재 특강 수강 중 여부 (재원생도 특강 수강 시 설정)
 ├── branch: string            # "2단지" | "10단지" (optional)
 ├── school: string            # 학교명 (optional)
 ├── grade: string             # 학년 (optional)
@@ -93,6 +94,7 @@ students/{studentId}
 ```
 class_settings/{classCode}
 ├── teacher: string           # 담당 선생님 이메일
+├── fee_type: string          # 특강 전용: "유료" | "무료" (특강 외 반에는 없음)
 │
 │   # 내신 반 전용 필드 (정규 반에는 없음)
 ├── naesin_start: string      # 내신 시작일 "2026-03-09"

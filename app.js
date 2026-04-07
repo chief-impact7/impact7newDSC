@@ -245,13 +245,21 @@ window.handleLogin = async () => {
 // ─── Load students (cached) ──────────────────────────────────────────────────
 async function loadAllStudents() {
     try {
-        const snapshot = await getDocs(query(collection(db, 'students'), where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원'])));
+        const [snap1, snap2] = await Promise.all([
+            getDocs(query(collection(db, 'students'), where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원']))),
+            getDocs(query(collection(db, 'students'), where('status2', '==', '특강')))
+        ]);
+        const seen = new Set();
         allStudents = [];
-        snapshot.forEach(docSnap => {
+        const addDoc = docSnap => {
+            if (seen.has(docSnap.id)) return;
+            seen.add(docSnap.id);
             const data = { id: docSnap.id, ...docSnap.data() };
             data.enrollments = normalizeEnrollments(data);
             allStudents.push(data);
-        });
+        };
+        snap1.docs.forEach(addDoc);
+        snap2.docs.forEach(addDoc);
         allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
         populateClassFilter();
     } catch (err) {

@@ -440,8 +440,17 @@ function findStudent(studentId) {
 async function loadStudents() {
     let snap;
     try {
-        snap = await getDocs(query(collection(db, 'students'), where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원'])));
-        console.log('[loadStudents] 문서 수:', snap.size);
+        const [snap1, snap2] = await Promise.all([
+            getDocs(query(collection(db, 'students'), where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원']))),
+            getDocs(query(collection(db, 'students'), where('status2', '==', '특강')))
+        ]);
+        const seenIds = new Set();
+        const allDocs = [];
+        const dedup = d => { if (!seenIds.has(d.id)) { seenIds.add(d.id); allDocs.push(d); } };
+        snap1.docs.forEach(dedup);
+        snap2.docs.forEach(dedup);
+        snap = allDocs;
+        console.log('[loadStudents] 문서 수:', allDocs.length);
     } catch (err) {
         console.error('[loadStudents] 로드 실패:', err.message, err);
         allStudents = [];

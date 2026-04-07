@@ -528,6 +528,19 @@ body {
   margin-bottom: 24px;
 }
 
+.fee-type-btn {
+  padding: 6px 20px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-main);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.fee-type-btn:hover { border-color: var(--primary); background: var(--primary-light); }
+.fee-type-btn.selected { background: var(--primary); border-color: var(--primary); color: #fff; }
+
 .day-chip {
   width: 48px;
   height: 48px;
