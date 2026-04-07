@@ -1145,7 +1145,8 @@ function renderSubFilters() {
                 { key: 'other', label: '기타' },
                 { key: 'departure_check', label: '귀가점검' }
             ]},
-            { key: 'naesin', label: '내신' }
+            { key: 'naesin', label: '내신' },
+            { key: 'teukang', label: '특강' }
         ],
         homework: [
             { key: 'hw_1st', label: '1차' },
@@ -1635,6 +1636,15 @@ function hasRegularEnrollmentToday(student) {
     );
 }
 
+function hasTeukangEnrollmentToday(student) {
+    if (_regularDayCache.date !== selectedDate) {
+        _regularDayCache = { date: selectedDate, dayName: getDayName(selectedDate) };
+    }
+    return getActiveEnrollments(student, selectedDate).some(e =>
+        e.class_type === '특강' && e.day.includes(_regularDayCache.dayName)
+    );
+}
+
 // 비정규 등원 여부 판별 (hw_fail/test_fail/extra_visit)
 function isVisitStudent(docId) {
     const hwFail = dailyRecords[docId]?.hw_fail_action || {};
@@ -1727,6 +1737,10 @@ function getSubFilterCount(filterKey) {
             case 'naesin': {
                 const naesinStudents = window._getNaesinStudents ? window._getNaesinStudents() : [];
                 return { count: naesinStudents.length, total: naesinStudents.length };
+            }
+            case 'teukang': {
+                const cnt = regularOnly.filter(hasTeukangEnrollmentToday).length;
+                return { count: cnt, total: cnt };
             }
             default: {
                 const svSources = SV_SOURCE_MAP[filterKey];
@@ -2143,6 +2157,7 @@ function getFilteredStudents() {
                 if (f === 'late' && st === '지각') return true;
                 if (f === 'absent' && st === '결석') return true;
                 if (f === 'other' && st && !['미확인', '출석', '지각', '결석'].includes(st)) return true;
+                if (f === 'teukang' && hasTeukangEnrollmentToday(s)) return true;
             }
             return false;
         });
