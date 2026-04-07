@@ -1533,12 +1533,13 @@ function renderFilterChips() {
     const subFilterLabels = {
         scheduled_visit: '비정규', pre_arrival: '정규', present: '출석', late: '지각', absent: '결석', other: '기타',
         departure_check: '귀가점검', enroll_pending: '등원예정',
-        absence_ledger: '결석대장', leave_request: '휴퇴원요청', return_upcoming: '복귀요청',
+        absence_ledger: '결석대장', leave_request: '휴퇴원요청', return_upcoming: '복귀예정',
         sv_absence_makeup: '결석보충', sv_clinic: '클리닉', sv_diagnostic: '진단평가', sv_fail: '미통과',
         hw_1st: '1차', hw_2nd: '2차', hw_next: '다음숙제',
         test_1st: '1차', test_2nd: '2차',
         auto_hw_missing: '미제출 숙제', auto_retake: '재시 필요', auto_unchecked: '미체크 출석',
-        naesin: '내신'
+        naesin: '내신',
+        teukang: '특강'
     };
 
     const chips = [];
@@ -1653,7 +1654,7 @@ function setSubFilter(filterKey) {
     renderListPanel();
 }
 
-const REGULAR_CLASS_TYPES = ['정규', '내신', '특강', '자유학기'];
+const REGULAR_CLASS_TYPES = ['정규', '내신', '자유학기'];
 const DAY_ORDER = ['월', '화', '수', '목', '금', '토'];
 
 let _regularDayCache = { date: null, dayName: null };
@@ -1672,9 +1673,11 @@ function hasTeukangEnrollmentToday(student) {
     if (_regularDayCache.date !== selectedDate) {
         _regularDayCache = { date: selectedDate, dayName: getDayName(selectedDate) };
     }
-    return getActiveEnrollments(student, selectedDate).some(e =>
-        e.class_type === '특강' && e.day.includes(_regularDayCache.dayName)
-    );
+    return getActiveEnrollments(student, selectedDate).some(e => {
+        if (e.class_type !== '특강' || !e.day.includes(_regularDayCache.dayName)) return false;
+        const ec = enrollmentCode(e);
+        return ec && classSettings[ec]?.class_type === '특강';
+    });
 }
 
 // 비정규 등원 여부 판별 (hw_fail/test_fail/extra_visit)
@@ -3496,6 +3499,7 @@ function renderListPanel() {
         !currentSubFilter.has('enroll_pending') &&
         !currentSubFilter.has('scheduled_visit') &&
         !currentSubFilter.has('departure_check') &&
+        !currentSubFilter.has('teukang') &&
         !SV_L3_KEYS.some(k => currentSubFilter.has(k));
 
     // 정규/비정규 분리 (single-pass)
