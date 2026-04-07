@@ -38,15 +38,18 @@ service cloud.firestore {
 
       function hasRequiredStudentFields() {
         let data = request.resource.data;
-        return data.keys().hasAll(['name', 'parent_phone_1', 'branch', 'status', 'enrollments'])
+        // name과 enrollments는 항상 필수
+        // status/parent_phone_1/branch는 있을 경우 유효해야 함 (비원생 신규 생성 허용)
+        return data.keys().hasAll(['name', 'enrollments'])
           && data.name is string
           && data.name.size() > 0
-          && data.parent_phone_1 is string
-          && data.parent_phone_1.size() > 0
-          && data.branch is string
-          && data.status is string
-          && data.status in ['등원예정', '재원', '실휴원', '가휴원', '퇴원']
-          && data.enrollments is list;
+          && data.enrollments is list
+          && (!data.keys().hasAny(['status']) || (
+                data.status is string
+                && data.status in ['등원예정', '재원', '실휴원', '가휴원', '퇴원']
+             ))
+          && (!data.keys().hasAny(['parent_phone_1']) || data.parent_phone_1 is string)
+          && (!data.keys().hasAny(['branch']) || data.branch is string);
       }
 
       function hasOnlyAllowedStudentFields() {
@@ -54,7 +57,7 @@ service cloud.firestore {
           'name', 'level', 'school', 'grade',
           'student_phone', 'parent_phone_1', 'parent_phone_2',
           'guardian_name_1', 'guardian_name_2',
-          'branch', 'status', 'enrollments',
+          'branch', 'status', 'status2', 'enrollments',
           'pause_start_date', 'pause_end_date',
           'day', 'class_type', 'level_code', 'level_symbol', 'class_number',
           'start_date', 'special_start_date', 'special_end_date',
@@ -331,7 +334,7 @@ service cloud.firestore {
           'default_time', 'default_time_updated_by', 'default_time_updated_at',
           'naesin_start', 'naesin_end', 'schedule',
           'free_schedule', 'free_start', 'free_end',
-          'class_type', 'updated_at', 'updated_by'
+          'class_type', 'fee_type', 'updated_at', 'updated_by'
         ]);
       }
 
