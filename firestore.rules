@@ -38,8 +38,7 @@ service cloud.firestore {
 
       function hasRequiredStudentFields() {
         let data = request.resource.data;
-        // name과 enrollments는 항상 필수
-        // status/parent_phone_1/branch는 있을 경우 유효해야 함 (비원생 신규 생성 허용)
+        // 비원생 신규 생성 허용 — status/phone/branch 없이도 create 가능
         return data.keys().hasAll(['name', 'enrollments'])
           && data.name is string
           && data.name.size() > 0
@@ -48,7 +47,10 @@ service cloud.firestore {
                 data.status is string
                 && data.status in ['등원예정', '재원', '실휴원', '가휴원', '퇴원']
              ))
-          && (!data.keys().hasAny(['parent_phone_1']) || data.parent_phone_1 is string)
+          && (!data.keys().hasAny(['parent_phone_1']) || (
+                data.parent_phone_1 is string
+                && data.parent_phone_1.size() > 0
+             ))
           && (!data.keys().hasAny(['branch']) || data.branch is string);
       }
 
@@ -81,7 +83,8 @@ service cloud.firestore {
       allow update: if isAuthorized()
         && hasRequiredStudentFields()
         && hasOnlyAllowedStudentFields()
-        && withinFieldLimit(30);
+        && withinFieldLimit(30)
+        && (!resource.data.keys().hasAny(['status']) || request.resource.data.keys().hasAny(['status']));
 
       allow delete: if false;  // 삭제 차단 — soft-delete(status='퇴원')로 대체
 
