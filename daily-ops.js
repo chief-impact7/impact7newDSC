@@ -1323,16 +1323,21 @@ function deriveNaesinCode(student, enrollment) {
 }
 
 // 특강 학생 조회: enrollmentCode 기반(신규) + schedule 기반(구형 데이터 호환)
-function isInTeukangClass(s, classCode) {
-    // class_settings.schedule은 { day: time } 객체 형태
-    const scheduleDays = new Set(Object.keys(classSettings[classCode]?.schedule || {}));
+function isInTeukangClass(s, classCode, _scheduleDays) {
+    const scheduleDays = _scheduleDays ?? new Set(Object.keys(classSettings[classCode]?.schedule || {}));
     return (s.enrollments || []).some(e => {
         if (e.class_type !== '특강') return false;
         const ec = enrollmentCode(e);
         if (ec) return ec === classCode;
-        // 구형 데이터 호환: class_number가 비어있으면 요일로 매칭
         return scheduleDays.size > 0 && e.day?.some(d => scheduleDays.has(d));
     });
+}
+
+function getTeukangClassStudents(classCode) {
+    const scheduleDays = new Set(Object.keys(classSettings[classCode]?.schedule || {}));
+    return allStudents.filter(s =>
+        s.status !== '퇴원' && matchesBranchFilter(s) && isInTeukangClass(s, classCode, scheduleDays)
+    );
 }
 
 function _getAllClassCodes() {
@@ -1461,7 +1466,7 @@ function renderClassCodeFilter() {
     if (tekExpanded) {
         html += teukang.map(code => {
             const isActive = selectedClassCode === code ? 'active' : '';
-            const count = allStudents.filter(s => s.status !== '퇴원' && matchesBranchFilter(s) && isInTeukangClass(s, code)).length;
+            const count = getTeukangClassStudents(code).length;
             return `<div class="nav-l2 nav-l3 ${isActive}" onclick="setClassCode('${escAttr(code)}')">
                 ${esc(code)}${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
             </div>`;
@@ -1676,6 +1681,7 @@ function hasTeukangEnrollmentToday(student) {
     return getActiveEnrollments(student, selectedDate).some(e => {
         if (e.class_type !== '특강' || !e.day.includes(_regularDayCache.dayName)) return false;
         const ec = enrollmentCode(e);
+        // 삭제된 반의 orphaned enrollment 제외 (classSettings에 존재하는 특강만)
         return ec && classSettings[ec]?.class_type === '특강';
     });
 }
@@ -2084,9 +2090,7 @@ function getEnrollPendingVisits() {
 function getFilteredStudents() {
     // 반 설정: 특강 모드 — 날짜 무관, 특강 반 전체 학생
     if (_classMgmtMode === 'teukang' && selectedClassCode) {
-        return allStudents.filter(s =>
-            s.status !== '퇴원' && matchesBranchFilter(s) && isInTeukangClass(s, selectedClassCode)
-        );
+        return getTeukangClassStudents(selectedClassCode);
     }
 
     // 반 설정: 내신 반코드 선택 시 (글로벌 필터이므로 currentCategory 무관)
@@ -3753,9 +3757,8 @@ function renderClassDetail(classCode) {
     document.getElementById('detail-content').style.display = '';
 
     const dayName = getDayName(selectedDate);
-    // 특강은 날짜 무관하게 전체 수강생 표시
     let classStudents = isTeukangClass
-        ? allStudents.filter(s => s.status !== '퇴원' && matchesBranchFilter(s) && isInTeukangClass(s, classCode))
+        ? getTeukangClassStudents(classCode)
         : allStudents.filter(s =>
             s.status !== '퇴원' &&
             getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayName) && enrollmentCode(e) === classCode)
