@@ -6,7 +6,7 @@
  *   - src/shared/firestore-helpers.js의 getDayName
  */
 
-import { getDayName } from './src/shared/firestore-helpers.js';
+import { getDayName, studentShortLabel } from './src/shared/firestore-helpers.js';
 import { db } from './firebase-config.js';
 import { doc } from 'firebase/firestore';
 import { auditUpdate, auditSet } from './audit.js';
@@ -239,7 +239,7 @@ export function renderNaesinDetail(studentId) {
         const teacherEmail = cs.teacher || '';
         const teacherName  = teacherEmail ? teacherEmail.split('@')[0] : '';
         const branch       = window.branchFromStudent?.(student) || '';
-        const schoolGrade  = [student.school, student.grade].filter(Boolean).join(' ');
+        const schoolGrade  = studentShortLabel(student);
         tagsEl.innerHTML =
             `<span class="tag-naesin">내신</span>` +
             (code ? `<span class="tag-class">${_esc(code)}</span>` : '') +
@@ -593,7 +593,7 @@ export function renderTeukangDetail(studentId) {
         const teacherEmail = cs.teacher || '';
         const teacherName = teacherEmail ? teacherEmail.split('@')[0] : '';
         const branch = window.branchFromStudent?.(student) || '';
-        const schoolGrade = [student.school, student.grade].filter(Boolean).join(' ');
+        const schoolGrade = studentShortLabel(student);
         tagsEl.innerHTML =
             `<span class="tag-naesin" style="background:var(--info);">특강</span>` +
             `<span class="tag-class">${_esc(classCode)}</span>` +

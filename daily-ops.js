@@ -7,7 +7,7 @@ import {
 import { auth, db, geminiModel } from './firebase-config.js';
 import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
 import { initHelpGuide } from './help-guide.js';
-import { toDateStrKST, parseDateKST, todayStr, getDayName } from './src/shared/firestore-helpers.js';
+import { toDateStrKST, parseDateKST, todayStr, getDayName, studentShortLabel } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditSet, auditAdd, auditDelete, batchUpdate, batchSet } from './audit.js';
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -278,15 +278,6 @@ function getStudentStartTime(enrollment, dayName) {
         if (classSchedule?.[dayName]) return classSchedule[dayName];
     }
     return enrollment.start_time || enrollment.time || classSettings[enrollmentCode(enrollment)]?.default_time || '';
-}
-
-// 학교+학부앞글자+학년앞글자 조합 (예: 대일고1, 진명여고1)
-function studentShortLabel(s) {
-    let school = (s.school || '').replace('여자', '여');
-    const dept = s.level || '';
-    const grade = String(s.grade || '');
-    if (!school) return '';
-    return school + (dept ? dept[0] : '') + (grade ? grade[0] : '');
 }
 
 function makeDailyRecordId(studentDocId, date) {
@@ -1890,21 +1881,8 @@ function getSubFilterCount(filterKey) {
 
 // ─── 비정규 통합 집계 ────────────────────────────────────────────────────────
 
-// 학교+학부+학년 → 축약 표시 (예: "진명여자고등학교" → "진명여고", + 학년 → "진명여고1")
-function _formatTempSchoolInfo(ta) {
-    let school = (ta.school || '').replace('여자', '여');
-    const level = ta.level || '';
-    const grade = ta.grade || '';
-    // 학부 접미어 축약: 초등→초, 중등→중, 고등→고
-    const levelShort = level === '초등' ? '초' : level === '중등' ? '중' : level === '고등' ? '고' : '';
-    // 학교명에 이미 '초/중/고'로 끝나면 학부 생략
-    const endsWithLevel = /[초중고]$|초등학교$|중학교$|고등학교$/.test(school);
-    if (endsWithLevel) {
-        school = school.replace(/초등학교$/, '초').replace(/중학교$/, '중').replace(/고등학교$/, '고');
-        return school + grade;
-    }
-    return (school + levelShort + grade) || '';
-}
+// 학교+학부+학년 축약 표시는 공용 helper studentShortLabel 사용
+const _formatTempSchoolInfo = studentShortLabel;
 
 let _scheduledVisitsCache = null;
 function getScheduledVisits() {
@@ -4129,8 +4107,7 @@ function _doSearchTeukangAddStudent(classCode, q) {
     }
 
     results.innerHTML = filtered.map(s => {
-        const meta = [s.school, s.grade ? `${s.grade}학년` : '', s.status]
-            .filter(Boolean).join(' · ');
+        const meta = [studentShortLabel(s), s.status].filter(Boolean).join(' · ');
         return `<div class="search-result-item" style="display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid var(--border);cursor:pointer;"
                      onclick="addStudentToTeukang('${escAttr(classCode)}', '${escAttr(s.docId)}')">
                     <div>
@@ -10863,8 +10840,7 @@ function _renderPastContacts(pastContactResults, container) {
     const renderPastItem = (c) => {
         const phone = c.parent_phone_1 || c.student_phone || '';
         const last4 = phone.replace(/\D/g, '').slice(-4);
-        const schoolGrade = [c.school || '', c.grade ? c.grade + '학년' : ''].filter(Boolean).join(' ');
-        const sub = [schoolGrade, last4 ? `☎${last4}` : ''].filter(Boolean).join(' · ');
+        const sub = [studentShortLabel(c), last4 ? `☎${last4}` : ''].filter(Boolean).join(' · ');
         return `<div class="list-item contact-item" style="cursor:pointer" onclick="window.openContactAsTemp('${escAttr(c.id)}')">
             <div class="item-info">
                 <span class="item-title">${esc(c.name || '—')} <span class="tag-past">과거</span></span>

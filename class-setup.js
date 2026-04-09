@@ -4,7 +4,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
-import { todayStr } from './src/shared/firestore-helpers.js';
+import { todayStr, studentShortLabel } from './src/shared/firestore-helpers.js';
 import { auditSet, batchUpdate } from './audit.js';
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -328,12 +328,11 @@ function _doSearchStudents(q) {
 
     const html = filtered.map(s => {
         const alreadySelected = selectedIds.has(s.docId);
-        const meta = [s.school, s.grade ? `${s.grade}학년` : ''].filter(Boolean).join(' ');
         return `<div class="search-result-item ${alreadySelected ? 'already-selected' : ''}"
                      onclick="addStudent('${s.docId}')">
                     <div class="result-info">
                         <span class="result-name">${esc(s.name)}</span>
-                        <span class="result-meta">${esc(meta)}</span>
+                        <span class="result-meta">${esc(studentShortLabel(s))}</span>
                     </div>
                     <span class="result-status">${esc(s.status)}</span>
                 </div>`;
@@ -367,10 +366,7 @@ function renderSelectedStudents() {
         return;
     }
     list.innerHTML = wizardData.students.map(s => {
-        const meta = [
-            s.school,
-            s.grade ? `${s.grade}학년` : ''
-        ].filter(Boolean).join(' ');
+        const meta = studentShortLabel(s);
         return `<div class="selected-chip">
                     <div class="selected-chip-info">
                         <span class="selected-chip-name">${esc(s.name)}</span>

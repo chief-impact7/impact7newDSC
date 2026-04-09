@@ -157,6 +157,34 @@ export const branchFromStudent = (s) =>
 
 export { normalizeDays };
 
+// ─── 학생 표시명 ───
+// 학교 + 학부(초/중/고) + 학년을 하나로 합친 축약 라벨
+// 예: (신목, 중등, 2) → "신목중2"
+//     (진명여자고등학교, 고등, 1) → "진명여고1"
+//     (신목중, 중등, 3) → "신목중3"  (중복 '중' 방지)
+//     (신목중학교, 중등, 3) → "신목중3"
+export function studentShortLabel(s) {
+    if (!s) return '';
+    let school = (s.school || '').replace('여자', '여');
+    const level = s.level || '';
+    const grade = s.grade != null ? String(s.grade) : '';
+    if (!school) return '';
+
+    // 학부 접미어 축약: 초등→초, 중등→중, 고등→고
+    const levelShort = level === '초등' ? '초'
+                     : level === '중등' ? '중'
+                     : level === '고등' ? '고'
+                     : (level[0] || '');
+
+    // 학교명이 이미 '초/중/고'로 끝나거나 긴 형식이면 접미어 중복 방지
+    school = school.replace(/초등학교$/, '초')
+                   .replace(/중학교$/, '중')
+                   .replace(/고등학교$/, '고');
+    const endsWithLevel = /[초중고]$/.test(school);
+    const suffix = endsWithLevel ? '' : levelShort;
+    return school + suffix + grade;
+}
+
 // ─── 날짜 유틸 ───
 
 export const toDateStrKST = (date) => date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
