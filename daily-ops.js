@@ -1326,8 +1326,9 @@ function isInTeukangClass(s, classCode, _scheduleDays) {
 
 function getTeukangClassStudents(classCode) {
     const scheduleDays = new Set(Object.keys(classSettings[classCode]?.schedule || {}));
+    // 특강 enrollment 자체가 필터 역할. 퇴원 학생도 특강 수강 가능.
     return allStudents.filter(s =>
-        s.status !== '퇴원' && matchesBranchFilter(s) && isInTeukangClass(s, classCode, scheduleDays)
+        matchesBranchFilter(s) && isInTeukangClass(s, classCode, scheduleDays)
     );
 }
 
@@ -4076,47 +4077,68 @@ function renderTeukangAddStudentCard(classCode) {
 }
 
 let _teukangAddSearchTimer = null;
+let _teukangAddSearchId = 0;
 window.searchTeukangAddStudent = function(classCode, q) {
     clearTimeout(_teukangAddSearchTimer);
     _teukangAddSearchTimer = setTimeout(() => _doSearchTeukangAddStudent(classCode, q), 200);
 };
 
-function _doSearchTeukangAddStudent(classCode, q) {
+function _renderTeukangSearchItem(classCode, s, docId) {
+    const meta = [studentShortLabel(s), s.status].filter(Boolean).join(' · ');
+    return `<div class="search-result-item" style="display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid var(--border);cursor:pointer;"
+                 onclick="addStudentToTeukang('${escAttr(classCode)}', '${escAttr(docId)}')">
+                <div>
+                    <div style="font-weight:600;">${esc(s.name)}</div>
+                    <div style="font-size:11px;color:var(--text-sec);">${esc(meta)}</div>
+                </div>
+                <span class="material-symbols-outlined" style="font-size:18px;color:var(--primary);">add</span>
+            </div>`;
+}
+
+async function _doSearchTeukangAddStudent(classCode, q) {
     const results = document.getElementById('teukang-add-results');
     if (!results) return;
     q = (q || '').trim().toLowerCase();
     if (!q) { results.innerHTML = ''; return; }
 
+    // stale result 방지를 위한 요청 ID
+    const reqId = ++_teukangAddSearchId;
+
     // 이미 이 특강반에 등록된 학생 제외
     const enrolledIds = new Set(getTeukangClassStudents(classCode).map(s => s.docId));
 
-    const filtered = allStudents
+    // 1) 로컬: 활성 학생(재원/등원예정/실휴원/가휴원/상담) 필터
+    const localItems = allStudents
         .filter(s => {
             if (!TEUKANG_ELIGIBLE_STATUSES.has(s.status)) return false;
             if (enrolledIds.has(s.docId)) return false;
             const name = (s.name || '').toLowerCase();
             const school = (s.school || '').toLowerCase();
             return name.includes(q) || school.includes(q);
-        })
-        .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'))
-        .slice(0, 20);
+        });
 
-    if (filtered.length === 0) {
-        results.innerHTML = '<div style="font-size:12px;color:var(--text-sec);padding:8px;">검색 결과 없음</div>';
-        return;
-    }
+    // 로컬 결과를 먼저 즉시 렌더
+    const renderCombined = (localList, pastList) => {
+        const items = [
+            ...localList.map(s => _renderTeukangSearchItem(classCode, s, s.docId)),
+            ...pastList.map(r => _renderTeukangSearchItem(classCode, r, r.id)),
+        ];
+        if (items.length === 0) {
+            results.innerHTML = '<div style="font-size:12px;color:var(--text-sec);padding:8px;">검색 결과 없음</div>';
+        } else {
+            results.innerHTML = items.slice(0, 30).join('');
+        }
+    };
 
-    results.innerHTML = filtered.map(s => {
-        const meta = [studentShortLabel(s), s.status].filter(Boolean).join(' · ');
-        return `<div class="search-result-item" style="display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid var(--border);cursor:pointer;"
-                     onclick="addStudentToTeukang('${escAttr(classCode)}', '${escAttr(s.docId)}')">
-                    <div>
-                        <div style="font-weight:600;">${esc(s.name)}</div>
-                        <div style="font-size:11px;color:var(--text-sec);">${esc(meta)}</div>
-                    </div>
-                    <span class="material-symbols-outlined" style="font-size:18px;color:var(--primary);">add</span>
-                </div>`;
-    }).join('');
+    renderCombined(localItems.slice(0, 20), []);
+
+    // 2) 리모트: 퇴원/종강 학생 prefix 쿼리 (_searchContactsDSC 재사용)
+    try {
+        const remote = await _searchContactsDSC(q);
+        if (reqId !== _teukangAddSearchId) return; // stale 무시
+        const pastItems = remote.filter(r => !enrolledIds.has(r.id)).slice(0, 10);
+        renderCombined(localItems.slice(0, 20), pastItems);
+    } catch (_) { /* 리모트 실패 시 로컬 결과만 유지 */ }
 }
 
 function _findTeukangEnrollment(student, classCode) {
@@ -4158,8 +4180,20 @@ function _buildTeukangEnrollment(classCode) {
 }
 
 window.addStudentToTeukang = async function(classCode, studentId) {
-    const student = allStudents.find(s => s.docId === studentId);
-    if (!student) { alert('학생을 찾을 수 없습니다.'); return; }
+    // 로컬 캐시 우선, 없으면 Firestore에서 가져옴 (퇴원/종강 학생 처리)
+    let student = allStudents.find(s => s.docId === studentId);
+    let isFromRemote = false;
+    if (!student) {
+        try {
+            const snap = await getDoc(doc(db, 'students', studentId));
+            if (!snap.exists()) { alert('학생을 찾을 수 없습니다.'); return; }
+            student = { docId: snap.id, ...snap.data() };
+            isFromRemote = true;
+        } catch (err) {
+            alert('학생 조회 실패: ' + err.message);
+            return;
+        }
+    }
 
     if (_findTeukangEnrollment(student, classCode)) {
         alert(`${student.name} 학생은 이미 ${classCode} 반에 등록되어 있습니다.`);
@@ -4177,6 +4211,11 @@ window.addStudentToTeukang = async function(classCode, studentId) {
         // 로컬 캐시 업데이트
         student.enrollments = [...(student.enrollments || []), newEnrollment];
         student.status2 = '특강';
+        // 리모트에서 가져온 학생은 allStudents에 추가 (status2='특강' 쿼리에 매칭)
+        if (isFromRemote) {
+            allStudents.push(student);
+            allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+        }
         showSaveIndicator('saved');
         renderClassDetail(classCode);
         renderListPanel?.();

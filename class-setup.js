@@ -315,26 +315,35 @@ function _doSearchStudents(q) {
     if (!q) { results.innerHTML = ''; return; }
 
     const selectedIds = new Set(wizardData.students.map(s => s.docId));
-    // 모든 반 유형: 재원/등원예정/실휴원/가휴원/상담만 검색 (퇴원 제외)
+    const isSpecial = wizardData.classType === '특강';
+
+    // 특강: 모든 상태 허용 (퇴원/종강 학생도 특강 수강 가능)
+    // 기타 반 유형: 활성 상태(재원/등원예정/실휴원/가휴원/상담)만
     const filtered = allStudents
         .filter(s => {
-            if (!ACTIVE_STATUSES.has(s.status)) return false;
+            if (!isSpecial && !ACTIVE_STATUSES.has(s.status)) return false;
             const name = (s.name || '').toLowerCase();
             const school = (s.school || '').toLowerCase();
             return name.includes(q) || school.includes(q);
         })
-        .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'))
+        .sort((a, b) => {
+            // 활성 학생 우선 → 이름순
+            const aActive = ACTIVE_STATUSES.has(a.status) ? 0 : 1;
+            const bActive = ACTIVE_STATUSES.has(b.status) ? 0 : 1;
+            return aActive - bActive || (a.name || '').localeCompare(b.name || '', 'ko');
+        })
         .slice(0, 20);
 
     const html = filtered.map(s => {
         const alreadySelected = selectedIds.has(s.docId);
+        const isInactive = !ACTIVE_STATUSES.has(s.status);
         return `<div class="search-result-item ${alreadySelected ? 'already-selected' : ''}"
                      onclick="addStudent('${s.docId}')">
                     <div class="result-info">
                         <span class="result-name">${esc(s.name)}</span>
                         <span class="result-meta">${esc(studentShortLabel(s))}</span>
                     </div>
-                    <span class="result-status">${esc(s.status)}</span>
+                    <span class="result-status ${isInactive ? 'withdrawn' : ''}">${esc(s.status)}</span>
                 </div>`;
     }).join('');
 
