@@ -6901,7 +6901,15 @@ window.submitTempClassOverrideFromModal = async function(studentId) {
     await window.createTempClassOverride(studentId, targetClass, [dateVal], reason);
 };
 
+let _lastRenderedStudentId = null;
+
 function renderStudentDetail(studentId) {
+    // 다른 학생으로 이동할 때 pending 클리닉 플래그 해제
+    if (studentId !== _lastRenderedStudentId) {
+        _pendingClinicStudentId = null;
+    }
+    _lastRenderedStudentId = studentId;
+
     if (!studentId) {
         document.getElementById('detail-empty').style.display = '';
         document.getElementById('detail-content').style.display = 'none';
