@@ -5,7 +5,7 @@ import {
 import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
 import { todayStr } from './src/shared/firestore-helpers.js';
-import { auditSet, auditAdd, batchUpdate } from './audit.js';
+import { auditSet, batchUpdate } from './audit.js';
 
 // ─── State ──────────────────────────────────────────────────────────────────
 let currentUser = null;
@@ -38,7 +38,7 @@ const wizardData = {
 let allStudents = [];
 let teachersList = [];
 
-const ACTIVE_STATUSES = new Set(['재원', '등원예정', '실휴원', '가휴원']);
+const ACTIVE_STATUSES = new Set(['재원', '등원예정', '실휴원', '가휴원', '상담']);
 
 // ─── Auth ───────────────────────────────────────────────────────────────────
 onAuthStateChanged(auth, async (user) => {
@@ -315,48 +315,31 @@ function _doSearchStudents(q) {
     if (!q) { results.innerHTML = ''; return; }
 
     const selectedIds = new Set(wizardData.students.map(s => s.docId));
-    const isSpecial = wizardData.classType === '특강';
-    // 특강: 재원생 우선 + 비원생 포함 / 정규·내신·자유학기: 재원생만
+    // 모든 반 유형: 재원/등원예정/실휴원/가휴원/상담만 검색 (퇴원 제외)
     const filtered = allStudents
         .filter(s => {
-            if (!isSpecial && !ACTIVE_STATUSES.has(s.status)) return false;
+            if (!ACTIVE_STATUSES.has(s.status)) return false;
             const name = (s.name || '').toLowerCase();
             const school = (s.school || '').toLowerCase();
             return name.includes(q) || school.includes(q);
         })
-        .sort((a, b) => {
-            const aActive = ACTIVE_STATUSES.has(a.status) ? 0 : 1;
-            const bActive = ACTIVE_STATUSES.has(b.status) ? 0 : 1;
-            return aActive - bActive || (a.name || '').localeCompare(b.name || '', 'ko');
-        })
+        .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'))
         .slice(0, 20);
 
-    let html = filtered.map(s => {
+    const html = filtered.map(s => {
         const alreadySelected = selectedIds.has(s.docId);
         const meta = [s.school, s.grade ? `${s.grade}학년` : ''].filter(Boolean).join(' ');
-        const statusClass = ACTIVE_STATUSES.has(s.status) ? '' : 'withdrawn';
         return `<div class="search-result-item ${alreadySelected ? 'already-selected' : ''}"
                      onclick="addStudent('${s.docId}')">
                     <div class="result-info">
                         <span class="result-name">${esc(s.name)}</span>
                         <span class="result-meta">${esc(meta)}</span>
                     </div>
-                    <span class="result-status ${statusClass}">${esc(s.status)}</span>
+                    <span class="result-status">${esc(s.status)}</span>
                 </div>`;
     }).join('');
 
-    // 특강이고 선택 가능한 결과 없으면 신규 비원생 추가 버튼 표시
-    const hasUnselected = filtered.some(s => !selectedIds.has(s.docId));
-    if (isSpecial && !hasUnselected && q.length >= 2) {
-        html += `<div class="search-result-item new-external" onclick="addNewExternalStudent()">
-                    <div class="result-info">
-                        <span class="result-name">「${esc(q)}」 신규 비원생으로 추가</span>
-                    </div>
-                    <span class="result-status">비원생</span>
-                </div>`;
-    }
-
-    results.innerHTML = html;
+    results.innerHTML = html || '<div class="empty-selected">검색 결과 없음</div>';
 }
 
 window.addStudent = function (docId) {
@@ -367,18 +350,6 @@ window.addStudent = function (docId) {
     renderSelectedStudents();
     const searchInput = document.getElementById('student-search');
     if (searchInput.value) window.searchStudents(searchInput.value);
-};
-
-// 특강 전용: DB에 없는 신규 비원생 추가
-window.addNewExternalStudent = function () {
-    const searchInput = document.getElementById('student-search');
-    const name = searchInput.value.trim();
-    if (!name || name.length < 2) return;
-    if (wizardData.students.some(s => s.name === name && s.isNew)) return;
-    wizardData.students.push({ docId: `__new__${Date.now()}`, name, status2: '특강', isNew: true });
-    renderSelectedStudents();
-    searchInput.value = '';
-    document.getElementById('search-results').innerHTML = '';
 };
 
 window.removeStudent = function (docId) {
@@ -397,7 +368,6 @@ function renderSelectedStudents() {
     }
     list.innerHTML = wizardData.students.map(s => {
         const meta = [
-            s.isNew ? '신규 비원생' : '',
             s.school,
             s.grade ? `${s.grade}학년` : ''
         ].filter(Boolean).join(' ');
@@ -525,23 +495,12 @@ window.submitWizard = async function () {
         // 3. 학생별 enrollment 추가 (batch + arrayUnion으로 경합 방지)
         const today = todayStr();
 
-        // 신규 비원생 먼저 생성 (병렬 처리)
-        const studentsToEnroll = await Promise.all(d.students.map(async student => {
-            if (!student.isNew) return student;
-            const newDocRef = await auditAdd(collection(db, 'students'), {
-                name: student.name,
-                status2: '특강',
-                enrollments: [],
-            });
-            return { ...student, docId: newDocRef.id };
-        }));
-
         const batch = writeBatch(db);
-        for (const student of studentsToEnroll) {
+        for (const student of d.students) {
             const studentRef = doc(db, 'students', student.docId);
 
-            // 특강 수강생은 모두 status2: '특강' 설정 (재원생 포함)
-            if (d.classType === '특강' && !student.isNew) {
+            // 특강 수강생은 모두 status2: '특강' 설정
+            if (d.classType === '특강') {
                 batchUpdate(batch, studentRef, { status2: '특강' });
             }
 

@@ -2138,7 +2138,7 @@ function getFilteredStudents() {
 
     const dayName = getDayName(selectedDate);
 
-    // 검색어가 있으면 요일 무관, 현재 학기 학생만 (퇴원생은 contacts 검색에서 표시)
+    // 검색어가 있으면 요일 무관, 현재 학기 학생만 (퇴원/종강생은 과거 학생 검색에서 표시)
     // 내신 기간 중에는 getActiveEnrollments가 정규를 숨기므로 만료 여부만 직접 확인
     const today = selectedDate || todayStr();
     const validDateStr = (d) => d && /^\d{4}-/.test(d);
@@ -3858,6 +3858,8 @@ function renderClassDetail(classCode) {
 
         ${renderClassScheduleCard(classCode)}
 
+        ${isTeukangClass ? renderTeukangAddStudentCard(classCode) : ''}
+
         <div class="detail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined">schedule</span>
@@ -4018,6 +4020,136 @@ window.saveClassDayTime = async function(classCode, day, time) {
     } catch (err) {
         console.error('시간 저장 실패:', err);
         showSaveIndicator('error');
+    }
+};
+
+// ─── 특강반 학생 추가 카드 ──────────────────────────────────────────────────
+
+const TEUKANG_ELIGIBLE_STATUSES = new Set(['재원', '등원예정', '실휴원', '가휴원', '상담']);
+
+function renderTeukangAddStudentCard(classCode) {
+    return `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined">person_add</span>
+                학생 추가
+            </div>
+            <div class="domain-add-row">
+                <input type="text" id="teukang-add-search" class="field-input"
+                    placeholder="이름 또는 학교 검색" style="flex:1;"
+                    oninput="searchTeukangAddStudent('${escAttr(classCode)}', this.value)">
+            </div>
+            <div id="teukang-add-results" class="search-results-list" style="margin-top:8px;"></div>
+            <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">
+                재원/등원예정/실휴원/가휴원/상담 학생 검색 (퇴원 제외).
+                새 학생은 첫데이터입력으로 먼저 등록해 주세요.
+            </div>
+        </div>
+    `;
+}
+
+let _teukangAddSearchTimer = null;
+window.searchTeukangAddStudent = function(classCode, q) {
+    clearTimeout(_teukangAddSearchTimer);
+    _teukangAddSearchTimer = setTimeout(() => _doSearchTeukangAddStudent(classCode, q), 200);
+};
+
+function _doSearchTeukangAddStudent(classCode, q) {
+    const results = document.getElementById('teukang-add-results');
+    if (!results) return;
+    q = (q || '').trim().toLowerCase();
+    if (!q) { results.innerHTML = ''; return; }
+
+    // 이미 이 특강반에 등록된 학생 제외
+    const enrolledIds = new Set(getTeukangClassStudents(classCode).map(s => s.docId));
+
+    const filtered = allStudents
+        .filter(s => {
+            if (!TEUKANG_ELIGIBLE_STATUSES.has(s.status)) return false;
+            if (enrolledIds.has(s.docId)) return false;
+            const name = (s.name || '').toLowerCase();
+            const school = (s.school || '').toLowerCase();
+            return name.includes(q) || school.includes(q);
+        })
+        .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'))
+        .slice(0, 20);
+
+    if (filtered.length === 0) {
+        results.innerHTML = '<div style="font-size:12px;color:var(--text-sec);padding:8px;">검색 결과 없음</div>';
+        return;
+    }
+
+    results.innerHTML = filtered.map(s => {
+        const meta = [s.school, s.grade ? `${s.grade}학년` : '', s.status]
+            .filter(Boolean).join(' · ');
+        return `<div class="search-result-item" style="display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid var(--border);cursor:pointer;"
+                     onclick="addStudentToTeukang('${escAttr(classCode)}', '${escAttr(s.docId)}')">
+                    <div>
+                        <div style="font-weight:600;">${esc(s.name)}</div>
+                        <div style="font-size:11px;color:var(--text-sec);">${esc(meta)}</div>
+                    </div>
+                    <span class="material-symbols-outlined" style="font-size:18px;color:var(--primary);">add</span>
+                </div>`;
+    }).join('');
+}
+
+function _findTeukangEnrollment(student, classCode) {
+    return (student.enrollments || []).find(e =>
+        e.class_type === '특강' && enrollmentCode(e) === classCode
+    );
+}
+
+// 새 enrollment 빌드: 같은 반의 기존 enrollment에서 start_date/end_date 복사,
+// 없으면 today / no end_date.
+function _buildTeukangEnrollment(classCode) {
+    const cs = classSettings[classCode] || {};
+    const days = Object.keys(cs.schedule || {})
+        .sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b));
+
+    let template = null;
+    for (const s of allStudents) {
+        const e = _findTeukangEnrollment(s, classCode);
+        if (e) { template = e; break; }
+    }
+
+    const enrollment = {
+        class_type: '특강',
+        level_symbol: '',
+        class_number: classCode,
+        day: days,
+        start_date: template?.start_date || todayStr(),
+    };
+    if (template?.end_date) enrollment.end_date = template.end_date;
+    return enrollment;
+}
+
+window.addStudentToTeukang = async function(classCode, studentId) {
+    const student = allStudents.find(s => s.docId === studentId);
+    if (!student) { alert('학생을 찾을 수 없습니다.'); return; }
+
+    if (_findTeukangEnrollment(student, classCode)) {
+        alert(`${student.name} 학생은 이미 ${classCode} 반에 등록되어 있습니다.`);
+        return;
+    }
+
+    const newEnrollment = _buildTeukangEnrollment(classCode);
+
+    showSaveIndicator('saving');
+    try {
+        await auditUpdate(doc(db, 'students', studentId), {
+            enrollments: arrayUnion(newEnrollment),
+            status2: '특강',
+        });
+        // 로컬 캐시 업데이트
+        student.enrollments = [...(student.enrollments || []), newEnrollment];
+        student.status2 = '특강';
+        showSaveIndicator('saved');
+        renderClassDetail(classCode);
+        renderListPanel?.();
+    } catch (err) {
+        console.error('특강 학생 추가 실패:', err);
+        showSaveIndicator('error');
+        alert('학생 추가에 실패했습니다: ' + err.message);
     }
 };
 
@@ -10600,43 +10732,43 @@ window.resetScheduledVisit = resetScheduledVisit;
 window.cycleVisitStatus = cycleVisitStatus;
 window.confirmVisitStatus = confirmVisitStatus;
 
-// ─── contacts 로딩 ────────────────────────────────────────────────────────
+// ─── 과거 학생 검색 ───────────────────────────────────────────────────────
 
-// contacts on-demand 검색 (Firestore prefix 쿼리, 1~50 reads)
+// students에서 퇴원/종강 학생을 prefix 쿼리로 가져온다.
+// (현재 활성 학생은 allStudents에 이미 들어있으므로 dedupe로 제외)
+const PAST_STUDENT_STATUSES = new Set(['퇴원', '종강']);
+
 async function _searchContactsDSC(term) {
     if (!term || term.length < 2) return [];
     const currentIds = new Set(allStudents.map(s => s.docId));
     const results = [];
     const seenIds = new Set();
+    const addIfPast = (d) => {
+        if (currentIds.has(d.id) || seenIds.has(d.id)) return;
+        const data = d.data();
+        if (!PAST_STUDENT_STATUSES.has(data.status)) return;
+        results.push({ id: d.id, ...data });
+        seenIds.add(d.id);
+    };
     try {
         const nameSnap = await getDocs(query(
-            collection(db, 'contacts'),
+            collection(db, 'students'),
             where('name', '>=', term),
             where('name', '<=', term + '\uf8ff'),
             limit(50)
         ));
-        nameSnap.forEach(d => {
-            if (!currentIds.has(d.id) && !seenIds.has(d.id)) {
-                results.push({ id: d.id, ...d.data() });
-                seenIds.add(d.id);
-            }
-        });
+        nameSnap.forEach(addIfPast);
         if (/\d{3,}/.test(term)) {
             const phoneSnap = await getDocs(query(
-                collection(db, 'contacts'),
+                collection(db, 'students'),
                 where('student_phone', '>=', term),
                 where('student_phone', '<=', term + '\uf8ff'),
                 limit(20)
             ));
-            phoneSnap.forEach(d => {
-                if (!currentIds.has(d.id) && !seenIds.has(d.id)) {
-                    results.push({ id: d.id, ...d.data() });
-                    seenIds.add(d.id);
-                }
-            });
+            phoneSnap.forEach(addIfPast);
         }
     } catch (e) {
-        console.warn('[searchContacts] 검색 실패:', e);
+        console.warn('[searchPastStudents] 검색 실패:', e);
     }
     return results;
 }
@@ -10693,7 +10825,7 @@ async function _tryTempContactAutofill() {
     if (docId === _lastTempAutofillId) return;
 
     try {
-        const snap = await getDoc(doc(db, 'contacts', docId));
+        const snap = await getDoc(doc(db, 'students', docId));
         if (!snap.exists()) return;
         const contact = snap.data();
         _lastTempAutofillId = docId;
@@ -10716,7 +10848,7 @@ async function _tryTempContactAutofill() {
     // 자동채움 알림
     const hint = document.getElementById('temp-att-autofill-hint');
     if (hint) {
-        hint.textContent = `연락처에서 "${contact.name}" 정보를 불러왔습니다`;
+        hint.textContent = `이전 기록에서 "${contact.name}" 정보를 불러왔습니다`;
         hint.style.display = 'block';
         setTimeout(() => { hint.style.display = 'none'; }, 3000);
     }
@@ -10742,23 +10874,47 @@ function openTempAttendanceModal() {
     document.getElementById('temp-attendance-modal').style.display = '';
 }
 
-async function _syncContactsForTemp(data) {
-    if (!data.parent_phone_1) return;
+// 첫데이터입력 → students 컬렉션 직접 upsert
+// - 신규: status='상담' + 빈 enrollments로 생성
+// - 기존: status/enrollments는 건드리지 않고 기본 정보만 merge
+async function _upsertStudentFromTemp(data) {
+    if (!data.parent_phone_1 || !data.name) return;
     try {
-        let phone = data.parent_phone_1.replace(/\D/g, '');
-        if (phone.length === 11 && phone.startsWith('0')) phone = phone.slice(1);
-        const contactDocId = `${data.name}_${phone}`.replace(/\s+/g, '_');
-        await auditSet(doc(db, 'contacts', contactDocId), {
+        const studentDocId = _makeContactDocId(data.name, data.parent_phone_1);
+        const ref = doc(db, 'students', studentDocId);
+
+        const baseFields = {
             name: data.name,
             level: data.level || '',
             school: data.school || '',
             grade: data.grade || '',
             student_phone: data.student_phone || '',
             parent_phone_1: data.parent_phone_1,
-            first_registered: data.temp_date
-        }, { merge: true });
-    } catch (contactErr) {
-        console.warn('[CONTACTS SYNC]', contactErr);
+        };
+        if (data.branch) baseFields.branch = data.branch;
+
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+            // 기존 학생 — status/enrollments는 보존, 기본 필드만 merge
+            await auditSet(ref, baseFields, { merge: true });
+            // 로컬 캐시 업데이트
+            const cached = allStudents.find(s => s.docId === studentDocId);
+            if (cached) Object.assign(cached, baseFields);
+        } else {
+            // 신규 — '상담' 상태로 생성
+            const newDoc = {
+                ...baseFields,
+                status: '상담',
+                enrollments: [],
+                first_registered: data.temp_date,
+            };
+            await auditSet(ref, newDoc);
+            // 로컬 캐시 추가 (loadStudents 재호출 없이 즉시 반영)
+            allStudents.push({ docId: studentDocId, ...newDoc });
+            allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+        }
+    } catch (err) {
+        console.warn('[STUDENT UPSERT FROM TEMP]', err);
     }
 }
 
@@ -10823,7 +10979,7 @@ async function saveTempAttendance() {
                     ...data,
                     edit_history: arrayUnion(historyEntry)
                 }),
-                _syncContactsForTemp(data)
+                _upsertStudentFromTemp(data)
             ]);
 
             // 로컬 캐시 업데이트
@@ -10851,7 +11007,7 @@ async function saveTempAttendance() {
 
             await Promise.all([
                 auditAdd(collection(db, 'temp_attendance'), data),
-                _syncContactsForTemp(data)
+                _upsertStudentFromTemp(data)
             ]);
             document.getElementById('temp-attendance-modal').style.display = 'none';
 
@@ -10927,10 +11083,10 @@ window.openTempAttendanceModal = openTempAttendanceModal;
 window.openTempAttendanceForEdit = openTempAttendanceForEdit;
 window.saveTempAttendance = saveTempAttendance;
 
-// 과거 연락처 클릭 → 진단평가 모달 열기 + 자동채움
+// 과거 학생 클릭 → 진단평가 모달 열기 + 자동채움
 window.openContactAsTemp = async function(contactId) {
     try {
-        const snap = await getDoc(doc(db, 'contacts', contactId));
+        const snap = await getDoc(doc(db, 'students', contactId));
         if (!snap.exists()) return;
         const c = snap.data();
         openTempAttendanceModal();
@@ -10944,7 +11100,7 @@ window.openContactAsTemp = async function(contactId) {
     } catch (e) { /* 네트워크 오류 시 무시 */ }
 };
 
-// 이름·학부모전화 입력 후 contacts 자동채움 이벤트
+// 이름·학부모전화 입력 후 students 자동채움 이벤트
 document.getElementById('temp-att-parent-phone')?.addEventListener('change', _tryTempContactAutofill);
 document.getElementById('temp-att-parent-phone')?.addEventListener('blur', _tryTempContactAutofill);
 document.getElementById('temp-att-name')?.addEventListener('change', _tryTempContactAutofill);
