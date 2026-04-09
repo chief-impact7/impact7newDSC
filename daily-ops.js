@@ -3832,7 +3832,7 @@ function renderClassDetail(classCode) {
         return `<option value="${escAttr(t.email)}" ${t.email === currentSubTeacher ? 'selected' : ''}>${esc(name)}</option>`;
     }).join('');
 
-    cardsContainer.innerHTML = `
+    const teacherCard = `
         <div class="detail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined">person</span>
@@ -3854,11 +3854,26 @@ function renderClassDetail(classCode) {
                     </select>
                 </div>
             </div>
-        </div>
+        </div>`;
+
+    // 특강반: 담당 + 특강기간 + 요일/시간 + 학생 추가 카드만 노출 (편성 과정에서 설정된 나머지는 숨김)
+    if (isTeukangClass) {
+        cardsContainer.innerHTML = `
+            ${teacherCard}
+            ${renderTeukangPeriodCard(classCode)}
+            ${renderClassScheduleCard(classCode)}
+            ${renderTeukangAddStudentCard(classCode)}
+        `;
+        if (window.innerWidth <= 768) {
+            document.getElementById('detail-panel').classList.add('mobile-visible');
+        }
+        return;
+    }
+
+    cardsContainer.innerHTML = `
+        ${teacherCard}
 
         ${renderClassScheduleCard(classCode)}
-
-        ${isTeukangClass ? renderTeukangAddStudentCard(classCode) : ''}
 
         <div class="detail-card">
             <div class="detail-card-title">
@@ -4023,6 +4038,40 @@ window.saveClassDayTime = async function(classCode, day, time) {
     }
 };
 
+// ─── 특강반 기간 카드 ───────────────────────────────────────────────────────
+
+function renderTeukangPeriodCard(classCode) {
+    const cs = classSettings[classCode] || {};
+    const start = cs.special_start || '';
+    const end = cs.special_end || '';
+    return `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined">date_range</span>
+                특강 기간
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <input type="date" class="field-input" value="${escAttr(start)}" style="flex:1;"
+                    onchange="saveTeukangPeriod('${escAttr(classCode)}', 'special_start', this.value)">
+                <span style="color:var(--text-sec);">~</span>
+                <input type="date" class="field-input" value="${escAttr(end)}" style="flex:1;"
+                    onchange="saveTeukangPeriod('${escAttr(classCode)}', 'special_end', this.value)">
+            </div>
+        </div>
+    `;
+}
+
+window.saveTeukangPeriod = async function(classCode, field, value) {
+    showSaveIndicator('saving');
+    try {
+        await saveClassSettings(classCode, { [field]: value });
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('특강 기간 저장 실패:', err);
+        showSaveIndicator('error');
+    }
+};
+
 // ─── 특강반 학생 추가 카드 ──────────────────────────────────────────────────
 
 const TEUKANG_ELIGIBLE_STATUSES = new Set(['재원', '등원예정', '실휴원', '가휴원', '상담']);
@@ -4099,17 +4148,25 @@ function _findTeukangEnrollment(student, classCode) {
     );
 }
 
-// 새 enrollment 빌드: 같은 반의 기존 enrollment에서 start_date/end_date 복사,
-// 없으면 today / no end_date.
+// 새 enrollment 빌드: class_settings.special_start/end 우선,
+// 없으면 같은 반 기존 enrollment, 그것도 없으면 today.
 function _buildTeukangEnrollment(classCode) {
     const cs = classSettings[classCode] || {};
     const days = Object.keys(cs.schedule || {})
         .sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b));
 
-    let template = null;
-    for (const s of allStudents) {
-        const e = _findTeukangEnrollment(s, classCode);
-        if (e) { template = e; break; }
+    let startDate = cs.special_start || '';
+    let endDate = cs.special_end || '';
+
+    if (!startDate || !endDate) {
+        for (const s of allStudents) {
+            const e = _findTeukangEnrollment(s, classCode);
+            if (e) {
+                if (!startDate && e.start_date) startDate = e.start_date;
+                if (!endDate && e.end_date) endDate = e.end_date;
+                break;
+            }
+        }
     }
 
     const enrollment = {
@@ -4117,9 +4174,9 @@ function _buildTeukangEnrollment(classCode) {
         level_symbol: '',
         class_number: classCode,
         day: days,
-        start_date: template?.start_date || todayStr(),
+        start_date: startDate || todayStr(),
     };
-    if (template?.end_date) enrollment.end_date = template.end_date;
+    if (endDate) enrollment.end_date = endDate;
     return enrollment;
 }
 
@@ -6864,10 +6921,17 @@ function renderStudentDetail(studentId) {
         return;
     }
 
-    // 내신/특강 모드: naesin.js로 위임 (간소화된 상세 패널)
+    // 특강 모드: 특강 전용 상세 패널
+    if (_classMgmtMode === 'teukang' && selectedClassCode) {
+        if (window.renderTeukangDetail) {
+            window.renderTeukangDetail(studentId);
+            return;
+        }
+    }
+
+    // 내신 모드: naesin.js로 위임 (간소화된 상세 패널)
     if ((currentCategory === 'attendance' && currentSubFilter.has('naesin')) ||
-        (_classMgmtMode === 'naesin' && selectedClassCode && _isNaesinClassCode(selectedClassCode)) ||
-        (_classMgmtMode === 'teukang' && selectedClassCode)) {
+        (_classMgmtMode === 'naesin' && selectedClassCode && _isNaesinClassCode(selectedClassCode))) {
         if (window.renderNaesinDetail) {
             window.renderNaesinDetail(studentId);
             return;
@@ -7119,7 +7183,8 @@ function renderStudentDetail(studentId) {
 
     // 클리닉 카드
     const extraVisit = rec.extra_visit || {};
-    const hasClinic = !!extraVisit.date;
+    const isPendingClinic = _pendingClinicStudentId === studentId;
+    const hasClinic = !!extraVisit.date || isPendingClinic;
     const isPastDate = selectedDate < todayStr();
     const clinicButtons = isPastDate
         ? (hasClinic ? '' : '')
@@ -7136,21 +7201,7 @@ function renderStudentDetail(studentId) {
                 </span>
                 ${clinicButtons}
             </div>
-            ${hasClinic ? `<div style="display:flex;flex-direction:column;gap:6px;">
-                <div style="display:flex;gap:6px;">
-                    <input type="date" class="field-input" style="flex:1;padding:4px 8px;font-size:12px;"
-                        value="${escAttr(extraVisit.date || '')}"
-                        placeholder="날짜"
-                        ${isPastDate ? 'readonly' : `onchange="saveExtraVisit('${escAttr(studentId)}', 'date', this.value)"`}>
-                    <input type="time" class="field-input" style="width:100px;padding:4px 8px;font-size:12px;"
-                        value="${escAttr(extraVisit.time || '')}"
-                        ${isPastDate ? 'readonly' : `onchange="saveExtraVisit('${escAttr(studentId)}', 'time', this.value)"`}>
-                </div>
-                <input type="text" class="field-input" style="width:100%;padding:4px 8px;font-size:12px;"
-                    placeholder="사유 (예: 보충수업, 재시험 등)"
-                    value="${escAttr(extraVisit.reason || '')}"
-                    ${isPastDate ? 'readonly' : `onchange="saveExtraVisit('${escAttr(studentId)}', 'reason', this.value)"`}>
-            </div>` : ''}
+            ${hasClinic ? renderClinicInputs(studentId, extraVisit, isPastDate) : ''}
         </div>
     `;
 
@@ -7264,8 +7315,32 @@ function renderStudentDetail(studentId) {
 }
 
 // ─── 클리닉 저장 ────────────────────────────────────────────────────────────
+// + 버튼 클릭 시 오늘 날짜를 바로 박지 않도록 pending 플래그로 빈 input 노출
+let _pendingClinicStudentId = null;
+
+// 클리닉 date/time/reason input 렌더 헬퍼 (daily-ops + naesin/teukang 공용)
+function renderClinicInputs(studentId, extraVisit, isReadonly) {
+    const v = extraVisit || {};
+    const dateOn = isReadonly ? 'readonly' : `onchange="saveExtraVisit('${escAttr(studentId)}', 'date', this.value)"`;
+    const timeOn = isReadonly ? 'readonly' : `onchange="saveExtraVisit('${escAttr(studentId)}', 'time', this.value)"`;
+    const reasonOn = isReadonly ? 'readonly' : `onchange="saveExtraVisit('${escAttr(studentId)}', 'reason', this.value)"`;
+    return `<div style="display:flex;flex-direction:column;gap:6px;">
+        <div style="display:flex;gap:6px;">
+            <input type="date" class="field-input" style="flex:1;padding:4px 8px;font-size:12px;"
+                value="${escAttr(v.date || '')}" ${dateOn}>
+            <input type="time" class="field-input" style="width:100px;padding:4px 8px;font-size:12px;"
+                value="${escAttr(v.time || '')}" ${timeOn}>
+        </div>
+        <input type="text" class="field-input" style="width:100%;padding:4px 8px;font-size:12px;"
+            placeholder="사유 (예: 보충수업, 재시험 등)"
+            value="${escAttr(v.reason || '')}" ${reasonOn}>
+    </div>`;
+}
+window.renderClinicInputs = renderClinicInputs;
 
 async function saveExtraVisit(studentId, field, value) {
+    // 날짜가 입력되면 pending 해제
+    if (field === 'date' && value) _pendingClinicStudentId = null;
     const rec = dailyRecords[studentId] || {};
     const extraVisit = { ...(rec.extra_visit || {}) };
     extraVisit[field] = value;
@@ -7297,9 +7372,9 @@ async function saveExtraVisit(studentId, field, value) {
     }
 }
 
-// + 버튼 클릭 → 오늘 날짜로 초기화 + 상세패널 리렌더
+// + 버튼 클릭 → 저장 없이 빈 input 노출 (사용자가 날짜 선택 후 저장)
 async function addExtraVisit(studentId) {
-    await saveExtraVisit(studentId, 'date', selectedDate);
+    _pendingClinicStudentId = studentId;
     renderStudentDetail(studentId);
 }
 
@@ -11207,6 +11282,21 @@ Object.defineProperties(window, {
         set(v) { selectedStudentId = v; },
         configurable: true,
     },
+    selectedClassCode: {
+        get() { return selectedClassCode; },
+        configurable: true,
+    },
+    _classMgmtMode: {
+        get() { return _classMgmtMode; },
+        configurable: true,
+    },
+});
+window.enrollmentCode = enrollmentCode;
+window.renderClassDetail = renderClassDetail;
+Object.defineProperty(window, '_pendingClinicStudentId', {
+    get() { return _pendingClinicStudentId; },
+    set(v) { _pendingClinicStudentId = v; },
+    configurable: true,
 });
 
 // 내신 모듈에서 사용하는 유틸 함수/데이터 노출

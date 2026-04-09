@@ -488,7 +488,11 @@ window.submitWizard = async function () {
         } else {
             classSettingsData.class_type = d.classType;
             classSettingsData.schedule = d.schedule;
-            if (d.classType === '특강' && d.feeType) classSettingsData.fee_type = d.feeType;
+            if (d.classType === '특강') {
+                if (d.feeType) classSettingsData.fee_type = d.feeType;
+                if (d.specialStart) classSettingsData.special_start = d.specialStart;
+                if (d.specialEnd) classSettingsData.special_end = d.specialEnd;
+            }
         }
         await auditSet(doc(db, 'class_settings', d.classCode), classSettingsData, { merge: true });
 

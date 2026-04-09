@@ -337,6 +337,7 @@ service cloud.firestore {
           'default_time', 'default_time_updated_by', 'default_time_updated_at',
           'naesin_start', 'naesin_end', 'schedule',
           'free_schedule', 'free_start', 'free_end',
+          'special_start', 'special_end',
           'class_type', 'fee_type', 'updated_at', 'updated_by'
         ]);
       }
@@ -345,7 +346,7 @@ service cloud.firestore {
 
       allow create, update: if isAuthorized()
         && hasOnlyAllowedClassSettingsFields()
-        && withinFieldLimit(18);
+        && withinFieldLimit(20);
 
       allow delete: if isAuthorized();
     }

@@ -360,20 +360,26 @@ export function renderNaesinDetail(studentId) {
         </div>`;
 
     // ── Section 5: 클리닉 ──
-    const extraVisit   = rec?.extra_visit;
-    const hasClinic    = !!extraVisit && (extraVisit.date === selectedDate || !extraVisit.date);
+    const extraVisit = rec?.extra_visit;
+    const isPendingClinic = window._pendingClinicStudentId === studentId;
+    const hasData = !!extraVisit?.date;
+    const hasClinic = hasData || isPendingClinic;
     let clinicBodyHtml = '';
     if (hasClinic) {
-        const cvDate   = extraVisit.date || '';
-        const cvTime   = extraVisit.time || '';
-        const cvReason = extraVisit.reason || '';
-        const isDone   = extraVisit.status === '완료';
-        clinicBodyHtml = `
-            <div class="naesin-clinic-item">
-                <span class="naesin-clinic-status ${isDone ? 'clinic-done' : 'clinic-pending'}">${isDone ? '완료' : '예정'}</span>
-                <span>${_esc(cvDate)} ${_esc(cvTime)}</span>
-                ${cvReason ? `<span class="naesin-time-label">· ${_esc(cvReason)}</span>` : ''}
-            </div>`;
+        if (hasData) {
+            const cvDate = extraVisit.date || '';
+            const cvTime = extraVisit.time || '';
+            const cvReason = extraVisit.reason || '';
+            const isDone = extraVisit.status === '완료';
+            clinicBodyHtml = `
+                <div class="naesin-clinic-item">
+                    <span class="naesin-clinic-status ${isDone ? 'clinic-done' : 'clinic-pending'}">${isDone ? '완료' : '예정'}</span>
+                    <span>${_esc(cvDate)} ${_esc(cvTime)}</span>
+                    ${cvReason ? `<span class="naesin-time-label">· ${_esc(cvReason)}</span>` : ''}
+                </div>`;
+        } else {
+            clinicBodyHtml = window.renderClinicInputs?.(studentId, null, false) || '';
+        }
     }
 
     const clinicHtml = `
@@ -422,13 +428,14 @@ window.saveNaesinMemo = function(studentId) {
 };
 
 // ─── 클리닉 추가 ─────────────────────────────────────────────────────────────
-window.openNaesinClinic = async function(studentId) {
-    const { selectedDate } = _state();
-    // 날짜 초기화 후 detail 리렌더
-    if (window.saveExtraVisit) {
-        await window.saveExtraVisit(studentId, 'date', selectedDate);
+// + 버튼: 저장 없이 빈 input 노출 (사용자가 날짜 선택 후 저장)
+window.openNaesinClinic = function(studentId) {
+    window._pendingClinicStudentId = studentId;
+    if (window._classMgmtMode === 'teukang' && window.renderTeukangDetail) {
+        window.renderTeukangDetail(studentId);
+    } else if (window.renderNaesinDetail) {
+        window.renderNaesinDetail(studentId);
     }
-    if (window.renderNaesinDetail) window.renderNaesinDetail(studentId);
 };
 
 // ─── 등원시간 수정 ────────────────────────────────────────────────────────────
@@ -533,6 +540,336 @@ window.toggleNaesinDay = async function(studentId, day) {
     }
 
     if (window.renderNaesinDetail) window.renderNaesinDetail(studentId);
+    if (window.renderListPanel) window.renderListPanel();
+};
+
+// ─── 특강 학생 상세 패널 ─────────────────────────────────────────────────────
+// 반설정 > 특강 L2 > 학생 클릭 시 호출. 간소화된 전용 패널.
+
+function _findTeukangEnrollment(student, classCode) {
+    return (student.enrollments || []).find(e =>
+        e.class_type === '특강' && window.enrollmentCode?.(e) === classCode
+    );
+}
+
+export function renderTeukangDetail(studentId) {
+    const { allStudents, selectedDate, classSettings, dailyRecords } = _state();
+    const student = allStudents?.find(s => s.docId === studentId);
+    if (!student) return;
+
+    const classCode = window.selectedClassCode;
+    if (!classCode) return;
+
+    const enrollment = _findTeukangEnrollment(student, classCode);
+    if (!enrollment) {
+        // 이 반 소속이 아닌 학생이면 일반 상세로 폴백
+        if (window._renderStudentDetailStandard) window._renderStudentDetailStandard(studentId);
+        return;
+    }
+
+    const cs = classSettings?.[classCode] || {};
+    const classSchedule = cs.schedule || {};
+    const dayName = getDayName(selectedDate);
+    const rec = dailyRecords?.[studentId] || {};
+
+    // ── 패널 표시 ──
+    document.getElementById('detail-empty').style.display = 'none';
+    document.getElementById('detail-content').style.display = '';
+    document.getElementById('detail-panel').classList.add('mobile-visible');
+
+    // ── 헤더 ──
+    const avatarEl = document.getElementById('profile-avatar');
+    const nameEl = document.getElementById('detail-name');
+    const phonesEl = document.getElementById('profile-phones');
+    const tagsEl = document.getElementById('profile-tags');
+    if (avatarEl) avatarEl.textContent = (student.name || '?')[0];
+    if (nameEl) nameEl.textContent = student.name || '';
+    if (phonesEl) {
+        phonesEl.innerHTML =
+            `<div class="profile-phone"><span class="phone-label">학생</span>${_esc(student.student_phone || '')}</div>` +
+            `<div class="profile-phone"><span class="phone-label">학부모</span>${_esc(student.parent_phone_1 || '')}</div>`;
+    }
+    if (tagsEl) {
+        const teacherEmail = cs.teacher || '';
+        const teacherName = teacherEmail ? teacherEmail.split('@')[0] : '';
+        const branch = window.branchFromStudent?.(student) || '';
+        const schoolGrade = [student.school, student.grade].filter(Boolean).join(' ');
+        tagsEl.innerHTML =
+            `<span class="tag-naesin" style="background:var(--info);">특강</span>` +
+            `<span class="tag-class">${_esc(classCode)}</span>` +
+            (schoolGrade ? `<span class="tag">${_esc(schoolGrade)}</span>` : '') +
+            (branch ? `<span class="tag">${_esc(branch)}</span>` : '') +
+            (teacherName ? `<span class="tag">담당: ${_esc(teacherName)}</span>` : '');
+    }
+    const stayStatsEl = document.getElementById('profile-stay-stats');
+    if (stayStatsEl) stayStatsEl.innerHTML = '';
+
+    // ── 출결 카드 ──
+    const attStatus = rec?.attendance?.status || '미확인';
+    const attClassMap = { '미확인': 'att-active', '출석': 'att-present', '지각': 'att-late', '결석': 'att-absent' };
+    const attButtons = [
+        { label: '등원전', value: '미확인' },
+        { label: '출석', value: '출석' },
+        { label: '지각', value: '지각' },
+        { label: '결석', value: '결석' },
+    ].map(({ label, value }) => {
+        const cls = attStatus === value ? attClassMap[value] : '';
+        return `<button class="naesin-att-btn ${cls}"
+            onclick="window.toggleAttendance('${_escAttr(studentId)}', '${_escAttr(value)}')">${_esc(label)}</button>`;
+    }).join('');
+    const attHtml = `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined">how_to_reg</span>
+                출결
+            </div>
+            <div class="naesin-att-row">${attButtons}</div>
+        </div>`;
+
+    // ── 등원요일·시간 카드 ──
+    const allDays = ['월', '화', '수', '목', '금', '토', '일'];
+    const classDays = Object.keys(classSchedule);
+    const studentDays = enrollment.day || [];
+
+    // 요일 토글 (반 스케줄에 있는 요일만)
+    const dayTogglesHtml = allDays.map(day => {
+        if (!classDays.includes(day)) return '';
+        const isEnrolled = studentDays.includes(day);
+        const isToday = day === dayName;
+        const cls = isToday && isEnrolled ? 'naesin-day-today'
+                  : isEnrolled ? 'naesin-day-active'
+                  : 'naesin-day-inactive';
+        return `<div class="naesin-day-badge naesin-day-toggle ${cls}"
+            onclick="window.toggleTeukangDay('${_escAttr(studentId)}', '${_escAttr(classCode)}', '${_escAttr(day)}')"
+            title="클릭하여 ${isEnrolled ? '제거' : '추가'}">${_esc(day)}</div>`;
+    }).join('');
+
+    // 개별 시간 vs 반 기본 시간
+    const individualTime = enrollment.start_time || '';
+    const firstClassDay = classDays[0];
+    const classDefaultTime = classSchedule[firstClassDay] || '';
+    const effectiveTime = individualTime || classDefaultTime;
+    const isOverride = !!individualTime && individualTime !== classDefaultTime;
+    const formatted = effectiveTime && window._formatTime12h
+        ? window._formatTime12h(effectiveTime) : (effectiveTime || '—');
+    const timeLabel = isOverride ? '(개별)' : (classDefaultTime ? '(반 기본)' : '');
+
+    const schedHtml = `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined">calendar_today</span>
+                등원요일 · 시간
+            </div>
+            <div class="naesin-day-chips">${dayTogglesHtml || '<div class="detail-card-empty">반 스케줄 없음</div>'}</div>
+            <div class="naesin-schedule-row" style="margin-top:8px;">
+                <span class="naesin-time${isOverride ? ' naesin-time-override' : ''}">${_esc(formatted)}</span>
+                <span class="naesin-time-label${isOverride ? ' naesin-time-override' : ''}">${timeLabel}</span>
+                <span class="naesin-edit-btn" onclick="window.editTeukangTime('${_escAttr(studentId)}', '${_escAttr(classCode)}')">수정</span>
+            </div>
+        </div>`;
+
+    // ── 반에서 제거 카드 ──
+    const removeHtml = `
+        <div class="detail-card">
+            <button class="btn btn-secondary" style="width:100%;color:var(--danger);border-color:var(--danger);"
+                onclick="window.removeFromTeukang('${_escAttr(studentId)}', '${_escAttr(classCode)}')">
+                <span class="material-symbols-outlined" style="font-size:16px;">person_remove</span>
+                ${_esc(classCode)} 반에서 제거
+            </button>
+        </div>`;
+
+    // ── 메모 카드 ──
+    const memo = rec?.naesin_memo || '';
+    const memoBy = rec?.naesin_memo_by || '';
+    const memoAt = rec?.naesin_memo_at || '';
+    const memoAtStr = memoAt
+        ? (memoAt.toDate ? memoAt.toDate().toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : String(memoAt))
+        : '';
+    const memoDisplayHtml = memo
+        ? `<div class="naesin-memo-item">${_esc(memo)}</div>
+           <div class="naesin-memo-meta">${_esc(memoBy ? memoBy.split('@')[0] : '')} ${_esc(memoAtStr)}</div>`
+        : `<div class="naesin-memo-empty">메모 없음</div>`;
+    const memoHtml = `
+        <div class="detail-card">
+            <div class="detail-card-title detail-card-title-row">
+                <span style="display:flex;align-items:center;gap:6px;">
+                    <span class="material-symbols-outlined">sticky_note_2</span>
+                    메모
+                </span>
+                <div class="card-add-btn" onclick="window.toggleNaesinMemoInput('${_escAttr(studentId)}')">+</div>
+            </div>
+            ${memoDisplayHtml}
+            <div id="naesin-memo-input-area-${_escAttr(studentId)}" style="display:none;margin-top:8px;">
+                <textarea id="naesin-memo-textarea-${_escAttr(studentId)}" class="naesin-memo-input"
+                    placeholder="메모를 입력하세요...">${_esc(memo)}</textarea>
+                <button class="naesin-memo-submit" onclick="window.saveNaesinMemo('${_escAttr(studentId)}')">저장</button>
+            </div>
+        </div>`;
+
+    // ── 클리닉 카드 ──
+    const extraVisit = rec?.extra_visit;
+    const isPending = window._pendingClinicStudentId === studentId;
+    const hasClinic = (!!extraVisit && (extraVisit.date === selectedDate || !extraVisit.date)) || isPending;
+    let clinicBodyHtml = '';
+    if (hasClinic) {
+        const cvDate = extraVisit?.date || '';
+        const cvTime = extraVisit?.time || '';
+        const cvReason = extraVisit?.reason || '';
+        const isDone = extraVisit?.status === '완료';
+        const hasData = !!cvDate;
+        clinicBodyHtml = hasData ? `
+            <div class="naesin-clinic-item">
+                <span class="naesin-clinic-status ${isDone ? 'clinic-done' : 'clinic-pending'}">${isDone ? '완료' : '예정'}</span>
+                <span>${_esc(cvDate)} ${_esc(cvTime)}</span>
+                ${cvReason ? `<span class="naesin-time-label">· ${_esc(cvReason)}</span>` : ''}
+            </div>` : (window.renderClinicInputs?.(studentId, null, false) || '');
+    }
+    const clinicHtml = `
+        <div class="detail-card">
+            <div class="detail-card-title detail-card-title-row">
+                <span style="display:flex;align-items:center;gap:6px;">
+                    <span class="material-symbols-outlined">schedule</span>
+                    클리닉
+                </span>
+                <div class="card-add-btn" onclick="window.openNaesinClinic('${_escAttr(studentId)}')">+</div>
+            </div>
+            ${clinicBodyHtml || '<div class="detail-card-empty">클리닉 예정 없음</div>'}
+        </div>`;
+
+    // ── 조립 ──
+    document.getElementById('detail-cards').innerHTML =
+        attHtml + schedHtml + removeHtml + memoHtml + clinicHtml;
+
+    // 탭 숨기기
+    const tabsEl = document.getElementById('detail-tabs');
+    if (tabsEl) tabsEl.style.display = 'none';
+    const reportEl = document.getElementById('report-tab');
+    if (reportEl) reportEl.style.display = 'none';
+}
+
+// ─── 특강 등원요일 토글 ──────────────────────────────────────────────────────
+window.toggleTeukangDay = async function(studentId, classCode, day) {
+    const { allStudents } = _state();
+    const student = allStudents?.find(s => s.docId === studentId);
+    if (!student) return;
+
+    const enrollments = (student.enrollments || []).slice();
+    const idx = enrollments.findIndex(e =>
+        e.class_type === '특강' && window.enrollmentCode?.(e) === classCode
+    );
+    if (idx === -1) return;
+
+    const currentDays = [...(enrollments[idx].day || [])];
+    const dayIdx = currentDays.indexOf(day);
+    if (dayIdx >= 0) {
+        if (currentDays.length <= 1) {
+            alert('최소 1개 요일은 필요합니다.');
+            return;
+        }
+        currentDays.splice(dayIdx, 1);
+    } else {
+        currentDays.push(day);
+    }
+
+    enrollments[idx] = { ...enrollments[idx], day: currentDays };
+
+    window.showSaveIndicator?.('saving');
+    try {
+        await auditUpdate(doc(db, 'students', studentId), { enrollments });
+        student.enrollments = enrollments;
+        window.showSaveIndicator?.('saved');
+    } catch (err) {
+        console.error('[toggleTeukangDay] 저장 실패:', err);
+        window.showSaveIndicator?.('error');
+        return;
+    }
+
+    if (window.renderTeukangDetail) window.renderTeukangDetail(studentId);
+    if (window.renderListPanel) window.renderListPanel();
+};
+
+// ─── 특강 등원시간 수정 ──────────────────────────────────────────────────────
+window.editTeukangTime = async function(studentId, classCode) {
+    const { allStudents, classSettings } = _state();
+    const student = allStudents?.find(s => s.docId === studentId);
+    if (!student) return;
+
+    const enrollments = (student.enrollments || []).slice();
+    const idx = enrollments.findIndex(e =>
+        e.class_type === '특강' && window.enrollmentCode?.(e) === classCode
+    );
+    if (idx === -1) return;
+
+    const cs = classSettings?.[classCode] || {};
+    const classSchedule = cs.schedule || {};
+    const firstDay = Object.keys(classSchedule)[0];
+    const classDefault = classSchedule[firstDay] || '';
+    const currentTime = enrollments[idx].start_time || classDefault;
+
+    const newTime = window.prompt(
+        `${classCode} 등원시간 수정 (예: 16:00)\n현재: ${currentTime || '없음'}\n반 기본: ${classDefault || '없음'}`,
+        currentTime
+    );
+    if (newTime === null) return;
+
+    const trimmed = newTime.trim();
+    const updated = { ...enrollments[idx] };
+    if (!trimmed || trimmed === classDefault) {
+        delete updated.start_time;
+    } else {
+        updated.start_time = trimmed;
+    }
+    enrollments[idx] = updated;
+
+    window.showSaveIndicator?.('saving');
+    try {
+        await auditUpdate(doc(db, 'students', studentId), { enrollments });
+        student.enrollments = enrollments;
+        window.showSaveIndicator?.('saved');
+    } catch (err) {
+        console.error('[editTeukangTime] 저장 실패:', err);
+        window.showSaveIndicator?.('error');
+        return;
+    }
+
+    if (window.renderTeukangDetail) window.renderTeukangDetail(studentId);
+};
+
+// ─── 특강 반에서 학생 제거 ──────────────────────────────────────────────────
+window.removeFromTeukang = async function(studentId, classCode) {
+    const { allStudents } = _state();
+    const student = allStudents?.find(s => s.docId === studentId);
+    if (!student) return;
+
+    if (!confirm(`${student.name} 학생을 ${classCode} 반에서 제거합니다. 계속할까요?`)) return;
+
+    // 단일 패스로 제거 + 다른 특강 존재 여부 판정
+    let hasOtherTeukang = false;
+    const enrollments = (student.enrollments || []).filter(e => {
+        const isTarget = e.class_type === '특강' && window.enrollmentCode?.(e) === classCode;
+        if (!isTarget && e.class_type === '특강') hasOtherTeukang = true;
+        return !isTarget;
+    });
+    const updateData = { enrollments };
+    if (!hasOtherTeukang && student.status2 === '특강') {
+        updateData.status2 = '';
+    }
+
+    window.showSaveIndicator?.('saving');
+    try {
+        await auditUpdate(doc(db, 'students', studentId), updateData);
+        student.enrollments = enrollments;
+        if (!hasOtherTeukang && student.status2 === '특강') student.status2 = '';
+        window.showSaveIndicator?.('saved');
+    } catch (err) {
+        console.error('[removeFromTeukang] 저장 실패:', err);
+        window.showSaveIndicator?.('error');
+        return;
+    }
+
+    // 학생 선택 해제 후 반 상세로 복귀
+    window.selectedStudentId = null;
+    if (window.renderClassDetail) window.renderClassDetail(classCode);
     if (window.renderListPanel) window.renderListPanel();
 };
 
@@ -701,6 +1038,7 @@ window._getNaesinClasses = getNaesinClasses;
 window.renderNaesinList = renderNaesinList;
 window.renderNaesinDetail = renderNaesinDetail;
 window.renderNaesinClassDetail = renderNaesinClassDetail;
+window.renderTeukangDetail = renderTeukangDetail;
 window.setNaesinClass = function(code) {
     window._selectedNaesinClass = (window._selectedNaesinClass === code) ? null : code;
     renderNaesinList();
