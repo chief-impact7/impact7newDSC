@@ -43,11 +43,11 @@ export function getSemestersForDate(dateStr, semesterSettings) {
     );
 }
 
-// 학생 전체 목록 (재원 학생만 — 퇴원 제외)
+// 학생 전체 목록 (재원 학생만 — 퇴원 제외, 상담 포함)
 export async function fetchStudents() {
     const q = query(
         collection(db, 'students'),
-        where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원'])
+        where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원', '상담'])
     );
     const snap = await getDocs(q);
     const list = [];

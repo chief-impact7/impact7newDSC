@@ -246,7 +246,7 @@ window.handleLogin = async () => {
 async function loadAllStudents() {
     try {
         const [snap1, snap2] = await Promise.all([
-            getDocs(query(collection(db, 'students'), where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원']))),
+            getDocs(query(collection(db, 'students'), where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원', '상담']))),
             getDocs(query(collection(db, 'students'), where('status2', '==', '특강')))
         ]);
         const seen = new Set();

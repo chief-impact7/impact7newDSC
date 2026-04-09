@@ -45,7 +45,7 @@ service cloud.firestore {
           && data.enrollments is list
           && (!data.keys().hasAny(['status']) || (
                 data.status is string
-                && data.status in ['등원예정', '재원', '실휴원', '가휴원', '퇴원']
+                && data.status in ['등원예정', '재원', '실휴원', '가휴원', '퇴원', '상담']
              ))
           && (!data.keys().hasAny(['parent_phone_1']) || (
                 data.parent_phone_1 is string
@@ -518,6 +518,14 @@ service cloud.firestore {
         ])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
+        && request.resource.data.branch is string
+        && request.resource.data.branch.size() > 0
+        && request.resource.data.school is string
+        && request.resource.data.school.size() > 0
+        && request.resource.data.level is string
+        && request.resource.data.level.size() > 0
+        && request.resource.data.grade is string
+        && request.resource.data.grade.size() > 0
         && withinFieldLimit(20);
 
       allow delete: if isAuthorized();

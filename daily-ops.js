@@ -441,7 +441,7 @@ async function loadStudents() {
     let snap;
     try {
         const [snap1, snap2] = await Promise.all([
-            getDocs(query(collection(db, 'students'), where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원']))),
+            getDocs(query(collection(db, 'students'), where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원', '상담']))),
             getDocs(query(collection(db, 'students'), where('status2', '==', '특강')))
         ]);
         const seenIds = new Set();
@@ -10764,14 +10764,23 @@ async function _syncContactsForTemp(data) {
 
 async function saveTempAttendance() {
     const name = document.getElementById('temp-att-name').value.trim();
-    if (!name) { alert('이름을 입력하세요.'); return; }
+    const branch = document.getElementById('temp-att-branch').value;
+    const school = document.getElementById('temp-att-school').value.trim();
+    const level = document.getElementById('temp-att-level').value;
+    const grade = document.getElementById('temp-att-grade').value.trim();
+
+    if (!name) { alert('이름을 입력하세요.'); document.getElementById('temp-att-name').focus(); return; }
+    if (!branch) { alert('소속을 선택하세요.'); document.getElementById('temp-att-branch').focus(); return; }
+    if (!school) { alert('학교를 입력하세요.'); document.getElementById('temp-att-school').focus(); return; }
+    if (!level) { alert('학부(초/중/고)를 선택하세요.'); document.getElementById('temp-att-level').focus(); return; }
+    if (!grade) { alert('학년을 입력하세요.'); document.getElementById('temp-att-grade').focus(); return; }
 
     const data = {
         name,
-        branch: document.getElementById('temp-att-branch').value,
-        school: document.getElementById('temp-att-school').value.trim(),
-        level: document.getElementById('temp-att-level').value,
-        grade: document.getElementById('temp-att-grade').value.trim(),
+        branch,
+        school,
+        level,
+        grade,
         student_phone: document.getElementById('temp-att-student-phone').value.trim(),
         parent_phone_1: document.getElementById('temp-att-parent-phone').value.trim(),
         memo: document.getElementById('temp-att-memo').value.trim(),
