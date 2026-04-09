@@ -7,7 +7,7 @@ import {
 import { auth, db, geminiModel } from './firebase-config.js';
 import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
 import { initHelpGuide } from './help-guide.js';
-import { toDateStrKST, parseDateKST, todayStr, getDayName, studentShortLabel } from './src/shared/firestore-helpers.js';
+import { toDateStrKST, parseDateKST, todayStr, getDayName, studentShortLabel, ACTIVE_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditSet, auditAdd, auditDelete, batchUpdate, batchSet } from './audit.js';
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -1882,8 +1882,6 @@ function getSubFilterCount(filterKey) {
 
 // ─── 비정규 통합 집계 ────────────────────────────────────────────────────────
 
-// 학교+학부+학년 축약 표시는 공용 helper studentShortLabel 사용
-const _formatTempSchoolInfo = studentShortLabel;
 
 let _scheduledVisitsCache = null;
 function getScheduledVisits() {
@@ -1909,7 +1907,7 @@ function getScheduledVisits() {
             studentId: null,
             name: ta.name || '(이름 없음)',
             time: ta.temp_time || '',
-            detail: _formatTempSchoolInfo(ta) || '',
+            detail: studentShortLabel(ta) || '',
             status: (ta.visit_status === '완료' || ta.visit_status === '기타') ? 'completed' : 'pending',
             visitStatus: _toVisitStatus(ta.visit_status),
             caller: callerName(ta.created_by),
@@ -4053,8 +4051,6 @@ window.saveTeukangPeriod = async function(classCode, field, value) {
 
 // ─── 특강반 학생 추가 카드 ──────────────────────────────────────────────────
 
-const TEUKANG_ELIGIBLE_STATUSES = new Set(['재원', '등원예정', '실휴원', '가휴원', '상담']);
-
 function renderTeukangAddStudentCard(classCode) {
     return `
         <div class="detail-card">
@@ -4083,7 +4079,9 @@ window.searchTeukangAddStudent = function(classCode, q) {
     _teukangAddSearchTimer = setTimeout(() => _doSearchTeukangAddStudent(classCode, q), 200);
 };
 
-function _renderTeukangSearchItem(classCode, s, docId) {
+function _renderTeukangSearchItem(classCode, s) {
+    // 로컬 학생은 docId, 리모트(_searchContactsDSC) 결과는 id 필드 사용
+    const docId = s.docId || s.id;
     const meta = [studentShortLabel(s), s.status].filter(Boolean).join(' · ');
     return `<div class="search-result-item" style="display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid var(--border);cursor:pointer;"
                  onclick="addStudentToTeukang('${escAttr(classCode)}', '${escAttr(docId)}')">
@@ -4110,35 +4108,32 @@ async function _doSearchTeukangAddStudent(classCode, q) {
     // 1) 로컬: 활성 학생(재원/등원예정/실휴원/가휴원/상담) 필터
     const localItems = allStudents
         .filter(s => {
-            if (!TEUKANG_ELIGIBLE_STATUSES.has(s.status)) return false;
+            if (!ACTIVE_STUDENT_STATUSES.has(s.status)) return false;
             if (enrolledIds.has(s.docId)) return false;
             const name = (s.name || '').toLowerCase();
             const school = (s.school || '').toLowerCase();
             return name.includes(q) || school.includes(q);
         });
 
-    // 로컬 결과를 먼저 즉시 렌더
     const renderCombined = (localList, pastList) => {
-        const items = [
-            ...localList.map(s => _renderTeukangSearchItem(classCode, s, s.docId)),
-            ...pastList.map(r => _renderTeukangSearchItem(classCode, r, r.id)),
-        ];
-        if (items.length === 0) {
-            results.innerHTML = '<div style="font-size:12px;color:var(--text-sec);padding:8px;">검색 결과 없음</div>';
-        } else {
-            results.innerHTML = items.slice(0, 30).join('');
-        }
+        const items = [...localList, ...pastList].slice(0, 30)
+            .map(s => _renderTeukangSearchItem(classCode, s));
+        results.innerHTML = items.length === 0
+            ? '<div style="font-size:12px;color:var(--text-sec);padding:8px;">검색 결과 없음</div>'
+            : items.join('');
     };
 
     renderCombined(localItems.slice(0, 20), []);
 
-    // 2) 리모트: 퇴원/종강 학생 prefix 쿼리 (_searchContactsDSC 재사용)
+    // 리모트: 퇴원/종강 학생 prefix 쿼리 (_searchContactsDSC 재사용)
     try {
         const remote = await _searchContactsDSC(q);
         if (reqId !== _teukangAddSearchId) return; // stale 무시
         const pastItems = remote.filter(r => !enrolledIds.has(r.id)).slice(0, 10);
         renderCombined(localItems.slice(0, 20), pastItems);
-    } catch (_) { /* 리모트 실패 시 로컬 결과만 유지 */ }
+    } catch (err) {
+        console.debug('[teukang remote search]', err?.message || err);
+    }
 }
 
 function _findTeukangEnrollment(student, classCode) {

@@ -4,7 +4,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
-import { todayStr, studentShortLabel } from './src/shared/firestore-helpers.js';
+import { todayStr, studentShortLabel, ACTIVE_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { auditSet, batchUpdate } from './audit.js';
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -38,7 +38,6 @@ const wizardData = {
 let allStudents = [];
 let teachersList = [];
 
-const ACTIVE_STATUSES = new Set(['재원', '등원예정', '실휴원', '가휴원', '상담']);
 
 // ─── Auth ───────────────────────────────────────────────────────────────────
 onAuthStateChanged(auth, async (user) => {
@@ -321,22 +320,22 @@ function _doSearchStudents(q) {
     // 기타 반 유형: 활성 상태(재원/등원예정/실휴원/가휴원/상담)만
     const filtered = allStudents
         .filter(s => {
-            if (!isSpecial && !ACTIVE_STATUSES.has(s.status)) return false;
+            if (!isSpecial && !ACTIVE_STUDENT_STATUSES.has(s.status)) return false;
             const name = (s.name || '').toLowerCase();
             const school = (s.school || '').toLowerCase();
             return name.includes(q) || school.includes(q);
         })
         .sort((a, b) => {
             // 활성 학생 우선 → 이름순
-            const aActive = ACTIVE_STATUSES.has(a.status) ? 0 : 1;
-            const bActive = ACTIVE_STATUSES.has(b.status) ? 0 : 1;
+            const aActive = ACTIVE_STUDENT_STATUSES.has(a.status) ? 0 : 1;
+            const bActive = ACTIVE_STUDENT_STATUSES.has(b.status) ? 0 : 1;
             return aActive - bActive || (a.name || '').localeCompare(b.name || '', 'ko');
         })
         .slice(0, 20);
 
     const html = filtered.map(s => {
         const alreadySelected = selectedIds.has(s.docId);
-        const isInactive = !ACTIVE_STATUSES.has(s.status);
+        const isInactive = !ACTIVE_STUDENT_STATUSES.has(s.status);
         return `<div class="search-result-item ${alreadySelected ? 'already-selected' : ''}"
                      onclick="addStudent('${s.docId}')">
                     <div class="result-info">

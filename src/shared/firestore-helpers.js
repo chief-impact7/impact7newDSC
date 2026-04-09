@@ -157,6 +157,14 @@ export const branchFromStudent = (s) =>
 
 export { normalizeDays };
 
+// ─── 학생 상태 ───
+
+// 활성 상태 집합 (등록/검색/목록에서 '실제 학원 등록되어있는' 학생 판정용)
+// 특강만 수강하는 퇴원/종강 학생은 status2='특강'로 별도 식별.
+export const ACTIVE_STUDENT_STATUSES = new Set([
+    '재원', '등원예정', '실휴원', '가휴원', '상담'
+]);
+
 // ─── 학생 표시명 ───
 // 학교 + 학부(초/중/고) + 학년을 하나로 합친 축약 라벨
 // 예: (신목, 중등, 2) → "신목중2"
