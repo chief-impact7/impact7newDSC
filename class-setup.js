@@ -356,8 +356,11 @@ window.addStudent = function (docId) {
     if (!found) return;
     wizardData.students.push(found);
     renderSelectedStudents();
+    // 선택 후 검색창 초기화 (다음 학생 검색 편의성)
     const searchInput = document.getElementById('student-search');
-    if (searchInput.value) window.searchStudents(searchInput.value);
+    searchInput.value = '';
+    document.getElementById('search-results').innerHTML = '';
+    searchInput.focus();
 };
 
 window.removeStudent = function (docId) {
