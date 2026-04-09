@@ -1,0 +1,20 @@
+# Memory Index
+
+- master 푸시 시 GitHub Actions (`.github/workflows/deploy.yml`)로 자동 배포
+- `firebase deploy` 수동 실행 불필요
+- **볼트**: `Jon`
+- **경로**: `impact7DEV/impact7DSC/` (볼트 내 상대경로)
+- **obsidian CLI 명령**: `obsidian create vault="Jon" path="impact7DEV/impact7DSC/YYYY-MM-DD.md"`
+- **규칙**: impact7dsc.web.app 관련 작업 시 매 세션/매일/중요한 변경마다 해당 폴더에 자동으로 노트 기록
+- **파일명 형식**: `YYYY-MM-DD.md` (날짜별)
+- [빌드 성공 후 커밋/푸시 금지](feedback_no_auto_commit.md) - 빌드 성공 시 사용자에게 먼저 알릴 것
+- [미완료 과업 과거 날짜 처리](project_overdue_past_date.md) - 미통과 등원 과업을 해당 날짜(과거)에서도 처리 가능하게 수정 필요
+- [학생 이름 중복 검증](project_name_duplication_rule.md) - impact7DB에서 신규/재등원 시 동명이인 검증 구현 필요
+- [project_realtime_sync.md](project_realtime_sync.md) — Firestore onSnapshot 전환 모니터링 (읽기 스파이크 시 하이브리드 전환 예정)
+- [feedback_use_pdf2fire_skill.md](feedback_use_pdf2fire_skill.md) — PDF 추출은 반드시 pdf2fire/ebs-extraction 스킬 사용, 자체 스크립트 금지
+- [project_class_setup_wizard.md](project_class_setup_wizard.md) — 반 편성 도우미 마법사 개발 (플랜 승인됨, 구현 시작 직전)
+- [project_naesin_design.md](project_naesin_design.md) — 내신 반 관리 체계 설계 (학교+학년 반코드, 요일별 시간, 정규와 분리된 UI)
+- [project_class_type_logic.md](project_class_type_logic.md) — 자유학기/내신은 정규의 일시적 전환, 특강은 별도 추가
+- [feedback_firestore_rules_4projects.md](feedback_firestore_rules_4projects.md) — rules 동기화는 DB/DSC/HR/exam 4개 필수
+- [rules 동기화 후 4-repo 커밋 규율](feedback_rules_sync_commit.md) — rules 수정·배포 후 4개 repo 모두 commit/push 확인 필수 (2026-04-09 사후 정리 사고)
+- [project_contacts_deprecation.md](project_contacts_deprecation.md) — contacts/students 병합 완료, Phase 5(코드 제거) + Phase 6(특강반 학생 추가 UI) 잔여
