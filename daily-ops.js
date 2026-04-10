@@ -3135,16 +3135,18 @@ function renderListPanel() {
 
         let toggleHtml = '';
         const isLeave = LEAVE_STATUSES.includes(s.status);
+        // isLeave가 true면 short-circuit으로 every() 미실행
+        const isTeukangOnly = !isLeave && _todayEnrolls.length > 0 && _todayEnrolls.every(e => e.class_type === '특강');
 
-        if (isLeave || s.status === '퇴원') {
-            // 휴원/퇴원 학생은 모든 카테고리에서 입력 버튼 숨김
+        if (isLeave || (PAST_STUDENT_STATUSES.has(s.status) && !isTeukangOnly)) {
             toggleHtml = '';
         } else if (currentCategory === 'attendance') {
             const rec = dailyRecords[s.docId];
             const attStatus = rec?.attendance?.status || '미확인';
-            const statuses = ['정규', '출석', '지각', '결석', '조퇴', '기타'];
-            // 미확인 maps to 정규 for display
-            const currentDisplay = attStatus === '미확인' ? '정규' : attStatus;
+            const defaultLabel = isTeukangOnly ? '특강' : '정규';
+            const statuses = [defaultLabel, '출석', '지각', '결석', '조퇴', '기타'];
+            // 기존 '정규' 저장값도 defaultLabel에 매핑 (특강 전환 시 호환)
+            const currentDisplay = (attStatus === '미확인' || attStatus === '정규') ? defaultLabel : attStatus;
             toggleHtml = `<div class="toggle-group">` +
                 statuses.map(st => {
                     let activeClass = '';
