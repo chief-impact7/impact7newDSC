@@ -560,9 +560,10 @@ function getOverridingOutFromClass(classCode, date) {
     return tempClassOverrides.filter(o => o.original_class_code === classCode && o.override_date === (date || selectedDate));
 }
 
-function addOverrideInStudents(students) {
+function addOverrideInStudents(students, classCodeFilter = null) {
     const studentIds = new Set(students.map(s => s.docId));
     tempClassOverrides.forEach(o => {
+        if (classCodeFilter && o.target_class_code !== classCodeFilter) return;
         if (!studentIds.has(o.student_id)) {
             const s = allStudents.find(st => st.docId === o.student_id);
             if (s && s.status !== '퇴원') {
@@ -2130,8 +2131,8 @@ function getFilteredStudents() {
                 e.day.includes(dayName)
             )
         );
-        // 타반수업 override-in 학생 추가
-        addOverrideInStudents(students);
+        // 타반수업 override-in 학생 추가 (반 필터 활성 시 해당 반 타반수업 학생만)
+        addOverrideInStudents(students, selectedClassCode || null);
     }
 
     // 소속 글로벌 필터
@@ -3850,6 +3851,8 @@ function renderClassDetail(classCode) {
     cardsContainer.innerHTML = `
         ${teacherCard}
 
+        ${renderRegularClassDayCard(classCode)}
+
         ${renderClassScheduleCard(classCode)}
 
         <div class="detail-card">
@@ -3901,6 +3904,83 @@ function renderClassDetail(classCode) {
         document.getElementById('detail-panel').classList.add('mobile-visible');
     }
 }
+
+// ─── 정규반 등원 요일 카드 ──────────────────────────────────────────────────
+
+function _getRegularClassDays(classCode) {
+    const cs = classSettings[classCode];
+    if (cs?.default_days?.length > 0) return cs.default_days;
+    // class_settings에 없으면 재원 학생 enrollment에서 합집합으로 도출
+    const daySet = new Set();
+    allStudents.forEach(s => {
+        if (s.status === '퇴원') return;
+        (s.enrollments || []).forEach(e => {
+            if (enrollmentCode(e) === classCode && (e.class_type || '정규') === '정규') {
+                (e.day || []).forEach(d => daySet.add(d));
+            }
+        });
+    });
+    return DAY_ORDER.filter(d => daySet.has(d));
+}
+
+function renderRegularClassDayCard(classCode) {
+    const cs = classSettings[classCode];
+    if (cs?.class_type === '특강' || cs?.free_schedule !== undefined) return '';
+    const activeDays = _getRegularClassDays(classCode);
+    const dayBtns = DAY_ORDER.map(d => {
+        const isActive = activeDays.includes(d);
+        return `<button class="btn ${isActive ? 'btn-primary' : 'btn-secondary'} btn-sm"
+            style="min-width:36px;padding:3px 8px;"
+            onclick="toggleRegularClassDay('${escAttr(classCode)}', '${d}', ${!isActive})">${d}</button>`;
+    }).join('');
+    return `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined">date_range</span>
+                등원 요일
+            </div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;">${dayBtns}</div>
+            <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">변경 시 재원 학생 전체에 적용됩니다</div>
+        </div>
+    `;
+}
+
+window.toggleRegularClassDay = async function(classCode, day, isAdd) {
+    const currentDays = _getRegularClassDays(classCode);
+    const newDays = isAdd
+        ? DAY_ORDER.filter(d => currentDays.includes(d) || d === day)
+        : currentDays.filter(d => d !== day);
+
+    showSaveIndicator('saving');
+    try {
+        const batch = writeBatch(db);
+        let hasOps = false;
+        for (const student of allStudents) {
+            if (student.status === '퇴원') continue;
+            let changed = false;
+            const updated = (student.enrollments || []).map(e => {
+                if (enrollmentCode(e) === classCode && (e.class_type || '정규') === '정규') {
+                    changed = true;
+                    return { ...e, day: newDays };
+                }
+                return e;
+            });
+            if (!changed) continue;
+            batchUpdate(batch, doc(db, 'students', student.docId), { enrollments: updated });
+            student.enrollments = updated;
+            hasOps = true;
+        }
+        await Promise.all([
+            saveClassSettings(classCode, { default_days: newDays }),
+            hasOps ? batch.commit() : Promise.resolve(),
+        ]);
+        showSaveIndicator('saved');
+        renderClassDetail(classCode);
+    } catch (err) {
+        console.error('요일 수정 실패:', err);
+        showSaveIndicator('error');
+    }
+};
 
 // ─── 자유학기/특강 요일 카드 ────────────────────────────────────────────────
 
@@ -3977,20 +4057,19 @@ window.toggleClassDay = async function(classCode, day, isAdd) {
         const batch = writeBatch(db);
         let hasOps = false;
         for (const student of allStudents) {
-            if (!student.enrollments?.some(e => enrollmentCode(e) === classCode && e.class_type === classType)) continue;
+            if (student.status === '퇴원') continue;
             let changed = false;
-            const updated = student.enrollments.map(e => {
+            const updated = (student.enrollments || []).map(e => {
                 if (enrollmentCode(e) === classCode && e.class_type === classType) {
                     changed = true;
                     return { ...e, day: newDays };
                 }
                 return e;
             });
-            if (changed) {
-                batchUpdate(batch, doc(db, 'students', student.docId), { enrollments: updated });
-                student.enrollments = updated;
-                hasOps = true;
-            }
+            if (!changed) continue;
+            batchUpdate(batch, doc(db, 'students', student.docId), { enrollments: updated });
+            student.enrollments = updated;
+            hasOps = true;
         }
         if (hasOps) await batch.commit();
         showSaveIndicator('saved');
