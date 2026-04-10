@@ -165,6 +165,8 @@ export const ACTIVE_STUDENT_STATUSES = new Set([
     '재원', '등원예정', '실휴원', '가휴원', '상담'
 ]);
 
+export const PAST_STUDENT_STATUSES = new Set(['퇴원', '종강']);
+
 // ─── 학생 표시명 ───
 // 학교 + 학부(초/중/고) + 학년을 하나로 합친 축약 라벨
 // 예: (신목, 중등, 2) → "신목중2"

@@ -7,7 +7,7 @@ import {
 import { auth, db, geminiModel } from './firebase-config.js';
 import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
 import { initHelpGuide } from './help-guide.js';
-import { toDateStrKST, parseDateKST, todayStr, getDayName, studentShortLabel, ACTIVE_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
+import { toDateStrKST, parseDateKST, todayStr, getDayName, studentShortLabel, ACTIVE_STUDENT_STATUSES, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditSet, auditAdd, auditDelete, batchUpdate, batchSet } from './audit.js';
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -2127,7 +2127,11 @@ function getFilteredStudents() {
         );
     } else {
         students = allStudents.filter(s => {
-            if (s.status === '퇴원') return false;
+            if (PAST_STUDENT_STATUSES.has(s.status)) {
+                return getActiveEnrollments(s, selectedDate).some(e =>
+                    e.class_type === '특강' && e.day.includes(dayName)
+                );
+            }
             if (LEAVE_STATUSES.includes(s.status) && s.pause_start_date && s.pause_end_date
                 && selectedDate >= s.pause_start_date && selectedDate <= s.pause_end_date) return false;
             return getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayName));
@@ -10930,8 +10934,6 @@ window.confirmVisitStatus = confirmVisitStatus;
 
 // students에서 퇴원/종강 학생을 prefix 쿼리로 가져온다.
 // (현재 활성 학생은 allStudents에 이미 들어있으므로 dedupe로 제외)
-const PAST_STUDENT_STATUSES = new Set(['퇴원', '종강']);
-
 async function _searchContactsDSC(term) {
     if (!term || term.length < 2) return [];
     const currentIds = new Set(allStudents.map(s => s.docId));

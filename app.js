@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
-import { todayStr, getDayName, addDays } from './src/shared/firestore-helpers.js';
+import { todayStr, getDayName, addDays, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditSet, auditAdd } from './audit.js';
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -432,14 +432,16 @@ function getStudentsForDay(branchFilter, classFilter) {
     const rows = [];
 
     allStudents.forEach(s => {
-        // 퇴원 학생 제외
-        if (s.status === '퇴원') return;
-
         const branch = branchFromStudent(s);
         if (branchFilter && branch !== branchFilter) return;
 
         const activeEnrolls = getActiveEnrollments(s, selectedDate);
-        activeEnrolls.forEach((e, idx) => {
+        const enrollsToProcess = PAST_STUDENT_STATUSES.has(s.status)
+            ? activeEnrolls.filter(e => e.class_type === '특강')
+            : activeEnrolls;
+        if (enrollsToProcess.length === 0) return;
+
+        enrollsToProcess.forEach((e, idx) => {
             const days = normalizeDays(e.day);
             if (!days.includes(dayName)) return;
 
