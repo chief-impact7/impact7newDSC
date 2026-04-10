@@ -2126,11 +2126,12 @@ function getFilteredStudents() {
             (s.enrollments || []).some(e => !(validDateStr(e.end_date) && e.end_date < today))
         );
     } else {
-        students = allStudents.filter(s =>
-            s.status !== '퇴원' && getActiveEnrollments(s, selectedDate).some(e =>
-                e.day.includes(dayName)
-            )
-        );
+        students = allStudents.filter(s => {
+            if (s.status === '퇴원') return false;
+            if (LEAVE_STATUSES.includes(s.status) && s.pause_start_date && s.pause_end_date
+                && selectedDate >= s.pause_start_date && selectedDate <= s.pause_end_date) return false;
+            return getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayName));
+        });
         // 타반수업 override-in 학생 추가 (반 필터 활성 시 해당 반 타반수업 학생만)
         addOverrideInStudents(students, selectedClassCode || null);
     }
@@ -8334,8 +8335,17 @@ async function _finalizeLeaveDSC(r, studentId) {
     } else if (_isLeaveExtension(r.request_type)) {
         studentUpdate.pause_end_date = r.leave_end_date || '';
     } else {
-        studentUpdate.status = r.leave_sub_type || '실휴원';
-        studentUpdate.pause_start_date = r.leave_start_date || '';
+        const leaveSubType = r.leave_sub_type || '실휴원';
+        const leaveStartDate = r.leave_start_date || '';
+        // 시작일이 미래이면 재원 유지 + scheduled_leave_status 예약
+        if (leaveStartDate && leaveStartDate > todayStr()) {
+            studentUpdate.status = '재원';
+            studentUpdate.scheduled_leave_status = leaveSubType;
+        } else {
+            studentUpdate.status = leaveSubType;
+            studentUpdate.scheduled_leave_status = deleteField();
+        }
+        studentUpdate.pause_start_date = leaveStartDate;
         studentUpdate.pause_end_date = r.leave_end_date || '';
     }
 
@@ -8364,7 +8374,18 @@ async function _finalizeLeaveDSC(r, studentId) {
     } else if (_isLeaveExtension(r.request_type)) {
         if (sIdx >= 0) allStudents[sIdx].pause_end_date = studentUpdate.pause_end_date;
     } else {
-        if (sIdx >= 0) { allStudents[sIdx].status = studentUpdate.status; allStudents[sIdx].pause_start_date = studentUpdate.pause_start_date; allStudents[sIdx].pause_end_date = studentUpdate.pause_end_date; }
+        if (sIdx >= 0) {
+            Object.assign(allStudents[sIdx], {
+                status: studentUpdate.status,
+                pause_start_date: studentUpdate.pause_start_date,
+                pause_end_date: studentUpdate.pause_end_date,
+            });
+            if (studentUpdate.status === '재원') {
+                allStudents[sIdx].scheduled_leave_status = studentUpdate.scheduled_leave_status;
+            } else {
+                delete allStudents[sIdx].scheduled_leave_status;
+            }
+        }
     }
 
     showSaveIndicator('saved');
