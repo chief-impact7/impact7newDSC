@@ -298,6 +298,14 @@ function buildClassCode() {
 }
 
 // ─── Step 3: 학생 추가 ─────────────────────────────────────────────────────
+/** 전화번호 뒷 4자리 표시 (parent_phone_1 우선, 없으면 student_phone) */
+function phoneSuffix(s) {
+    const ph = s.parent_phone_1 || s.student_phone || '';
+    const digits = ph.replace(/\D/g, '');
+    if (digits.length < 4) return '';
+    return ` (${digits.slice(-4)})`;
+}
+
 function onEnterStep3() {
     renderSelectedStudents();
 }
@@ -340,7 +348,7 @@ function _doSearchStudents(q) {
                      onclick="addStudent('${s.docId}')">
                     <div class="result-info">
                         <span class="result-name">${esc(s.name)}</span>
-                        <span class="result-meta">${esc(studentShortLabel(s))}</span>
+                        <span class="result-meta">${esc(studentShortLabel(s))}${phoneSuffix(s)}</span>
                     </div>
                     <span class="result-status ${isInactive ? 'withdrawn' : ''}">${esc(s.status)}</span>
                 </div>`;
