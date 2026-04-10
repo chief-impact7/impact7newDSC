@@ -2136,6 +2136,17 @@ function getFilteredStudents() {
                 && selectedDate >= s.pause_start_date && selectedDate <= s.pause_end_date) return false;
             return getActiveEnrollments(s, selectedDate).some(e => e.day.includes(dayName));
         });
+        // 세션 내 퇴원처리된 학생도 특강 수강 중이면 포함
+        // (퇴원처리 시 allStudents→withdrawnStudents로 이동하므로 별도 체크 필요)
+        const studentIds = new Set(students.map(s => s.docId));
+        for (const s of withdrawnStudents) {
+            if (!studentIds.has(s.docId) && getActiveEnrollments(s, selectedDate).some(e =>
+                e.class_type === '특강' && e.day.includes(dayName)
+            )) {
+                students.push(s);
+                studentIds.add(s.docId);
+            }
+        }
         // 타반수업 override-in 학생 추가 (반 필터 활성 시 해당 반 타반수업 학생만)
         addOverrideInStudents(students, selectedClassCode || null);
     }
