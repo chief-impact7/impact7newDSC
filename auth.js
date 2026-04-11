@@ -35,6 +35,8 @@ export const signInWithGoogle = async () => {
 export const logout = async () => {
     try {
         await signOut(auth);
+        googleAccessToken = null;
+        tokenExpiresAt = 0;
         console.log('[AUTH SUCCESS] 로그아웃 완료');
     } catch (error) {
         console.error('[AUTH ERROR] 로그아웃 실패:', error);

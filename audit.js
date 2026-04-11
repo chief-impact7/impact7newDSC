@@ -10,10 +10,10 @@
  */
 
 import { updateDoc, setDoc, deleteDoc, addDoc, getDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db } from './firebase-config.js';
+import { db, auth } from './firebase-config.js';
 
 function _auditFields() {
-    const email = window._auditUser || 'unknown';
+    const email = auth.currentUser?.email || window._auditUser || 'unknown';
     return { updated_by: email, updated_at: serverTimestamp() };
 }
 
@@ -38,7 +38,7 @@ export async function auditDelete(ref) {
                 collection: ref.parent.id,
                 doc_id: ref.id,
                 data_before: snap.data(),
-                deleted_by: window._auditUser || 'unknown',
+                deleted_by: auth.currentUser?.email || window._auditUser || 'unknown',
                 deleted_at: serverTimestamp()
             });
         }

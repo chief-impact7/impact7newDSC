@@ -14,8 +14,10 @@ import { auditUpdate, auditSet, auditAdd, auditDelete, batchUpdate, batchSet } f
 let currentUser = null;
 let allStudents = [];           // students 컬렉션 캐시
 let dailyRecords = {};          // studentDocId → daily_record 데이터
-// 디버그용 전역 노출
-window._debug = { get allStudents() { return allStudents; }, get dailyRecords() { return dailyRecords; }, get hwFailTasks() { return hwFailTasks; }, get testFailTasks() { return testFailTasks; } };
+// 디버그용 전역 노출 (DEV 환경에서만)
+if (import.meta.env?.DEV) {
+    window._debug = { get allStudents() { return allStudents; }, get dailyRecords() { return dailyRecords; }, get hwFailTasks() { return hwFailTasks; }, get testFailTasks() { return testFailTasks; } };
+}
 let retakeSchedules = [];       // retake_schedule 전체
 let hwFailTasks = [];           // hw_fail_tasks 전체
 let testFailTasks = [];         // test_fail_tasks 전체
@@ -701,7 +703,7 @@ function _listenCollection(key, q, parser, onData) {
 }
 
 function loadLeaveRequests() {
-    const q = query(collection(db, 'leave_requests'), where('status', 'in', ['requested', 'teacher_approved', 'approved', 'cancelled']));
+    const q = query(collection(db, 'leave_requests'), where('status', 'in', ['requested', 'approved', 'cancelled']));
     return _listenCollection('leave_requests', q, null, (data) => { leaveRequests = data; });
 }
 
@@ -709,7 +711,12 @@ function loadLeaveRequests() {
 
 function _toDate(timestamp) {
     if (!timestamp) return null;
-    return timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    if (timestamp.toDate) return timestamp.toDate();
+    // "YYYY-MM-DD" 문자열은 UTC로 파싱되므로 KST 변환
+    if (typeof timestamp === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(timestamp)) {
+        return parseDateKST(timestamp);
+    }
+    return new Date(timestamp);
 }
 
 function _isOlderThan(timestamp, { days, months } = {}) {

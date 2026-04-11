@@ -73,7 +73,7 @@ service cloud.firestore {
       }
 
       // DB/DSC: 읽기+쓰기, Director: 읽기만
-      allow read: if isLoggedIn();
+      allow read: if isAuthorized();
 
       allow create: if isAuthorized()
         && hasRequiredStudentFields()
@@ -595,7 +595,7 @@ service cloud.firestore {
     // =========================================================================
     // [Director] Entities / Buildings / Teams
     // =========================================================================
-    match /entities/{id} { allow read: if isLoggedIn(); allow get: if true; allow write: if isDirector(); }
+    match /entities/{id} { allow read: if isLoggedIn(); allow write: if isDirector(); }
     match /buildings/{id} { allow read: if isLoggedIn(); allow write: if isDirector(); }
     match /teams/{id} { allow read: if isLoggedIn(); allow write: if isDirector(); }
 
@@ -666,10 +666,13 @@ service cloud.firestore {
       allow read: if isDirector() || isShortTerm();
       allow write: if isDirector() || isShortTerm();
 
-      // 비인증: 토큰 기반 등록 (필수 필드 검증)
-      allow create: if request.resource.data.keys().hasAll(['name', 'phone', 'email', 'residentNumber', 'address', 'bank', 'accountNumber', 'accountHolder', 'createdAt'])
+      // 비인증: 토큰 기반 등록 (필수 필드 + hasOnly + 토큰 검증)
+      allow create: if request.resource.data.keys().hasAll(['name', 'phone', 'email', 'residentNumber', 'address', 'bank', 'accountNumber', 'accountHolder', 'createdAt', 'tokenId'])
+        && request.resource.data.keys().hasOnly(['name', 'phone', 'email', 'residentNumber', 'address', 'bank', 'accountNumber', 'accountHolder', 'createdAt', 'tokenId', 'status'])
         && request.resource.data.name is string
-        && request.resource.data.phone is string;
+        && request.resource.data.phone is string
+        && exists(/databases/$(database)/documents/shortTermTokens/$(request.resource.data.tokenId))
+        && get(/databases/$(database)/documents/shortTermTokens/$(request.resource.data.tokenId)).data.status == 'pending';
 
       match /contracts/{contractId} {
         allow read: if isDirector() || isShortTerm();
@@ -701,9 +704,12 @@ service cloud.firestore {
       allow write: if isDirector();
 
       // 온보딩: 비인증 사용자가 유효한 토큰으로 staff 문서 생성
-      allow create: if request.resource.data.status == 'onboarding';
+      allow create: if request.resource.data.status == 'onboarding'
+        && request.resource.data.keys().hasAll(['tokenId'])
+        && exists(/databases/$(database)/documents/onboardingTokens/$(request.resource.data.tokenId))
+        && get(/databases/$(database)/documents/onboardingTokens/$(request.resource.data.tokenId)).data.status == 'pending';
 
-      // 비인증: 토큰 기반 staff 읽기 (이름 표시용)
+      // 비인증: 토큰 기반 staff 읽기 (이름 표시용) — get만 허용, list 불가
       allow get: if true;
 
       match /contracts/{contractId} {
@@ -715,7 +721,13 @@ service cloud.firestore {
         allow get: if true;
         allow update: if request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['signatures', 'salaryNotification', 'status', 'updatedAt', 'signedPdfUrl', 'salaryPdfUrl'])
-          && request.resource.data.status in ['ready', 'signed', 'salary_sent'];
+          && request.resource.data.status in ['ready', 'signed', 'salary_sent']
+          // 상태 전이 제한: ready→signed, signed→salary_sent만 허용
+          && (
+            (resource.data.status == 'ready' && request.resource.data.status == 'signed')
+            || (resource.data.status == 'signed' && request.resource.data.status == 'salary_sent')
+            || (resource.data.status == request.resource.data.status)
+          );
       }
 
       match /assignments/{id} {
@@ -814,7 +826,10 @@ service cloud.firestore {
     match /employees/{employeeId} {
       allow read: if isLoggedIn();
       allow write: if isDirector();
-      allow create: if request.resource.data.status == 'onboarding';
+      allow create: if request.resource.data.status == 'onboarding'
+        && request.resource.data.keys().hasAll(['tokenId'])
+        && exists(/databases/$(database)/documents/onboardingTokens/$(request.resource.data.tokenId))
+        && get(/databases/$(database)/documents/onboardingTokens/$(request.resource.data.tokenId)).data.status == 'pending';
       allow get: if true;
 
       match /contracts/{contractId} {
@@ -824,7 +839,12 @@ service cloud.firestore {
         allow get: if true;
         allow update: if request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['signatures', 'salaryNotification', 'status', 'updatedAt', 'signedPdfUrl', 'salaryPdfUrl'])
-          && request.resource.data.status in ['ready', 'signed', 'salary_sent'];
+          && request.resource.data.status in ['ready', 'signed', 'salary_sent']
+          && (
+            (resource.data.status == 'ready' && request.resource.data.status == 'signed')
+            || (resource.data.status == 'signed' && request.resource.data.status == 'salary_sent')
+            || (resource.data.status == request.resource.data.status)
+          );
       }
 
       match /performanceNotes/{noteId} {
@@ -836,35 +856,35 @@ service cloud.firestore {
     // [Exam] 학부 설정
     // =========================================================================
     match /departments/{deptId} {
-      allow read: if isLoggedIn();
-      allow write: if isLoggedIn();
+      allow read: if isAuthorized();
+      allow write: if isAuthorized();
     }
 
     // =========================================================================
     // [Exam] 시험 종류
     // =========================================================================
     match /examTypes/{typeId} {
-      allow read: if isLoggedIn();
-      allow write: if isLoggedIn();
+      allow read: if isAuthorized();
+      allow write: if isAuthorized();
     }
 
     // =========================================================================
     // [Exam] 시험
     // =========================================================================
     match /exams/{examId} {
-      allow read: if isLoggedIn();
-      allow create, update, delete: if isLoggedIn();
+      allow read: if isAuthorized();
+      allow create, update, delete: if isAuthorized();
     }
 
     // =========================================================================
     // [Exam] 채점 결과
     // =========================================================================
     match /results/{examId} {
-      allow read: if isLoggedIn();
+      allow read: if isAuthorized();
 
       match /students/{studentId} {
-        allow read: if isLoggedIn();
-        allow write: if isLoggedIn();
+        allow read: if isAuthorized();
+        allow write: if isAuthorized();
       }
     }
 
@@ -872,16 +892,25 @@ service cloud.firestore {
     // [Exam] 알림
     // =========================================================================
     match /exam_notifications/{notifId} {
-      allow read: if isLoggedIn();
-      allow create: if isLoggedIn();
+      allow read: if isAuthorized();
+      allow create: if isAuthorized();
     }
 
     // =========================================================================
     // [Exam] 템플릿
     // =========================================================================
     match /exam_templates/{templateId} {
-      allow read: if isLoggedIn();
-      allow write: if isLoggedIn();
+      allow read: if isAuthorized();
+      allow write: if isAuthorized();
+    }
+
+    // =========================================================================
+    // [공통] 감사 로그
+    // =========================================================================
+    match /audit_logs/{logId} {
+      allow create: if isAuthorized();
+      allow read: if isAuthorized();
+      allow update, delete: if false;
     }
 
     // =========================================================================

@@ -23,9 +23,10 @@
 - 변경사항 요약을 항상 남겨서 Gemini가 컨텍스트를 파악할 수 있게 한다
 
 ## 공유 Firebase 규칙 (중요!)
-- 이 프로젝트는 **impact7DB, impact7HR와 동일한 Firebase 프로젝트(impact7db)를 공유**
-- `firestore.rules`는 3개 프로젝트가 **동일한 파일**을 사용한다
-- rules 수정 시 반드시 3개 프로젝트(impact7DB, impact7newDSC, impact7HR) 모두에 복사
+- 이 프로젝트는 **impact7DB, impact7HR, impact7exam과 동일한 Firebase 프로젝트(impact7db)를 공유**
+- `firestore.rules`는 4개 프로젝트가 **동일한 파일**을 사용한다
+- rules 수정 시 반드시 4개 프로젝트(impact7DB, impact7newDSC, impact7HR, impact7exam) 모두에 복사
+- rules 동기화는 `/firestore-rules-sync` 스킬로 실행
 - 배포는 impact7DB에서만 하는 것을 권장
 - `students` 컬렉션: 클라이언트 삭제 완전 차단 (`allow delete: if false`)
 - HR 앱의 사용자 컬렉션은 `director_users` (DB의 `users`와 분리)
@@ -45,6 +46,17 @@
 npm run dev          # 개발 서버 (port 5174)
 npm run build        # 빌드
 ```
+
+## 하네스: 코드 품질
+
+**목표:** 코드 리뷰, 리팩토링 분석, 보안 감사를 병렬 실행하여 통합 품질 보고서를 생성
+
+**트리거:** 코드 품질/점검/감사/리뷰/보안 점검/푸시 전 검사 요청 시 `code-quality` 스킬을 사용하라. 단순 질문은 직접 응답 가능.
+
+**변경 이력:**
+| 날짜 | 변경 내용 | 대상 | 사유 |
+|------|----------|------|------|
+| 2026-04-11 | 초기 구성 | 전체 | - |
 
 ## 메모리 (계정 공유)
 
