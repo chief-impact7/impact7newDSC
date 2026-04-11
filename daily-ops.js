@@ -707,12 +707,18 @@ function loadLeaveRequests() {
 
 // ─── 1개월 경과 자동 처리 ────────────────────────────────────────────────────
 
-function _isOlderThanOneMonth(timestamp) {
-    if (!timestamp) return false;
-    const d = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    const oneMonthAgo = new Date();
-    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-    return d < oneMonthAgo;
+function _toDate(timestamp) {
+    if (!timestamp) return null;
+    return timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+}
+
+function _isOlderThan(timestamp, { days, months } = {}) {
+    const d = _toDate(timestamp);
+    if (!d) return false;
+    const cutoff = new Date();
+    if (months) cutoff.setMonth(cutoff.getMonth() - months);
+    if (days) cutoff.setDate(cutoff.getDate() - days);
+    return d < cutoff;
 }
 
 async function syncTaskStudentNames() {
@@ -750,7 +756,7 @@ async function syncTaskStudentNames() {
 
 async function autoCloseOldRecords() {
     // 결석대장: 1개월 경과 → 행정완료
-    const oldAbsences = absenceRecords.filter(r => _isOlderThanOneMonth(r.created_at));
+    const oldAbsences = absenceRecords.filter(r => _isOlderThan(r.created_at, { months: 1 }));
     for (const r of oldAbsences) {
         try {
             await auditUpdate(doc(db, 'absence_records', r.docId), {
@@ -767,7 +773,7 @@ async function autoCloseOldRecords() {
 
     // 휴퇴원요청: 1개월 경과 requested → 자동승인
     const oldRequests = leaveRequests.filter(r =>
-        r.status === 'requested' && _isOlderThanOneMonth(r.requested_at)
+        r.status === 'requested' && _isOlderThan(r.requested_at, { months: 1 })
     );
     for (const r of oldRequests) {
         try {
@@ -795,7 +801,7 @@ async function autoCloseOldRecords() {
     }
 
     // 숙제미통과/테스트미통과 등원: 1개월 경과 pending → 자동 기타 처리
-    const oldHwTasks = hwFailTasks.filter(t => t.status === 'pending' && t.scheduled_date && _isOlderThanOneMonth(t.scheduled_date));
+    const oldHwTasks = hwFailTasks.filter(t => t.status === 'pending' && t.scheduled_date && _isOlderThan(t.scheduled_date, { months: 1 }));
     for (const t of oldHwTasks) {
         try {
             await auditUpdate(doc(db, 'hw_fail_tasks', t.docId), {
@@ -810,7 +816,7 @@ async function autoCloseOldRecords() {
     }
     if (oldHwTasks.length > 0) console.log(`숙제미통과 등원 자동 기타처리: ${oldHwTasks.length}건`);
 
-    const oldTestTasks = testFailTasks.filter(t => t.status === 'pending' && t.scheduled_date && _isOlderThanOneMonth(t.scheduled_date));
+    const oldTestTasks = testFailTasks.filter(t => t.status === 'pending' && t.scheduled_date && _isOlderThan(t.scheduled_date, { months: 1 }));
     for (const t of oldTestTasks) {
         try {
             await auditUpdate(doc(db, 'test_fail_tasks', t.docId), {
@@ -2877,9 +2883,11 @@ function renderLeaveRequestList() {
         return;
     }
 
-    // 그룹: 승인 대기 → 승인 완료
+    // 그룹: 승인 대기 → 승인 완료 (7일 이내만)
     const pending = records.filter(r => r.status === 'requested');
-    const approved = records.filter(r => r.status === 'approved');
+    const approved = records.filter(r =>
+        r.status === 'approved' && !_isOlderThan(r.approved_at, { days: 7 })
+    );
 
     const groups = [
         { label: '승인 대기', items: pending },
@@ -3427,7 +3435,7 @@ function renderListPanel() {
             const hasCurrentSemester = s.enrollments.length > 0;
             const wdLr = leaveRequests.find(lr => lr.student_id === s.docId && lr.status === 'approved' &&
                 (lr.request_type === '퇴원요청' || lr.request_type === '휴원→퇴원'));
-            const isRecentWithdrawal = wdLr && !_isOlderThanOneMonth(wdLr.approved_at);
+            const isRecentWithdrawal = wdLr && !_isOlderThan(wdLr.approved_at, { months: 1 });
             if (hasCurrentSemester || isRecentWithdrawal) {
                 leaveBadge = `<span class="tag" style="background:#dc2626;color:#fff;">퇴원</span>`;
             } else {
@@ -8366,8 +8374,9 @@ async function _finalizeLeaveDSC(r, studentId) {
         studentUpdate.pause_end_date = r.leave_end_date || '';
     }
 
+    const newName = studentUpdate.name;
     const changeType = isReturn ? 'RETURN' : isWithdrawal ? 'WITHDRAW' : 'UPDATE';
-    await Promise.all([
+    const writes = [
         auditUpdate(doc(db, 'students', studentId), studentUpdate),
         auditAdd(collection(db, 'history_logs'), {
             doc_id: studentId, change_type: changeType,
@@ -8375,7 +8384,15 @@ async function _finalizeLeaveDSC(r, studentId) {
             after: JSON.stringify({ status: studentUpdate.status || beforeStatus, pause_start_date: (isReturn || isWithdrawal) ? '' : (studentUpdate.pause_start_date || ''), pause_end_date: (isReturn || isWithdrawal) ? '' : (studentUpdate.pause_end_date || '') }),
             google_login_id: currentUser?.email || 'system', timestamp: serverTimestamp()
         })
-    ]);
+    ];
+    if (newName && newName !== r.student_name) {
+        writes.push(auditUpdate(doc(db, 'leave_requests', r.docId), { student_name: newName }));
+    }
+    await Promise.all(writes);
+    if (newName && newName !== r.student_name) {
+        const lrIdx = leaveRequests.findIndex(lr => lr.docId === r.docId);
+        if (lrIdx >= 0) leaveRequests[lrIdx].student_name = newName;
+    }
 
     const sIdx = allStudents.findIndex(s => s.docId === studentId);
     if (isReturn && _isReEnrollType(r.request_type)) {
