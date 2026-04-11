@@ -8331,6 +8331,19 @@ async function approveLeaveRequest(docId, studentId) {
     }
 }
 
+/** 재원생 중 동명이인이 있으면 숫자 접미사를 붙인 이름 반환, 없으면 null */
+function _deduplicateName(studentId, currentName) {
+    const isDup = allStudents.some(s => s.docId !== studentId && s.name === currentName && (s.status === '재원' || s.status === '등원예정'));
+    if (!isDup) return null;
+    const baseName = currentName.replace(/\d+$/, '');
+    const escapedBase = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const variantRe = new RegExp(`^${escapedBase}\\d*$`);
+    const variants = allStudents.filter(s => s.docId !== studentId && variantRe.test(s.name) && (s.status === '재원' || s.status === '등원예정'));
+    const usedNumbers = variants.map(s => { const m = s.name.match(/(\d+)$/); return m ? parseInt(m[1], 10) : 1; });
+    usedNumbers.push(1); // 원본 이름(숫자 없음)도 1로 간주
+    return `${baseName}${Math.max(...usedNumbers) + 1}`;
+}
+
 // 양쪽 승인 완료 → 학생 상태 변경 (공통)
 async function _finalizeLeaveDSC(r, studentId) {
     const cachedStudent = findStudent(studentId);
@@ -8344,15 +8357,6 @@ async function _finalizeLeaveDSC(r, studentId) {
         studentUpdate.status = '재원';
         studentUpdate.pause_start_date = deleteField();
         studentUpdate.pause_end_date = deleteField();
-        const studentName = cachedStudent?.name || '';
-        const baseName = studentName.replace(/\d+$/, '');
-        const escapedBase = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const variantRe = new RegExp(`^${escapedBase}\\d*$`);
-        const activeVariants = allStudents.filter(s => s.docId !== studentId && variantRe.test(s.name) && s.status === '재원');
-        if (activeVariants.length > 0) {
-            const usedNumbers = [cachedStudent, ...activeVariants].map(s => { const m = s.name.match(/(\d+)$/); return m ? parseInt(m[1], 10) : 1; });
-            studentUpdate.name = `${baseName}${Math.max(...usedNumbers) + 1}`;
-        }
     } else if (isWithdrawal) {
         studentUpdate.status = '퇴원';
         studentUpdate.withdrawal_date = r.withdrawal_date || todayStr();
@@ -8373,6 +8377,12 @@ async function _finalizeLeaveDSC(r, studentId) {
         }
         studentUpdate.pause_start_date = leaveStartDate;
         studentUpdate.pause_end_date = r.leave_end_date || '';
+    }
+
+    // 재원/등원예정으로 전환 시 동명이인 체크 (복귀, 재등원, 퇴원→휴원 등)
+    if (!studentUpdate.name && (studentUpdate.status === '재원' || studentUpdate.status === '등원예정')) {
+        const dedupName = _deduplicateName(studentId, cachedStudent?.name || '');
+        if (dedupName) studentUpdate.name = dedupName;
     }
 
     const newName = studentUpdate.name;
