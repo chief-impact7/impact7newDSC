@@ -1809,7 +1809,8 @@ function getSubFilterCount(filterKey) {
                 let filtered = [...leaveRequests];
                 if (selectedBranch) filtered = filtered.filter(r => r.branch === selectedBranch);
                 const pending = filtered.filter(r => r.status === 'requested').length;
-                return { count: pending, total: filtered.length };
+                const recentApproved = filtered.filter(r => r.status === 'approved' && !_isOlderThan(r.approved_at, { days: 7 })).length;
+                return { count: pending, total: pending + recentApproved };
             }
             case 'return_upcoming': {
                 const items = _getReturnUpcomingStudents();
@@ -2868,7 +2869,13 @@ function renderLeaveRequestList() {
         const q = searchQuery.trim().toLowerCase();
         records = records.filter(r => r.student_name?.toLowerCase().includes(q));
     }
-    countEl.textContent = `${records.length}건`;
+    // 그룹: 승인 대기 → 승인 완료 (7일 이내만)
+    const pending = records.filter(r => r.status === 'requested');
+    const approved = records.filter(r =>
+        r.status === 'approved' && !_isOlderThan(r.approved_at, { days: 7 })
+    );
+    const visibleCount = pending.length + approved.length;
+    countEl.textContent = `${visibleCount}건`;
 
     // 새 요청 버튼
     let html = `<div style="padding:8px 12px;">
@@ -2877,17 +2884,11 @@ function renderLeaveRequestList() {
         </button>
     </div>`;
 
-    if (records.length === 0) {
+    if (visibleCount === 0) {
         html += '<div class="empty-state">휴퇴원 요청이 없습니다.</div>';
         container.innerHTML = html;
         return;
     }
-
-    // 그룹: 승인 대기 → 승인 완료 (7일 이내만)
-    const pending = records.filter(r => r.status === 'requested');
-    const approved = records.filter(r =>
-        r.status === 'approved' && !_isOlderThan(r.approved_at, { days: 7 })
-    );
 
     const groups = [
         { label: '승인 대기', items: pending },
