@@ -1740,7 +1740,8 @@ function getSubFilterCount(filterKey) {
     const r = (count) => ({ count, total });
 
     if (currentCategory === 'attendance') {
-        const regularTotal = regularOnly.length;
+        const realRegular = regularOnly.filter(s => hasRegularEnrollmentToday(s));
+        const regularTotal = realRegular.length;
         const rr = (count) => ({ count, total: regularTotal });
 
         switch (filterKey) {
@@ -1763,15 +1764,15 @@ function getSubFilterCount(filterKey) {
                 const visits = getEnrollPendingVisits();
                 return { count: visits.length, total: visits.length };
             }
-            case 'present': return rr(regularOnly.filter(s => dailyRecords[s.docId]?.attendance?.status === '출석').length);
-            case 'late': return rr(regularOnly.filter(s => dailyRecords[s.docId]?.attendance?.status === '지각').length);
-            case 'absent': return rr(regularOnly.filter(s => dailyRecords[s.docId]?.attendance?.status === '결석').length);
-            case 'other': return rr(regularOnly.filter(s => {
+            case 'present': return rr(realRegular.filter(s => dailyRecords[s.docId]?.attendance?.status === '출석').length);
+            case 'late': return rr(realRegular.filter(s => dailyRecords[s.docId]?.attendance?.status === '지각').length);
+            case 'absent': return rr(realRegular.filter(s => dailyRecords[s.docId]?.attendance?.status === '결석').length);
+            case 'other': return rr(realRegular.filter(s => {
                 const st = dailyRecords[s.docId]?.attendance?.status;
                 return st && !['미확인', '출석', '지각', '결석'].includes(st);
             }).length);
             case 'departure_check': {
-                const departed = regularOnly.filter(s => dailyRecords[s.docId]?.departure?.status === '귀가').length;
+                const departed = realRegular.filter(s => dailyRecords[s.docId]?.departure?.status === '귀가').length;
                 return { count: departed, total: regularTotal };
             }
             case 'naesin': {
@@ -3511,24 +3512,15 @@ function renderListPanel() {
         !currentSubFilter.has('teukang') &&
         !SV_L3_KEYS.some(k => currentSubFilter.has(k));
 
-    // 정규/비정규 분리 (single-pass)
-    let regularActive, irregularActive;
+    // 정규/특강 분리: 특강 전용 학생은 정규 탭에서 제외 (특강 탭에서만 표시)
+    let regularActive;
     if (shouldSplitRegular) {
-        regularActive = [];
-        irregularActive = [];
-        for (const s of activeStudents) {
-            (hasRegularEnrollmentToday(s) ? regularActive : irregularActive).push(s);
-        }
+        regularActive = activeStudents.filter(s => hasRegularEnrollmentToday(s));
     } else {
         regularActive = activeStudents;
-        irregularActive = [];
     }
 
     const appendIrregularAndLeave = (html) => {
-        if (irregularActive.length > 0) {
-            html += `<div class="leave-section-divider"><span>비정규 (${irregularActive.length}명)</span></div>`;
-            html += irregularActive.map(renderItemHtml).join('');
-        }
         if (leaveStudents.length > 0) {
             html += `<div class="leave-section-divider"><span>휴원 학생 (${leaveStudents.length}명)</span></div>`;
             html += leaveStudents.map(renderItemHtml).join('');
