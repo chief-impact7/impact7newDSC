@@ -19,6 +19,7 @@ export const SV_L3_KEYS = Object.keys(SV_SOURCE_MAP);
 export const SOURCE_PRIORITY = { extra: 0, temp: 1, hw_fail: 2, test_fail: 3, absence_makeup: 4 };
 export const SOURCE_SHORT = { extra: '클리닉', temp: '진단', hw_fail: '숙제', test_fail: '테스트', absence_makeup: '보충' };
 export const LEAVE_STATUSES = ['가휴원', '실휴원'];
+export const DAY_ORDER = ['월', '화', '수', '목', '금', '토'];
 export const NEW_STUDENT_DAYS = 14;
 export const TEMP_FIELD_LABELS = {
     name: '이름', branch: '소속', school: '학교', level: '학부', grade: '학년',

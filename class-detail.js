@@ -6,7 +6,7 @@ import { doc, getDoc, getDocFromServer, writeBatch, arrayUnion } from 'firebase/
 import { db } from './firebase-config.js';
 import { getDayName } from './src/shared/firestore-helpers.js';
 import { auditUpdate, batchUpdate } from './audit.js';
-import { state } from './state.js';
+import { state, DAY_ORDER } from './state.js';
 import { esc, escAttr, showSaveIndicator } from './ui-utils.js';
 import { matchesBranchFilter, enrollmentCode, getActiveEnrollments } from './student-helpers.js';
 

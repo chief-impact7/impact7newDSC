@@ -12,7 +12,8 @@ import {
     state,
     OX_CYCLE, VISIT_STATUS_CYCLE, DEFAULT_DOMAINS, KOREAN_CHAR_RE,
     SV_SOURCE_MAP, SV_L3_KEYS, SOURCE_PRIORITY, SOURCE_SHORT,
-    LEAVE_STATUSES, NEW_STUDENT_DAYS, TEMP_FIELD_LABELS, LEVEL_SHORT
+    LEAVE_STATUSES, NEW_STUDENT_DAYS, TEMP_FIELD_LABELS, LEVEL_SHORT,
+    DAY_ORDER
 } from './state.js';
 import {
     esc, escAttr, decodeHtmlEntities, formatTime12h, nowTimeStr,
@@ -937,7 +938,6 @@ function setSubFilter(filterKey) {
 }
 
 const REGULAR_CLASS_TYPES = ['정규', '내신', '자유학기'];
-const DAY_ORDER = ['월', '화', '수', '목', '금', '토'];
 
 let _regularDayCache = { date: null, dayName: null };
 function hasRegularEnrollmentToday(student) {
