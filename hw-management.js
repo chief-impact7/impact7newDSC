@@ -2,17 +2,19 @@
 // daily-ops.js에서 추출한 숙제 관리 관련 함수
 // Phase 3-4
 
-import { doc } from 'firebase/firestore';
+import { doc, writeBatch } from 'firebase/firestore';
 import { db } from './firebase-config.js';
-import { auditUpdate } from './audit.js';
+import { auditUpdate, auditSet, batchSet, batchUpdate } from './audit.js';
 import { state } from './state.js';
 import { esc, escAttr, showSaveIndicator, formatTime12h, nextOXValue, oxDisplayClass } from './ui-utils.js';
-import { enrollmentCode, getActiveEnrollments, matchesBranchFilter } from './student-helpers.js';
+import { enrollmentCode, getActiveEnrollments, matchesBranchFilter, makeDailyRecordId, branchFromStudent } from './student-helpers.js';
+import { getDayName, studentShortLabel } from './src/shared/firestore-helpers.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderStudentDetail, renderSubFilters, renderListPanel, saveDailyRecord;
 let getClassDomains, getNextHwStatus, saveClassNextHw;
 let _stripYear, _isNoShow, _renderRescheduleHistory, checkCanEditGrading, saveImmediately;
+let getUniqueClassCodes, renderFilterChips, openBulkModal;
 
 export function initHwManagementDeps(deps) {
     renderStudentDetail = deps.renderStudentDetail;
@@ -27,6 +29,9 @@ export function initHwManagementDeps(deps) {
     _renderRescheduleHistory = deps._renderRescheduleHistory;
     checkCanEditGrading = deps.checkCanEditGrading;
     saveImmediately = deps.saveImmediately;
+    getUniqueClassCodes = deps.getUniqueClassCodes;
+    renderFilterChips = deps.renderFilterChips;
+    openBulkModal = deps.openBulkModal;
 }
 
 export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, mode = 'default') {
@@ -629,10 +634,11 @@ export function renderNextHwClassDetail(classCode) {
 
     // 반 소속 학생 목록
     const dayName = getDayName(state.selectedDate);
-    let classStudents = state.allStudents.filter(s =>
-        s.status !== '퇴원' && getActiveEnrollments(s, state.selectedDate).some(e => e.day.includes(dayName) && enrollmentCode(e) === classCode)
+    const classStudents = state.allStudents.filter(s =>
+        s.status !== '퇴원'
+        && matchesBranchFilter(s)
+        && getActiveEnrollments(s, state.selectedDate).some(e => e.day.includes(dayName) && enrollmentCode(e) === classCode)
     );
-    classStudents = classStudents.filter(s => matchesBranchFilter(s));
 
     const cardsContainer = document.getElementById('detail-cards');
     cardsContainer.innerHTML = `

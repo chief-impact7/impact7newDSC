@@ -236,7 +236,7 @@ window.searchTeukangAddStudent = searchTeukangAddStudent;
 window.addStudentToTeukang = addStudentToTeukang;
 
 // hw-management.js 의존성 주입 + window 노출
-initHwManagementDeps({ renderStudentDetail, renderSubFilters, renderListPanel, saveDailyRecord, getClassDomains, getNextHwStatus, saveClassNextHw, _stripYear, _isNoShow, _renderRescheduleHistory, checkCanEditGrading, saveImmediately });
+initHwManagementDeps({ renderStudentDetail, renderSubFilters, renderListPanel, saveDailyRecord, getClassDomains, getNextHwStatus, saveClassNextHw, _stripYear, _isNoShow, _renderRescheduleHistory, checkCanEditGrading, saveImmediately, getUniqueClassCodes, renderFilterChips, openBulkModal });
 window.renderHwFailActionCard = renderHwFailActionCard;
 window.saveHwFailAction = saveHwFailAction;
 window.selectHwFailType = selectHwFailType;
