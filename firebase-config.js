@@ -31,5 +31,5 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-const ai = getAI(app, { backend: new VertexAIBackend() });
-export const geminiModel = getGenerativeModel(ai, { model: 'gemini-2.5-flash' });
+const ai = getAI(app, { backend: new VertexAIBackend('global') });
+export const geminiModel = getGenerativeModel(ai, { model: 'gemini-3-flash-preview' });
