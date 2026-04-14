@@ -4,11 +4,12 @@
 
 import { doc, getDoc, getDocFromServer, writeBatch, arrayUnion } from 'firebase/firestore';
 import { db } from './firebase-config.js';
-import { getDayName } from './src/shared/firestore-helpers.js';
+import { getDayName, todayStr, studentShortLabel, ACTIVE_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { auditUpdate, batchUpdate } from './audit.js';
 import { state, DAY_ORDER } from './state.js';
 import { esc, escAttr, showSaveIndicator } from './ui-utils.js';
 import { matchesBranchFilter, enrollmentCode, getActiveEnrollments } from './student-helpers.js';
+import { _searchContactsDSC } from './past-search.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let getOverrideStudentsForClass, getOverridingOutFromClass, getClassDomains, getClassTestSections;
@@ -594,7 +595,7 @@ function renderTeukangAddStudentCard(classCode) {
             </div>
             <div id="teukang-add-results" class="search-results-list" style="margin-top:8px;"></div>
             <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">
-                재원/등원예정/실휴원/가휴원/상담 학생 검색 (퇴원 제외).
+                재원/등원예정/실휴원/가휴원/상담 + 퇴원/종강 학생 검색.
                 새 학생은 첫데이터입력으로 먼저 등록해 주세요.
             </div>
         </div>
