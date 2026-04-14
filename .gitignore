@@ -18,7 +18,9 @@ build/
 .DS_Store
 Thumbs.db
 .aider*
-.claude/
+.claude/*
+!.claude/agents/
+!.claude/skills/
 .vscode/
 *.log
 .superpowers/

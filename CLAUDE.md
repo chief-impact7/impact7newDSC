@@ -90,6 +90,7 @@ npm run build        # 빌드
 | 날짜 | 변경 내용 | 대상 | 사유 |
 |------|----------|------|------|
 | 2026-04-12 | 초기 구성 | 전체 | - |
+| 2026-04-14 | 심볼 해결 검증 단계 추가 | dependency-analyzer.md, module-executor.md, module-splitter/SKILL.md | daily-ops.js 분리(3c70765) 후 bare identifier 누락으로 3연속 회귀(makeDailyRecordId/auditSet 누락 610192d, DAY_ORDER 고아화 174fc2e). build는 통과하고 runtime ReferenceError로만 드러나는 버그 클래스를 분리 전/중 단계에서 static하게 잡도록 강화 |
 
 ## 메모리 (계정 공유)
 
