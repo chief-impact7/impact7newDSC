@@ -74,4 +74,5 @@ export const state = {
     _classMgmtMode: null,
     saveIndicatorTimer: null,
     _classSettingsLoaded: false,
+    _pendingClinicStudentId: null,
 };

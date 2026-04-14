@@ -361,7 +361,7 @@ export function renderNaesinDetail(studentId) {
 
     // ── Section 5: 클리닉 ──
     const extraVisit = rec?.extra_visit;
-    const isPendingClinic = window._pendingClinicStudentId === studentId;
+    const isPendingClinic = window.state?._pendingClinicStudentId === studentId;
     const hasData = !!extraVisit?.date;
     const hasClinic = hasData || isPendingClinic;
     let clinicBodyHtml = '';
@@ -430,7 +430,7 @@ window.saveNaesinMemo = function(studentId) {
 // ─── 클리닉 추가 ─────────────────────────────────────────────────────────────
 // + 버튼: 저장 없이 빈 input 노출 (사용자가 날짜 선택 후 저장)
 window.openNaesinClinic = function(studentId) {
-    window._pendingClinicStudentId = studentId;
+    if (window.state) window.state._pendingClinicStudentId = studentId;
     if (window._classMgmtMode === 'teukang' && window.renderTeukangDetail) {
         window.renderTeukangDetail(studentId);
     } else if (window.renderNaesinDetail) {
@@ -708,7 +708,7 @@ export function renderTeukangDetail(studentId) {
 
     // ── 클리닉 카드 ──
     const extraVisit = rec?.extra_visit;
-    const isPending = window._pendingClinicStudentId === studentId;
+    const isPending = window.state?._pendingClinicStudentId === studentId;
     const hasClinic = (!!extraVisit && (extraVisit.date === selectedDate || !extraVisit.date)) || isPending;
     let clinicBodyHtml = '';
     if (hasClinic) {
