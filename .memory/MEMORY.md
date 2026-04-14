@@ -18,3 +18,4 @@
 - [feedback_firestore_rules_4projects.md](feedback_firestore_rules_4projects.md) — rules 동기화는 DB/DSC/HR/exam 4개 필수
 - [rules 동기화 후 4-repo 커밋 규율](feedback_rules_sync_commit.md) — rules 수정·배포 후 4개 repo 모두 commit/push 확인 필수 (2026-04-09 사후 정리 사고)
 - [project_contacts_deprecation.md](project_contacts_deprecation.md) — contacts/students 병합 완료, Phase 5(코드 제거) + Phase 6(특강반 학생 추가 UI) 잔여
+- [feedback_checklist_before_work.md](feedback_checklist_before_work.md) — 다단계 작업 시작 전 항상 TaskCreate로 체크리스트 만들고 승인받기
