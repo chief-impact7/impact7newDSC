@@ -1,6 +1,9 @@
 .env
 .env.local
 .env.*.local
+
+# Firebase emulator local data (실 학생 PII 포함, 절대 커밋 금지)
+emulator-data/
 *.pem
 *.key
 credentials.json

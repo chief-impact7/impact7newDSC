@@ -47,6 +47,34 @@ npm run dev          # 개발 서버 (port 5174)
 npm run build        # 빌드
 ```
 
+## Dev 안전장치 (production DB 격리)
+
+이 프로젝트는 BaaS 구조라 dev 서버가 production Firestore를 직격한다. 일선 혼란을 막기 위해 두 가지 모드를 제공한다 (`.env.development.local`로 전환).
+
+### 모드 1: READ-ONLY (기본 권장)
+- `.env.development.local`에 `VITE_READ_ONLY=true` 추가 + `npm run dev` 재시작
+- audit.js의 모든 write wrapper를 console.log로 stub. read는 정상.
+- 화면 상단 노란 배너 자동 표시.
+- 용도: 화면 둘러보기, UI 검증, 회귀 확인.
+
+### 모드 2: Firebase Emulator (완전 격리, write 검증 가능)
+- 사전: Java 필요 (`brew install --cask temurin`)
+- `.env.development.local`에 `VITE_USE_EMULATOR=true` (READ_ONLY 대신)
+- 두 터미널 필요:
+  ```bash
+  # 터미널 1: emulator
+  firebase emulators:start --import=./emulator-data --export-on-exit --only firestore,auth --project=impact7db
+
+  # 터미널 2: dev 서버
+  npm run dev
+  ```
+- emulator UI: http://localhost:4000
+- emulator-data/는 .gitignored (PII 포함). 시드 스크립트: `node scripts/seed-emulator.mjs` (production READ → emulator 재구성)
+- 용도: write까지 포함한 풀 라운드트립 검증, save → reload → 캐시 무효화 같은 시나리오.
+
+### 둘 다 끄면
+- production DB 직격. 일선에 영향. 가급적 사용 금지.
+
 ## 하네스: 코드 품질
 
 **목표:** 코드 리뷰, 리팩토링 분석, 보안 감사를 병렬 실행하여 통합 품질 보고서를 생성
