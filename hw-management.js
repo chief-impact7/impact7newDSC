@@ -6,14 +6,14 @@ import { doc, writeBatch } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { auditUpdate, auditSet, batchSet, batchUpdate } from './audit.js';
 import { state } from './state.js';
-import { esc, escAttr, showSaveIndicator, formatTime12h, nextOXValue, oxDisplayClass } from './ui-utils.js';
+import { esc, escAttr, showSaveIndicator, formatTime12h, nextOXValue, oxDisplayClass, _stripYear, _isNoShow, _renderRescheduleHistory } from './ui-utils.js';
 import { enrollmentCode, getActiveEnrollments, matchesBranchFilter, makeDailyRecordId, branchFromStudent } from './student-helpers.js';
 import { getDayName, studentShortLabel } from './src/shared/firestore-helpers.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderStudentDetail, renderSubFilters, renderListPanel, saveDailyRecord;
 let getClassDomains, getNextHwStatus, saveClassNextHw;
-let _stripYear, _isNoShow, _renderRescheduleHistory, checkCanEditGrading, saveImmediately;
+let checkCanEditGrading, saveImmediately;
 let getUniqueClassCodes, renderFilterChips, openBulkModal;
 
 export function initHwManagementDeps(deps) {
@@ -24,9 +24,6 @@ export function initHwManagementDeps(deps) {
     getClassDomains = deps.getClassDomains;
     getNextHwStatus = deps.getNextHwStatus;
     saveClassNextHw = deps.saveClassNextHw;
-    _stripYear = deps._stripYear;
-    _isNoShow = deps._isNoShow;
-    _renderRescheduleHistory = deps._renderRescheduleHistory;
     checkCanEditGrading = deps.checkCanEditGrading;
     saveImmediately = deps.saveImmediately;
     getUniqueClassCodes = deps.getUniqueClassCodes;
@@ -334,13 +331,11 @@ export function renderPendingTasksCard(studentId, tasks) {
             ? `${esc(_stripYear(t.scheduled_date))}${t.scheduled_time ? ' ' + esc(formatTime12h(t.scheduled_time)) : ''}`
             : `${esc(t.alt_hw || '내용 미입력')}${t.scheduled_date ? ' (기한: ' + esc(_stripYear(t.scheduled_date)) + ')' : ''}`;
 
-        // 재지정 버튼 (미등원 + 등원 타입만)
-        const rescheduleBtn = (noShow && t.type === '등원')
-            ? `<button class="hw-fail-type-btn" style="background:#7c3aed;border-color:#7c3aed;color:#fff;font-size:11px;"
+        // 재지정 버튼 — 모든 pending task에 노출 (대체숙제는 모달이 시간 필드 자동 숨김)
+        const rescheduleBtn = `<button class="hw-fail-type-btn" style="background:#7c3aed;border-color:#7c3aed;color:#fff;font-size:11px;"
                     onclick="openRescheduleModal('${escAttr(collection)}', '${escAttr(t.docId)}', '${escAttr(studentId)}')">
                     <span class="material-symbols-outlined" style="font-size:13px;">event</span>재지정
-                </button>`
-            : '';
+                </button>`;
 
         // 재지정 이력
         const historyHtml = _renderRescheduleHistory(t.reschedule_history);

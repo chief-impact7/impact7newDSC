@@ -6,20 +6,17 @@ import { doc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { auditUpdate, auditSet } from './audit.js';
 import { state } from './state.js';
-import { esc, escAttr, showSaveIndicator } from './ui-utils.js';
+import { esc, escAttr, showSaveIndicator, _fmtTs, _stripYear, _renderRescheduleHistory } from './ui-utils.js';
 import { makeDailyRecordId } from './student-helpers.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
-let renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, _fmtTs, _stripYear, _renderRescheduleHistory, renderFilterChips;
+let renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, renderFilterChips;
 
 export function initAbsenceRecordsDeps(deps) {
     renderSubFilters = deps.renderSubFilters;
     renderListPanel = deps.renderListPanel;
     renderStudentDetail = deps.renderStudentDetail;
     getTeacherName = deps.getTeacherName;
-    _fmtTs = deps._fmtTs;
-    _stripYear = deps._stripYear;
-    _renderRescheduleHistory = deps._renderRescheduleHistory;
     renderFilterChips = deps.renderFilterChips;
 }
 

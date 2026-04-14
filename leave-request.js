@@ -7,18 +7,17 @@ import { db } from './firebase-config.js';
 import { parseDateKST, todayStr } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditAdd } from './audit.js';
 import { state, LEAVE_STATUSES } from './state.js';
-import { esc, escAttr, showSaveIndicator } from './ui-utils.js';
+import { esc, escAttr, showSaveIndicator, _fmtTs } from './ui-utils.js';
 import { branchFromStudent, allClassCodes, activeClassCodes, findStudent } from './student-helpers.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
-let renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, _fmtTs, _isOlderThan, loadWithdrawnStudents, renderFilterChips;
+let renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, _isOlderThan, loadWithdrawnStudents, renderFilterChips;
 
 export function initLeaveRequestDeps(deps) {
     renderSubFilters = deps.renderSubFilters;
     renderListPanel = deps.renderListPanel;
     renderStudentDetail = deps.renderStudentDetail;
     getTeacherName = deps.getTeacherName;
-    _fmtTs = deps._fmtTs;
     _isOlderThan = deps._isOlderThan;
     loadWithdrawnStudents = deps.loadWithdrawnStudents;
     renderFilterChips = deps.renderFilterChips;

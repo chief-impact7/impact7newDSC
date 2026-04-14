@@ -101,6 +101,42 @@ export function showSaveIndicator(status) {
     }
 }
 
+// ─── Date/Timestamp Helpers (from daily-ops.js) ────────────────────────────
+export function _stripYear(dateStr) {
+    if (!dateStr) return '';
+    return dateStr.replace(/^\d{4}-/, '');
+}
+
+export function _fmtTs(ts, includeTime = false) {
+    if (!ts) return '';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    const base = `${d.getMonth()+1}/${d.getDate()}`;
+    return includeTime
+        ? `${base} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+        : base;
+}
+
+export function _isNoShow(t) {
+    return t.type === '등원' && t.status === 'pending'
+        && t.scheduled_date && t.scheduled_date < state.selectedDate;
+}
+
+export function _renderRescheduleHistory(history) {
+    if (!history || !Array.isArray(history) || history.length === 0) return '';
+    const sorted = [...history].sort((a, b) => (b.rescheduled_at || '').localeCompare(a.rescheduled_at || ''));
+    const items = sorted.map(h => {
+        const prevLabel = `${_stripYear(h.prev_date)}${h.prev_time ? ' ' + formatTime12h(h.prev_time) : ''}`;
+        const newLabel = `${_stripYear(h.new_date)}${h.new_time ? ' ' + formatTime12h(h.new_time) : ''}`;
+        const reason = h.reason ? ` (${esc(h.reason)})` : '';
+        const by = h.rescheduled_by ? ` by ${esc(h.rescheduled_by)}` : '';
+        return `<div class="reschedule-history-item">${esc(prevLabel)} → ${esc(newLabel)}${reason}${by}</div>`;
+    }).join('');
+    return `<div class="reschedule-history">
+        <div class="reschedule-history-title">재지정 이력</div>
+        ${items}
+    </div>`;
+}
+
 // ─── Toast Notification ────────────────────────────────────────────────────
 export function showToast(message) {
     let container = document.querySelector('.toast-container');

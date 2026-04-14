@@ -18,7 +18,8 @@ import {
 import {
     esc, escAttr, decodeHtmlEntities, formatTime12h, nowTimeStr,
     showSaveIndicator, showToast, nextOXValue, oxDisplayClass,
-    _attToggleClass, _toVisitStatus, _visitBtnStyles, _visitLabel
+    _attToggleClass, _toVisitStatus, _visitBtnStyles, _visitLabel,
+    _stripYear, _fmtTs, _isNoShow, _renderRescheduleHistory
 } from './ui-utils.js';
 import {
     normalizeDays, branchFromStudent, matchesBranchFilter,
@@ -135,6 +136,8 @@ if (import.meta.env?.DEV) {
     window._debug = { get allStudents() { return state.allStudents; }, get dailyRecords() { return state.dailyRecords; }, get hwFailTasks() { return state.hwFailTasks; }, get testFailTasks() { return state.testFailTasks; } };
 }
 
+window.state = state;
+
 // _attToggleClass, _toVisitStatus, _visitBtnStyles, _visitLabel,
 // nextOXValue, oxDisplayClass → imported from ui-utils.js
 
@@ -173,7 +176,7 @@ window.saveTempAttendance = saveTempAttendance;
 window.openContactAsTemp = openContactAsTemp;
 
 // leave-request.js 의존성 주입 + window 노출
-initLeaveRequestDeps({ renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, _fmtTs, _isOlderThan, loadWithdrawnStudents, renderFilterChips });
+initLeaveRequestDeps({ renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, _isOlderThan, loadWithdrawnStudents, renderFilterChips });
 window.renderLeaveRequestList = renderLeaveRequestList;
 window.selectLeaveRequest = selectLeaveRequest;
 window.renderReturnUpcomingList = renderReturnUpcomingList;
@@ -196,7 +199,7 @@ window.openReturnFromLeaveModal = openReturnFromLeaveModal;
 window.submitReturnFromLeave = submitReturnFromLeave;
 
 // absence-records.js 의존성 주입 + window 노출
-initAbsenceRecordsDeps({ renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, _fmtTs, _stripYear, _renderRescheduleHistory, renderFilterChips });
+initAbsenceRecordsDeps({ renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, renderFilterChips });
 window.renderAbsenceLedgerList = renderAbsenceLedgerList;
 window.renderAbsenceRecordCard = renderAbsenceRecordCard;
 window.updateAbsenceField = updateAbsenceField;
@@ -237,7 +240,7 @@ window.searchTeukangAddStudent = searchTeukangAddStudent;
 window.addStudentToTeukang = addStudentToTeukang;
 
 // hw-management.js 의존성 주입 + window 노출
-initHwManagementDeps({ renderStudentDetail, renderSubFilters, renderListPanel, saveDailyRecord, getClassDomains, getNextHwStatus, saveClassNextHw, _stripYear, _isNoShow, _renderRescheduleHistory, checkCanEditGrading, saveImmediately, getUniqueClassCodes, renderFilterChips, openBulkModal });
+initHwManagementDeps({ renderStudentDetail, renderSubFilters, renderListPanel, saveDailyRecord, getClassDomains, getNextHwStatus, saveClassNextHw, checkCanEditGrading, saveImmediately, getUniqueClassCodes, renderFilterChips, openBulkModal });
 window.renderHwFailActionCard = renderHwFailActionCard;
 window.saveHwFailAction = saveHwFailAction;
 window.selectHwFailType = selectHwFailType;
@@ -2557,51 +2560,23 @@ function renderListPanel() {
 }
 
 
-function _stripYear(dateStr) {
-    if (!dateStr) return '';
-    return dateStr.replace(/^\d{4}-/, '');
-}
-
-function _fmtTs(ts, includeTime = false) {
-    if (!ts) return '';
-    const d = ts.toDate ? ts.toDate() : new Date(ts);
-    const base = `${d.getMonth()+1}/${d.getDate()}`;
-    return includeTime
-        ? `${base} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
-        : base;
-}
-
-function _isNoShow(t) {
-    return t.type === '등원' && t.status === 'pending'
-        && t.scheduled_date && t.scheduled_date < state.selectedDate;
-}
-
-function _renderRescheduleHistory(history) {
-    if (!history || !Array.isArray(history) || history.length === 0) return '';
-    const sorted = [...history].sort((a, b) => (b.rescheduled_at || '').localeCompare(a.rescheduled_at || ''));
-    const items = sorted.map(h => {
-        const prevLabel = `${_stripYear(h.prev_date)}${h.prev_time ? ' ' + formatTime12h(h.prev_time) : ''}`;
-        const newLabel = `${_stripYear(h.new_date)}${h.new_time ? ' ' + formatTime12h(h.new_time) : ''}`;
-        const reason = h.reason ? ` (${esc(h.reason)})` : '';
-        const by = h.rescheduled_by ? ` by ${esc(h.rescheduled_by)}` : '';
-        return `<div class="reschedule-history-item">${esc(prevLabel)} → ${esc(newLabel)}${reason}${by}</div>`;
-    }).join('');
-    return `<div class="reschedule-history">
-        <div class="reschedule-history-title">재지정 이력</div>
-        ${items}
-    </div>`;
-}
+// _stripYear, _fmtTs, _isNoShow, _renderRescheduleHistory → imported from ui-utils.js
 
 // ─── 밀린 Task 재지정 ─────────────────────────────────────────────────────────
 
 let _rescheduleTarget = null;
 
 window.openRescheduleModal = function(collection, docId, studentId) {
-    // 결석대장 재예약
+    const dateLabel = document.getElementById('reschedule-date-label');
+    const timeField = document.getElementById('reschedule-time-field');
+
+    // 결석대장 재예약 (항상 등원 형식)
     if (collection === 'absence_records') {
         const r = state.absenceRecords.find(x => x.docId === docId);
         if (!r) return;
-        _rescheduleTarget = { collection, docId, studentId };
+        _rescheduleTarget = { collection, docId, studentId, taskType: '등원' };
+        dateLabel.textContent = '새 날짜';
+        timeField.style.display = '';
         document.getElementById('reschedule-prev-info').innerHTML =
             `<strong>현재 보충 예정:</strong> ${r.makeup_date ? esc(_stripYear(r.makeup_date)) : '미정'}${r.makeup_time ? ' ' + esc(formatTime12h(r.makeup_time)) : ''}`;
         document.getElementById('reschedule-date').value = '';
@@ -2610,14 +2585,26 @@ window.openRescheduleModal = function(collection, docId, studentId) {
         document.getElementById('reschedule-modal').style.display = 'flex';
         return;
     }
+
     const arr = collection === 'test_fail_tasks' ? state.testFailTasks : state.hwFailTasks;
     const t = arr.find(x => x.docId === docId);
     if (!t) return;
-    _rescheduleTarget = { collection, docId, studentId };
-    document.getElementById('reschedule-prev-info').innerHTML =
-        `<strong>현재 예정:</strong> ${esc(_stripYear(t.scheduled_date))}${t.scheduled_time ? ' ' + esc(formatTime12h(t.scheduled_time)) : ''}`;
+    _rescheduleTarget = { collection, docId, studentId, taskType: t.type };
+
+    if (t.type === '대체숙제') {
+        dateLabel.textContent = '새 제출기한';
+        timeField.style.display = 'none';
+        document.getElementById('reschedule-prev-info').innerHTML =
+            `<strong>현재 기한:</strong> ${t.scheduled_date ? esc(_stripYear(t.scheduled_date)) : '미정'}`;
+        document.getElementById('reschedule-time').value = '';
+    } else {
+        dateLabel.textContent = '새 날짜';
+        timeField.style.display = '';
+        document.getElementById('reschedule-prev-info').innerHTML =
+            `<strong>현재 예정:</strong> ${t.scheduled_date ? esc(_stripYear(t.scheduled_date)) : '미정'}${t.scheduled_time ? ' ' + esc(formatTime12h(t.scheduled_time)) : ''}`;
+        document.getElementById('reschedule-time').value = t.scheduled_time || '16:00';
+    }
     document.getElementById('reschedule-date').value = '';
-    document.getElementById('reschedule-time').value = t.scheduled_time || '16:00';
     document.getElementById('reschedule-reason').value = '';
     document.getElementById('reschedule-modal').style.display = 'flex';
 };
