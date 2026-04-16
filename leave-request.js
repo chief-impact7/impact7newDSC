@@ -352,6 +352,7 @@ function _renderLRRow(r, idx, studentId) {
     let dateStr = '';
     if (r.return_date) dateStr = `복귀일: ${r.return_date}`;
     else if (r.withdrawal_date) dateStr = `퇴원일: ${r.withdrawal_date}`;
+    else if (_isLeaveExtension(r.request_type)) dateStr = `연장 종료일: ${r.leave_end_date || '—'}`;
     else if (r.leave_start_date) dateStr = `${r.leave_start_date} ~ ${r.leave_end_date || ''}`;
 
     const reqBy = getTeacherName(r.requested_by);
