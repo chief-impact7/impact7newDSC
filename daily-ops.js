@@ -998,6 +998,33 @@ function hasTeukangEnrollmentToday(student) {
 }
 
 // 비정규 등원 여부 판별 (hw_fail/test_fail/extra_visit)
+// 출결 리스트 정렬용 — enrollment.start_time + 비정규 소스(hw_fail/test_fail/extra_visit)
+// 중 가장 이른 시각. 없으면 '99:99' (맨 뒤로).
+function getEffectiveAttendanceTime(s, date, dayName) {
+    const times = [];
+    const todayE = getActiveEnrollments(s, date).find(e => (e.day || []).includes(dayName));
+    const enrollTime = getStudentStartTime(todayE, dayName);
+    if (enrollTime) times.push(enrollTime);
+
+    const docId = s.docId;
+    for (const t of state.hwFailTasks) {
+        if (t.student_id !== docId || t.type !== '등원' || t.status !== 'pending') continue;
+        if (t.scheduled_date === date && t.scheduled_time) times.push(t.scheduled_time);
+    }
+    for (const t of state.testFailTasks) {
+        if (t.student_id !== docId || t.type !== '등원' || t.status !== 'pending') continue;
+        if (t.scheduled_date === date && t.scheduled_time) times.push(t.scheduled_time);
+    }
+    const ev = state.dailyRecords[docId]?.extra_visit;
+    if (ev?.date === date && ev.time) times.push(ev.time);
+    const hfa = state.dailyRecords[docId]?.hw_fail_action || {};
+    for (const a of Object.values(hfa)) {
+        if (a.type === '등원' && a.scheduled_date === date && a.scheduled_time) times.push(a.scheduled_time);
+    }
+
+    return times.length === 0 ? '99:99' : times.sort()[0];
+}
+
 function isVisitStudent(docId) {
     const hwFail = state.dailyRecords[docId]?.hw_fail_action || {};
     if (Object.values(hwFail).some(a => a.type === '등원' && a.scheduled_date === state.selectedDate)) return true;
@@ -1410,20 +1437,8 @@ function getFilteredStudents() {
         });
     }
 
-    // 출결 필터 활성 시 등원시간 임박순 정렬
-    const allF = { ...state.savedSubFilters };
-    allF[state.currentCategory] = new Set(state.currentSubFilter);
-    if (allF['attendance']?.size > 0 || state.currentCategory === 'attendance') {
-        const dayName = getDayName(state.selectedDate);
-        students.sort((a, b) => {
-            const timeA = getStudentStartTime(getActiveEnrollments(a, state.selectedDate).find(e => e.day.includes(dayName))) || '99:99';
-            const timeB = getStudentStartTime(getActiveEnrollments(b, state.selectedDate).find(e => e.day.includes(dayName))) || '99:99';
-            return timeA.localeCompare(timeB);
-        });
-    }
-
     // hw_fail / test_fail / extra_visit 등원일이 오늘인 학생 추가 포함 (정규 수업 없어도 리스트에 나타나야 함)
-    // 단, 출결 필터 활성 시 비정규 학생은 추가하지 않음 (비정규 페이지에서만 표시)
+    // 단, 출결 서브필터 활성 시 비정규 학생은 추가하지 않음 (비정규 페이지에서만 표시)
     const attFilterActive = allFilters['attendance']?.size > 0;
     if (!attFilterActive) {
         const existingIds = new Set(students.map(s => s.docId));
@@ -1444,6 +1459,18 @@ function getFilteredStudents() {
             }
             students = [...students, ...filtered];
         }
+    }
+
+    // 출결 필터 활성 시 등원시간 임박순 정렬 (비정규 학생 포함 후 수행).
+    // 비정규 학생은 enrollment가 없으므로 hw_fail/test_fail/extra_visit의 scheduled_time을 반영.
+    const allF = { ...state.savedSubFilters };
+    allF[state.currentCategory] = new Set(state.currentSubFilter);
+    if (allF['attendance']?.size > 0 || state.currentCategory === 'attendance') {
+        const dayName = getDayName(state.selectedDate);
+        students.sort((a, b) => {
+            return getEffectiveAttendanceTime(a, state.selectedDate, dayName)
+                .localeCompare(getEffectiveAttendanceTime(b, state.selectedDate, dayName));
+        });
     }
 
     return students;
