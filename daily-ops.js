@@ -1878,6 +1878,9 @@ function renderListPanel() {
                 timeLabel = '등원'; timeValue = formatTime12h(arrivalTime); timeClass = 'arrived';
             } else if (scheduledTime) {
                 timeLabel = '예정'; timeValue = formatTime12h(scheduledTime);
+            } else if (_todayEnrolls.length === 0 && isVisitStudent(s.docId)) {
+                // 비정규인데 모든 visit task의 scheduled_time이 비어있음 — 시간 미입력 표시
+                timeLabel = '예정'; timeValue = '(미정)'; timeClass = 'time-unset';
             }
             timeHtml = [
                 timeValue ? `<div class="item-time-block ${timeClass}">

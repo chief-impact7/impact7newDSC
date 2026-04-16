@@ -731,6 +731,13 @@ body {
   color: var(--arrived);
 }
 
+/* 비정규인데 visit task의 scheduled_time이 비어있는 경우 — "예정 (미정)" 옅게 */
+.item-time-block.time-unset .item-time-value {
+  color: var(--text-third);
+  font-weight: 500;
+  font-size: 11px;
+}
+
 .item-actions {
   flex: 1;
   min-width: 0;
