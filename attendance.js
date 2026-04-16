@@ -11,6 +11,10 @@ import { showSaveIndicator, nowTimeStr } from './ui-utils.js';
 import { enrollmentCode, branchFromStudent } from './student-helpers.js';
 import { saveImmediately, saveDailyRecord } from './data-layer.js';
 
+// 토글 UI의 "기본" 라벨 집합 — 이 라벨들을 클릭하면 attendance.status는 '미확인'으로 리셋.
+// 오늘 수업 유형/비정규 여부에 따라 첫 버튼 라벨이 동적으로 바뀌지만, 의미는 모두 동일("아직 미확인").
+export const DEFAULT_ATTENDANCE_LABELS = new Set(['정규', '특강', '내신', '자유', '비정규']);
+
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderSubFilters, renderListPanel, renderStudentDetail, openBulkModal;
 
@@ -204,8 +208,8 @@ export async function syncAbsenceRecords() {
 }
 
 export function applyAttendance(studentId, displayStatus, force = false, silent = false) {
-    // 정규 → 미확인으로 매핑
-    const firestoreStatus = displayStatus === '정규' ? '미확인' : displayStatus;
+    // 기본 라벨(정규/특강/내신/자유/비정규) → 미확인으로 매핑
+    const firestoreStatus = DEFAULT_ATTENDANCE_LABELS.has(displayStatus) ? '미확인' : displayStatus;
 
     const rec = state.dailyRecords[studentId] || {};
     const currentStatus = rec?.attendance?.status || '미확인';

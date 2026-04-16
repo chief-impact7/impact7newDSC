@@ -803,6 +803,20 @@ body {
   border-color: #5f6368;
 }
 
+/* 첫 버튼(정규/특강/내신/자유/비정규) — 라벨별 색상 톤.
+   비활성 상태에서는 옅은 배경 + 색 테두리로 구분, 활성(미확인)일 때 진하게 채움. */
+.toggle-btn.default-tone-normal   { border-color: #1a73e8; color: #1a73e8; background: #e8f0fe; }
+.toggle-btn.default-tone-teukang  { border-color: #8e24aa; color: #8e24aa; background: #f3e5f5; }
+.toggle-btn.default-tone-naesin   { border-color: #0891b2; color: #0891b2; background: #e0f7fa; }
+.toggle-btn.default-tone-jayu     { border-color: #ef6c00; color: #ef6c00; background: #fff3e0; }
+.toggle-btn.default-tone-bijeong  { border-color: #d81b60; color: #d81b60; background: #fce4ec; }
+
+.toggle-btn.active-default.default-tone-normal   { background: #1a73e8; color: white; }
+.toggle-btn.active-default.default-tone-teukang  { background: #8e24aa; color: white; }
+.toggle-btn.active-default.default-tone-naesin   { background: #0891b2; color: white; }
+.toggle-btn.active-default.default-tone-jayu     { background: #ef6c00; color: white; }
+.toggle-btn.active-default.default-tone-bijeong  { background: #d81b60; color: white; }
+
 /* ===== Detail Panel (380px fixed) ===== */
 .detail-panel {
   width: 380px;

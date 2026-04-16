@@ -90,7 +90,8 @@ import {
     cycleTempArrival, cycleVisitAttendance, toggleAttendance,
     autoCreateAbsenceRecord, autoRemoveAbsenceRecord, syncAbsenceRecords,
     applyAttendance, doesStatusMatchFilter, isNewStudent, isAttendedStatus,
-    checkCanEditGrading, _isVisitAttended, handleAttendanceChange
+    checkCanEditGrading, _isVisitAttended, handleAttendanceChange,
+    DEFAULT_ATTENDANCE_LABELS
 } from './attendance.js';
 import {
     initScheduledVisitsDeps,
@@ -968,6 +969,9 @@ function setSubFilter(filterKey) {
 
 const REGULAR_CLASS_TYPES = ['정규', '내신', '자유학기'];
 
+// 출결 토글 첫 버튼의 CSS 톤 매핑. key는 표시 라벨(예: '자유'), class_type 데이터 값('자유학기')과는 의도적으로 다름.
+const DEFAULT_TONE = { '정규':'normal', '특강':'teukang', '내신':'naesin', '자유':'jayu', '비정규':'bijeong' };
+
 let _regularDayCache = { date: null, dayName: null };
 function hasRegularEnrollmentToday(student) {
     if (_regularDayCache.date !== state.selectedDate) {
@@ -1586,26 +1590,35 @@ function renderListPanel() {
         const isLeave = LEAVE_STATUSES.includes(s.status);
         // isLeave가 true면 short-circuit으로 every() 미실행
         const isTeukangOnly = !isLeave && _todayEnrolls.length > 0 && _todayEnrolls.every(e => e.class_type === '특강');
+        const _todayTypes = new Set(_todayEnrolls.map(e => e.class_type || '정규'));
+        const _onlyType = (t) => _todayTypes.size === 1 && _todayTypes.has(t);
 
         if (isLeave || (PAST_STUDENT_STATUSES.has(s.status) && !isTeukangOnly)) {
             toggleHtml = '';
         } else if (state.currentCategory === 'attendance') {
             const rec = state.dailyRecords[s.docId];
             const attStatus = rec?.attendance?.status || '미확인';
-            const defaultLabel = isTeukangOnly ? '특강' : '정규';
+            let defaultLabel;
+            if (_todayEnrolls.length === 0 && isVisitStudent(s.docId)) defaultLabel = '비정규';
+            else if (_onlyType('특강')) defaultLabel = '특강';
+            else if (_onlyType('내신')) defaultLabel = '내신';
+            else if (_onlyType('자유학기')) defaultLabel = '자유';
+            else defaultLabel = '정규';
             const statuses = [defaultLabel, '출석', '지각', '결석', '조퇴', '기타'];
-            // 기존 '정규' 저장값도 defaultLabel에 매핑 (특강 전환 시 호환)
-            const currentDisplay = (attStatus === '미확인' || attStatus === '정규') ? defaultLabel : attStatus;
+            // 저장된 기본 라벨(정규/특강/내신/자유/비정규)과 '미확인'은 현재 컨텍스트의 defaultLabel로 표시
+            const currentDisplay = (attStatus === '미확인' || DEFAULT_ATTENDANCE_LABELS.has(attStatus)) ? defaultLabel : attStatus;
             toggleHtml = `<div class="toggle-group">` +
                 statuses.map(st => {
-                    let activeClass = '';
+                    const classes = ['toggle-btn'];
+                    if (st === defaultLabel) classes.push(`default-tone-${DEFAULT_TONE[defaultLabel]}`);
                     if (st === currentDisplay) {
-                        if (st === '출석') activeClass = 'active-present';
-                        else if (st === '결석') activeClass = 'active-absent';
-                        else if (st === '지각') activeClass = 'active-late';
-                        else activeClass = 'active-other';
+                        if (st === '출석') classes.push('active-present');
+                        else if (st === '결석') classes.push('active-absent');
+                        else if (st === '지각') classes.push('active-late');
+                        else if (st === defaultLabel) classes.push('active-default');
+                        else classes.push('active-other');
                     }
-                    return `<button class="toggle-btn ${activeClass}" onclick="event.stopPropagation(); toggleAttendance('${escAttr(s.docId)}', '${st}')">${st}</button>`;
+                    return `<button class="${classes.join(' ')}" onclick="event.stopPropagation(); toggleAttendance('${escAttr(s.docId)}', '${st}')">${st}</button>`;
                 }).join('') +
                 `</div>`;
         } else if (state.currentCategory === 'homework') {
