@@ -95,7 +95,8 @@ export function getScheduledVisits() {
             detail: `${t.domain || ''} (${_stripYear(t.source_date)})`,
             status: (t.status === '완료' || t.status === '기타') ? 'completed' : 'pending',
             visitStatus: _toVisitStatus(t.status),
-            caller: callerName(t.created_by || ''),
+            // 최신 담당(handler) 우선, 없으면 created_by — 재지정 시 마지막 담당이 표시되도록
+            caller: callerName(t.handler || t.created_by || ''),
             completedBy: callerName(t.completed_by || ''),
             completedAt: t.completed_at || '',
             docId: t.docId,
@@ -121,7 +122,7 @@ export function getScheduledVisits() {
             detail: `${t.item || t.domain || ''} (${_stripYear(t.source_date)})`,
             status: (t.status === '완료' || t.status === '기타') ? 'completed' : 'pending',
             visitStatus: _toVisitStatus(t.status),
-            caller: callerName(t.created_by || ''),
+            caller: callerName(t.handler || t.created_by || ''),
             completedBy: callerName(t.completed_by || ''),
             completedAt: t.completed_at || '',
             docId: t.docId,
