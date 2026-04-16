@@ -1854,13 +1854,24 @@ function renderListPanel() {
                 if (eff !== '99:99') scheduledTime = eff;
             }
 
-            // hw_fail_tasks 등원 예약 시간 (선택날짜 기준 pending)
-            const visitTasks = state.hwFailTasks.filter(t =>
-                t.student_id === s.docId &&
-                t.type === '등원' &&
-                t.scheduled_date === state.selectedDate &&
-                t.status === 'pending'
-            );
+            // 비정규 등원 예약 시간 (hw_fail/test_fail/extra_visit/hw_fail_action 통합).
+            // 정규/fallback 예정 시간(scheduledTime)과 다른 것만 보충 블록으로 표시.
+            const visitBonusTimes = [];
+            for (const t of state.hwFailTasks) {
+                if (t.student_id !== s.docId || t.type !== '등원' || t.status !== 'pending') continue;
+                if (t.scheduled_date === state.selectedDate && t.scheduled_time) visitBonusTimes.push(t.scheduled_time);
+            }
+            for (const t of state.testFailTasks) {
+                if (t.student_id !== s.docId || t.type !== '등원' || t.status !== 'pending') continue;
+                if (t.scheduled_date === state.selectedDate && t.scheduled_time) visitBonusTimes.push(t.scheduled_time);
+            }
+            const ev = rec?.extra_visit;
+            if (ev?.date === state.selectedDate && ev.time) visitBonusTimes.push(ev.time);
+            const hfa = rec?.hw_fail_action || {};
+            for (const a of Object.values(hfa)) {
+                if (a.type === '등원' && a.scheduled_date === state.selectedDate && a.scheduled_time) visitBonusTimes.push(a.scheduled_time);
+            }
+            const uniqueBonusTimes = [...new Set(visitBonusTimes)].filter(t => t !== scheduledTime).sort();
 
             let timeLabel = '', timeValue = '', timeClass = '';
             if (arrivalTime) {
@@ -1873,13 +1884,10 @@ function renderListPanel() {
                     <span class="item-time-label">${timeLabel}</span>
                     <span class="item-time-value">${esc(timeValue)}</span>
                 </div>` : '',
-                // 정규 수업과 시간이 다른 등원 예약 시간 추가 표시
-                ...visitTasks
-                    .filter(t => t.scheduled_time && t.scheduled_time !== scheduledTime)
-                    .map(t => `<div class="item-time-block" style="color:var(--danger);">
-                        <span class="item-time-label" style="color:var(--danger);">보충</span>
-                        <span class="item-time-value" style="color:var(--danger);">${esc(formatTime12h(t.scheduled_time))}</span>
-                    </div>`)
+                ...uniqueBonusTimes.map(t => `<div class="item-time-block" style="color:var(--danger);">
+                    <span class="item-time-label" style="color:var(--danger);">보충</span>
+                    <span class="item-time-value" style="color:var(--danger);">${esc(formatTime12h(t))}</span>
+                </div>`)
             ].join('');
         }
 
