@@ -25,6 +25,7 @@ import {
     normalizeDays, branchFromStudent, matchesBranchFilter,
     enrollmentCode, allClassCodes, activeClassCodes, _enrollCodeList,
     deriveNaesinCode, getActiveEnrollments, getStudentStartTime,
+    isNaesinActiveToday, isFreeSemesterActiveToday,
     makeDailyRecordId, findStudent, buildSiblingMap
 } from './student-helpers.js';
 import {
@@ -1590,19 +1591,20 @@ function renderListPanel() {
         const isLeave = LEAVE_STATUSES.includes(s.status);
         // isLeave가 true면 short-circuit으로 every() 미실행
         const isTeukangOnly = !isLeave && _todayEnrolls.length > 0 && _todayEnrolls.every(e => e.class_type === '특강');
-        const _todayTypes = new Set(_todayEnrolls.map(e => e.class_type || '정규'));
-        const _onlyType = (t) => _todayTypes.size === 1 && _todayTypes.has(t);
 
         if (isLeave || (PAST_STUDENT_STATUSES.has(s.status) && !isTeukangOnly)) {
             toggleHtml = '';
         } else if (state.currentCategory === 'attendance') {
             const rec = state.dailyRecords[s.docId];
             const attStatus = rec?.attendance?.status || '미확인';
+            // 학생 레벨 현재 모드 판정 — 우선순위 비정규 > 내신 > 자유 > 특강 > 정규.
+            // enrollment.class_type 단독 판정은 옛 자유학기 enrollment가 내신 기간에 살아남는
+            // 경우(getActiveEnrollments step 2 결과) 오분류를 내므로 class_settings 윈도우를 확인.
             let defaultLabel;
             if (_todayEnrolls.length === 0 && isVisitStudent(s.docId)) defaultLabel = '비정규';
-            else if (_onlyType('특강')) defaultLabel = '특강';
-            else if (_onlyType('내신')) defaultLabel = '내신';
-            else if (_onlyType('자유학기')) defaultLabel = '자유';
+            else if (isNaesinActiveToday(s, state.selectedDate)) defaultLabel = '내신';
+            else if (isFreeSemesterActiveToday(s, state.selectedDate)) defaultLabel = '자유';
+            else if (isTeukangOnly) defaultLabel = '특강';
             else defaultLabel = '정규';
             const statuses = [defaultLabel, '출석', '지각', '결석', '조퇴', '기타'];
             // 저장된 기본 라벨(정규/특강/내신/자유/비정규)과 '미확인'은 현재 컨텍스트의 defaultLabel로 표시

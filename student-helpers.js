@@ -123,6 +123,41 @@ export function getActiveEnrollments(s, dateStr) {
     return current;
 }
 
+// 학생의 "현재 수업 모드" 판정용 predicate.
+// enrollment.class_type 뿐 아니라 class_settings의 naesin/free 윈도우도 확인 —
+// 옛 자유학기 enrollment가 남아있어도 naesin 윈도우가 우선 잡혀야 라벨이 정확해짐.
+export function isNaesinActiveToday(s, dateStr) {
+    const today = dateStr || todayStr();
+    const validDate = (d) => d && /^\d{4}-/.test(d);
+    const enrollments = s.enrollments || [];
+    const current = enrollments.filter(e => !validDate(e.end_date) || e.end_date >= today);
+    // 1) explicit 내신 enrollment (start_date 도달)
+    if (current.some(e =>
+        e.class_type === '내신' && validDate(e.start_date) && e.start_date <= today
+    )) return true;
+    // 2) auto: 정규에서 파생한 naesin 반의 class_settings 윈도우
+    const regularEnroll = current.find(e => e.class_type !== '내신' && e.class_number);
+    if (!regularEnroll) return false;
+    const nCode = deriveNaesinCode(s, regularEnroll);
+    if (!nCode) return false;
+    const cs = state.classSettings[branchFromStudent(s) + nCode];
+    if (!cs?.naesin_start || !cs?.naesin_end) return false;
+    return cs.naesin_start <= today && cs.naesin_end >= today;
+}
+
+export function isFreeSemesterActiveToday(s, dateStr) {
+    const today = dateStr || todayStr();
+    const validDate = (d) => d && /^\d{4}-/.test(d);
+    const enrollments = s.enrollments || [];
+    const current = enrollments.filter(e => !validDate(e.end_date) || e.end_date >= today);
+    return current.some(e => {
+        if (e.class_type === '자유학기' && validDate(e.start_date) && e.start_date <= today) return true;
+        const cs = state.classSettings[enrollmentCode(e)];
+        if (cs?.free_start && cs?.free_end && cs.free_start <= today && cs.free_end >= today) return true;
+        return false;
+    });
+}
+
 // 학생 등원시간: 개별 시간 → 반 기본 시간 fallback (내신/자유학기: 요일별 schedule 지원)
 export function getStudentStartTime(enrollment, dayName) {
     if (!enrollment) return '';
