@@ -1847,7 +1847,12 @@ function renderListPanel() {
         const todayEnroll = getActiveEnrollments(s, state.selectedDate).find(e => e.day.includes(dayName));
         if (!isLeave) {
             const arrivalTime = rec?.arrival_time;
-            const scheduledTime = getStudentStartTime(todayEnroll);
+            let scheduledTime = getStudentStartTime(todayEnroll);
+            if (!scheduledTime) {
+                // 비정규(오늘 enrollment 없음) — hw_fail/test_fail/extra_visit의 가장 이른 scheduled_time 사용
+                const eff = getEffectiveAttendanceTime(s, state.selectedDate, dayName);
+                if (eff !== '99:99') scheduledTime = eff;
+            }
 
             // hw_fail_tasks 등원 예약 시간 (선택날짜 기준 pending)
             const visitTasks = state.hwFailTasks.filter(t =>
