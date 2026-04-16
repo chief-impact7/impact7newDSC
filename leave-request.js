@@ -432,8 +432,10 @@ export function renderLeaveRequestCard(studentId) {
     const isWithdrawnStu = stuStatus === '퇴원';
     const isLeaveStu = LEAVE_STATUSES.includes(stuStatus);
 
-    const leaveRecords = records.filter(r => !_isWithdrawalType(r.request_type) && !_isReturnType(r.request_type));
-    const withdrawRecords = records.filter(r => _isWithdrawalType(r.request_type) || _isReturnType(r.request_type));
+    // 복귀요청은 "휴원 → 재원" 이므로 휴원 라이프사이클(휴원요청서 카드)에 소속.
+    // 재등원요청(퇴원 → 재원)만 퇴원요청서 카드에 남김.
+    const leaveRecords = records.filter(r => !_isWithdrawalType(r.request_type) && !_isReEnrollType(r.request_type));
+    const withdrawRecords = records.filter(r => _isWithdrawalType(r.request_type) || _isReEnrollType(r.request_type));
 
     const btnStyle = 'font-size:11px;padding:2px 8px;margin-left:auto;display:inline-flex;align-items:center;gap:4px;';
     let cards = '';
@@ -538,9 +540,11 @@ export function searchLeaveRequestStudent(term) {
     let pool;
     if (type === '퇴원→휴원') {
         pool = state.withdrawnStudents;
-    } else if (type === '휴원→퇴원') {
+    } else if (type === '휴원→퇴원' || type === '휴원연장') {
+        // 휴원연장은 이미 휴원 중인 학생 대상
         pool = state.allStudents.filter(s => LEAVE_STATUSES.includes(s.status));
     } else {
+        // 휴원요청/퇴원요청 — 재원·등원예정 학생 대상
         pool = state.allStudents.filter(s => s.status === '재원' || s.status === '등원예정');
     }
 
