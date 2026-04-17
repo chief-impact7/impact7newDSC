@@ -8,8 +8,10 @@
 
 import { getDayName, studentShortLabel } from './src/shared/firestore-helpers.js';
 import { db } from './firebase-config.js';
-import { doc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { auditUpdate, auditSet } from './audit.js';
+import { NAESIN_OVERRIDE_EXCLUDE } from './student-helpers.js';
+import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 
 // ─── State 접근자 ─────────────────────────────────────────────────────────────
 function _state() {
@@ -29,12 +31,13 @@ function getNaesinInfo(student, selectedDate, dayName) {
     );
     if (!regularEnroll) return null;
 
-    // 내신 반코드 유도 (표시용, branch 없음)
-    const naesinCode = window.deriveNaesinCode?.(student, regularEnroll);
-    if (!naesinCode) return null;
+    // 내신 반 매칭: 수동 override 우선, 없으면 자동 유도 (빈 문자열 override = 배제)
+    const csKey = window.resolveNaesinCsKey?.(student, regularEnroll);
+    if (!csKey) return null;
 
-    // class_settings 키: 소속 접두사 + 반코드 (소속이 다른 반은 별도 관리)
-    const csKey = (window.branchFromStudent?.(student) || '') + naesinCode;
+    // 표시용 반코드: csKey에서 소속 접두사 제거
+    const naesinCode = window.displayCodeFromCsKey?.(csKey, window.branchFromStudent?.(student)) || csKey;
+
     const cs = classSettings?.[csKey];
     if (!cs?.naesin_start || !cs?.naesin_end) return null;
     if (cs.naesin_start > selectedDate || cs.naesin_end < selectedDate) return null;
@@ -194,6 +197,18 @@ export function renderNaesinList() {
 // daily-ops.js에서 window로 노출된 이스케이프 헬퍼
 const _esc = (str) => window._esc(str);
 const _escAttr = (str) => window._escAttr(str);
+
+// 내신/특강 공용: 반에서 제거 버튼 카드
+function _renderRemoveFromClassCard(studentId, key, displayLabel, handlerName) {
+    return `
+        <div class="detail-card">
+            <button class="btn btn-secondary" style="width:100%;color:var(--danger);border-color:var(--danger);"
+                onclick="window.${handlerName}('${_escAttr(studentId)}', '${_escAttr(key)}')">
+                <span class="material-symbols-outlined" style="font-size:16px;">person_remove</span>
+                ${_esc(displayLabel)} 반에서 제거
+            </button>
+        </div>`;
+}
 
 // ─── 상세패널 렌더링 ──────────────────────────────────────────────────────────
 
@@ -394,9 +409,12 @@ export function renderNaesinDetail(studentId) {
             ${clinicBodyHtml || '<div class="detail-card-empty">클리닉 예정 없음</div>'}
         </div>`;
 
+    // ── 반에서 제거 카드 (내신 활성 학생일 때만) ──
+    const removeHtml = csKey ? _renderRemoveFromClassCard(studentId, csKey, code, 'removeFromNaesin') : '';
+
     // ── 조립 ──
     document.getElementById('detail-cards').innerHTML =
-        attHtml + schedHtml + memoHtml + clinicHtml;
+        attHtml + schedHtml + memoHtml + clinicHtml + removeHtml;
 
     // 탭 상태 (일일현황 탭만 표시)
     const tabsEl = document.getElementById('detail-tabs');
@@ -543,6 +561,47 @@ window.toggleNaesinDay = async function(studentId, day) {
     if (window.renderListPanel) window.renderListPanel();
 };
 
+// ─── 내신 반에서 학생 제거 ───────────────────────────────────────────────────
+window.removeFromNaesin = async function(studentId, csKey) {
+    const { allStudents } = _state();
+    const student = allStudents?.find(s => s.docId === studentId);
+    if (!student) return;
+
+    const displayCode = window.displayCodeFromCsKey?.(csKey, window.branchFromStudent?.(student)) || csKey;
+
+    if (!confirm(`${student.name} 학생을 ${displayCode} 반에서 제거합니다. 계속할까요?`)) return;
+
+    const enrollments = (student.enrollments || []).slice();
+    const idx = enrollments.findIndex(e => e.class_type !== '내신' && e.class_number);
+    if (idx === -1) {
+        alert('정규 enrollment을 찾을 수 없어 제거할 수 없습니다.');
+        return;
+    }
+
+    // 재추가 시 새 반 기준으로 초기화되도록 naesin_days/schedule도 함께 제거
+    const updated = { ...enrollments[idx], naesin_class_override: NAESIN_OVERRIDE_EXCLUDE };
+    delete updated.naesin_days;
+    delete updated.naesin_schedule;
+    enrollments[idx] = updated;
+
+    window.showSaveIndicator?.('saving');
+    try {
+        await auditUpdate(doc(db, 'students', studentId), { enrollments });
+        student.enrollments = enrollments;
+        window.showSaveIndicator?.('saved');
+    } catch (err) {
+        console.error('[removeFromNaesin] 저장 실패:', err);
+        window.showSaveIndicator?.('error');
+        alert('학생 제거에 실패했습니다: ' + err.message);
+        return;
+    }
+
+    // 학생 선택 해제 후 반 상세로 복귀
+    window.selectedStudentId = null;
+    if (window.renderClassDetail) window.renderClassDetail(csKey);
+    if (window.renderListPanel) window.renderListPanel();
+};
+
 // ─── 특강 학생 상세 패널 ─────────────────────────────────────────────────────
 // 반설정 > 특강 L2 > 학생 클릭 시 호출. 간소화된 전용 패널.
 
@@ -669,14 +728,7 @@ export function renderTeukangDetail(studentId) {
         </div>`;
 
     // ── 반에서 제거 카드 ──
-    const removeHtml = `
-        <div class="detail-card">
-            <button class="btn btn-secondary" style="width:100%;color:var(--danger);border-color:var(--danger);"
-                onclick="window.removeFromTeukang('${_escAttr(studentId)}', '${_escAttr(classCode)}')">
-                <span class="material-symbols-outlined" style="font-size:16px;">person_remove</span>
-                ${_esc(classCode)} 반에서 제거
-            </button>
-        </div>`;
+    const removeHtml = _renderRemoveFromClassCard(studentId, classCode, classCode, 'removeFromTeukang');
 
     // ── 메모 카드 ──
     const memo = rec?.naesin_memo || '';
@@ -875,22 +927,22 @@ window.removeFromTeukang = async function(studentId, classCode) {
 
 // ─── 반 관리 상세패널 (내신 반 설정) ──────────────────────────────────────────
 
-function renderNaesinClassDetail(classCode) {
+function renderNaesinClassDetail(csKey) {
     const { allStudents, selectedDate, classSettings } = _state();
 
     document.getElementById('detail-empty').style.display = 'none';
     document.getElementById('detail-content').style.display = '';
     window.selectedStudentId = null;
 
-    const cs = classSettings?.[classCode] || {};
+    const cs = classSettings?.[csKey] || {};
     const dayName = getDayName(selectedDate);
 
     // 이 반의 학생 수 (유도된 코드 기준)
-    const students = window.getNaesinStudentsByDerivedCode ? window.getNaesinStudentsByDerivedCode(classCode) : [];
+    const students = window.getNaesinStudentsByDerivedCode ? window.getNaesinStudentsByDerivedCode(csKey) : [];
 
     // 표시용 반코드: 소속 접두사(branch) 제거
     const branch = students[0]?.student?.branch || '';
-    const displayCode = branch && classCode.startsWith(branch) ? classCode.slice(branch.length) : classCode;
+    const displayCode = window.displayCodeFromCsKey?.(csKey, branch) || csKey;
 
     // 프로필 헤더
     document.getElementById('profile-avatar').textContent = displayCode[0] || '?';
@@ -928,8 +980,8 @@ function renderNaesinClassDetail(classCode) {
         return `<div class="naesin-schedule-row">
             <div class="naesin-day-badge ${badgeCls}" ${badgeInactive}>${_esc(day)}</div>
             <input type="time" class="field-input" value="${_escAttr(time)}" style="width:120px;"
-                onchange="window.saveNaesinClassSchedule('${_escAttr(classCode)}', '${_escAttr(day)}', this.value)">
-            ${time ? `<button style="font-size:11px;color:var(--danger);cursor:pointer;border:none;background:none;" onclick="window.saveNaesinClassSchedule('${_escAttr(classCode)}', '${_escAttr(day)}', '')">삭제</button>` : ''}
+                onchange="window.saveNaesinClassSchedule('${_escAttr(csKey)}', '${_escAttr(day)}', this.value)">
+            ${time ? `<button style="font-size:11px;color:var(--danger);cursor:pointer;border:none;background:none;" onclick="window.saveNaesinClassSchedule('${_escAttr(csKey)}', '${_escAttr(day)}', '')">삭제</button>` : ''}
         </div>`;
     }).join('');
 
@@ -940,7 +992,7 @@ function renderNaesinClassDetail(classCode) {
                 <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">person</span>
                 담당 배정
             </div>
-            <select class="field-input" style="width:100%;" onchange="window.saveNaesinClassTeacher('${_escAttr(classCode)}', this.value)">
+            <select class="field-input" style="width:100%;" onchange="window.saveNaesinClassTeacher('${_escAttr(csKey)}', this.value)">
                 <option value="">미지정</option>
                 ${teacherOptions}
             </select>
@@ -953,10 +1005,10 @@ function renderNaesinClassDetail(classCode) {
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
                 <input type="date" class="field-input" value="${_escAttr(naesinStart)}" style="flex:1;"
-                    onchange="window.saveNaesinClassPeriod('${_escAttr(classCode)}', 'naesin_start', this.value)">
+                    onchange="window.saveNaesinClassPeriod('${_escAttr(csKey)}', 'naesin_start', this.value)">
                 <span style="color:var(--text-sec);">~</span>
                 <input type="date" class="field-input" value="${_escAttr(naesinEnd)}" style="flex:1;"
-                    onchange="window.saveNaesinClassPeriod('${_escAttr(classCode)}', 'naesin_end', this.value)">
+                    onchange="window.saveNaesinClassPeriod('${_escAttr(csKey)}', 'naesin_end', this.value)">
             </div>
         </div>
 
@@ -968,6 +1020,8 @@ function renderNaesinClassDetail(classCode) {
             <div style="font-size:11px;color:var(--text-sec);margin-bottom:8px;">시간을 입력하면 해당 요일이 활성화됩니다</div>
             ${scheduleRows}
         </div>
+
+        ${_renderNaesinAddStudentCard(csKey)}
     `;
 
     // 탭 숨기기
@@ -982,13 +1036,13 @@ function renderNaesinClassDetail(classCode) {
 }
 
 // 내신 반 설정 저장 핸들러
-window.saveNaesinClassTeacher = async function(classCode, teacher) {
+window.saveNaesinClassTeacher = async function(csKey, teacher) {
     window.showSaveIndicator?.('saving');
     try {
-        await auditSet(doc(db, 'class_settings', classCode), { teacher }, { merge: true });
+        await auditSet(doc(db, 'class_settings', csKey), { teacher }, { merge: true });
         const { classSettings } = _state();
-        if (!classSettings[classCode]) classSettings[classCode] = {};
-        classSettings[classCode].teacher = teacher;
+        if (!classSettings[csKey]) classSettings[csKey] = {};
+        classSettings[csKey].teacher = teacher;
         window.showSaveIndicator?.('saved');
     } catch (err) {
         console.error('담당 저장 실패:', err);
@@ -996,13 +1050,13 @@ window.saveNaesinClassTeacher = async function(classCode, teacher) {
     }
 };
 
-window.saveNaesinClassPeriod = async function(classCode, field, value) {
+window.saveNaesinClassPeriod = async function(csKey, field, value) {
     window.showSaveIndicator?.('saving');
     try {
-        await auditSet(doc(db, 'class_settings', classCode), { [field]: value }, { merge: true });
+        await auditSet(doc(db, 'class_settings', csKey), { [field]: value }, { merge: true });
         const { classSettings } = _state();
-        if (!classSettings[classCode]) classSettings[classCode] = {};
-        classSettings[classCode][field] = value;
+        if (!classSettings[csKey]) classSettings[csKey] = {};
+        classSettings[csKey][field] = value;
         window.showSaveIndicator?.('saved');
     } catch (err) {
         console.error('기간 저장 실패:', err);
@@ -1010,9 +1064,9 @@ window.saveNaesinClassPeriod = async function(classCode, field, value) {
     }
 };
 
-window.saveNaesinClassSchedule = async function(classCode, day, time) {
+window.saveNaesinClassSchedule = async function(csKey, day, time) {
     const { classSettings } = _state();
-    const cs = classSettings[classCode] || {};
+    const cs = classSettings[csKey] || {};
     const schedule = { ...(cs.schedule || {}) };
     if (time) {
         schedule[day] = time;
@@ -1021,15 +1075,102 @@ window.saveNaesinClassSchedule = async function(classCode, day, time) {
     }
     window.showSaveIndicator?.('saving');
     try {
-        await auditSet(doc(db, 'class_settings', classCode), { schedule }, { merge: true });
-        if (!classSettings[classCode]) classSettings[classCode] = {};
-        classSettings[classCode].schedule = schedule;
+        await auditSet(doc(db, 'class_settings', csKey), { schedule }, { merge: true });
+        if (!classSettings[csKey]) classSettings[csKey] = {};
+        classSettings[csKey].schedule = schedule;
         window.showSaveIndicator?.('saved');
-        renderNaesinClassDetail(classCode);
+        renderNaesinClassDetail(csKey);
     } catch (err) {
         console.error('스케줄 저장 실패:', err);
         window.showSaveIndicator?.('error');
     }
+};
+
+// ─── 내신반 학생 추가 카드 (반설정 상세패널) ─────────────────────────────────
+function _renderNaesinAddStudentCard(csKey) {
+    return renderAddStudentCard({
+        key: csKey,
+        idPrefix: 'naesin-add',
+        searchHandlerName: 'searchNaesinAddStudent',
+        footerText: '정규 반에 등록된 학생만 추가 가능. 자동 유도되지 않는 학생을 수동 매핑합니다.',
+    });
+}
+
+const _naesinSearcher = createStudentSearcher({
+    idPrefix: 'naesin-add',
+    addHandlerName: 'addStudentToNaesin',
+    getEnrolledIds: (csKey) => new Set(
+        (window.getNaesinStudentsByDerivedCode?.(csKey) || [])
+            .map(({ student }) => student.docId)
+    ),
+    getAllStudents: () => _state().allStudents,
+});
+
+window.searchNaesinAddStudent = function(csKey, q) {
+    _naesinSearcher(csKey, q);
+};
+
+window.addStudentToNaesin = async function(csKey, studentId) {
+    const { allStudents, classSettings } = _state();
+
+    // 로컬 캐시 우선, 없으면 Firestore에서 조회 (퇴원/종강 학생 지원)
+    let student = allStudents?.find(s => s.docId === studentId);
+    let isFromRemote = false;
+    if (!student) {
+        try {
+            const snap = await getDoc(doc(db, 'students', studentId));
+            if (!snap.exists()) { alert('학생을 찾을 수 없습니다.'); return; }
+            student = { docId: snap.id, ...snap.data() };
+            isFromRemote = true;
+        } catch (err) {
+            alert('학생 조회 실패: ' + err.message);
+            return;
+        }
+    }
+
+    const enrollments = (student.enrollments || []).slice();
+    const idx = enrollments.findIndex(e => e.class_type !== '내신' && e.class_number);
+    if (idx === -1) {
+        alert('정규 반에 먼저 등록된 학생만 추가할 수 있습니다.');
+        return;
+    }
+
+    // 이미 같은 반이면 skip (resolveNaesinCsKey는 override === '' 일 때 null 반환)
+    if (window.resolveNaesinCsKey?.(student, enrollments[idx]) === csKey) {
+        alert(`${student.name} 학생은 이미 ${csKey} 반에 등록되어 있습니다.`);
+        return;
+    }
+
+    // 내신 기간 미설정 경고 (진행은 허용)
+    const cs = classSettings?.[csKey];
+    if (!cs?.naesin_start || !cs?.naesin_end) {
+        if (!confirm(`${csKey} 반에 내신 기간이 설정되어 있지 않아 리스트에 바로 노출되지 않을 수 있습니다. 그래도 추가할까요?`)) return;
+    }
+
+    const updated = { ...enrollments[idx], naesin_class_override: csKey };
+    // 이전 반의 학생별 요일/시간 override는 새 반 기준으로 초기화
+    delete updated.naesin_days;
+    delete updated.naesin_schedule;
+    enrollments[idx] = updated;
+
+    window.showSaveIndicator?.('saving');
+    try {
+        await auditUpdate(doc(db, 'students', studentId), { enrollments });
+        student.enrollments = enrollments;
+        if (isFromRemote && Array.isArray(allStudents)) {
+            allStudents.push(student);
+            allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+        }
+        window.showSaveIndicator?.('saved');
+    } catch (err) {
+        console.error('[addStudentToNaesin] 저장 실패:', err);
+        window.showSaveIndicator?.('error');
+        alert('학생 추가에 실패했습니다: ' + err.message);
+        return;
+    }
+
+    renderNaesinClassDetail(csKey);
+    if (window.renderListPanel) window.renderListPanel();
 };
 
 // ─── 외부 모듈/onclick 핸들러용 window 노출 ──────────────────────────────────

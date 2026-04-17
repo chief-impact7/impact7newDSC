@@ -73,6 +73,32 @@ export function deriveNaesinCode(student, enrollment) {
     return `${school}${levelShort}${grade}${group}`;
 }
 
+// 내신 반 수동 배제 센티넬 (naesin_class_override에 저장).
+// string 이면 override, undefined/null 이면 자동 유도.
+export const NAESIN_OVERRIDE_EXCLUDE = '';
+
+// 내신 반 매칭 resolver:
+//   - override === NAESIN_OVERRIDE_EXCLUDE (== '') → null (명시적 배제)
+//   - override (non-empty string) → 해당 csKey (수동 강제 매핑)
+//   - override가 string 아님 (undefined/null) → 자동 유도 (branchFromStudent + deriveNaesinCode)
+// null 반환 = 내신 대상 아님.
+export function resolveNaesinCsKey(student, regularEnroll) {
+    if (!regularEnroll) return null;
+    const override = regularEnroll.naesin_class_override;
+    if (typeof override === 'string') {
+        return override === NAESIN_OVERRIDE_EXCLUDE ? null : override;
+    }
+    const nCode = deriveNaesinCode(student, regularEnroll);
+    if (!nCode) return null;
+    return branchFromStudent(student) + nCode;
+}
+
+// csKey에서 branch 접두사 제거 (표시용)
+export function displayCodeFromCsKey(csKey, branch) {
+    if (!csKey) return '';
+    return branch && csKey.startsWith(branch) ? csKey.slice(branch.length) : csKey;
+}
+
 // 활성 enrollment만 반환.
 // - end_date가 지난 enrollment(내신/특강)은 제외
 // - 내신이 활성 기간이면 정규를 숨김 (내신 종료 후 정규 복귀)
@@ -98,9 +124,9 @@ export function getActiveEnrollments(s, dateStr) {
         )) return true;
         const regularEnroll = current.find(e => e.class_type !== '내신' && e.class_number);
         if (!regularEnroll) return false;
-        const nCode = deriveNaesinCode(s, regularEnroll);
-        if (!nCode) return false;
-        const cs = state.classSettings[branchFromStudent(s) + nCode];
+        const csKey = resolveNaesinCsKey(s, regularEnroll);
+        if (!csKey) return false;
+        const cs = state.classSettings[csKey];
         if (!cs?.naesin_start || !cs?.naesin_end) return false;
         return cs.naesin_start <= today && cs.naesin_end >= today;
     })();
@@ -135,12 +161,12 @@ export function isNaesinActiveToday(s, dateStr) {
     if (current.some(e =>
         e.class_type === '내신' && validDate(e.start_date) && e.start_date <= today
     )) return true;
-    // 2) auto: 정규에서 파생한 naesin 반의 class_settings 윈도우
+    // 2) auto or manual override: 정규 enrollment에서 resolve한 csKey의 naesin 윈도우
     const regularEnroll = current.find(e => e.class_type !== '내신' && e.class_number);
     if (!regularEnroll) return false;
-    const nCode = deriveNaesinCode(s, regularEnroll);
-    if (!nCode) return false;
-    const cs = state.classSettings[branchFromStudent(s) + nCode];
+    const csKey = resolveNaesinCsKey(s, regularEnroll);
+    if (!csKey) return false;
+    const cs = state.classSettings[csKey];
     if (!cs?.naesin_start || !cs?.naesin_end) return false;
     return cs.naesin_start <= today && cs.naesin_end >= today;
 }

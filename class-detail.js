@@ -4,12 +4,12 @@
 
 import { doc, getDoc, getDocFromServer, writeBatch, arrayUnion } from 'firebase/firestore';
 import { db } from './firebase-config.js';
-import { getDayName, todayStr, studentShortLabel, ACTIVE_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
+import { getDayName, todayStr } from './src/shared/firestore-helpers.js';
 import { auditUpdate, batchUpdate } from './audit.js';
 import { state, DAY_ORDER } from './state.js';
 import { esc, escAttr, showSaveIndicator } from './ui-utils.js';
 import { matchesBranchFilter, enrollmentCode, getActiveEnrollments } from './student-helpers.js';
-import { _searchContactsDSC } from './past-search.js';
+import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let getOverrideStudentsForClass, getOverridingOutFromClass, getClassDomains, getClassTestSections;
@@ -582,88 +582,23 @@ export async function saveTeukangPeriod(classCode, field, value) {
 // ─── 특강반 학생 추가 카드 ──────────────────────────────────────────────────
 
 function renderTeukangAddStudentCard(classCode) {
-    return `
-        <div class="detail-card">
-            <div class="detail-card-title">
-                <span class="material-symbols-outlined">person_add</span>
-                학생 추가
-            </div>
-            <div class="domain-add-row">
-                <input type="text" id="teukang-add-search" class="field-input"
-                    placeholder="이름 또는 학교 검색" style="flex:1;"
-                    oninput="searchTeukangAddStudent('${escAttr(classCode)}', this.value)">
-            </div>
-            <div id="teukang-add-results" class="search-results-list" style="margin-top:8px;"></div>
-            <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">
-                재원/등원예정/실휴원/가휴원/상담 + 퇴원/종강 학생 검색.
-                새 학생은 첫데이터입력으로 먼저 등록해 주세요.
-            </div>
-        </div>
-    `;
+    return renderAddStudentCard({
+        key: classCode,
+        idPrefix: 'teukang-add',
+        searchHandlerName: 'searchTeukangAddStudent',
+        footerText: '재원/등원예정/실휴원/가휴원/상담 + 퇴원/종강 학생 검색. 새 학생은 첫데이터입력으로 먼저 등록해 주세요.',
+    });
 }
 
-let _teukangAddSearchTimer = null;
-let _teukangAddSearchId = 0;
+const _teukangSearcher = createStudentSearcher({
+    idPrefix: 'teukang-add',
+    addHandlerName: 'addStudentToTeukang',
+    getEnrolledIds: (classCode) => new Set(getTeukangClassStudents(classCode).map(s => s.docId)),
+    getAllStudents: () => state.allStudents,
+});
+
 export function searchTeukangAddStudent(classCode, q) {
-    clearTimeout(_teukangAddSearchTimer);
-    _teukangAddSearchTimer = setTimeout(() => _doSearchTeukangAddStudent(classCode, q), 200);
-}
-
-function _renderTeukangSearchItem(classCode, s) {
-    // 로컬 학생은 docId, 리모트(_searchContactsDSC) 결과는 id 필드 사용
-    const docId = s.docId || s.id;
-    const meta = [studentShortLabel(s), s.status].filter(Boolean).join(' · ');
-    return `<div class="search-result-item" style="display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid var(--border);cursor:pointer;"
-                 onclick="addStudentToTeukang('${escAttr(classCode)}', '${escAttr(docId)}')">
-                <div>
-                    <div style="font-weight:600;">${esc(s.name)}</div>
-                    <div style="font-size:11px;color:var(--text-sec);">${esc(meta)}</div>
-                </div>
-                <span class="material-symbols-outlined" style="font-size:18px;color:var(--primary);">add</span>
-            </div>`;
-}
-
-async function _doSearchTeukangAddStudent(classCode, q) {
-    const results = document.getElementById('teukang-add-results');
-    if (!results) return;
-    q = (q || '').trim().toLowerCase();
-    if (!q) { results.innerHTML = ''; return; }
-
-    // stale result 방지를 위한 요청 ID
-    const reqId = ++_teukangAddSearchId;
-
-    // 이미 이 특강반에 등록된 학생 제외
-    const enrolledIds = new Set(getTeukangClassStudents(classCode).map(s => s.docId));
-
-    // 1) 로컬: 활성 학생(재원/등원예정/실휴원/가휴원/상담) 필터
-    const localItems = state.allStudents
-        .filter(s => {
-            if (!ACTIVE_STUDENT_STATUSES.has(s.status)) return false;
-            if (enrolledIds.has(s.docId)) return false;
-            const name = (s.name || '').toLowerCase();
-            const school = (s.school || '').toLowerCase();
-            return name.includes(q) || school.includes(q);
-        });
-
-    const renderCombined = (localList, pastList) => {
-        const items = [...localList, ...pastList].slice(0, 30)
-            .map(s => _renderTeukangSearchItem(classCode, s));
-        results.innerHTML = items.length === 0
-            ? '<div style="font-size:12px;color:var(--text-sec);padding:8px;">검색 결과 없음</div>'
-            : items.join('');
-    };
-
-    renderCombined(localItems.slice(0, 20), []);
-
-    // 리모트: 퇴원/종강 학생 prefix 쿼리 (_searchContactsDSC 재사용)
-    try {
-        const remote = await _searchContactsDSC(q);
-        if (reqId !== _teukangAddSearchId) return; // stale 무시
-        const pastItems = remote.filter(r => !enrolledIds.has(r.id)).slice(0, 10);
-        renderCombined(localItems.slice(0, 20), pastItems);
-    } catch (err) {
-        console.debug('[teukang remote search]', err?.message || err);
-    }
+    _teukangSearcher(classCode, q);
 }
 
 function _findTeukangEnrollment(student, classCode) {

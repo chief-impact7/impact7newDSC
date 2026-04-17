@@ -82,13 +82,19 @@ students/{studentId}
 │       ├── start_time: string       # 수업 시작 시간 "16:00"
 │       ├── start_date: string       # 수강 시작일
 │       ├── end_date: string         # (특강일 경우) 종료일
-│       └── naesin_schedule: map     # 내신 시간 개별 override (optional)
-│           └── {요일}: string       # 예: { "월": "17:30" }
+│       ├── naesin_days: array       # 학생 개별 내신 등원 요일 (optional, 없으면 반 schedule 전체)
+│       ├── naesin_schedule: map     # 내신 시간 개별 override (optional)
+│       │   └── {요일}: string       # 예: { "월": "17:30" }
+│       └── naesin_class_override: string  # 내신 반 수동 매핑 (optional)
+│                                    #  - undefined: 자동 유도 (기본)
+│                                    #  - "<csKey>":  해당 반으로 수동 강제 매핑
+│                                    #  - "":         내신 대상에서 명시적 배제
 ```
 
 > **내신 반 코드** 자동 유도: `level_symbol` + `school` + `grade` + A/B(홀짝)
 > 내신 기간은 `class_settings` 문서의 `naesin_start ~ naesin_end`로 판단.
 > 내신 기간 중에는 정규 enrollment가 DSC 목록에서 숨겨지고 내신 탭으로 이동.
+> 반설정상세패널의 "학생 추가"로 `naesin_class_override`를 세팅해 자동 유도를 override할 수 있다.
 
 ### `class_settings` 컬렉션 (정규 + 내신 공용)
 ```

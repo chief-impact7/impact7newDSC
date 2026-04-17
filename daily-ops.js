@@ -24,7 +24,7 @@ import {
 import {
     normalizeDays, branchFromStudent, matchesBranchFilter,
     enrollmentCode, allClassCodes, activeClassCodes, _enrollCodeList,
-    deriveNaesinCode, getActiveEnrollments, getStudentStartTime,
+    deriveNaesinCode, resolveNaesinCsKey, displayCodeFromCsKey, getActiveEnrollments, getStudentStartTime,
     isNaesinActiveToday, isFreeSemesterActiveToday,
     makeDailyRecordId, findStudent, buildSiblingMap
 } from './student-helpers.js';
@@ -669,14 +669,26 @@ function _getAllClassCodes() {
         // 내신 반코드 유도 (초등 제외, 정규 enrollment이 있는 학생만)
         // key = 소속+반코드 (Firestore 키), displayCode = 반코드만 (표시용)
         if (hasRegular && levelShort && levelShort !== '초') {
-            const nCode = deriveNaesinCode(s, (s.enrollments || []).find(e => e.class_type !== '내신' && e.class_number) || {});
-            if (nCode) {
-                const key = branchFromStudent(s) + nCode;
-                if (!naesinCounts.has(key)) naesinCounts.set(key, { displayCode: nCode, count: 0 });
+            const regularEnroll = (s.enrollments || []).find(e => e.class_type !== '내신' && e.class_number) || {};
+            const key = resolveNaesinCsKey(s, regularEnroll);
+            if (key) {
+                const displayCode = displayCodeFromCsKey(key, branchFromStudent(s));
+                if (!naesinCounts.has(key)) naesinCounts.set(key, { displayCode, count: 0 });
                 naesinCounts.get(key).count++;
             }
         }
     });
+    // 학생이 아직 없는 내신 반도 L3 칩에 노출 — naesin 기간이 설정된 class_settings 기반
+    const BRANCHES = ['10단지', '2단지'];
+    Object.entries(state.classSettings).forEach(([key, cs]) => {
+        if (!cs?.naesin_start || !cs?.naesin_end) return;
+        if (cs.class_type === '특강') return;
+        if (naesinCounts.has(key)) return;
+        const branch = BRANCHES.find(b => key.startsWith(b)) || '';
+        if (state.selectedBranch && branch !== state.selectedBranch) return;
+        naesinCounts.set(key, { displayCode: displayCodeFromCsKey(key, branch), count: 0 });
+    });
+
     const naesinWithCounts = [...naesinCounts.entries()]
         .map(([key, { displayCode, count }]) => ({ code: key, displayCode, count }))
         .sort((a, b) => a.displayCode.localeCompare(b.displayCode, 'ko'));
@@ -698,9 +710,8 @@ function getNaesinStudentsByDerivedCode(classKey) {
         if (!matchesBranchFilter(s)) return;
         const regularEnroll = (s.enrollments || []).find(e => e.class_type !== '내신' && e.class_number);
         if (!regularEnroll) return;
-        const nCode = deriveNaesinCode(s, regularEnroll);
-        if (!nCode) return;
-        if (branchFromStudent(s) + nCode !== classKey) return;
+        const resolved = resolveNaesinCsKey(s, regularEnroll);
+        if (resolved !== classKey) return;
         if (!seen.has(s.docId)) {
             seen.add(s.docId);
             result.push({ student: s });
@@ -710,6 +721,8 @@ function getNaesinStudentsByDerivedCode(classKey) {
 }
 window.branchFromStudent = branchFromStudent;
 window.deriveNaesinCode = deriveNaesinCode;
+window.resolveNaesinCsKey = resolveNaesinCsKey;
+window.displayCodeFromCsKey = displayCodeFromCsKey;
 window.getNaesinStudentsByDerivedCode = getNaesinStudentsByDerivedCode;
 
 function renderClassCodeFilter() {

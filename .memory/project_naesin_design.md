@@ -67,6 +67,16 @@ type: project
 - 시간 개별 override: `enrollment.naesin_schedule[day]`에 저장 (Firestore rules 불변, enrollments 배열 내부)
 - toggleNaesinDay 제거 (요일은 class_settings.schedule 키 기준)
 
+### 완료 (2026-04-17 세션)
+- **수동 추가/제거 UI** ✅ — 반설정상세패널에 "학생 추가" 카드, 내신학생상세패널에 "반에서 제거" 버튼. 특강과 대칭.
+- **`enrollment.naesin_class_override` 필드 도입** — 첫 정규 enrollment에 저장:
+  - `undefined`: 자동 유도 (기본)
+  - `"<csKey>"`: 강제 매핑
+  - `""`: 명시적 배제
+- **`resolveNaesinCsKey(student, regularEnroll)` 헬퍼** (student-helpers.js) — 자동 유도 + override를 통합 처리. window.resolveNaesinCsKey로도 노출.
+- 적용 위치: `naesin.js:getNaesinInfo`, `daily-ops.js:_getAllClassCodes`/`getNaesinStudentsByDerivedCode`, `student-helpers.js:getActiveEnrollments`/`isNaesinActiveToday`.
+- 추가/제거 시 naesin_days·naesin_schedule 초기화. status2 건드리지 않음 (정규 모드 유지).
+
 ### 완료 (2026-04-02 3차 세션)
 - **renderNaesinDetail CSS 전환** ✅ — 인라인 스타일 전부 제거, CSS 클래스 활용
   - detail-card / detail-card-title / detail-card-title-row / card-add-btn
