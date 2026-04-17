@@ -5,12 +5,16 @@ import { todayStr } from './src/shared/firestore-helpers.js';
 import { state, LEVEL_SHORT, LEAVE_STATUSES } from './state.js';
 
 // 학생이 특정 날짜에 휴원 중인지 판정.
-// status ∈ LEAVE_STATUSES 이고 pause_start_date ~ pause_end_date 기간 내이면 true.
-// (pause 날짜가 누락된 휴원 상태는 false — 데이터 정합성은 leave-request write 쪽이 책임)
+// status ∈ LEAVE_STATUSES 이면 휴원으로 간주하고, pause 기간이 명시되어 있으면
+// dateStr이 그 기간 내일 때만 true. pause 날짜가 누락된 휴원 상태는
+// 데이터 정합성 위반이지만 안전 쪽(휴원 중 간주)으로 처리해 출결/편성에서 숨긴다.
+// (_finalizeLeaveDSC가 r.leave_end_date||''로 빈 값 저장을 허용하므로 예외 케이스 발생 가능)
 export function isOnLeaveAt(s, dateStr) {
-    return LEAVE_STATUSES.includes(s.status)
-        && !!s.pause_start_date && !!s.pause_end_date
-        && dateStr >= s.pause_start_date && dateStr <= s.pause_end_date;
+    if (!LEAVE_STATUSES.includes(s.status)) return false;
+    if (s.pause_start_date && s.pause_end_date) {
+        return dateStr >= s.pause_start_date && dateStr <= s.pause_end_date;
+    }
+    return true;
 }
 
 // ─── 기본 유틸 ─────────────────────────────────────────────────────────────
