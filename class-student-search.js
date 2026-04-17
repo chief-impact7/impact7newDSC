@@ -11,6 +11,7 @@
 
 import { studentShortLabel, ACTIVE_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { _searchContactsDSC } from './past-search.js';
+import { LEAVE_STATUSES } from './state.js';
 
 // daily-ops.js에서 window로 노출된 이스케이프 헬퍼
 const _esc = (str) => window._esc(str);
@@ -36,7 +37,7 @@ export function renderAddStudentCard({ key, idPrefix, searchHandlerName, footerT
     `;
 }
 
-export function createStudentSearcher({ idPrefix, addHandlerName, getEnrolledIds, getAllStudents }) {
+export function createStudentSearcher({ idPrefix, addHandlerName, getEnrolledIds, getAllStudents, excludeOnLeave = false }) {
     let timer = null;
     let reqId = 0;
 
@@ -64,6 +65,7 @@ export function createStudentSearcher({ idPrefix, addHandlerName, getEnrolledIds
 
         const localItems = (getAllStudents() || []).filter(s => {
             if (!ACTIVE_STUDENT_STATUSES.has(s.status)) return false;
+            if (excludeOnLeave && LEAVE_STATUSES.includes(s.status)) return false;
             if (enrolledIds.has(s.docId)) return false;
             const name = (s.name || '').toLowerCase();
             const school = (s.school || '').toLowerCase();

@@ -5,6 +5,7 @@ import {
 import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
 import { todayStr, studentShortLabel, ACTIVE_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
+import { LEAVE_STATUSES } from './state.js';
 import { auditSet, batchUpdate } from './audit.js';
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -325,10 +326,14 @@ function _doSearchStudents(q) {
     const isSpecial = wizardData.classType === '특강';
 
     // 특강: 모든 상태 허용 (퇴원/종강 학생도 특강 수강 가능)
-    // 기타 반 유형: 활성 상태(재원/등원예정/실휴원/가휴원/상담)만
+    // 기타 반 유형(정규/내신/자유학기): 활성 상태 + 휴원 제외
+    //   — 정규의 일종이므로 휴원 중인 학생은 편성 대상 아님
     const filtered = allStudents
         .filter(s => {
-            if (!isSpecial && !ACTIVE_STUDENT_STATUSES.has(s.status)) return false;
+            if (!isSpecial) {
+                if (!ACTIVE_STUDENT_STATUSES.has(s.status)) return false;
+                if (LEAVE_STATUSES.includes(s.status)) return false;
+            }
             const name = (s.name || '').toLowerCase();
             const school = (s.school || '').toLowerCase();
             return name.includes(q) || school.includes(q);

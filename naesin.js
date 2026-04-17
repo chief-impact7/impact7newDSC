@@ -1107,6 +1107,7 @@ function _renderNaesinAddStudentCard(csKey) {
 const _naesinSearcher = createStudentSearcher({
     idPrefix: 'naesin-add',
     addHandlerName: 'addStudentToNaesin',
+    excludeOnLeave: true,
     getEnrolledIds: (csKey) => new Set(
         (window.getNaesinStudentsByDerivedCode?.(csKey) || [])
             .map(({ student }) => student.docId)
