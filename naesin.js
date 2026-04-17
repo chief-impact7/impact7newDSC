@@ -12,6 +12,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { auditUpdate, auditSet } from './audit.js';
 import { NAESIN_OVERRIDE_EXCLUDE } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
+import { LEAVE_STATUSES } from './state.js';
 
 // ─── State 접근자 ─────────────────────────────────────────────────────────────
 function _state() {
@@ -24,6 +25,13 @@ function _state() {
 // csKey:      Firestore 키 (branch 포함, 예: "2단지신목중2A")
 function getNaesinInfo(student, selectedDate, dayName) {
     const { classSettings } = _state();
+
+    // 휴원 기간 내 학생은 내신 대상 아님 (내신은 정규의 일시적 전환 — 정규가 멈춰있으면 내신도 멈춤)
+    if (LEAVE_STATUSES.includes(student.status) &&
+        student.pause_start_date && student.pause_end_date &&
+        selectedDate >= student.pause_start_date && selectedDate <= student.pause_end_date) {
+        return null;
+    }
 
     // 정규 enrollment 확인 (초등 제외는 class_settings에 naesin 기간 없으면 자연히 걸러짐)
     const regularEnroll = (student.enrollments || []).find(
