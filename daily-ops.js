@@ -24,7 +24,7 @@ import {
 import {
     normalizeDays, branchFromStudent, matchesBranchFilter,
     enrollmentCode, allClassCodes, activeClassCodes, _enrollCodeList,
-    deriveNaesinCode, resolveNaesinCsKey, displayCodeFromCsKey, getActiveEnrollments, getStudentStartTime,
+    deriveNaesinCode, resolveNaesinCsKey, displayCodeFromCsKey, getActiveEnrollments, getStudentStartTime, isOnLeaveAt,
     isNaesinActiveToday, isFreeSemesterActiveToday,
     makeDailyRecordId, findStudent, buildSiblingMap
 } from './student-helpers.js';
@@ -649,13 +649,6 @@ function getTeukangClassStudents(classCode) {
     );
 }
 
-// 내신은 정규의 일시적 전환이므로 휴원 기간에는 집계/표시에서 제외
-function _isOnLeaveToday(s) {
-    return LEAVE_STATUSES.includes(s.status) &&
-        s.pause_start_date && s.pause_end_date &&
-        state.selectedDate >= s.pause_start_date && state.selectedDate <= s.pause_end_date;
-}
-
 function _getAllClassCodes() {
     const regularCodes = new Set();
     const naesinCounts = new Map();
@@ -675,7 +668,7 @@ function _getAllClassCodes() {
 
         // 내신 반코드 유도 (초등 제외, 정규 enrollment이 있는 학생만, 휴원 중 제외)
         // key = 소속+반코드 (Firestore 키), displayCode = 반코드만 (표시용)
-        if (hasRegular && levelShort && levelShort !== '초' && !_isOnLeaveToday(s)) {
+        if (hasRegular && levelShort && levelShort !== '초' && !isOnLeaveAt(s, state.selectedDate)) {
             const regularEnroll = (s.enrollments || []).find(e => e.class_type !== '내신' && e.class_number) || {};
             const key = resolveNaesinCsKey(s, regularEnroll);
             if (key) {
@@ -714,7 +707,7 @@ function getNaesinStudentsByDerivedCode(classKey) {
     const seen = new Set();
     state.allStudents.forEach(s => {
         if (s.status === '퇴원') return;
-        if (_isOnLeaveToday(s)) return;
+        if (isOnLeaveAt(s, state.selectedDate)) return;
         if (!matchesBranchFilter(s)) return;
         const regularEnroll = (s.enrollments || []).find(e => e.class_type !== '내신' && e.class_number);
         if (!regularEnroll) return;
@@ -1320,8 +1313,7 @@ function getFilteredStudents() {
                     e.class_type === '특강' && e.day.includes(dayName)
                 );
             }
-            if (LEAVE_STATUSES.includes(s.status) && s.pause_start_date && s.pause_end_date
-                && state.selectedDate >= s.pause_start_date && state.selectedDate <= s.pause_end_date) return false;
+            if (isOnLeaveAt(s, state.selectedDate)) return false;
             return getActiveEnrollments(s, state.selectedDate).some(e => e.day.includes(dayName));
         });
         // 세션 내 퇴원처리된 학생도 특강 수강 중이면 포함

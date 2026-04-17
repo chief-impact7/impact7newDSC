@@ -2,7 +2,16 @@
 // daily-ops.js에서 추출한 학생 관련 유틸리티 함수들
 
 import { todayStr } from './src/shared/firestore-helpers.js';
-import { state, LEVEL_SHORT } from './state.js';
+import { state, LEVEL_SHORT, LEAVE_STATUSES } from './state.js';
+
+// 학생이 특정 날짜에 휴원 중인지 판정.
+// status ∈ LEAVE_STATUSES 이고 pause_start_date ~ pause_end_date 기간 내이면 true.
+// (pause 날짜가 누락된 휴원 상태는 false — 데이터 정합성은 leave-request write 쪽이 책임)
+export function isOnLeaveAt(s, dateStr) {
+    return LEAVE_STATUSES.includes(s.status)
+        && !!s.pause_start_date && !!s.pause_end_date
+        && dateStr >= s.pause_start_date && dateStr <= s.pause_end_date;
+}
 
 // ─── 기본 유틸 ─────────────────────────────────────────────────────────────
 export function normalizeDays(day) {
