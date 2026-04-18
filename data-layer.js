@@ -247,6 +247,29 @@ export async function promoteEnrollPending() {
     }
 }
 
+// 미래 퇴원 예약 학생 중 퇴원일이 오늘 이하인 경우 Firestore status를 '퇴원'으로 업데이트
+export async function promoteWithdrawalDate() {
+    const today = todayStr();
+    const toWithdraw = state.allStudents.filter(s =>
+        s.status !== '퇴원' && s.withdrawal_date && s.withdrawal_date <= today
+    );
+    if (toWithdraw.length === 0) return;
+    const batch = writeBatch(db);
+    for (const s of toWithdraw) {
+        batchUpdate(batch, doc(db, 'students', s.docId), { status: '퇴원' });
+        s.status = '퇴원';
+    }
+    try {
+        await batch.commit();
+        const toWithdrawSet = new Set(toWithdraw);
+        state.allStudents = state.allStudents.filter(s => !toWithdrawSet.has(s));
+        state.withdrawnStudents.push(...toWithdraw);
+        console.log(`[promoteWithdrawalDate] ${toWithdraw.length}명 재원→퇴원 전환:`, toWithdraw.map(s => s.name));
+    } catch (err) {
+        console.error('[promoteWithdrawalDate] 전환 실패:', err);
+    }
+}
+
 export function loadDailyRecords(date) {
     const q = query(collection(db, 'daily_records'), where('date', '==', date));
     return _listenCollection('daily_records', q, null, (data) => {

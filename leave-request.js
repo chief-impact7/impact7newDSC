@@ -787,16 +787,19 @@ export async function _finalizeLeaveDSC(r, studentId) {
     const studentUpdate = {};
     const isWithdrawal = _isWithdrawalType(r.request_type);
     const isReturn = _isReturnType(r.request_type);
+    const withdrawalDate = isWithdrawal ? (r.withdrawal_date || todayStr()) : '';
 
     if (isReturn) {
         studentUpdate.status = '재원';
         studentUpdate.pause_start_date = deleteField();
         studentUpdate.pause_end_date = deleteField();
     } else if (isWithdrawal) {
-        studentUpdate.status = '퇴원';
-        studentUpdate.withdrawal_date = r.withdrawal_date || todayStr();
+        studentUpdate.withdrawal_date = withdrawalDate;
         studentUpdate.pause_start_date = deleteField();
         studentUpdate.pause_end_date = deleteField();
+        if (withdrawalDate <= todayStr()) {
+            studentUpdate.status = '퇴원';
+        }
     } else if (_isLeaveExtension(r.request_type)) {
         studentUpdate.pause_end_date = r.leave_end_date || '';
     } else {
@@ -847,7 +850,11 @@ export async function _finalizeLeaveDSC(r, studentId) {
     } else if (isReturn) {
         if (sIdx >= 0) { state.allStudents[sIdx].status = '재원'; delete state.allStudents[sIdx].pause_start_date; delete state.allStudents[sIdx].pause_end_date; }
     } else if (isWithdrawal) {
-        if (sIdx >= 0) { const removed = state.allStudents.splice(sIdx, 1)[0]; removed.status = '퇴원'; delete removed.pause_start_date; delete removed.pause_end_date; state.withdrawnStudents.push(removed); }
+        if (withdrawalDate <= todayStr()) {
+            if (sIdx >= 0) { const removed = state.allStudents.splice(sIdx, 1)[0]; removed.status = '퇴원'; removed.withdrawal_date = withdrawalDate; delete removed.pause_start_date; delete removed.pause_end_date; state.withdrawnStudents.push(removed); }
+        } else {
+            if (sIdx >= 0) { state.allStudents[sIdx].withdrawal_date = withdrawalDate; delete state.allStudents[sIdx].pause_start_date; delete state.allStudents[sIdx].pause_end_date; }
+        }
     } else if (r.request_type === '퇴원→휴원') {
         const wIdx = state.withdrawnStudents.findIndex(s => s.docId === studentId);
         if (wIdx >= 0) { const restored = state.withdrawnStudents.splice(wIdx, 1)[0]; restored.status = studentUpdate.status; restored.pause_start_date = studentUpdate.pause_start_date; restored.pause_end_date = studentUpdate.pause_end_date; state.allStudents.push(restored); }

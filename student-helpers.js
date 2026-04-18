@@ -9,12 +9,24 @@ import { state, LEVEL_SHORT, LEAVE_STATUSES } from './state.js';
 // dateStr이 그 기간 내일 때만 true. pause 날짜가 누락된 휴원 상태는
 // 데이터 정합성 위반이지만 안전 쪽(휴원 중 간주)으로 처리해 출결/편성에서 숨긴다.
 // (_finalizeLeaveDSC가 r.leave_end_date||''로 빈 값 저장을 허용하므로 예외 케이스 발생 가능)
+// scheduled_leave_status: 시작일이 미래인 휴원 요청 승인 시 예약용 (status는 '재원' 유지)
 export function isOnLeaveAt(s, dateStr) {
-    if (!LEAVE_STATUSES.includes(s.status)) return false;
+    const effectiveStatus = LEAVE_STATUSES.includes(s.status)
+        ? s.status
+        : (LEAVE_STATUSES.includes(s.scheduled_leave_status) ? s.scheduled_leave_status : null);
+    if (!effectiveStatus) return false;
     if (s.pause_start_date && s.pause_end_date) {
         return dateStr >= s.pause_start_date && dateStr <= s.pause_end_date;
     }
     return true;
+}
+
+// 학생이 특정 날짜에 퇴원 상태인지 판정.
+// status='퇴원' 이거나, 미래 퇴원 예약(status='재원' + withdrawal_date)이 dateStr에 도래한 경우 true.
+export function isWithdrawnAt(s, dateStr) {
+    if (s.status === '퇴원') return true;
+    if (s.withdrawal_date) return s.withdrawal_date <= (dateStr || todayStr());
+    return false;
 }
 
 // ─── 기본 유틸 ─────────────────────────────────────────────────────────────

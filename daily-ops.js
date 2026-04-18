@@ -24,7 +24,7 @@ import {
 import {
     normalizeDays, branchFromStudent, matchesBranchFilter,
     enrollmentCode, allClassCodes, activeClassCodes, _enrollCodeList,
-    deriveNaesinCode, resolveNaesinCsKey, displayCodeFromCsKey, getActiveEnrollments, getStudentStartTime, isOnLeaveAt,
+    deriveNaesinCode, resolveNaesinCsKey, displayCodeFromCsKey, getActiveEnrollments, getStudentStartTime, isOnLeaveAt, isWithdrawnAt,
     isNaesinActiveToday, isFreeSemesterActiveToday,
     makeDailyRecordId, findStudent, buildSiblingMap
 } from './student-helpers.js';
@@ -113,7 +113,7 @@ import {
     initDataLayerDeps, initDataLayerDeps2,
     loadClassSettings, getClassDomains, loadTeachers, trackTeacherLogin, getTeacherName,
     loadClassNextHw, saveClassNextHw, getNextHwStatus, getStudentDomains, getStudentTestItems,
-    saveClassSettings, loadStudents, promoteEnrollPending,
+    saveClassSettings, loadStudents, promoteEnrollPending, promoteWithdrawalDate,
     loadDailyRecords, loadRetakeSchedules, loadHwFailTasks, loadTestFailTasks,
     loadTempAttendances, loadTempClassOverrides,
     getStudentOverrides, getOverrideStudentsForClass, getOverridingOutFromClass, addOverrideInStudents,
@@ -344,7 +344,7 @@ function getUniqueClassCodes() {
     const regularCodes = new Set();
     const naesinCodes = new Set();
     state.allStudents.forEach(s => {
-        if (s.status === '퇴원') return;
+        if (isWithdrawnAt(s, state.selectedDate)) return;
         if (!matchesBranchFilter(s)) return;
         getActiveEnrollments(s, state.selectedDate).forEach(e => {
             const days = normalizeDays(e.day);
@@ -368,7 +368,7 @@ function getUniqueClassCodes() {
 function getClassMgmtCount(filterKey) {
     const dayName = getDayName(state.selectedDate);
     let students = state.allStudents.filter(s =>
-        s.status !== '퇴원' && getActiveEnrollments(s, state.selectedDate).some(e =>
+        !isWithdrawnAt(s, state.selectedDate) && getActiveEnrollments(s, state.selectedDate).some(e =>
             e.day.includes(dayName)
         )
     );
@@ -582,7 +582,7 @@ function renderBranchFilter() {
     ];
     const dayName = getDayName(state.selectedDate);
     const active = state.allStudents.filter(s =>
-        s.status !== '퇴원' && getActiveEnrollments(s, state.selectedDate).some(e =>
+        !isWithdrawnAt(s, state.selectedDate) && getActiveEnrollments(s, state.selectedDate).some(e =>
             e.day.includes(dayName)
         )
     );
@@ -653,7 +653,7 @@ function _getAllClassCodes() {
     const regularCodes = new Set();
     const naesinCounts = new Map();
     state.allStudents.forEach(s => {
-        if (s.status === '퇴원') return;
+        if (isWithdrawnAt(s, state.selectedDate)) return;
         if (!matchesBranchFilter(s)) return;
         const levelShort = LEVEL_SHORT[s.level] || '';
 
@@ -706,7 +706,7 @@ function getNaesinStudentsByDerivedCode(classKey) {
     const result = [];
     const seen = new Set();
     state.allStudents.forEach(s => {
-        if (s.status === '퇴원') return;
+        if (isWithdrawnAt(s, state.selectedDate)) return;
         if (isOnLeaveAt(s, state.selectedDate)) return;
         if (!matchesBranchFilter(s)) return;
         const regularEnroll = (s.enrollments || []).find(e => e.class_type !== '내신' && e.class_number);
@@ -1061,7 +1061,7 @@ function _getSubFilterBase() {
 
     const dayName = getDayName(state.selectedDate);
     let todayStudents = state.allStudents.filter(s =>
-        s.status !== '퇴원' && getActiveEnrollments(s, state.selectedDate).some(e =>
+        !isWithdrawnAt(s, state.selectedDate) && getActiveEnrollments(s, state.selectedDate).some(e =>
             e.day.includes(dayName)
         )
     );
@@ -1261,7 +1261,7 @@ function getFilteredStudents() {
     if (state.currentCategory === 'class_mgmt') {
         const dayName = getDayName(state.selectedDate);
         let students = state.allStudents.filter(s =>
-            s.status !== '퇴원' && getActiveEnrollments(s, state.selectedDate).some(e =>
+            !isWithdrawnAt(s, state.selectedDate) && getActiveEnrollments(s, state.selectedDate).some(e =>
                 e.day.includes(dayName)
             )
         );
@@ -2107,7 +2107,7 @@ function getClassCodesForDate(dateStr, excludeStudentId) {
     const dayName = getDayName(dateStr);
     const codes = new Set();
     state.allStudents.forEach(s => {
-        if (s.status === '퇴원') return;
+        if (isWithdrawnAt(s, dateStr)) return;
         if (!matchesBranchFilter(s)) return;
         getActiveEnrollments(s, dateStr).forEach(e => {
             if (!e.day.includes(dayName)) return;
@@ -2605,6 +2605,7 @@ onAuthStateChanged(auth, async (user) => {
         try {
             await loadStudents();
             await promoteEnrollPending();
+            await promoteWithdrawalDate();
             await loadWithdrawnStudents();
             buildSiblingMap();
             await trackTeacherLogin(user);
@@ -2732,6 +2733,7 @@ window.refreshData = async () => {
     showSaveIndicator('saving');
     await loadStudents();
     await promoteEnrollPending();
+    await promoteWithdrawalDate();
     await loadWithdrawnStudents();
     await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadRoleMemos(), loadClassSettings(true), loadClassNextHw(state.selectedDate), loadTeachers()]);
     await syncAbsenceRecords();

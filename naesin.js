@@ -10,7 +10,7 @@ import { getDayName, studentShortLabel } from './src/shared/firestore-helpers.js
 import { db } from './firebase-config.js';
 import { doc, getDoc } from 'firebase/firestore';
 import { auditUpdate, auditSet } from './audit.js';
-import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt } from './student-helpers.js';
+import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 
 // ─── State 접근자 ─────────────────────────────────────────────────────────────
@@ -71,7 +71,7 @@ export function getNaesinStudents() {
     const result = [];
 
     for (const student of allStudents) {
-        if (student.status === '퇴원') continue;
+        if (isWithdrawnAt(student, selectedDate)) continue;
 
         // 소속 필터
         if (selectedBranch) {
