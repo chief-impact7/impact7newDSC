@@ -51,7 +51,8 @@ import {
     openLeaveRequestModal, onLeaveRequestTypeChange, searchLeaveRequestStudent, selectLeaveRequestStudentById,
     submitLeaveRequest, toggleCancelLeaveRequest, teacherApproveLeaveRequest,
     approveLeaveRequest, cancelLeaveRequest,
-    openReEnrollModal, openReturnFromLeaveModal, submitReturnFromLeave
+    openReEnrollModal, openReturnFromLeaveModal, submitReturnFromLeave,
+    retryFinalize
 } from './leave-request.js';
 import {
     initAbsenceRecordsDeps,
@@ -215,6 +216,7 @@ window.cancelLeaveRequest = cancelLeaveRequest;
 window.openReEnrollModal = openReEnrollModal;
 window.openReturnFromLeaveModal = openReturnFromLeaveModal;
 window.submitReturnFromLeave = submitReturnFromLeave;
+window._retryFinalize = retryFinalize;
 
 // absence-records.js 의존성 주입 + window 노출
 initAbsenceRecordsDeps({ renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, renderFilterChips });

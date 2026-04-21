@@ -899,6 +899,14 @@
                     <label id="rfl-date-label" style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">복귀일</label>
                     <input type="date" id="rfl-return-date" class="field-input" style="width:100%;">
                 </div>
+                <!-- 복귀할 정규반 -->
+                <div id="rfl-target-class-wrap">
+                    <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">복귀할 정규반</label>
+                    <select id="rfl-target-class" class="field-input" style="width:100%;" onchange="window._onRflTargetClassChange?.()">
+                        <option value="">-- 반 선택 --</option>
+                    </select>
+                    <div id="rfl-target-class-hint" style="font-size:11px;color:var(--text-sec);margin-top:4px;"></div>
+                </div>
                 <!-- 상담내용 -->
                 <div>
                     <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">상담내용</label>
