@@ -16,7 +16,7 @@ import { normalizeDays, enrollmentCode, branchFromStudent, makeDailyRecordId, ge
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderSubFilters, renderListPanel, renderStudentDetail, renderClassDetail,
-    getClassTestSections, _finalizeLeaveDSC;
+    getClassTestSections;
 
 export function initDataLayerDeps(deps) {
     renderSubFilters = deps.renderSubFilters;
@@ -24,7 +24,6 @@ export function initDataLayerDeps(deps) {
     renderStudentDetail = deps.renderStudentDetail;
     renderClassDetail = deps.renderClassDetail;
     getClassTestSections = deps.getClassTestSections;
-    _finalizeLeaveDSC = deps._finalizeLeaveDSC;
 }
 
 // ─── Class Settings (영역 관리) ─────────────────────────────────────────────
@@ -560,8 +559,7 @@ export async function autoCloseOldRecords() {
             r.status = 'approved';
             if (!r.teacher_approved_by) r.teacher_approved_by = 'system_auto';
             if (!r.approved_by) r.approved_by = 'system_auto';
-            // 학생 status 실제 변경 (퇴원/휴원 등)
-            await _finalizeLeaveDSC(r, r.student_id);
+            // 학생 status 실제 변경은 Cloud Function(onLeaveRequestApproved)이 처리
         } catch (err) {
             console.error('휴퇴원요청 자동승인 실패:', r.docId, err);
         }

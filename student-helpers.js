@@ -8,7 +8,7 @@ import { state, LEVEL_SHORT, LEAVE_STATUSES } from './state.js';
 // status ∈ LEAVE_STATUSES 이면 휴원으로 간주하고, pause 기간이 명시되어 있으면
 // dateStr이 그 기간 내일 때만 true. pause 날짜가 누락된 휴원 상태는
 // 데이터 정합성 위반이지만 안전 쪽(휴원 중 간주)으로 처리해 출결/편성에서 숨긴다.
-// (_finalizeLeaveDSC가 r.leave_end_date||''로 빈 값 저장을 허용하므로 예외 케이스 발생 가능)
+// (Cloud Function finalize가 r.leave_end_date||''로 빈 값 저장을 허용하므로 예외 케이스 발생 가능)
 // scheduled_leave_status: 시작일이 미래인 휴원 요청 승인 시 예약용 (status는 '재원' 유지)
 export function isOnLeaveAt(s, dateStr) {
     const effectiveStatus = LEAVE_STATUSES.includes(s.status)

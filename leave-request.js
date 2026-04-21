@@ -690,14 +690,13 @@ export async function toggleCancelLeaveRequest(docId, studentId) {
     } catch (err) { alert('처리 실패: ' + err.message); }
 }
 
-// 레거시 요청 가드: 최종 승인 시 target_class_code가 필요한 RETURN 유형이 세팅 안 됐으면 차단
-// 반환: true면 진행 가능, false면 alert 후 중단
+// 방어 가드: 최종 승인 시 RETURN 유형(복귀/재등원)은 반드시 target_class_code 필요
+// 정상 UI 경로에서는 세팅되지만, 데이터 마이그레이션/수동 생성 등 비정상 경로 방어용.
 function _checkLegacyReturnTarget(r, willFinalize) {
     if (!willFinalize) return true;
-    if (r.use_server_finalize) return true;
     const isReturn = _isReturnType(r.request_type);
     if (isReturn && !r.target_class_code) {
-        alert('이 요청은 구버전에서 생성되어 "복귀할 반" 정보가 없습니다.\n요청을 취소하고 새로 작성해주세요.');
+        alert('이 요청에 "복귀할 반" 정보가 없습니다.\n요청을 취소하고 새로 작성해주세요.');
         return false;
     }
     return true;
@@ -733,8 +732,6 @@ export async function teacherApproveLeaveRequest(docId, studentId) {
     try {
         const updates = { teacher_approved_by: state.currentUser?.email || '', teacher_approved_at: serverTimestamp() };
         if (r.approved_by) updates.status = 'approved';
-        // 레거시 요청이 최종 승인될 때 플래그 자동 부여 → Cloud Function 트리거
-        if (isFinal && !r.use_server_finalize) updates.use_server_finalize = true;
         await auditUpdate(doc(db, 'leave_requests', docId), updates);
 
         const lrIdx = state.leaveRequests.findIndex(lr => lr.docId === docId);
@@ -742,7 +739,6 @@ export async function teacherApproveLeaveRequest(docId, studentId) {
             state.leaveRequests[lrIdx].teacher_approved_by = state.currentUser?.email || '';
             state.leaveRequests[lrIdx].teacher_approved_at = new Date();
             if (r.approved_by) state.leaveRequests[lrIdx].status = 'approved';
-            if (updates.use_server_finalize) state.leaveRequests[lrIdx].use_server_finalize = true;
         }
 
         // 최종 승인된 경우 학생 상태 전이는 Cloud Function(onLeaveRequestApproved)이 처리
@@ -787,8 +783,6 @@ export async function approveLeaveRequest(docId, studentId) {
     try {
         const updates = { approved_by: state.currentUser?.email || '', approved_at: serverTimestamp() };
         if (r.teacher_approved_by) updates.status = 'approved';
-        // 레거시 요청이 최종 승인될 때 플래그 자동 부여 → Cloud Function 트리거
-        if (isFinal && !r.use_server_finalize) updates.use_server_finalize = true;
         await auditUpdate(doc(db, 'leave_requests', docId), updates);
 
         const lrIdx = state.leaveRequests.findIndex(lr => lr.docId === docId);
@@ -796,7 +790,6 @@ export async function approveLeaveRequest(docId, studentId) {
             state.leaveRequests[lrIdx].approved_by = state.currentUser?.email || '';
             state.leaveRequests[lrIdx].approved_at = new Date();
             if (r.teacher_approved_by) state.leaveRequests[lrIdx].status = 'approved';
-            if (updates.use_server_finalize) state.leaveRequests[lrIdx].use_server_finalize = true;
         }
 
         // 최종 승인된 경우 학생 상태 전이는 Cloud Function(onLeaveRequestApproved)이 처리
@@ -808,121 +801,6 @@ export async function approveLeaveRequest(docId, studentId) {
         alert('행정부 승인 실패: ' + err.message);
         console.error(err);
     }
-}
-
-/** 재원생 중 동명이인이 있으면 숫자 접미사를 붙인 이름 반환, 없으면 null */
-function _deduplicateName(studentId, currentName) {
-    const isDup = state.allStudents.some(s => s.docId !== studentId && s.name === currentName && (s.status === '재원' || s.status === '등원예정'));
-    if (!isDup) return null;
-    const baseName = currentName.replace(/\d+$/, '');
-    const escapedBase = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const variantRe = new RegExp(`^${escapedBase}\\d*$`);
-    const variants = state.allStudents.filter(s => s.docId !== studentId && variantRe.test(s.name) && (s.status === '재원' || s.status === '등원예정'));
-    const usedNumbers = variants.map(s => { const m = s.name.match(/(\d+)$/); return m ? parseInt(m[1], 10) : 1; });
-    usedNumbers.push(1); // 원본 이름(숫자 없음)도 1로 간주
-    return `${baseName}${Math.max(...usedNumbers) + 1}`;
-}
-
-// 양쪽 승인 완료 → 학생 상태 변경 (공통)
-export async function _finalizeLeaveDSC(r, studentId) {
-    const cachedStudent = findStudent(studentId);
-    const beforeData = cachedStudent || {};
-    const beforeStatus = beforeData.status || '';
-    const studentUpdate = {};
-    const isWithdrawal = _isWithdrawalType(r.request_type);
-    const isReturn = _isReturnType(r.request_type);
-    const withdrawalDate = isWithdrawal ? (r.withdrawal_date || todayStr()) : '';
-
-    if (isReturn) {
-        studentUpdate.status = '재원';
-        studentUpdate.pause_start_date = deleteField();
-        studentUpdate.pause_end_date = deleteField();
-    } else if (isWithdrawal) {
-        studentUpdate.withdrawal_date = withdrawalDate;
-        studentUpdate.pause_start_date = deleteField();
-        studentUpdate.pause_end_date = deleteField();
-        if (withdrawalDate <= todayStr()) {
-            studentUpdate.status = '퇴원';
-        }
-    } else if (_isLeaveExtension(r.request_type)) {
-        studentUpdate.pause_end_date = r.leave_end_date || '';
-    } else {
-        const leaveSubType = r.leave_sub_type || '실휴원';
-        const leaveStartDate = r.leave_start_date || '';
-        // 시작일이 미래이면 재원 유지 + scheduled_leave_status 예약
-        if (leaveStartDate && leaveStartDate > todayStr()) {
-            studentUpdate.status = '재원';
-            studentUpdate.scheduled_leave_status = leaveSubType;
-        } else {
-            studentUpdate.status = leaveSubType;
-            studentUpdate.scheduled_leave_status = deleteField();
-        }
-        studentUpdate.pause_start_date = leaveStartDate;
-        studentUpdate.pause_end_date = r.leave_end_date || '';
-    }
-
-    // 재원/등원예정으로 전환 시 동명이인 체크 (복귀, 재등원, 퇴원→휴원 등)
-    if (!studentUpdate.name && (studentUpdate.status === '재원' || studentUpdate.status === '등원예정')) {
-        const dedupName = _deduplicateName(studentId, cachedStudent?.name || '');
-        if (dedupName) studentUpdate.name = dedupName;
-    }
-
-    const newName = studentUpdate.name;
-    const changeType = isReturn ? 'RETURN' : isWithdrawal ? 'WITHDRAW' : 'UPDATE';
-    const writes = [
-        auditUpdate(doc(db, 'students', studentId), studentUpdate),
-        auditAdd(collection(db, 'history_logs'), {
-            doc_id: studentId, change_type: changeType,
-            before: JSON.stringify({ status: beforeStatus, pause_start_date: beforeData.pause_start_date || '', pause_end_date: beforeData.pause_end_date || '' }),
-            after: JSON.stringify({ status: studentUpdate.status || beforeStatus, pause_start_date: (isReturn || isWithdrawal) ? '' : (studentUpdate.pause_start_date || ''), pause_end_date: (isReturn || isWithdrawal) ? '' : (studentUpdate.pause_end_date || '') }),
-            google_login_id: state.currentUser?.email || 'system', timestamp: serverTimestamp()
-        })
-    ];
-    if (newName && newName !== r.student_name) {
-        writes.push(auditUpdate(doc(db, 'leave_requests', r.docId), { student_name: newName }));
-    }
-    await Promise.all(writes);
-    if (newName && newName !== r.student_name) {
-        const lrIdx = state.leaveRequests.findIndex(lr => lr.docId === r.docId);
-        if (lrIdx >= 0) state.leaveRequests[lrIdx].student_name = newName;
-    }
-
-    const sIdx = state.allStudents.findIndex(s => s.docId === studentId);
-    if (isReturn && _isReEnrollType(r.request_type)) {
-        const wIdx = state.withdrawnStudents.findIndex(s => s.docId === studentId);
-        if (wIdx >= 0) { const restored = state.withdrawnStudents.splice(wIdx, 1)[0]; restored.status = '재원'; delete restored.pause_start_date; delete restored.pause_end_date; state.allStudents.push(restored); }
-    } else if (isReturn) {
-        if (sIdx >= 0) { state.allStudents[sIdx].status = '재원'; delete state.allStudents[sIdx].pause_start_date; delete state.allStudents[sIdx].pause_end_date; }
-    } else if (isWithdrawal) {
-        if (withdrawalDate <= todayStr()) {
-            if (sIdx >= 0) { const removed = state.allStudents.splice(sIdx, 1)[0]; removed.status = '퇴원'; removed.withdrawal_date = withdrawalDate; delete removed.pause_start_date; delete removed.pause_end_date; state.withdrawnStudents.push(removed); }
-        } else {
-            if (sIdx >= 0) { state.allStudents[sIdx].withdrawal_date = withdrawalDate; delete state.allStudents[sIdx].pause_start_date; delete state.allStudents[sIdx].pause_end_date; }
-        }
-    } else if (r.request_type === '퇴원→휴원') {
-        const wIdx = state.withdrawnStudents.findIndex(s => s.docId === studentId);
-        if (wIdx >= 0) { const restored = state.withdrawnStudents.splice(wIdx, 1)[0]; restored.status = studentUpdate.status; restored.pause_start_date = studentUpdate.pause_start_date; restored.pause_end_date = studentUpdate.pause_end_date; state.allStudents.push(restored); }
-    } else if (_isLeaveExtension(r.request_type)) {
-        if (sIdx >= 0) state.allStudents[sIdx].pause_end_date = studentUpdate.pause_end_date;
-    } else {
-        if (sIdx >= 0) {
-            Object.assign(state.allStudents[sIdx], {
-                status: studentUpdate.status,
-                pause_start_date: studentUpdate.pause_start_date,
-                pause_end_date: studentUpdate.pause_end_date,
-            });
-            if (studentUpdate.status === '재원') {
-                state.allStudents[sIdx].scheduled_leave_status = studentUpdate.scheduled_leave_status;
-            } else {
-                delete state.allStudents[sIdx].scheduled_leave_status;
-            }
-        }
-    }
-
-    showSaveIndicator('saved');
-    renderSubFilters();
-    if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) renderLeaveRequestList();
-    renderStudentDetail(studentId);
 }
 
 export async function cancelLeaveRequest(docId, studentId) {
@@ -1063,7 +941,6 @@ export async function submitReturnFromLeave() {
             request_type: _returnModalType,
             return_date: returnDate,
             target_class_code: targetClassCode,
-            use_server_finalize: true,
             student_phone: student.student_phone || '',
             parent_phone_1: student.parent_phone_1 || '',
             consultation_note: note,

@@ -45,7 +45,7 @@ import {
     initLeaveRequestDeps,
     renderLeaveRequestList, selectLeaveRequest,
     renderReturnUpcomingList, selectReturnUpcomingStudent, resetReturnUpcomingCache,
-    _getReturnUpcomingStudents, _finalizeLeaveDSC,
+    _getReturnUpcomingStudents,
     renderReturnConsultCard, renderLeaveRequestCard,
     toggleReturnConsult, updateReturnConsultNote,
     openLeaveRequestModal, onLeaveRequestTypeChange, searchLeaveRequestStudent, selectLeaveRequestStudentById,
@@ -298,7 +298,7 @@ window.cancelTestFailTask = cancelTestFailTask;
 initAttendanceDeps({ renderSubFilters, renderListPanel, renderStudentDetail, openBulkModal });
 
 // data-layer.js 의존성 주입
-initDataLayerDeps({ renderSubFilters, renderListPanel, renderStudentDetail, renderClassDetail, getClassTestSections, _finalizeLeaveDSC });
+initDataLayerDeps({ renderSubFilters, renderListPanel, renderStudentDetail, renderClassDetail, getClassTestSections });
 initDataLayerDeps2({ loadRoleMemos, syncAbsenceRecords });
 
 // bulk-mode.js 의존성 주입
