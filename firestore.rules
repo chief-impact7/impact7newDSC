@@ -486,8 +486,18 @@ service cloud.firestore {
           'approved_by', 'approved_at',
           'teacher_approved_by', 'teacher_approved_at',
           'return_date',
-          'previous_status', 'created_at', 'updated_by', 'updated_at'
+          'previous_status', 'created_at', 'updated_by', 'updated_at',
+          // Cloud Function 연동 (재등원·복귀 반 선택 + 서버사이드 finalize)
+          'target_class_code', 'use_server_finalize',
+          'finalized_at', 'finalize_error', 'finalize_attempts'
         ]);
+      }
+
+      // admin 필드(finalize_*)는 Cloud Function(admin SDK)만 쓸 수 있음 — 클라이언트 차단
+      function notTouchingAdminFields() {
+        let admin = ['finalized_at', 'finalize_error', 'finalize_attempts'];
+        return resource == null
+          || !request.resource.data.diff(resource.data).affectedKeys().hasAny(admin);
       }
 
       allow read: if isAuthorized();
@@ -496,7 +506,8 @@ service cloud.firestore {
         && hasOnlyAllowedLeaveRequestFields()
         && request.resource.data.status is string
         && request.resource.data.status in ['requested', 'approved', 'rejected', 'cancelled']
-        && withinFieldLimit(25);
+        && withinFieldLimit(30)
+        && notTouchingAdminFields();
 
       allow delete: if isAuthorized();
     }
@@ -914,6 +925,26 @@ service cloud.firestore {
     match /exams/{examId} {
       allow read: if isAuthorized();
       allow create, update, delete: if isAuthorized();
+    }
+
+    // =========================================================================
+    // [Exam] 정답표 — exams 와 분리된 재사용 가능한 엔티티
+    // =========================================================================
+    match /answer_keys/{keyId} {
+      allow read: if isAuthorized();
+      allow create: if isAuthorized();
+      allow update: if isAuthorized();
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // [Exam] 정답표 — exams 와 분리된 재사용 가능한 엔티티
+    // =========================================================================
+    match /answer_keys/{keyId} {
+      allow read: if isAuthorized();
+      allow create: if isAuthorized();
+      allow update: if isAuthorized();
+      allow delete: if false;
     }
 
     // =========================================================================
