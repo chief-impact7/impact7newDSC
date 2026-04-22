@@ -77,25 +77,38 @@ npm run build        # 빌드
 
 ## 하네스: 코드 품질
 
-**목표:** 코드 리뷰, 리팩토링 분석, 보안 감사를 병렬 실행하여 통합 품질 보고서를 생성
+**목표:** 코드 리뷰, 리팩토링 분석, 보안 감사를 병렬 실행하며, functions/ 변경 시 Cloud Functions 전문 리뷰까지 포함하여 통합 품질 보고서를 생성
 
-**트리거:** 코드 품질/점검/감사/리뷰/보안 점검 요청 시 `code-quality` 스킬을 사용하라. 단순 질문은 직접 응답 가능.
+**트리거:** 코드 품질/점검/감사/리뷰/보안 점검/Functions 리뷰 요청 시 `code-quality` 스킬을 사용하라. 단순 질문은 직접 응답 가능.
 
 **변경 이력:**
 | 날짜 | 변경 내용 | 대상 | 사유 |
 |------|----------|------|------|
 | 2026-04-11 | 초기 구성 | 전체 | - |
+| 2026-04-22 | functions-reviewer 에이전트 추가 | agents/functions-reviewer.md, skills/code-quality/SKILL.md | Cloud Functions 도입으로 Node 런타임·Transaction·v2 트리거 특화 리뷰가 필요해짐. functions/ 변경 포함 시 병렬 스폰하여 클라이언트 리뷰와 독립 보고 |
 
 ## 하네스: 배포 전 점검
 
-**목표:** push = 자동 배포이므로, 빌드 검증 + Rules 동기화 + 코드 품질을 한 번에 점검하여 안전한 배포를 보장
+**목표:** push = 자동 배포이므로, 빌드 검증 + Functions 검증(변경 시) + Rules 동기화 + 코드 품질을 한 번에 점검하여 안전한 배포를 보장
 
-**트리거:** 푸시 전/배포 전/푸시해도 돼?/배포 점검 요청 시 `pre-deploy` 스킬을 사용하라. code-quality 하네스를 내부적으로 연동한다.
+**트리거:** 푸시 전/배포 전/푸시해도 돼?/배포 점검 요청 시 `pre-deploy` 스킬을 사용하라. code-quality 및 functions-check 하네스를 내부적으로 연동한다.
 
 **변경 이력:**
 | 날짜 | 변경 내용 | 대상 | 사유 |
 |------|----------|------|------|
 | 2026-04-12 | 초기 구성 | 전체 | - |
+| 2026-04-22 | Functions 검증 Phase 추가 | skills/pre-deploy/SKILL.md | Cloud Functions 도입으로 functions/ 변경 감지 시 lint + vitest unit + emulator integration test가 자동 수행되어야 함 (functions-check 스킬 위임) |
+
+## 하네스: Functions 검증
+
+**목표:** Cloud Functions(`impact7DB/functions/`)의 lint + unit + emulator integration test를 순차 실행하여 배포 가능성 판정
+
+**트리거:** Functions 점검/Function 테스트/emulator 테스트/Function lint 요청 시 `functions-check` 스킬을 사용하라. `pre-deploy` 하네스가 자동 연동.
+
+**변경 이력:**
+| 날짜 | 변경 내용 | 대상 | 사유 |
+|------|----------|------|------|
+| 2026-04-22 | 초기 구성 | skills/functions-check/SKILL.md | 재등원·복귀 Cloud Function(`onLeaveRequestApproved`) 도입으로 배포 전 Functions 전용 검증이 별도 필요해짐 |
 
 ## 하네스: 스키마 영향 분석
 
@@ -119,6 +132,17 @@ npm run build        # 빌드
 |------|----------|------|------|
 | 2026-04-12 | 초기 구성 | 전체 | - |
 | 2026-04-14 | 심볼 해결 검증 단계 추가 | dependency-analyzer.md, module-executor.md, module-splitter/SKILL.md | daily-ops.js 분리(3c70765) 후 bare identifier 누락으로 3연속 회귀(makeDailyRecordId/auditSet 누락 610192d, DAY_ORDER 고아화 174fc2e). build는 통과하고 runtime ReferenceError로만 드러나는 버그 클래스를 분리 전/중 단계에서 static하게 잡도록 강화 |
+
+## 하네스: Firestore 데이터 복구
+
+**목표:** 프로덕션 Firestore의 단일 문서 수동 조사·복구를 안전하게 수행 (check → dry-run → execute, batch atomic + history_logs)
+
+**트리거:** 특정 학생 데이터 복구/Firestore 수동 수정/one-off 스크립트/scripts/oneoff 요청 시 `firestore-data-fix` 스킬을 사용하라. 대량 마이그레이션은 범위 밖.
+
+**변경 이력:**
+| 날짜 | 변경 내용 | 대상 | 사유 |
+|------|----------|------|------|
+| 2026-04-22 | 초기 구성 | skills/firestore-data-fix/SKILL.md | 유시우 복구(check-yoosiwoo.mjs + restore-yoosiwoo.mjs) 패턴을 체계화. 1인 개발자가 프로덕션 데이터를 수정할 때 실수 없이 진행하도록 dry-run + history_logs + batch atomic 규율을 스킬로 명문화 |
 
 ## 메모리 (계정 공유)
 

@@ -1,11 +1,11 @@
 ---
 name: code-quality
-description: "코드 품질 검사를 수행하는 오케스트레이터. 코드 리뷰, 리팩토링 분석, 보안 감사를 병렬로 실행하여 통합 보고서를 생성한다. '코드 품질', '코드 점검', '품질 검사', '전체 리뷰', '보안 점검', '리팩토링 분석', '코드 감사' 요청 시 반드시 이 스킬을 사용. 배포 전 종합 점검은 pre-deploy 스킬을 사용할 것. 후속 작업: 결과 수정, 부분 재실행, 특정 에이전트만 다시, 이전 결과 개선, 품질 재점검 시에도 사용."
+description: "코드 품질 검사를 수행하는 오케스트레이터. 코드 리뷰, 리팩토링 분석, 보안 감사를 병렬로 실행하며, functions/ 변경이 포함된 경우 Cloud Functions 전문 리뷰까지 동시 수행하여 통합 보고서를 생성한다. '코드 품질', '코드 점검', '품질 검사', '전체 리뷰', '보안 점검', '리팩토링 분석', '코드 감사', 'Functions 리뷰' 요청 시 반드시 이 스킬을 사용. 배포 전 종합 점검은 pre-deploy 스킬을 사용할 것. 후속 작업: 결과 수정, 부분 재실행, 특정 에이전트만 다시, 이전 결과 개선, 품질 재점검 시에도 사용."
 ---
 
 # Code Quality Orchestrator
 
-3개 전문 에이전트(코드 리뷰어, 리팩토러, 보안 감사관)를 병렬로 실행하여 코드 품질 통합 보고서를 생성한다.
+클라이언트 JS는 3개 에이전트(리뷰어/리팩토러/보안 감사관), Cloud Functions는 1개 전문 에이전트가 병렬로 분석하여 코드 품질 통합 보고서를 생성한다.
 
 ## 실행 모드: 서브 에이전트 (팬아웃/팬인)
 
@@ -13,11 +13,14 @@ description: "코드 품질 검사를 수행하는 오케스트레이터. 코드
 
 ## 에이전트 구성
 
-| 에이전트 | 파일 | 역할 | 출력 |
-|---------|------|------|------|
-| code-reviewer | `.claude/agents/code-reviewer.md` | 버그, 로직 오류, 패턴 일관성 | `_workspace/01_review.md` |
-| refactorer | `.claude/agents/refactorer.md` | 중복 코드, 구조 개선, 미사용 코드 | `_workspace/02_refactor.md` |
+| 에이전트 | 파일 | 담당 범위 | 출력 |
+|---------|------|---------|------|
+| code-reviewer | `.claude/agents/code-reviewer.md` | 클라이언트 JS 버그, 로직 오류, 패턴 일관성 | `_workspace/01_review.md` |
+| refactorer | `.claude/agents/refactorer.md` | 클라이언트 중복 코드, 구조 개선, 미사용 코드 | `_workspace/02_refactor.md` |
 | security-auditor | `.claude/agents/security-auditor.md` | Firebase 보안, XSS, 인증 패턴 | `_workspace/03_security.md` |
+| functions-reviewer | `.claude/agents/functions-reviewer.md` | Cloud Functions 런타임·Transaction·트리거·emulator 테스트 | `_workspace/04_functions_review.md` |
+
+**functions-reviewer는 조건부 실행**: 변경 범위에 `~/projects/impact7DB/functions/**/*.js` 파일이 포함될 때만 스폰. 나머지 3명은 항상 실행.
 
 ## 워크플로우
 
@@ -43,17 +46,25 @@ description: "코드 품질 검사를 수행하는 오케스트레이터. 코드
 
 ### Phase 2: 팬아웃 (병렬 분석)
 
-3개 에이전트를 병렬로 스폰한다. 각 에이전트의 프롬프트에 포함할 내용:
+변경 범위에 따라 3~4개 에이전트를 병렬로 스폰한다. 각 에이전트의 프롬프트에 포함할 내용:
 - 에이전트 정의 파일(`.claude/agents/{name}.md`)을 먼저 읽으라는 지시
 - 분석 대상 파일 목록 (`_workspace/00_scope.md` 참조)
 - RULES.md를 읽어 프로젝트 컨텍스트를 파악하라는 지시
 - 결과를 `_workspace/{번호}_{이름}.md`에 저장하라는 지시
 
+**항상 실행 (클라이언트 JS):**
 ```
 Agent(code-reviewer, model: opus, run_in_background: true)
-Agent(refactorer, model: opus, run_in_background: true)  
+Agent(refactorer, model: opus, run_in_background: true)
 Agent(security-auditor, model: opus, run_in_background: true)
 ```
+
+**조건부 실행 (functions/ 변경 포함 시):**
+```
+Agent(functions-reviewer, model: opus, run_in_background: true)
+```
+
+functions-reviewer는 클라이언트 3명과 스코프가 다르므로(Cloud Function 코드만) 중복 분석이 아니다. 변경 목록에 `functions/**/*.js`가 하나라도 있으면 반드시 스폰.
 
 각 에이전트는 `general-purpose` 타입을 사용한다. 에이전트 정의 파일의 역할/원칙/출력 형식을 따르도록 프롬프트에 명시한다.
 
@@ -114,13 +125,15 @@ Agent(security-auditor, model: opus, run_in_background: true)
 ```
 [오케스트레이터]
     │
-    ├── git diff / 파일 목록 수집
+    ├── git diff / 파일 목록 수집 + functions/ 변경 여부 체크
     │
-    ├── _workspace/00_scope.md 생성
+    ├── _workspace/00_scope.md 생성 (scope 요약 + includes_functions 플래그)
     │
-    ├──→ Agent(code-reviewer)  → _workspace/01_review.md
-    ├──→ Agent(refactorer)     → _workspace/02_refactor.md
-    └──→ Agent(security-auditor) → _workspace/03_security.md
+    ├──→ Agent(code-reviewer)      → _workspace/01_review.md
+    ├──→ Agent(refactorer)         → _workspace/02_refactor.md
+    ├──→ Agent(security-auditor)   → _workspace/03_security.md
+    └──→ Agent(functions-reviewer) → _workspace/04_functions_review.md
+         (functions/ 변경 있을 때만)
                 │
                 ↓
          [결과 통합] → 통합 보고서 출력
