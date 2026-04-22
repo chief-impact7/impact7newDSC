@@ -61,6 +61,7 @@ service cloud.firestore {
           'guardian_name_1', 'guardian_name_2',
           'branch', 'status', 'status2', 'enrollments',
           'pause_start_date', 'pause_end_date',
+          'scheduled_leave_status', 'pre_withdrawal_status',
           'day', 'class_type', 'level_code', 'level_symbol', 'class_number',
           'start_date', 'special_start_date', 'special_end_date',
           'first_registered',
