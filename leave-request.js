@@ -8,7 +8,7 @@ import { parseDateKST, todayStr } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditAdd } from './audit.js';
 import { state, LEAVE_STATUSES } from './state.js';
 import { esc, escAttr, showSaveIndicator, _fmtTs } from './ui-utils.js';
-import { branchFromStudent, allClassCodes, activeClassCodes, findStudent } from './student-helpers.js';
+import { branchFromStudent, allClassCodes, activeClassCodes, enrollmentCode, findStudent } from './student-helpers.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, _isOlderThan, loadWithdrawnStudents, renderFilterChips;
@@ -436,8 +436,9 @@ function _renderLRRow(r, idx, studentId) {
         </div>`;
 }
 
-// Cloud Function이 남긴 finalize_error를 사용자가 수동으로 재시도.
-// status를 requested → approved로 토글하면 onUpdate가 다시 발동 (finalized_at 없으므로 가드 통과).
+// finalize_error 수동 재시도: status를 'requested' → 'approved' 토글로 onUpdate 재발동.
+// finalize_* 필드는 admin SDK만 쓸 수 있어 클라이언트에서 삭제 불가 → status 토글 방식 사용.
+// 두 write 사이 지연은 Firestore가 빠른 연속 write를 하나의 onUpdate로 coalesce하는 것을 방지 (before가 'approved'면 Function 가드에서 return).
 export async function retryFinalize(docId) {
     const r = state.leaveRequests.find(lr => lr.docId === docId);
     if (!r) return;
@@ -860,7 +861,6 @@ function _openReturnModal(studentId, type) {
     document.getElementById('rfl-return-date').value = today;
     document.getElementById('rfl-consultation-note').value = '';
 
-    // 정규반 드롭다운 채우기 (branch 기준 필터)
     // class_settings에 level(초/중/고) 메타가 없어 branch만으로 필터.
     // 학부 이동은 재등원 후 학생 상세에서 수동 처리.
     const branch = branchFromStudent(student);
@@ -868,12 +868,12 @@ function _openReturnModal(studentId, type) {
     select.innerHTML = '<option value="">-- 반 선택 --</option>';
     const candidates = Object.entries(state.classSettings || {})
         .filter(([code, cs]) => {
-            // 정규반만 (class_type 없음=레거시 정규 포함, '내신'/'특강' 제외)
+            // 정규반만 (class_type 없음=레거시 정규 포함, '내신'/'특강' 제외).
+            // 자유학기는 정규 코드 공유하되 free_schedule이 있음 — 정규로 취급.
             if (cs.class_type && cs.class_type !== '정규') return false;
-            // 자유학기는 정규 코드 공유하되 free_schedule이 있음 — 정규로 취급
-            // branch 필터: class_number 첫 자리로 추론 ('1'=2단지, '2'=10단지)
-            const firstChar = (code.match(/\d/) || [''])[0];
-            const codeBranch = firstChar === '1' ? '2단지' : firstChar === '2' ? '10단지' : '';
+            // code의 첫 숫자로 branch 추론 (A101 → '1' → 2단지, A201 → '2' → 10단지)
+            const firstDigit = (code.match(/\d/) || [''])[0];
+            const codeBranch = firstDigit === '1' ? '2단지' : firstDigit === '2' ? '10단지' : '';
             if (branch && codeBranch && codeBranch !== branch) return false;
             return true;
         })
@@ -885,12 +885,11 @@ function _openReturnModal(studentId, type) {
         opt.textContent = days ? `${code} (${days})` : code;
         select.appendChild(opt);
     }
-    // 기존 정규 enrollment의 반 코드를 기본값으로
     const existingReg = (student.enrollments || []).find(e =>
         (!e.class_type || e.class_type === '정규') && e.class_number
     );
     if (existingReg) {
-        const existingCode = `${existingReg.level_symbol || ''}${existingReg.class_number || ''}`;
+        const existingCode = enrollmentCode(existingReg);
         if (candidates.some(([c]) => c === existingCode)) {
             select.value = existingCode;
         }

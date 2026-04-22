@@ -565,7 +565,7 @@ export async function autoCloseOldRecords() {
         }
     }
     if (oldRequests.length > 0) {
-        console.log(`휴퇴원요청 자동 승인 + 학생 상태 변경: ${oldRequests.length}건`);
+        console.log(`휴퇴원요청 자동 승인: ${oldRequests.length}건 (학생 상태 전이는 Cloud Function이 처리)`);
     }
 
     // 숙제미통과/테스트미통과 등원: 1개월 경과 pending → 자동 기타 처리
