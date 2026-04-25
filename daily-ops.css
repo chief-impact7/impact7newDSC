@@ -8,31 +8,32 @@
 }
 
 :root {
-  --primary: #0b57d0;
-  --primary-light: #e8f0fe;
+  /* Starbucks-inspired tokens (DESIGN-starbucks.md) */
+  --primary: #00754A;
+  --primary-light: #d4e9e2;
   --on-primary: #ffffff;
-  --surface: #f8fafd;
+  --surface: #f2f0eb;
   --surface-container: #ffffff;
-  --surface-hover: #f1f3f4;
-  --outline: #747775;
-  --text-main: #1f1f1f;
-  --text-sec: #444746;
-  --hover-bg: #f2f6fc;
-  --active-bg: #d3e3fd;
-  --active-text: #041e49;
-  --border: #e0e0e0;
-  --radius-lg: 12px;
-  --font-heading: "Google Sans", sans-serif;
-  --font-body: "Roboto", sans-serif;
-  --success: #188038;
-  --danger: #c5221f;
+  --surface-hover: #edebe9;
+  --outline: rgba(0, 0, 0, 0.42);
+  --text-main: rgba(0, 0, 0, 0.87);
+  --text-sec: rgba(0, 0, 0, 0.58);
+  --hover-bg: #faf6ee;
+  --active-bg: #d4e9e2;
+  --active-text: #006241;
+  --border: #e7e3db;
+  --radius-lg: 16px;
+  --font-heading: 'Inter', 'Noto Sans KR', "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: 'Inter', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+  --success: #006241;
+  --danger: #c82014;
   --warning: #e37400;
-  --success-light: #dcfce7;
-  --success-dark: #166534;
-  --search-bg: #eaf1fb;
-  --arrived: #137333;
-  --login-gradient-start: #667eea;
-  --login-gradient-end: #764ba2;
+  --success-light: #d4e9e2;
+  --success-dark: #1E3932;
+  --search-bg: #edebe9;
+  --arrived: #00754A;
+  --login-gradient-start: #1E3932;
+  --login-gradient-end: #00754A;
 }
 
 .hidden {

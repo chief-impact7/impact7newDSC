@@ -2,36 +2,37 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-    --primary: #0b57d0;
-    --primary-light: #e8f0fe;
+    /* Starbucks-inspired tokens (DESIGN-starbucks.md) */
+    --primary: #00754A;            /* Green Accent — CTA */
+    --primary-light: #d4e9e2;      /* Green Light wash */
     --on-primary: #ffffff;
-    --danger: #c5221f;
-    --success: #188038;
-    --warning: #e37400;
-    --surface: #f8fafd;
-    --surface-container: #ffffff;
-    --surface-hover: #f1f3f4;
-    --outline: #747775;
-    --border: #e0e0e0;
-    --border-light: #e8eaed;
-    --text-main: #1f1f1f;
-    --text-sec: #444746;
-    --text-third: #80868b;
-    --hover-bg: #f2f6fc;
-    --active-bg: #d3e3fd;
-    --active-text: #041e49;
-    --radius: 8px;
-    --radius-lg: 12px;
-    --font-heading: "Google Sans", sans-serif;
-    --font-body: "Roboto", sans-serif;
-    --shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08);
-    --shadow-lg: 0 4px 12px rgba(0,0,0,0.15);
-    --success-light: #dcfce7;
-    --success-dark: #166534;
-    --search-bg: #eaf1fb;
-    --arrived: #137333;
-    --login-gradient-start: #667eea;
-    --login-gradient-end: #764ba2;
+    --danger: #c82014;             /* Starbucks Red */
+    --success: #006241;            /* Starbucks Green */
+    --warning: #e37400;            /* legibility 보존 위해 유지 */
+    --surface: #f2f0eb;            /* Neutral Warm — 페이지 캔버스 */
+    --surface-container: #ffffff;  /* 카드 surface */
+    --surface-hover: #edebe9;      /* Ceramic */
+    --outline: rgba(0, 0, 0, 0.42);
+    --border: #e7e3db;             /* warm cream border */
+    --border-light: #edebe9;       /* Ceramic */
+    --text-main: rgba(0, 0, 0, 0.87); /* Text Black (warm) */
+    --text-sec: rgba(0, 0, 0, 0.58);  /* Text Black Soft */
+    --text-third: rgba(0, 0, 0, 0.42);
+    --hover-bg: #faf6ee;           /* Gold Lightest cream wash */
+    --active-bg: #d4e9e2;          /* Green Light */
+    --active-text: #006241;        /* Starbucks Green */
+    --radius: 12px;                /* café card */
+    --radius-lg: 16px;
+    --font-heading: 'Inter', 'Noto Sans KR', "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --font-body: 'Inter', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+    --shadow: 0 0 0.5px rgba(0,0,0,0.14), 0 1px 1px rgba(0,0,0,0.24);
+    --shadow-lg: 0 1px 3px rgba(0,0,0,0.10), 0 4px 8px rgba(0,0,0,0.06), 0 0 2px rgba(0,0,0,0.07);
+    --success-light: #d4e9e2;      /* Green Light */
+    --success-dark: #1E3932;       /* House Green */
+    --search-bg: #edebe9;          /* Ceramic */
+    --arrived: #00754A;            /* Green Accent */
+    --login-gradient-start: #1E3932; /* House Green */
+    --login-gradient-end: #00754A;   /* Green Accent */
 
     /* Section colors */
     --sec-attendance: #e8f0fe;
@@ -47,7 +48,7 @@
 }
 
 body {
-    font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: var(--font-body);
     background: var(--surface);
     color: var(--text-main);
     font-size: 14px;
