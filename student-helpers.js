@@ -64,6 +64,11 @@ export const _enrollCodeList = (enrolls) => {
     return [...new Set(codes)].join(', ');
 };
 
+// 내신 csKey 빌더 — 마법사·자동 유도가 모두 이 함수를 거쳐 형식이 silent drift 하지 않도록 단일 정의.
+export function buildNaesinCsKey({ branch, school, level, grade, group }) {
+    return `${branch || ''}${school || ''}${level || ''}${grade || ''}${group || ''}`;
+}
+
 // 내신 반코드 유도: 학생의 school + level + grade + A/B
 // A/B 판별: 정규반 class_number 끝자리 홀수=A, 짝수=B
 export function deriveNaesinCode(student, enrollment) {
@@ -95,7 +100,7 @@ export function deriveNaesinCode(student, enrollment) {
         }
     }
 
-    return `${school}${levelShort}${grade}${group}`;
+    return buildNaesinCsKey({ school, level: levelShort, grade, group });
 }
 
 // 내신 반 수동 배제 센티넬 (naesin_class_override에 저장).

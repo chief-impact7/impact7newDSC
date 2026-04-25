@@ -20,4 +20,3 @@
 - [project_contacts_deprecation.md](project_contacts_deprecation.md) — contacts/students 병합 완료, Phase 5(코드 제거) + Phase 6(특강반 학생 추가 UI) 잔여
 - [feedback_checklist_before_work.md](feedback_checklist_before_work.md) — 다단계 작업 시작 전 항상 TaskCreate로 체크리스트 만들고 승인받기
 - [feedback_naesin_regular_identification.md](feedback_naesin_regular_identification.md) — 정규 enrollment 식별은 `(정규 || 자유학기)` 화이트리스트만 사용 (특강 오인 방지, 67c92d0)
-- [project_class_setup_wizard_cskey_bug.md](project_class_setup_wizard_cskey_bug.md) — 반편성 마법사 csKey branch 접두사 누락 — 별도 PR 필요

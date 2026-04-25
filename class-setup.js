@@ -5,7 +5,8 @@ import {
 import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
 import { todayStr, studentShortLabel, ACTIVE_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
-import { LEAVE_STATUSES } from './state.js';
+import { LEAVE_STATUSES, LEVEL_SHORT } from './state.js';
+import { buildNaesinCsKey } from './student-helpers.js';
 import { auditSet, batchUpdate } from './audit.js';
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -22,7 +23,9 @@ const wizardData = {
     classNumber: '',
     school: '',
     grade: '',
-    naesinGroup: '',     // 'A' | 'B'
+    naesinBranch: '',
+    naesinLevel: '',
+    naesinGroup: '',
     specialName: '',
     naesinStart: '',
     naesinEnd: '',
@@ -193,7 +196,7 @@ function onEnterStep2() {
         el.removeEventListener('input', updateRegularPreview);
         el.addEventListener('input', updateRegularPreview);
     });
-    ['input-school', 'input-grade', 'input-naesin-group'].forEach(id => {
+    ['input-naesin-branch', 'input-naesin-level', 'input-school', 'input-grade', 'input-naesin-group'].forEach(id => {
         const el = document.getElementById(id);
         el.removeEventListener('input', updateNaesinPreview);
         el.addEventListener('input', updateNaesinPreview);
@@ -233,14 +236,8 @@ function updateRegularPreview() {
 }
 
 function updateNaesinPreview() {
-    const school = document.getElementById('input-school').value.trim();
-    const grade = document.getElementById('input-grade').value;
-    const group = document.getElementById('input-naesin-group').value;
-    const code = school && grade ? `${school}${grade}${group}` : '';
+    const code = buildClassCode();
     document.getElementById('naesin-preview').textContent = code || '';
-    wizardData.school = school;
-    wizardData.grade = grade;
-    wizardData.naesinGroup = group;
     wizardData.naesinStart = document.getElementById('input-naesin-start').value;
     wizardData.naesinEnd = document.getElementById('input-naesin-end').value;
 }
@@ -282,11 +279,18 @@ function buildClassCode() {
         return wizardData.classCode;
     }
     if (t === '내신') {
+        const br = document.getElementById('input-naesin-branch').value;
+        const lv = document.getElementById('input-naesin-level').value;
         const s = document.getElementById('input-school').value.trim();
         const g = document.getElementById('input-grade').value;
         const grp = document.getElementById('input-naesin-group').value;
-        if (!s || !g) return '';
-        wizardData.classCode = `${s}${g}${grp}`;
+        if (!br || !lv || !s || !g || !grp) return '';
+        wizardData.naesinBranch = br;
+        wizardData.naesinLevel = lv;
+        wizardData.school = s;
+        wizardData.grade = g;
+        wizardData.naesinGroup = grp;
+        wizardData.classCode = buildNaesinCsKey({ branch: br, school: s, level: lv, grade: g, group: grp });
         return wizardData.classCode;
     }
     if (t === '특강') {
@@ -366,6 +370,21 @@ window.addStudent = function (docId) {
     if (wizardData.students.some(s => s.docId === docId)) return;
     const found = allStudents.find(s => s.docId === docId);
     if (!found) return;
+
+    if (wizardData.classType === '내신') {
+        const checks = [
+            ['학교', wizardData.school, found.school || ''],
+            ['과정', wizardData.naesinLevel, LEVEL_SHORT[found.level] || ''],
+            ['학년', String(wizardData.grade), String(found.grade || '')],
+        ];
+        for (const [label, expected, actual] of checks) {
+            if (expected !== actual) {
+                showToast(`${label} 불일치: 마법사(${expected}) ↔ 학생(${actual || '미지정'})`, 'error');
+                return;
+            }
+        }
+    }
+
     wizardData.students.push(found);
     renderSelectedStudents();
     // 선택 후 검색창 초기화 (다음 학생 검색 편의성)
@@ -519,6 +538,18 @@ window.submitWizard = async function () {
         // 3. 학생별 enrollment 추가 (batch + arrayUnion으로 경합 방지)
         const today = todayStr();
 
+        // 내신은 정규/자유학기 enrollment 수정이 필요해 학생 doc을 먼저 읽어야 한다.
+        // 직렬 await 대신 한 번에 병렬로 받아 RTT를 학생 수만큼이 아닌 1번으로 줄인다.
+        const enrollmentsByDocId = new Map();
+        if (d.classType === '내신') {
+            const snaps = await Promise.all(
+                d.students.map(s => getDoc(doc(db, 'students', s.docId)))
+            );
+            snaps.forEach(snap => {
+                enrollmentsByDocId.set(snap.id, snap.data()?.enrollments || []);
+            });
+        }
+
         const batch = writeBatch(db);
         for (const student of d.students) {
             const studentRef = doc(db, 'students', student.docId);
@@ -555,9 +586,21 @@ window.submitWizard = async function () {
                 if (d.specialEnd) newEnrollment.end_date = d.specialEnd;
             }
 
-            batchUpdate(batch, studentRef, {
-                enrollments: arrayUnion(newEnrollment),
-            });
+            if (d.classType === '내신') {
+                // 정규/자유학기 enrollment에 naesin_class_override 박아 명시 매핑.
+                // arrayUnion으로는 기존 element 수정 불가 → 전체 enrollments 다시 쓰기.
+                const updated = (enrollmentsByDocId.get(student.docId) || []).map(e =>
+                    (e.class_type === '정규' || e.class_type === '자유학기')
+                        ? { ...e, naesin_class_override: d.classCode }
+                        : e
+                );
+                updated.push(newEnrollment);
+                batchUpdate(batch, studentRef, { enrollments: updated });
+            } else {
+                batchUpdate(batch, studentRef, {
+                    enrollments: arrayUnion(newEnrollment),
+                });
+            }
         }
         await batch.commit();
 
