@@ -977,6 +977,18 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // [Exam] 내신분석자료
+    // =========================================================================
+    match /exam_analyses/{id} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                      && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if request.auth != null
+                              && (resource.data.createdBy == request.auth.uid
+                                  || request.auth.token.admin == true);
+    }
+
+    // =========================================================================
     // [공통] 감사 로그
     // =========================================================================
     match /audit_logs/{logId} {
