@@ -88,7 +88,7 @@ export function deriveNaesinCode(student, enrollment) {
 
     // A/B를 알 수 없으면 정규 enrollment에서 추론
     if (!group) {
-        const regularEnroll = (student.enrollments || []).find(e => e.class_type !== '내신' && e.class_number);
+        const regularEnroll = (student.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
         if (regularEnroll) {
             const regLast = parseInt((regularEnroll.class_number || '').slice(-1));
             if (!isNaN(regLast)) group = regLast % 2 === 1 ? 'A' : 'B';
@@ -147,7 +147,7 @@ export function getActiveEnrollments(s, dateStr) {
             e.class_type === '내신' &&
             validDate(e.start_date) && e.start_date <= today
         )) return true;
-        const regularEnroll = current.find(e => e.class_type !== '내신' && e.class_number);
+        const regularEnroll = current.find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
         if (!regularEnroll) return false;
         const csKey = resolveNaesinCsKey(s, regularEnroll);
         if (!csKey) return false;
@@ -187,7 +187,7 @@ export function isNaesinActiveToday(s, dateStr) {
         e.class_type === '내신' && validDate(e.start_date) && e.start_date <= today
     )) return true;
     // 2) auto or manual override: 정규 enrollment에서 resolve한 csKey의 naesin 윈도우
-    const regularEnroll = current.find(e => e.class_type !== '내신' && e.class_number);
+    const regularEnroll = current.find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
     if (!regularEnroll) return false;
     const csKey = resolveNaesinCsKey(s, regularEnroll);
     if (!csKey) return false;

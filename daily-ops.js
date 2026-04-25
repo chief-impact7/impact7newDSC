@@ -671,7 +671,7 @@ function _getAllClassCodes() {
         // 내신 반코드 유도 (초등 제외, 정규 enrollment이 있는 학생만, 휴원 중 제외)
         // key = 소속+반코드 (Firestore 키), displayCode = 반코드만 (표시용)
         if (hasRegular && levelShort && levelShort !== '초' && !isOnLeaveAt(s, state.selectedDate)) {
-            const regularEnroll = (s.enrollments || []).find(e => e.class_type !== '내신' && e.class_number) || {};
+            const regularEnroll = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number) || {};
             const key = resolveNaesinCsKey(s, regularEnroll);
             if (key) {
                 const displayCode = displayCodeFromCsKey(key, branchFromStudent(s));
@@ -711,7 +711,7 @@ function getNaesinStudentsByDerivedCode(classKey) {
         if (isWithdrawnAt(s, state.selectedDate)) return;
         if (isOnLeaveAt(s, state.selectedDate)) return;
         if (!matchesBranchFilter(s)) return;
-        const regularEnroll = (s.enrollments || []).find(e => e.class_type !== '내신' && e.class_number);
+        const regularEnroll = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
         if (!regularEnroll) return;
         const resolved = resolveNaesinCsKey(s, regularEnroll);
         if (resolved !== classKey) return;
@@ -1613,7 +1613,7 @@ function renderListPanel() {
         // 내신 기간이라 정규 enrollment가 숨겨진 경우 내신 반코드로 대체
         const _naesinCodeFallback = (!_todayEnrolls.length && !_activeEnrolls.length && naesinIds.has(s.docId))
             ? (() => {
-                const re = (s.enrollments || []).find(e => e.class_type !== '내신' && e.class_number);
+                const re = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
                 return re ? (deriveNaesinCode(s, re) || '') : '';
             })() : '';
         const code = _enrollCodeList(_todayEnrolls) || _enrollCodeList(_activeEnrolls) || _naesinCodeFallback;
@@ -2914,7 +2914,7 @@ window.migrateNaesinEnrollments = async function(save = false) {
         if (naesinIdx === -1) continue;
 
         const hasRegular = enrollments.some(
-            (e, i) => i !== naesinIdx && e.class_type !== '내신'
+            (e, i) => i !== naesinIdx && (e.class_type === '정규' || e.class_type === '자유학기')
         );
         let newEnrollments;
         if (hasRegular) {

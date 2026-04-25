@@ -30,7 +30,7 @@ function getNaesinInfo(student, selectedDate, dayName) {
 
     // 정규 enrollment 확인 (초등 제외는 class_settings에 naesin 기간 없으면 자연히 걸러짐)
     const regularEnroll = (student.enrollments || []).find(
-        e => e.class_type !== '내신' && e.class_number
+        e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number
     );
     if (!regularEnroll) return null;
 
@@ -575,7 +575,7 @@ window.removeFromNaesin = async function(studentId, csKey) {
     if (!confirm(`${student.name} 학생을 ${displayCode} 반에서 제거합니다. 계속할까요?`)) return;
 
     const enrollments = (student.enrollments || []).slice();
-    const idx = enrollments.findIndex(e => e.class_type !== '내신' && e.class_number);
+    const idx = enrollments.findIndex(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
     if (idx === -1) {
         alert('정규 enrollment을 찾을 수 없어 제거할 수 없습니다.');
         return;
@@ -1133,7 +1133,7 @@ window.addStudentToNaesin = async function(csKey, studentId) {
     }
 
     const enrollments = (student.enrollments || []).slice();
-    const idx = enrollments.findIndex(e => e.class_type !== '내신' && e.class_number);
+    const idx = enrollments.findIndex(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
     if (idx === -1) {
         alert('정규 반에 먼저 등록된 학생만 추가할 수 있습니다.');
         return;
