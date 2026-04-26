@@ -42,7 +42,7 @@ impact7newDSC/
 ├── .env                    # Firebase 환경변수 (git 제외)
 ├── .gitignore
 ├── RULES.md                # 이 파일 (공통 규칙)
-├── CLAUDE.md               # Claude Code 전용 설정
+├── AGENTS.md               # Claude Code 전용 설정
 ├── GEMINI_PROMPT.md        # Gemini 온보딩 프롬프트
 └── src/
     └── dashboard/
