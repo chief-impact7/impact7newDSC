@@ -4,7 +4,7 @@
 // Injection: `renderSubFilters`, `renderListPanel`, `_isNaesinClassCode`는 daily-ops.js에서 주입.
 
 import {
-    collection, getDocs, doc,
+    collection, getDocs, doc, getDoc,
     query, where, deleteField
 } from 'firebase/firestore';
 import { db } from './firebase-config.js';
@@ -347,6 +347,8 @@ export function switchDetailTab(tab) {
     });
     document.getElementById('detail-cards').style.display = tab === 'daily' ? '' : 'none';
     document.getElementById('report-tab').style.display = tab === 'report' ? '' : 'none';
+    document.getElementById('score-tab').style.display = tab === 'score' ? '' : 'none';
+    if (tab === 'score') loadScoreCard();
 }
 
 export async function loadReportCard() {
@@ -495,6 +497,183 @@ function renderReportCard(records) {
     ` : '';
 
     contentEl.innerHTML = attendanceHtml + oxGridHtml;
+}
+
+function scoreDateText(value) {
+    if (!value) return '';
+    if (typeof value === 'string') return value.slice(0, 10);
+    if (typeof value.toDate === 'function') return value.toDate().toISOString().slice(0, 10);
+    if (value.seconds) return new Date(value.seconds * 1000).toISOString().slice(0, 10);
+    return '';
+}
+
+function scoreNum(value) {
+    return typeof value === 'number' && Number.isFinite(value)
+        ? Math.round(value * 10) / 10
+        : null;
+}
+
+function scoreValue(value) {
+    const n = scoreNum(value);
+    return n == null ? '—' : String(n);
+}
+
+function scoreLink(url, label = '보기') {
+    return url
+        ? `<a class="score-link" href="${escAttr(url)}" target="_blank" rel="noreferrer">${esc(label)}</a>`
+        : '—';
+}
+
+function renderScoreTable(title, icon, rows, emptyText, columns) {
+    return `
+        <div class="detail-card score-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">${icon}</span>
+                ${esc(title)}
+            </div>
+            ${rows.length === 0 ? `<div class="detail-card-empty">${esc(emptyText)}</div>` : `
+                <div class="score-table-wrap">
+                    <table class="score-table">
+                        <thead>
+                            <tr>${columns.map(c => `<th>${esc(c.label)}</th>`).join('')}</tr>
+                        </thead>
+                        <tbody>
+                            ${rows.map(row => `<tr>
+                                ${columns.map(c => `<td class="${c.align === 'right' ? 'score-cell-num' : ''}">${row[c.key] ?? '—'}</td>`).join('')}
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `}
+        </div>
+    `;
+}
+
+function externalEventLabel(event) {
+    if (event.type === 'school') {
+        return `${event.year || ''} ${event.level || ''} ${event.school || ''} ${event.grade || ''}학년 ${event.semester || ''}학기 ${event.examName || ''}`.replace(/\s+/g, ' ').trim();
+    }
+    return `${event.year || ''} ${event.month || ''}월 모의고사 ${event.grade ? `${event.grade}학년` : ''}`.replace(/\s+/g, ' ').trim();
+}
+
+async function loadAcademyScores(studentId) {
+    const examSnap = await getDocs(collection(db, 'exams'));
+    const exams = [];
+    examSnap.forEach(d => {
+        const data = d.data();
+        if (data.deptId) exams.push({ id: d.id, ...data });
+    });
+
+    const rows = await Promise.all(exams.map(async exam => {
+        const resultSnap = await getDoc(doc(db, 'results', exam.id, 'students', studentId));
+        if (!resultSnap.exists()) return null;
+        const r = resultSnap.data();
+        const finalScore = scoreNum(r.finalScore);
+        const rawScore = scoreNum(r.rawScore);
+        const domainScores = r.finalDomainScores || r.domainRawScores || {};
+        const domainText = Object.entries(domainScores)
+            .map(([k, v]) => `${k} ${scoreValue(v)}`)
+            .join(', ');
+        return {
+            title: esc(exam.title || '원내고사'),
+            date: esc(scoreDateText(exam.schedule?.startDate) || ''),
+            score: esc(finalScore != null ? finalScore : rawScore != null ? rawScore : '—'),
+            status: exam.status === 'finalized' ? '<span class="score-badge finalized">확정</span>' : '<span class="score-badge draft">진행</span>',
+            domains: esc(domainText || '—'),
+        };
+    }));
+
+    return rows.filter(Boolean).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+}
+
+async function loadExternalScores(studentId, type) {
+    const eventSnap = await getDocs(query(collection(db, 'external_score_events'), where('type', '==', type)));
+    const events = [];
+    eventSnap.forEach(d => events.push({ id: d.id, ...d.data() }));
+
+    const rows = await Promise.all(events.map(async event => {
+        const scoreSnap = await getDoc(doc(db, 'external_score_events', event.id, 'students', studentId));
+        if (!scoreSnap.exists()) return null;
+        const s = scoreSnap.data();
+        const diff = scoreNum(s.finalScore) != null && scoreNum(s.predictedScore) != null
+            ? scoreNum(s.finalScore - s.predictedScore)
+            : null;
+        return {
+            title: esc(externalEventLabel(event) || event.title || ''),
+            predicted: esc(scoreValue(s.predictedScore)),
+            final: esc(scoreValue(s.finalScore)),
+            diff: esc(diff == null ? '—' : `${diff > 0 ? '+' : ''}${diff}`),
+            grade: esc([s.predictedGrade, s.finalGrade].filter(Boolean).join(' → ') || '—'),
+            extra: type === 'mock'
+                ? esc([
+                    s.percentile != null ? `백분위 ${scoreValue(s.percentile)}` : '',
+                    s.standardScore != null ? `표준 ${scoreValue(s.standardScore)}` : '',
+                ].filter(Boolean).join(', ') || '—')
+                : esc(s.memo || '—'),
+            report: scoreLink(s.reportImageUrl, s.reportImageName || '성적표'),
+            date: event.date || event.updatedAt || '',
+        };
+    }));
+
+    return rows.filter(Boolean).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+}
+
+export async function loadScoreCard() {
+    const studentId = state.selectedStudentId;
+    if (!studentId) return;
+
+    const contentEl = document.getElementById('score-content');
+    if (!contentEl) return;
+    contentEl.innerHTML = '<div class="detail-card-empty" style="padding:32px;text-align:center;">성적을 불러오는 중...</div>';
+
+    try {
+        const [academyRows, schoolRows, mockRows] = await Promise.all([
+            loadAcademyScores(studentId).catch(err => {
+                console.warn('원내고사 조회 실패:', err);
+                return [];
+            }),
+            loadExternalScores(studentId, 'school').catch(err => {
+                console.warn('내신 성적 조회 실패:', err);
+                return [];
+            }),
+            loadExternalScores(studentId, 'mock').catch(err => {
+                console.warn('모의고사 성적 조회 실패:', err);
+                return [];
+            }),
+        ]);
+        if (state.selectedStudentId !== studentId) return;
+
+        const academyHtml = renderScoreTable('원내고사', 'bar_chart', academyRows, '원내고사 결과가 없습니다.', [
+            { key: 'title', label: '시험' },
+            { key: 'date', label: '일자' },
+            { key: 'score', label: '점수', align: 'right' },
+            { key: 'status', label: '상태' },
+            { key: 'domains', label: '영역' },
+        ]);
+        const schoolHtml = renderScoreTable('학교내신', 'school', schoolRows, '학교내신 성적 기록이 없습니다.', [
+            { key: 'title', label: '시험' },
+            { key: 'predicted', label: '예상', align: 'right' },
+            { key: 'final', label: '확정', align: 'right' },
+            { key: 'diff', label: '차이', align: 'right' },
+            { key: 'grade', label: '등급' },
+            { key: 'report', label: '성적표' },
+            { key: 'extra', label: '메모' },
+        ]);
+        const mockHtml = renderScoreTable('모의고사', 'fact_check', mockRows, '모의고사 성적 기록이 없습니다.', [
+            { key: 'title', label: '시험' },
+            { key: 'predicted', label: '예상', align: 'right' },
+            { key: 'final', label: '확정', align: 'right' },
+            { key: 'diff', label: '차이', align: 'right' },
+            { key: 'grade', label: '등급' },
+            { key: 'report', label: '성적표' },
+            { key: 'extra', label: '부가' },
+        ]);
+
+        contentEl.innerHTML = `<div class="score-tab-content">${academyHtml}${schoolHtml}${mockHtml}</div>`;
+    } catch (err) {
+        console.error('성적 조회 실패:', err);
+        contentEl.innerHTML = '<div class="detail-card-empty" style="padding:32px;text-align:center;color:var(--danger);">성적 조회 실패: ' + esc(err.message) + '</div>';
+    }
 }
 
 function renderTempClassOverrideCard(studentId) {
@@ -936,6 +1115,11 @@ export function renderStudentDetail(studentId) {
     document.getElementById('detail-cards').style.display = state.detailTab === 'daily' ? '' : 'none';
     const reportTabEl = document.getElementById('report-tab');
     if (reportTabEl) reportTabEl.style.display = state.detailTab === 'report' ? '' : 'none';
+    const scoreTabEl = document.getElementById('score-tab');
+    if (scoreTabEl) {
+        scoreTabEl.style.display = state.detailTab === 'score' ? '' : 'none';
+        if (state.detailTab === 'score') loadScoreCard();
+    }
 
     // 결석대장 카드 expanded 상태 복원
     _restoreExpandedAbsenceIndices(expandedAbsenceIndices);

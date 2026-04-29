@@ -961,6 +961,19 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // [Exam] 외부 성적 (내신/모의고사)
+    // =========================================================================
+    match /external_score_events/{eventId} {
+      allow read: if isAuthorized();
+      allow create, update, delete: if isAuthorized();
+
+      match /students/{studentId} {
+        allow read: if isAuthorized();
+        allow write: if isAuthorized();
+      }
+    }
+
+    // =========================================================================
     // [Exam] 알림
     // =========================================================================
     match /exam_notifications/{notifId} {

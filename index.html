@@ -228,6 +228,7 @@
                     <div class="detail-tabs" id="detail-tabs">
                         <button class="detail-tab active" data-tab="daily" onclick="switchDetailTab('daily')">일일현황</button>
                         <button class="detail-tab" data-tab="report" onclick="switchDetailTab('report')">출결현황</button>
+                        <button class="detail-tab" data-tab="score" onclick="switchDetailTab('score')">성적</button>
                     </div>
 
                     <!-- 개인현황 카드들 (JS에서 동적 렌더링) -->
@@ -249,6 +250,15 @@
                         <div id="report-content">
                             <div class="detail-card-empty" style="padding:32px;text-align:center;">
                                 기간을 선택하고 조회를 눌러주세요
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 성적 -->
+                    <div id="score-tab" style="display:none;">
+                        <div id="score-content">
+                            <div class="detail-card-empty" style="padding:32px;text-align:center;">
+                                성적 탭을 열면 원내고사, 학교내신, 모의고사 기록을 불러옵니다
                             </div>
                         </div>
                     </div>
