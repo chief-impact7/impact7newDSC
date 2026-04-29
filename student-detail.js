@@ -518,6 +518,12 @@ function scoreValue(value) {
     return n == null ? '—' : String(n);
 }
 
+function finalScoreValue(result) {
+    return result && Object.prototype.hasOwnProperty.call(result, 'finalScore')
+        ? scoreValue(result.finalScore)
+        : '—';
+}
+
 function scoreLink(url, label = '보기') {
     return url
         ? `<a class="score-link" href="${escAttr(url)}" target="_blank" rel="noreferrer">${esc(label)}</a>`
@@ -556,17 +562,25 @@ function renderScoreTable(title, icon, rows, emptyText, columns) {
                 ${esc(title)}
             </div>
             ${rows.length === 0 ? `<div class="detail-card-empty">${esc(emptyText)}</div>` : `
-                <div class="score-table-wrap">
-                    <table class="score-table">
-                        <thead>
-                            <tr>${columns.map(c => `<th>${esc(c.label)}</th>`).join('')}</tr>
-                        </thead>
-                        <tbody>
-                            ${rows.map(row => `<tr>
-                                ${columns.map(c => `<td class="${c.align === 'right' ? 'score-cell-num' : ''}">${row[c.key] ?? '—'}</td>`).join('')}
-                            </tr>`).join('')}
-                        </tbody>
-                    </table>
+                <div class="score-row-list">
+                    ${rows.map(row => `
+                        <div class="score-row-card">
+                            <div class="score-row-head">
+                                <div class="score-row-title">${row.title ?? '—'}</div>
+                                ${row.date ? `<div class="score-row-date">${row.date}</div>` : ''}
+                            </div>
+                            <div class="score-row-fields">
+                                ${columns
+                                    .filter(c => c.key !== 'title' && c.key !== 'date')
+                                    .map(c => `
+                                        <div class="score-row-field ${c.wide ? 'wide' : ''}">
+                                            <span class="score-row-label">${esc(c.label)}</span>
+                                            <span class="${c.align === 'right' ? 'score-cell-num' : ''}">${row[c.key] ?? '—'}</span>
+                                        </div>
+                                    `).join('')}
+                            </div>
+                        </div>
+                    `).join('')}
                 </div>
             `}
         </div>
@@ -644,12 +658,11 @@ async function loadAcademyScores(studentId) {
         const resultSnap = await findAcademyResultDoc(exam.id, studentId);
         if (!resultSnap) return null;
         const r = resultSnap.data();
-        const finalScore = scoreNum(r.finalScore);
         const department = departmentsById.get(exam.deptId);
         return {
             title: esc(exam.title || '원내고사'),
             date: esc(scoreDateText(exam.schedule?.startDate) || ''),
-            score: esc(finalScore != null ? String(finalScore) : '—'),
+            score: esc(finalScoreValue(r)),
             domains: renderDomainScores(r, department),
         };
     }));
@@ -718,7 +731,7 @@ export async function loadScoreCard() {
             { key: 'title', label: '시험' },
             { key: 'date', label: '일자' },
             { key: 'score', label: '최종', align: 'right' },
-            { key: 'domains', label: '영역' },
+            { key: 'domains', label: '영역', wide: true },
         ]);
         const schoolHtml = renderScoreTable('학교내신', 'school', schoolRows, '학교내신 성적 기록이 없습니다.', [
             { key: 'title', label: '시험' },
@@ -727,7 +740,7 @@ export async function loadScoreCard() {
             { key: 'diff', label: '차이', align: 'right' },
             { key: 'grade', label: '등급' },
             { key: 'report', label: '성적표' },
-            { key: 'extra', label: '메모' },
+            { key: 'extra', label: '메모', wide: true },
         ]);
         const mockHtml = renderScoreTable('모의고사', 'fact_check', mockRows, '모의고사 성적 기록이 없습니다.', [
             { key: 'title', label: '시험' },
@@ -736,7 +749,7 @@ export async function loadScoreCard() {
             { key: 'diff', label: '차이', align: 'right' },
             { key: 'grade', label: '등급' },
             { key: 'report', label: '성적표' },
-            { key: 'extra', label: '부가' },
+            { key: 'extra', label: '부가', wide: true },
         ]);
 
         contentEl.innerHTML = `<div class="score-tab-content">${academyHtml}${schoolHtml}${mockHtml}</div>`;
