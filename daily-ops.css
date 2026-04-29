@@ -3351,7 +3351,7 @@ textarea.field-input {
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
-    min-width: 560px;
+    min-width: 420px;
 }
 .score-table th {
     text-align: left;
@@ -3397,6 +3397,27 @@ textarea.field-input {
 }
 .score-link:hover {
     text-decoration: underline;
+}
+.score-domain-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 0;
+}
+.score-domain-chip {
+    display: inline-flex;
+    align-items: center;
+    max-width: 72px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--surface-variant, #f1f3f4);
+    color: var(--text-sec);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* ─── 결석대장 뱃지/스타일 ─── */

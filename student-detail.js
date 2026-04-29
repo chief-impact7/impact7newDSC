@@ -524,6 +524,30 @@ function scoreLink(url, label = '보기') {
         : '—';
 }
 
+function shortDomainName(name) {
+    const text = String(name || '').trim();
+    if (!text) return '';
+    if (text.length <= 4 || text.includes('/')) return text;
+    return text[0];
+}
+
+function renderDomainScores(result, department) {
+    const scores = result.finalDomainScores || {};
+    const domains = department?.domains || [];
+    if (domains.length === 0) return '—';
+
+    const items = domains
+        .map(domain => {
+            const value = scoreNum(scores[domain.id]);
+            if (value == null) return '';
+            const label = shortDomainName(domain.name);
+            return `<span class="score-domain-chip" title="${escAttr(domain.name)}">${esc(label)} ${esc(String(value))}</span>`;
+        })
+        .filter(Boolean);
+
+    return items.length ? `<div class="score-domain-list">${items.join('')}</div>` : '—';
+}
+
 function renderScoreTable(title, icon, rows, emptyText, columns) {
     return `
         <div class="detail-card score-card">
@@ -603,7 +627,13 @@ async function findAcademyResultByName(examId, student) {
 }
 
 async function loadAcademyScores(studentId) {
-    const examSnap = await getDocs(collection(db, 'exams'));
+    const [examSnap, deptSnap] = await Promise.all([
+        getDocs(collection(db, 'exams')),
+        getDocs(collection(db, 'departments')),
+    ]);
+    const departmentsById = new Map();
+    deptSnap.forEach(d => departmentsById.set(d.id, d.data()));
+
     const exams = [];
     examSnap.forEach(d => {
         const data = d.data();
@@ -615,17 +645,12 @@ async function loadAcademyScores(studentId) {
         if (!resultSnap) return null;
         const r = resultSnap.data();
         const finalScore = scoreNum(r.finalScore);
-        const rawScore = scoreNum(r.rawScore);
-        const domainScores = r.finalDomainScores || r.domainRawScores || {};
-        const domainText = Object.entries(domainScores)
-            .map(([k, v]) => `${k} ${scoreValue(v)}`)
-            .join(', ');
+        const department = departmentsById.get(exam.deptId);
         return {
             title: esc(exam.title || '원내고사'),
             date: esc(scoreDateText(exam.schedule?.startDate) || ''),
-            score: esc(finalScore != null ? finalScore : rawScore != null ? rawScore : '—'),
-            status: exam.status === 'finalized' ? '<span class="score-badge finalized">확정</span>' : '<span class="score-badge draft">진행</span>',
-            domains: esc(domainText || '—'),
+            score: esc(finalScore != null ? String(finalScore) : '—'),
+            domains: renderDomainScores(r, department),
         };
     }));
 
@@ -692,8 +717,7 @@ export async function loadScoreCard() {
         const academyHtml = renderScoreTable('원내고사', 'bar_chart', academyRows, '원내고사 결과가 없습니다.', [
             { key: 'title', label: '시험' },
             { key: 'date', label: '일자' },
-            { key: 'score', label: '점수', align: 'right' },
-            { key: 'status', label: '상태' },
+            { key: 'score', label: '최종', align: 'right' },
             { key: 'domains', label: '영역' },
         ]);
         const schoolHtml = renderScoreTable('학교내신', 'school', schoolRows, '학교내신 성적 기록이 없습니다.', [
