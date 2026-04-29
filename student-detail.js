@@ -556,6 +556,52 @@ function externalEventLabel(event) {
     return `${event.year || ''} ${event.month || ''}월 모의고사 ${event.grade ? `${event.grade}학년` : ''}`.replace(/\s+/g, ' ').trim();
 }
 
+function studentNumberOf(student) {
+    return student?.studentNumber || student?.registrationNo || '';
+}
+
+function isSameSchoolGradeResult(result, student) {
+    const className = result.className || '';
+    const school = student?.school || '';
+    const grade = String(student?.grade || '').trim();
+    return (!school || className.includes(school)) && (!grade || className.includes(`${grade}학년`));
+}
+
+async function firstResultByQuery(examId, field, value) {
+    if (!value) return null;
+    const snap = await getDocs(query(
+        collection(db, 'results', examId, 'students'),
+        where(field, '==', value)
+    ));
+    return snap.empty ? null : snap.docs[0];
+}
+
+async function findAcademyResultDoc(examId, studentId) {
+    const directSnap = await getDoc(doc(db, 'results', examId, 'students', studentId));
+    if (directSnap.exists()) return directSnap;
+
+    const student = state.allStudents.find(s => s.docId === studentId);
+    const studentNumber = studentNumberOf(student);
+
+    return await firstResultByQuery(examId, 'studentId', studentId)
+        || await firstResultByQuery(examId, 'studentNumber', studentNumber)
+        || await firstResultByQuery(examId, 'registrationNo', studentNumber)
+        || await findAcademyResultByName(examId, student);
+}
+
+async function findAcademyResultByName(examId, student) {
+    if (!student?.name) return null;
+
+    const snap = await getDocs(query(
+        collection(db, 'results', examId, 'students'),
+        where('studentName', '==', student.name)
+    ));
+    if (snap.empty) return null;
+    if (snap.size === 1) return snap.docs[0];
+
+    return snap.docs.find(d => isSameSchoolGradeResult(d.data(), student)) || null;
+}
+
 async function loadAcademyScores(studentId) {
     const examSnap = await getDocs(collection(db, 'exams'));
     const exams = [];
@@ -565,8 +611,8 @@ async function loadAcademyScores(studentId) {
     });
 
     const rows = await Promise.all(exams.map(async exam => {
-        const resultSnap = await getDoc(doc(db, 'results', exam.id, 'students', studentId));
-        if (!resultSnap.exists()) return null;
+        const resultSnap = await findAcademyResultDoc(exam.id, studentId);
+        if (!resultSnap) return null;
         const r = resultSnap.data();
         const finalScore = scoreNum(r.finalScore);
         const rawScore = scoreNum(r.rawScore);
