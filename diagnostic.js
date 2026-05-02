@@ -1,11 +1,14 @@
 // ─── 진단평가 모달 + CRUD ─────────────────────────────────────────────────
 // daily-ops.js에서 분리 (Phase 2-3)
 
-import { collection, doc, getDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, where, serverTimestamp, arrayUnion } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { state, TEMP_FIELD_LABELS } from './state.js';
-import { esc, formatTime12h, nowTimeStr, showSaveIndicator } from './ui-utils.js';
+import { esc, formatTime12h, nowTimeStr, showSaveIndicator, stripEmailDomain, _fmtTs } from './ui-utils.js';
 import { auditDelete, auditUpdate, auditSet, auditAdd } from './audit.js';
+import { todayStr } from './src/shared/firestore-helpers.js';
+
+const _normalizePhone = (phone) => (phone || '').replace(/\D/g, '').replace(/^0(?=\d{10}$)/, '');
 
 // ─── 의존성 주입 (daily-ops.js에서 init 호출) ──────────────────────────────
 let renderSubFilters, renderListPanel, loadTempAttendances;
@@ -44,8 +47,7 @@ export function renderTempAttendanceDetail(docId) {
         createdAtStr = `${ts.getFullYear()}-${String(ts.getMonth()+1).padStart(2,'0')}-${String(ts.getDate()).padStart(2,'0')} ${String(ts.getHours()).padStart(2,'0')}:${String(ts.getMinutes()).padStart(2,'0')}`;
     }
 
-    // 이메일에서 아이디만 추출 (@gw.impact7.kr, @impact7.kr 제거)
-    const createdById = (ta.created_by || '').replace(/@(gw\.)?impact7\.kr$/, '');
+    const createdById = stripEmailDomain(ta.created_by);
 
     const infoRows = [
         { icon: 'apartment', label: '소속', value: ta.branch },
@@ -81,7 +83,7 @@ export function renderTempAttendanceDetail(docId) {
                 ${sorted.map(h => {
                     const dt = h.edited_at ? new Date(h.edited_at) : null;
                     const dateStr = dt ? `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}` : '';
-                    const editor = (h.edited_by || '').replace(/@(gw\.)?impact7\.kr$/, '');
+                    const editor = stripEmailDomain(h.edited_by);
                     const changes = Object.keys(h.after || {}).map(key => {
                         const label = TEMP_FIELD_LABELS[key] || key;
                         const before = (h.before && h.before[key]) || '(없음)';
@@ -196,6 +198,7 @@ export function openTempAttendanceModal() {
     document.getElementById('temp-att-modal-title').textContent = '첫데이터 및 진단평가입력';
     document.getElementById('temp-att-save-btn').textContent = '저장';
     document.getElementById('temp-att-edit-history').innerHTML = '';
+    _hideDuplicatePrompt();
     document.getElementById('temp-att-name').value = '';
     document.getElementById('temp-att-branch').value = '';
     document.getElementById('temp-att-school').value = '';
@@ -281,83 +284,153 @@ export async function saveTempAttendance() {
 
     try {
         if (state._editingTempDocId) {
-            // ── 수정 모드 ──
             const existing = state.tempAttendances.find(t => t.docId === state._editingTempDocId);
             if (!existing) { alert('원본 데이터를 찾을 수 없습니다.'); return; }
-
-            const editableFields = Object.keys(TEMP_FIELD_LABELS);
-            const before = {};
-            const after = {};
-            for (const key of editableFields) {
-                const oldVal = (existing[key] || '').toString();
-                const newVal = (data[key] || '').toString();
-                if (oldVal !== newVal) {
-                    before[key] = oldVal;
-                    after[key] = newVal;
-                }
-            }
-
-            if (Object.keys(after).length === 0) {
-                alert('변경된 내용이 없습니다.');
-                return;
-            }
-
-            const historyEntry = {
-                before,
-                after,
-                edited_by: state.currentUser?.email || '',
-                edited_at: new Date().toISOString()
-            };
-
-            await Promise.all([
-                auditUpdate(doc(db, 'temp_attendance', state._editingTempDocId), {
-                    ...data,
-                    edit_history: arrayUnion(historyEntry)
-                }),
-                _upsertStudentFromTemp(data)
-            ]);
-
-            // 로컬 캐시 업데이트
-            Object.assign(existing, data);
-            existing.updated_by = state.currentUser?.email || '';
-            if (!existing.edit_history) existing.edit_history = [];
-            existing.edit_history.push(historyEntry);
-
-            document.getElementById('temp-attendance-modal').style.display = 'none';
-
-            renderSubFilters();
-            renderListPanel();
-            renderTempAttendanceDetail(state._editingTempDocId);
-            showSaveIndicator('saved');
-        } else {
-            // ── 생성 모드 ──
-            // 동일 이름+날짜 중복 체크
-            const duplicate = state.tempAttendances.find(t => t.name === data.name && t.temp_date === data.temp_date);
-            if (duplicate) {
-                if (!confirm(`"${data.name}" 학생이 ${data.temp_date}에 이미 등록되어 있습니다.\n그래도 추가하시겠습니까?`)) return;
-            }
-
-            data.created_at = serverTimestamp();
-            data.created_by = state.currentUser?.email || '';
-
-            await Promise.all([
-                auditAdd(collection(db, 'temp_attendance'), data),
-                _upsertStudentFromTemp(data)
-            ]);
-            document.getElementById('temp-attendance-modal').style.display = 'none';
-
-            const savedDate = data.temp_date;
-            if (savedDate === state.selectedDate) {
-                await loadTempAttendances(state.selectedDate);
-                renderSubFilters();
-                renderListPanel();
-            }
-            showSaveIndicator('saved');
+            await _doUpdateTempAttendance(state._editingTempDocId, existing, data);
+            return;
         }
+
+        const duplicates = await _findUpcomingTempByContact(data.name, data.parent_phone_1);
+        if (duplicates.length > 0) {
+            duplicates.sort((a, b) => (a.temp_date || '').localeCompare(b.temp_date || ''));
+            _showDuplicatePrompt(duplicates[0], data);
+            return;
+        }
+
+        await _doCreateTempAttendance(data);
     } catch (err) {
         console.error('진단평가 저장 실패:', err);
         alert(`저장에 실패했습니다.\n${err.message || err}`);
     }
+}
+
+async function _doCreateTempAttendance(data) {
+    data.created_at = serverTimestamp();
+    data.created_by = state.currentUser?.email || '';
+
+    await Promise.all([
+        auditAdd(collection(db, 'temp_attendance'), data),
+        _upsertStudentFromTemp(data)
+    ]);
+    document.getElementById('temp-attendance-modal').style.display = 'none';
+
+    if (data.temp_date === state.selectedDate) {
+        await loadTempAttendances(state.selectedDate);
+        renderSubFilters();
+        renderListPanel();
+    }
+    showSaveIndicator('saved');
+}
+
+async function _doUpdateTempAttendance(docId, existing, data) {
+    const editableFields = Object.keys(TEMP_FIELD_LABELS);
+    const before = {};
+    const after = {};
+    for (const key of editableFields) {
+        const oldVal = (existing[key] || '').toString();
+        const newVal = (data[key] || '').toString();
+        if (oldVal !== newVal) {
+            before[key] = oldVal;
+            after[key] = newVal;
+        }
+    }
+
+    if (Object.keys(after).length === 0) {
+        alert('변경된 내용이 없습니다.');
+        return;
+    }
+
+    const historyEntry = {
+        before,
+        after,
+        edited_by: state.currentUser?.email || '',
+        edited_at: new Date().toISOString()
+    };
+
+    await Promise.all([
+        auditUpdate(doc(db, 'temp_attendance', docId), {
+            ...data,
+            edit_history: arrayUnion(historyEntry)
+        }),
+        _upsertStudentFromTemp(data)
+    ]);
+
+    const cached = state.tempAttendances.find(t => t.docId === docId);
+    if (cached) {
+        Object.assign(cached, data);
+        cached.updated_by = state.currentUser?.email || '';
+        if (!cached.edit_history) cached.edit_history = [];
+        cached.edit_history.push(historyEntry);
+    }
+
+    document.getElementById('temp-attendance-modal').style.display = 'none';
+
+    if (data.temp_date === state.selectedDate || existing.temp_date === state.selectedDate) {
+        await loadTempAttendances(state.selectedDate);
+    }
+    renderSubFilters();
+    renderListPanel();
+    if (cached) renderTempAttendanceDetail(docId);
+    showSaveIndicator('saved');
+}
+
+// phone은 raw 입력(010-1234-5678 vs 01012345678)이라 클라이언트 정규화 비교 필요
+async function _findUpcomingTempByContact(name, phone) {
+    if (!name || !phone) return [];
+    const target = _normalizePhone(phone);
+    if (!target) return [];
+    const snap = await getDocs(query(collection(db, 'temp_attendance'), where('name', '==', name)));
+    const today = todayStr();
+    return snap.docs
+        .map(d => ({ docId: d.id, ...d.data() }))
+        .filter(t => _normalizePhone(t.parent_phone_1) === target && (t.temp_date || '') >= today);
+}
+
+function _hideDuplicatePrompt() {
+    const box = document.getElementById('temp-att-duplicate-prompt');
+    if (!box) return;
+    box.innerHTML = '';
+    box.style.display = 'none';
+}
+
+function _showDuplicatePrompt(existing, pendingData) {
+    const box = document.getElementById('temp-att-duplicate-prompt');
+    if (!box) return;
+
+    const editor = stripEmailDomain(existing.created_by);
+    const tsStr = _fmtTs(existing.created_at, true);
+    const timeStr = existing.temp_time ? formatTime12h(existing.temp_time) : '시간 미정';
+
+    box.innerHTML = `
+        <div style="background:#fff7ed;border:1px solid #f59e0b;border-radius:8px;padding:12px;margin:8px 0;">
+            <div style="display:flex;align-items:center;gap:6px;color:#b45309;font-weight:600;margin-bottom:6px;">
+                <span class="material-symbols-outlined" style="font-size:18px;">warning</span>
+                동일 학생의 진단평가가 이미 예정되어 있습니다
+            </div>
+            <div style="color:#78350f;font-size:13px;line-height:1.6;">
+                <strong>${esc(existing.name)}</strong> (${esc(existing.parent_phone_1 || '-')}) — ${esc(existing.temp_date)} ${esc(timeStr)}<br>
+                등록: ${esc(editor || '-')}${tsStr ? ` (${tsStr})` : ''}
+            </div>
+            <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+                <button class="btn btn-primary" id="temp-att-dup-edit" style="font-size:13px;">기존 일정 변경</button>
+                <button class="btn btn-secondary" id="temp-att-dup-add" style="font-size:13px;">중복 등록</button>
+                <button class="btn btn-secondary" id="temp-att-dup-cancel" style="font-size:13px;">취소</button>
+            </div>
+        </div>
+    `;
+    box.style.display = '';
+
+    const runDup = (label, fn) => async () => {
+        _hideDuplicatePrompt();
+        try { await fn(); }
+        catch (err) {
+            console.error(`${label} 실패:`, err);
+            alert(`${label}에 실패했습니다.\n${err.message || err}`);
+        }
+    };
+    document.getElementById('temp-att-dup-edit').onclick = runDup('일정 변경', () => _doUpdateTempAttendance(existing.docId, existing, pendingData));
+    document.getElementById('temp-att-dup-add').onclick = runDup('진단평가 저장', () => _doCreateTempAttendance(pendingData));
+    document.getElementById('temp-att-dup-cancel').onclick = _hideDuplicatePrompt;
 }
 
 export function openTempAttendanceForEdit(docId) {
@@ -369,6 +442,7 @@ export function openTempAttendanceForEdit(docId) {
 
     document.getElementById('temp-att-modal-title').textContent = '첫데이터 및 진단평가 수정';
     document.getElementById('temp-att-save-btn').textContent = '수정';
+    _hideDuplicatePrompt();
 
     document.getElementById('temp-att-name').value = ta.name || '';
     document.getElementById('temp-att-branch').value = ta.branch || '';

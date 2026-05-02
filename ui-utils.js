@@ -101,6 +101,8 @@ export function showSaveIndicator(status) {
     }
 }
 
+export const stripEmailDomain = (email) => (email || '').replace(/@(gw\.)?impact7\.kr$/, '');
+
 // ─── Date/Timestamp Helpers (from daily-ops.js) ────────────────────────────
 export function _stripYear(dateStr) {
     if (!dateStr) return '';
