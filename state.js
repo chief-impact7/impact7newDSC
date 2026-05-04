@@ -72,6 +72,8 @@ export const state = {
     _visitStatusPending: {},
     _scheduledVisitsCache: null,
     _classMgmtMode: null,
+    _classDeleteMode: false,
+    _classDeleteSelected: new Set(),
     saveIndicatorTimer: null,
     _classSettingsLoaded: false,
     _pendingClinicStudentId: null,

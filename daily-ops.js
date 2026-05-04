@@ -70,7 +70,8 @@ import {
     saveTeacherAssign, addClassDomain, removeClassDomain, resetClassDomains,
     addTestToSection, removeTestFromSection, addTestSection, removeTestSection, resetTestSections, resetTestSection,
     saveClassDefaultTime, toggleRegularClassDay, toggleClassDay, saveClassDayTime,
-    saveTeukangPeriod, searchTeukangAddStudent, addStudentToTeukang
+    saveTeukangPeriod, saveFreeSemesterPeriod, searchTeukangAddStudent, addStudentToTeukang,
+    confirmDeleteClass, deleteClass, CLASS_MODE_LABELS
 } from './class-detail.js';
 import {
     initHwManagementDeps,
@@ -256,6 +257,9 @@ window.toggleRegularClassDay = toggleRegularClassDay;
 window.toggleClassDay = toggleClassDay;
 window.saveClassDayTime = saveClassDayTime;
 window.saveTeukangPeriod = saveTeukangPeriod;
+window.saveFreeSemesterPeriod = saveFreeSemesterPeriod;
+window.confirmDeleteClass = confirmDeleteClass;
+window.deleteClass = deleteClass;
 window.searchTeukangAddStudent = searchTeukangAddStudent;
 window.addStudentToTeukang = addStudentToTeukang;
 
@@ -430,7 +434,7 @@ function setCategory(category) {
         state.savedL2Expanded[state.currentCategory] = false; // L2는 접지만 필터는 유지
 
         // 내신/특강 반 설정 모드 리셋 (카테고리 전환 시 필터 누출 방지)
-        if (state._classMgmtMode === 'naesin' || state._classMgmtMode === 'teukang') { state._classMgmtMode = null; state.selectedClassCode = null; }
+        if (state._classMgmtMode === 'naesin' || state._classMgmtMode === 'teukang' || state._classMgmtMode === 'free') { state._classMgmtMode = null; state.selectedClassCode = null; }
 
         state.currentCategory = category;
 
@@ -651,8 +655,17 @@ function getTeukangClassStudents(classCode) {
     );
 }
 
+function getFreeSemesterClassStudents(classCode) {
+    return state.allStudents.filter(s => {
+        if (isWithdrawnAt(s, state.selectedDate)) return false;
+        if (!matchesBranchFilter(s)) return false;
+        return (s.enrollments || []).some(e => e.class_type === '자유학기' && enrollmentCode(e) === classCode);
+    });
+}
+
 function _getAllClassCodes() {
     const regularCodes = new Set();
+    const freeCounts = new Map();
     const naesinCounts = new Map();
     state.allStudents.forEach(s => {
         if (isWithdrawnAt(s, state.selectedDate)) return;
@@ -664,6 +677,10 @@ function _getAllClassCodes() {
             const code = enrollmentCode(e);
             if (!code) return;
             if (e.class_type === '내신' || e.class_type === '특강') return;
+            if (e.class_type === '자유학기') {
+                freeCounts.set(code, (freeCounts.get(code) || 0) + 1);
+                return;
+            }
             regularCodes.add(code);
             hasRegular = true;
         });
@@ -680,6 +697,15 @@ function _getAllClassCodes() {
             }
         }
     });
+
+    // 학생이 없는 자유학기 반도 노출 — class_settings에 free_schedule 또는 free_start이 설정됨
+    Object.entries(state.classSettings).forEach(([code, cs]) => {
+        if (cs?.free_schedule === undefined && !cs?.free_start) return;
+        if (cs.class_type === '내신' || cs.class_type === '특강') return;
+        if (freeCounts.has(code)) return;
+        freeCounts.set(code, 0);
+    });
+
     // 학생이 아직 없는 내신 반도 L3 칩에 노출 — naesin 기간이 설정된 class_settings 기반
     const BRANCHES = ['10단지', '2단지'];
     Object.entries(state.classSettings).forEach(([key, cs]) => {
@@ -698,7 +724,10 @@ function _getAllClassCodes() {
         .filter(([, cs]) => cs.class_type === '특강')
         .map(([code]) => code)
         .sort();
-    return { regular: [...regularCodes].sort(), naesin: naesinWithCounts, teukang };
+    const free = [...freeCounts.entries()]
+        .map(([code, count]) => ({ code, count }))
+        .sort((a, b) => a.code.localeCompare(b.code));
+    return { regular: [...regularCodes].sort(), naesin: naesinWithCounts, teukang, free };
 }
 
 // 내신 반코드(Firestore 키)로 학생 목록 조회
@@ -728,6 +757,23 @@ window.resolveNaesinCsKey = resolveNaesinCsKey;
 window.displayCodeFromCsKey = displayCodeFromCsKey;
 window.getNaesinStudentsByDerivedCode = getNaesinStudentsByDerivedCode;
 
+function _renderL3Chip(code, displayLabel, count, mode) {
+    const isActive = state.selectedClassCode === code ? 'active' : '';
+    const isDeleteMode = state._classDeleteMode;
+    const selectKey = `${mode}|${code}`;
+    const isSelected = isDeleteMode && state._classDeleteSelected.has(selectKey);
+    const onclick = isDeleteMode
+        ? `window.toggleClassDeleteSelect('${escAttr(mode)}', '${escAttr(code)}')`
+        : `setClassCode('${escAttr(code)}')`;
+    const checkbox = isDeleteMode
+        ? `<span class="material-symbols-outlined" style="font-size:16px;margin-right:4px;color:${isSelected ? '#dc2626' : '#9ca3af'};">${isSelected ? 'check_box' : 'check_box_outline_blank'}</span>`
+        : '';
+    const selectedStyle = isSelected ? 'background:#fef2f2;color:#b91c1c;' : '';
+    return `<div class="nav-l2 nav-l3 ${isActive}" style="${selectedStyle}" onclick="${onclick}">
+        ${checkbox}${esc(displayLabel)}${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
+    </div>`;
+}
+
 function renderClassCodeFilter() {
     let container = document.getElementById('nav-class-l2');
     const classL1 = document.querySelector('.nav-l1[data-category="class_mgmt"]');
@@ -740,13 +786,32 @@ function renderClassCodeFilter() {
         classL1.after(container);
     }
 
-    const { regular, naesin, teukang } = _getAllClassCodes();
+    const { regular, naesin, teukang, free } = _getAllClassCodes();
 
     const regExpanded = state._classMgmtMode === 'regular';
+    const freeExpanded = state._classMgmtMode === 'free';
     const naeExpanded = state._classMgmtMode === 'naesin';
     const tekExpanded = state._classMgmtMode === 'teukang';
 
     let html = '';
+
+    const isDeleteMode = state._classDeleteMode;
+    const selectedCount = state._classDeleteSelected.size;
+    html += `<div class="nav-l2-actions" style="padding:6px 8px;display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--border);">
+        <button class="btn btn-secondary btn-sm" style="font-size:11px;flex:1;" onclick="window.toggleClassDeleteMode()">
+            ${isDeleteMode ? '선택 취소' : '선택 모드'}
+        </button>
+        <button class="btn btn-secondary btn-sm" style="font-size:11px;flex:1;" onclick="window.cleanupExpiredClasses()" title="종료된 자유학기/내신/특강 일괄 정리">
+            종료반 정리
+        </button>
+    </div>`;
+    if (isDeleteMode && selectedCount > 0) {
+        html += `<div style="padding:6px 8px;">
+            <button class="btn" style="background:#dc2626;color:#fff;font-size:11px;width:100%;" onclick="window.bulkDeleteSelectedClasses()">
+                선택 ${selectedCount}개 일괄 삭제
+            </button>
+        </div>`;
+    }
 
     // 정규 L2
     html += `<div class="nav-l2 l2-parent ${regExpanded ? 'active l2-expanded' : ''}" onclick="window.setClassMgmtMode('regular')">
@@ -754,13 +819,16 @@ function renderClassCodeFilter() {
         <span class="material-symbols-outlined l2-expand-icon">${regExpanded ? 'expand_less' : 'expand_more'}</span>
     </div>`;
     if (regExpanded) {
-        html += regular.map(code => {
-            const isActive = state.selectedClassCode === code ? 'active' : '';
-            const count = getClassMgmtCount(code);
-            return `<div class="nav-l2 nav-l3 ${isActive}" onclick="setClassCode('${escAttr(code)}')">
-                ${esc(code)}${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
-            </div>`;
-        }).join('');
+        html += regular.map(code => _renderL3Chip(code, code, getClassMgmtCount(code), 'regular')).join('');
+    }
+
+    // 자유학기 L2
+    html += `<div class="nav-l2 l2-parent ${freeExpanded ? 'active l2-expanded' : ''}" onclick="window.setClassMgmtMode('free')">
+        자유학기<span class="nav-l2-count">${free.length}</span>
+        <span class="material-symbols-outlined l2-expand-icon">${freeExpanded ? 'expand_less' : 'expand_more'}</span>
+    </div>`;
+    if (freeExpanded) {
+        html += free.map(({ code, count }) => _renderL3Chip(code, code, count, 'free')).join('');
     }
 
     // 내신 L2
@@ -775,12 +843,7 @@ function renderClassCodeFilter() {
         <span class="material-symbols-outlined l2-expand-icon">${naeExpanded ? 'expand_less' : 'expand_more'}</span>
     </div>`;
     if (naeExpanded) {
-        html += filteredNaesin.map(({ code, displayCode, count }) => {
-            const isActive = state.selectedClassCode === code ? 'active' : '';
-            return `<div class="nav-l2 nav-l3 ${isActive}" onclick="setClassCode('${escAttr(code)}')">
-                ${esc(displayCode)}${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
-            </div>`;
-        }).join('');
+        html += filteredNaesin.map(({ code, displayCode, count }) => _renderL3Chip(code, displayCode, count, 'naesin')).join('');
     }
 
     // 특강 L2
@@ -789,13 +852,7 @@ function renderClassCodeFilter() {
         <span class="material-symbols-outlined l2-expand-icon">${tekExpanded ? 'expand_less' : 'expand_more'}</span>
     </div>`;
     if (tekExpanded) {
-        html += teukang.map(code => {
-            const isActive = state.selectedClassCode === code ? 'active' : '';
-            const count = getTeukangClassStudents(code).length;
-            return `<div class="nav-l2 nav-l3 ${isActive}" onclick="setClassCode('${escAttr(code)}')">
-                ${esc(code)}${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
-            </div>`;
-        }).join('');
+        html += teukang.map(code => _renderL3Chip(code, code, getTeukangClassStudents(code).length, 'teukang')).join('');
     }
 
     container.innerHTML = html;
@@ -808,6 +865,94 @@ function renderClassCodeFilter() {
 
     classL1.classList.toggle('has-filter', !!state.selectedClassCode);
 }
+
+window.toggleClassDeleteMode = function() {
+    state._classDeleteMode = !state._classDeleteMode;
+    state._classDeleteSelected.clear();
+    renderClassCodeFilter();
+};
+
+window.toggleClassDeleteSelect = function(mode, code) {
+    const key = `${mode}|${code}`;
+    if (state._classDeleteSelected.has(key)) state._classDeleteSelected.delete(key);
+    else state._classDeleteSelected.add(key);
+    renderClassCodeFilter();
+};
+
+// 순차 실행 — deleteClass가 state.allStudents.enrollments를 in-place 변경하므로
+// Promise.all로 병렬 처리하면 같은 학생의 enrollments가 두 deletion에서 race 발생.
+async function _runBulkDelete(items, label) {
+    let success = 0, failed = 0;
+    for (const { mode, code } of items) {
+        try {
+            await deleteClass(code, mode, { skipRender: true });
+            success++;
+        } catch (err) {
+            console.error(`[${label}] ${mode}/${code} 실패:`, err);
+            failed++;
+        }
+    }
+    state._classDeleteMode = false;
+    state._classDeleteSelected.clear();
+    state._classMgmtMode = null;
+    state.selectedClassCode = null;
+    renderClassCodeFilter();
+    renderListPanel();
+    renderStudentDetail(null);
+    showToast(`${label}: 성공 ${success}건${failed > 0 ? ` / 실패 ${failed}건` : ''}`);
+}
+
+window.bulkDeleteSelectedClasses = async function() {
+    const selected = [...state._classDeleteSelected].map(k => {
+        const [mode, code] = k.split('|');
+        return { mode, code };
+    });
+    if (selected.length === 0) return;
+
+    const hasRegular = selected.some(s => s.mode === 'regular');
+    const labels = selected.map(s => `[${CLASS_MODE_LABELS[s.mode] || s.mode}] ${s.code}`).join('\n');
+
+    if (hasRegular) {
+        const first = confirm(`⚠️ ${selected.length}개 반 일괄 삭제\n\n정규 반이 포함되어 있습니다. 학생들의 정규 등록이 끊깁니다.\n\n${labels}\n\n진짜 삭제하시겠습니까?`);
+        if (!first) return;
+        const typed = prompt(`정말 일괄 삭제하려면 "삭제"를 입력하세요`);
+        if (typed !== '삭제') {
+            alert('입력이 일치하지 않아 취소되었습니다.');
+            return;
+        }
+    } else {
+        const ok = confirm(`${selected.length}개 반 일괄 삭제\n\n${labels}\n\n진행하시겠습니까?`);
+        if (!ok) return;
+    }
+
+    await _runBulkDelete(selected, '일괄 삭제');
+};
+
+window.cleanupExpiredClasses = async function() {
+    const today = todayStr();
+    const expired = [];
+    Object.entries(state.classSettings).forEach(([code, cs]) => {
+        if (!cs) return;
+        if (cs.class_type === '특강' && cs.special_end && cs.special_end < today) {
+            expired.push({ mode: 'teukang', code, end: cs.special_end });
+        } else if (cs.naesin_end && cs.naesin_end < today && cs.class_type !== '특강') {
+            expired.push({ mode: 'naesin', code, end: cs.naesin_end });
+        } else if (cs.free_end && cs.free_end < today && cs.class_type !== '특강' && cs.class_type !== '내신') {
+            expired.push({ mode: 'free', code, end: cs.free_end });
+        }
+    });
+
+    if (expired.length === 0) {
+        alert('종료된 자유학기/내신/특강 반이 없습니다.');
+        return;
+    }
+
+    const list = expired.map(e => `[${CLASS_MODE_LABELS[e.mode] || e.mode}] ${e.code} (종료: ${e.end})`).join('\n');
+    const ok = confirm(`종료된 반 ${expired.length}개를 정리합니다:\n\n${list}\n\n진행하시겠습니까?`);
+    if (!ok) return;
+
+    await _runBulkDelete(expired, '종료반 정리');
+};
 
 window.setClassMgmtMode = function(mode) {
     state._classMgmtMode = (state._classMgmtMode === mode) ? null : mode; // 토글
@@ -1252,6 +1397,11 @@ function getFilteredStudents() {
     // 반 설정: 특강 모드 — 날짜 무관, 특강 반 전체 학생
     if (state._classMgmtMode === 'teukang' && state.selectedClassCode) {
         return getTeukangClassStudents(state.selectedClassCode);
+    }
+
+    // 반 설정: 자유학기 모드 — 날짜 무관, 자유학기 enrollment 가진 학생
+    if (state._classMgmtMode === 'free' && state.selectedClassCode) {
+        return getFreeSemesterClassStudents(state.selectedClassCode);
     }
 
     // 반 설정: 내신 반코드 선택 시 (글로벌 필터이므로 state.currentCategory 무관)
@@ -2069,9 +2219,10 @@ function renderListPanel() {
     // 과거 학생은 _searchContactsDSC에서 비동기로 렌더링 (위에서 호출됨)
 
     // 반 상세 표시: 반(+소속)만 선택되고, 콘텐츠 서브필터 없을 때
-    // 내신/특강 반 설정 모드에서는 항상 반 상세 표시
+    // 내신/특강/자유학기 반 설정 모드에서는 항상 반 상세 표시
     if (((state._classMgmtMode === 'naesin' && _isNaesinClassCode(state.selectedClassCode)) ||
-         state._classMgmtMode === 'teukang') && state.selectedClassCode && !state.selectedStudentId) {
+         state._classMgmtMode === 'teukang' ||
+         state._classMgmtMode === 'free') && state.selectedClassCode && !state.selectedStudentId) {
         renderClassDetail(state.selectedClassCode);
     } else {
         const allFilters = { ...state.savedSubFilters };

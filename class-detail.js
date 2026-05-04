@@ -2,13 +2,13 @@
 // daily-ops.js에서 추출한 반 관리 상세 + 타반수업 관련 함수
 // Phase 3-3
 
-import { doc, getDoc, getDocFromServer, writeBatch, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, getDocFromServer, writeBatch, arrayUnion, deleteDoc, deleteField, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { getDayName, todayStr } from './src/shared/firestore-helpers.js';
 import { auditUpdate, batchUpdate } from './audit.js';
 import { state, DAY_ORDER } from './state.js';
-import { esc, escAttr, showSaveIndicator } from './ui-utils.js';
-import { matchesBranchFilter, enrollmentCode, getActiveEnrollments } from './student-helpers.js';
+import { esc, escAttr, showSaveIndicator, showToast } from './ui-utils.js';
+import { matchesBranchFilter, enrollmentCode, getActiveEnrollments, resolveNaesinCsKey } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
@@ -173,9 +173,10 @@ export function renderClassDetail(classCode) {
 
     // 특강 반: naesin보다 먼저 체크 (반 이름에 한글 포함되므로 _isNaesinClassCode가 true 반환할 수 있음)
     const isTeukangClass = state.classSettings[classCode]?.class_type === '특강';
+    const isFreeMode = state._classMgmtMode === 'free';
 
     // 내신 반: naesin.js로 위임
-    if (!isTeukangClass && window.renderNaesinClassDetail && _isNaesinClassCode(classCode)) {
+    if (!isTeukangClass && !isFreeMode && window.renderNaesinClassDetail && _isNaesinClassCode(classCode)) {
         window.renderNaesinClassDetail(classCode);
         return;
     }
@@ -186,12 +187,20 @@ export function renderClassDetail(classCode) {
     document.getElementById('detail-content').style.display = '';
 
     const dayName = getDayName(state.selectedDate);
-    let classStudents = isTeukangClass
-        ? getTeukangClassStudents(classCode)
-        : state.allStudents.filter(s =>
+    let classStudents;
+    if (isTeukangClass) {
+        classStudents = getTeukangClassStudents(classCode);
+    } else if (isFreeMode) {
+        classStudents = state.allStudents.filter(s =>
+            s.status !== '퇴원' &&
+            (s.enrollments || []).some(e => e.class_type === '자유학기' && enrollmentCode(e) === classCode)
+        ).filter(s => matchesBranchFilter(s));
+    } else {
+        classStudents = state.allStudents.filter(s =>
             s.status !== '퇴원' &&
             getActiveEnrollments(s, state.selectedDate).some(e => e.day.includes(dayName) && enrollmentCode(e) === classCode)
-          ).filter(s => matchesBranchFilter(s));
+        ).filter(s => matchesBranchFilter(s));
+    }
     const domains = getClassDomains(classCode);
     const testSections = getClassTestSections(classCode);
 
@@ -292,6 +301,7 @@ export function renderClassDetail(classCode) {
             ${renderTeukangPeriodCard(classCode)}
             ${renderClassScheduleCard(classCode)}
             ${renderTeukangAddStudentCard(classCode)}
+            ${renderClassDeleteCard(classCode, 'teukang')}
         `;
         if (window.innerWidth <= 768) {
             document.getElementById('detail-panel').classList.add('mobile-visible');
@@ -299,12 +309,14 @@ export function renderClassDetail(classCode) {
         return;
     }
 
+    const dayOrPeriodCards = isFreeMode
+        ? `${renderFreeSemesterPeriodCard(classCode)}${renderClassScheduleCard(classCode)}`
+        : renderRegularClassDayCard(classCode);
+
     cardsContainer.innerHTML = `
         ${teacherCard}
 
-        ${renderRegularClassDayCard(classCode)}
-
-        ${renderClassScheduleCard(classCode)}
+        ${dayOrPeriodCards}
 
         <div class="detail-card">
             <div class="detail-card-title">
@@ -348,6 +360,7 @@ export function renderClassDetail(classCode) {
 
         ${renderClassTempOverrideSection(classCode)}
 
+        ${renderClassDeleteCard(classCode, isFreeMode ? 'free' : 'regular')}
     `;
 
     // 모바일에서 디테일 패널 표시
@@ -376,7 +389,7 @@ function _getRegularClassDays(classCode) {
 
 function renderRegularClassDayCard(classCode) {
     const cs = state.classSettings[classCode];
-    if (cs?.class_type === '특강' || cs?.free_schedule !== undefined) return '';
+    if (cs?.class_type === '특강') return '';
     const activeDays = _getRegularClassDays(classCode);
     const dayBtns = DAY_ORDER.map(d => {
         const isActive = activeDays.includes(d);
@@ -547,6 +560,62 @@ export async function saveClassDayTime(classCode, day, time) {
 
 // ─── 특강반 기간 카드 ───────────────────────────────────────────────────────
 
+// ─── 자유학기 기간 카드 ─────────────────────────────────────────────────────
+
+function renderFreeSemesterPeriodCard(classCode) {
+    const cs = state.classSettings[classCode] || {};
+    const start = cs.free_start || '';
+    const end = cs.free_end || '';
+    return `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                <span class="material-symbols-outlined">date_range</span>
+                자유학기 기간
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <input type="date" class="field-input" value="${escAttr(start)}" style="flex:1;"
+                    onchange="saveFreeSemesterPeriod('${escAttr(classCode)}', 'free_start', this.value)">
+                <span style="color:var(--text-sec);">~</span>
+                <input type="date" class="field-input" value="${escAttr(end)}" style="flex:1;"
+                    onchange="saveFreeSemesterPeriod('${escAttr(classCode)}', 'free_end', this.value)">
+            </div>
+            <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">기간이 지나면 자동으로 정규로 복귀합니다</div>
+        </div>
+    `;
+}
+
+export async function saveFreeSemesterPeriod(classCode, field, value) {
+    showSaveIndicator('saving');
+    try {
+        const enrollmentField = field === 'free_start' ? 'start_date' : 'end_date';
+        const batch = writeBatch(db);
+        let hasOps = false;
+        for (const student of state.allStudents) {
+            let changed = false;
+            const updated = (student.enrollments || []).map(e => {
+                if (e.class_type === '자유학기' && enrollmentCode(e) === classCode) {
+                    changed = true;
+                    return { ...e, [enrollmentField]: value };
+                }
+                return e;
+            });
+            if (!changed) continue;
+            batchUpdate(batch, doc(db, 'students', student.docId), { enrollments: updated });
+            student.enrollments = updated;
+            hasOps = true;
+        }
+        await Promise.all([
+            saveClassSettings(classCode, { [field]: value }),
+            hasOps ? batch.commit() : Promise.resolve(),
+        ]);
+        showSaveIndicator('saved');
+        renderClassDetail(classCode);
+    } catch (err) {
+        console.error('자유학기 기간 저장 실패:', err);
+        showSaveIndicator('error');
+    }
+}
+
 function renderTeukangPeriodCard(classCode) {
     const cs = state.classSettings[classCode] || {};
     const start = cs.special_start || '';
@@ -576,6 +645,203 @@ export async function saveTeukangPeriod(classCode, field, value) {
     } catch (err) {
         console.error('특강 기간 저장 실패:', err);
         showSaveIndicator('error');
+    }
+}
+
+// ─── 반 삭제 ──────────────────────────────────────────────────────────────
+
+export const CLASS_MODE_LABELS = Object.freeze({
+    regular: '정규',
+    free: '자유학기',
+    naesin: '내신',
+    teukang: '특강',
+});
+
+// 모드별 삭제 동작 정의. applyToStudent는 변경 발생 시 {update, before}, 아니면 null.
+const _MODES = {
+    free: {
+        deleteClassDoc: false,
+        csFieldsToDelete: ['free_schedule', 'free_start', 'free_end'],
+        describe: (count) => `자유학기 ${count}명이 정규로 복귀합니다. (정규 반 코드 자체는 보존됨)`,
+        toast: (code, count) => `자유학기 "${code}" 정리 완료 (${count}명 정규 복귀)`,
+        applyToStudent: (s, code) => {
+            const original = s.enrollments || [];
+            const updated = original.filter(e => !(e.class_type === '자유학기' && enrollmentCode(e) === code));
+            if (updated.length === original.length) return null;
+            return { update: { enrollments: updated }, before: original };
+        },
+    },
+    teukang: {
+        deleteClassDoc: true,
+        describe: (count) => `특강 반에 등록된 ${count}명이 영향을 받습니다.`,
+        toast: (code, count) => `특강 "${code}" 삭제 완료 (${count}명)`,
+        applyToStudent: (s, code) => {
+            const original = s.enrollments || [];
+            const updated = original.filter(e => !(e.class_type === '특강' && enrollmentCode(e) === code));
+            if (updated.length === original.length) return null;
+            const update = { enrollments: updated };
+            // 이 학생의 마지막 특강이었으면 status2='특강' 정리
+            if (s.status2 === '특강' && !updated.some(e => e.class_type === '특강')) {
+                update.status2 = '';
+            }
+            return { update, before: original };
+        },
+    },
+    regular: {
+        deleteClassDoc: true,
+        describe: (count) => `정규 반 삭제는 학생 ${count}명의 정규 등록을 모두 끊는 위험한 작업입니다. 진짜 삭제할 반인지 한 번 더 확인하세요.`,
+        toast: (code, count) => `정규 "${code}" 삭제 완료 (${count}명 정규 enrollment 제거)`,
+        applyToStudent: (s, code) => {
+            const original = s.enrollments || [];
+            const updated = original.filter(e =>
+                !((e.class_type === '정규' || !e.class_type) && enrollmentCode(e) === code));
+            if (updated.length === original.length) return null;
+            return { update: { enrollments: updated }, before: original };
+        },
+    },
+    naesin: {
+        deleteClassDoc: true,
+        describe: (count) => `내신 반에 등록된 ${count}명이 영향을 받습니다.`,
+        toast: (code, count) => `내신 "${code}" 삭제 완료 (${count}명)`,
+        applyToStudent: (s, csKey) => {
+            const original = s.enrollments || [];
+            const reg = original.find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
+            if (!reg || resolveNaesinCsKey(s, reg) !== csKey) return null;
+            let changed = false;
+            const updated = original.flatMap(e => {
+                if (e.class_type === '내신') { changed = true; return []; }
+                if ((e.class_type === '정규' || e.class_type === '자유학기') && e.naesin_class_override === csKey) {
+                    changed = true;
+                    const { naesin_class_override: _drop, ...rest } = e;
+                    return [rest];
+                }
+                return [e];
+            });
+            if (!changed) return null;
+            return { update: { enrollments: updated }, before: original };
+        },
+    },
+};
+
+async function _logClassDeletion(classCode, mode, csBefore, affected) {
+    await addDoc(collection(db, 'history_logs'), {
+        change_type: 'CLASS_DELETE',
+        class_code: classCode,
+        class_mode: mode,
+        before: JSON.stringify({
+            class_settings: csBefore,
+            students: affected.map(s => ({ docId: s.docId, name: s.name, enrollments: s.before })),
+        }),
+        affected_count: affected.length,
+        google_login_id: state.currentUser?.email || 'unknown',
+        timestamp: serverTimestamp(),
+    });
+}
+
+function _countAffectedStudents(classCode, mode) {
+    const M = _MODES[mode];
+    if (!M) return 0;
+    return state.allStudents.filter(s => M.applyToStudent(s, classCode) !== null).length;
+}
+
+export async function deleteClass(classCode, mode, opts = {}) {
+    const M = _MODES[mode];
+    if (!M) throw new Error(`Unknown delete mode: ${mode}`);
+    const { skipRender = false } = opts;
+    const cs = state.classSettings[classCode] || {};
+
+    const batch = writeBatch(db);
+    const affected = [];
+    for (const student of state.allStudents) {
+        const result = M.applyToStudent(student, classCode);
+        if (!result) continue;
+        affected.push({ docId: student.docId, name: student.name, before: result.before });
+        batchUpdate(batch, doc(db, 'students', student.docId), result.update);
+        Object.assign(student, result.update);
+    }
+
+    let csOp = Promise.resolve();
+    let csBefore = cs;
+    if (M.deleteClassDoc) {
+        csOp = deleteDoc(doc(db, 'class_settings', classCode));
+    } else if (M.csFieldsToDelete) {
+        const csUpdate = {};
+        const fieldsBefore = {};
+        for (const f of M.csFieldsToDelete) {
+            if (cs[f] !== undefined) {
+                csUpdate[f] = deleteField();
+                fieldsBefore[f] = cs[f];
+            }
+        }
+        csBefore = fieldsBefore;
+        if (Object.keys(csUpdate).length > 0) {
+            csOp = auditUpdate(doc(db, 'class_settings', classCode), csUpdate);
+        }
+    }
+
+    await Promise.all([csOp, affected.length > 0 ? batch.commit() : Promise.resolve()]);
+    await _logClassDeletion(classCode, mode, csBefore, affected);
+
+    if (M.deleteClassDoc) {
+        delete state.classSettings[classCode];
+    } else if (M.csFieldsToDelete && state.classSettings[classCode]) {
+        for (const f of M.csFieldsToDelete) delete state.classSettings[classCode][f];
+    }
+
+    if (!skipRender) {
+        state._classMgmtMode = null;
+        state.selectedClassCode = null;
+        showToast(M.toast(classCode, affected.length));
+        renderListPanel();
+        renderStudentDetail(null);
+    }
+    return { affected: affected.length };
+}
+
+export function renderClassDeleteCard(classCode, mode) {
+    const M = _MODES[mode];
+    if (!M) return '';
+    const count = _countAffectedStudents(classCode, mode);
+    const label = CLASS_MODE_LABELS[mode] || mode;
+
+    return `
+        <div class="detail-card" style="border:1px solid #fecaca;background:#fef2f2;">
+            <div class="detail-card-title" style="color:#b91c1c;">
+                <span class="material-symbols-outlined" style="color:#dc2626;">delete_forever</span>
+                반 삭제
+            </div>
+            <div style="font-size:13px;color:#7f1d1d;line-height:1.6;margin-bottom:8px;">${esc(M.describe(count))}</div>
+            <button class="btn" style="background:#dc2626;color:#fff;font-size:13px;"
+                onclick="confirmDeleteClass('${escAttr(classCode)}', '${escAttr(mode)}')">
+                <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">delete</span>
+                ${esc(label)} 반 삭제
+            </button>
+        </div>
+    `;
+}
+
+export async function confirmDeleteClass(classCode, mode) {
+    const label = CLASS_MODE_LABELS[mode] || mode;
+    const count = _countAffectedStudents(classCode, mode);
+
+    if (mode === 'regular') {
+        const first = confirm(`⚠️ 정규 반 "${classCode}" 삭제\n\n학생 ${count}명의 정규 등록이 모두 끊깁니다.\n진짜 삭제하시겠습니까?`);
+        if (!first) return;
+        const typed = prompt(`정말 삭제하려면 반 코드를 그대로 입력하세요:\n${classCode}`);
+        if (typed !== classCode) {
+            alert('입력이 일치하지 않아 취소되었습니다.');
+            return;
+        }
+    } else {
+        const ok = confirm(`${label} 반 "${classCode}" 삭제\n영향 학생 ${count}명. 삭제하시겠습니까?`);
+        if (!ok) return;
+    }
+
+    try {
+        await deleteClass(classCode, mode);
+    } catch (err) {
+        console.error('반 삭제 실패:', err);
+        alert(`삭제 실패: ${err.message || err}`);
     }
 }
 

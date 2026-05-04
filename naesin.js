@@ -12,6 +12,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { auditUpdate, auditSet } from './audit.js';
 import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
+import { renderClassDeleteCard } from './class-detail.js';
 
 // ─── State 접근자 ─────────────────────────────────────────────────────────────
 function _state() {
@@ -1025,6 +1026,8 @@ function renderNaesinClassDetail(csKey) {
         </div>
 
         ${_renderNaesinAddStudentCard(csKey)}
+
+        ${renderClassDeleteCard(csKey, 'naesin')}
     `;
 
     // 탭 숨기기
