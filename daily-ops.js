@@ -71,7 +71,7 @@ import {
     addTestToSection, removeTestFromSection, addTestSection, removeTestSection, resetTestSections, resetTestSection,
     saveClassDefaultTime, toggleRegularClassDay, toggleClassDay, saveClassDayTime,
     saveTeukangPeriod, saveFreeSemesterPeriod, searchTeukangAddStudent, addStudentToTeukang,
-    confirmDeleteClass, deleteClass, CLASS_MODE_LABELS
+    confirmDeleteClass, deleteClass, CLASS_MODE_LABELS, getClassPeriodInfo
 } from './class-detail.js';
 import {
     initHwManagementDeps,
@@ -797,11 +797,11 @@ function renderClassCodeFilter() {
 
     const isDeleteMode = state._classDeleteMode;
     const selectedCount = state._classDeleteSelected.size;
-    html += `<div class="nav-l2-actions" style="padding:6px 8px;display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--border);">
-        <button class="btn btn-secondary btn-sm" style="font-size:11px;flex:1;" onclick="window.toggleClassDeleteMode()">
+    html += `<div class="nav-l2-actions" style="padding:6px 8px;display:flex;gap:6px;flex-wrap:nowrap;border-bottom:1px solid var(--border);">
+        <button class="btn btn-secondary btn-sm" style="font-size:11px;flex:1;white-space:nowrap;padding:4px 6px;" onclick="window.toggleClassDeleteMode()">
             ${isDeleteMode ? '선택 취소' : '선택 모드'}
         </button>
-        <button class="btn btn-secondary btn-sm" style="font-size:11px;flex:1;" onclick="window.cleanupExpiredClasses()" title="종료된 자유학기/내신/특강 일괄 정리">
+        <button class="btn btn-secondary btn-sm" style="font-size:11px;flex:1;white-space:nowrap;padding:4px 6px;" onclick="window.cleanupExpiredClasses()" title="종료된 자유학기/내신/특강 일괄 정리">
             종료반 정리
         </button>
     </div>`;
@@ -910,10 +910,18 @@ window.bulkDeleteSelectedClasses = async function() {
     if (selected.length === 0) return;
 
     const hasRegular = selected.some(s => s.mode === 'regular');
-    const labels = selected.map(s => `[${CLASS_MODE_LABELS[s.mode] || s.mode}] ${s.code}`).join('\n');
+    const inProgress = selected.filter(s => getClassPeriodInfo(s.code, s.mode)?.inProgress);
+    const labels = selected.map(s => {
+        const period = getClassPeriodInfo(s.code, s.mode);
+        const flag = period?.inProgress ? ' (진행 중)' : '';
+        return `[${CLASS_MODE_LABELS[s.mode] || s.mode}] ${s.code}${flag}`;
+    }).join('\n');
 
-    if (hasRegular) {
-        const first = confirm(`⚠️ ${selected.length}개 반 일괄 삭제\n\n정규 반이 포함되어 있습니다. 학생들의 정규 등록이 끊깁니다.\n\n${labels}\n\n진짜 삭제하시겠습니까?`);
+    if (hasRegular || inProgress.length > 0) {
+        const reasons = [];
+        if (hasRegular) reasons.push('정규 반이 포함되어 있어 학생들의 정규 등록이 끊깁니다.');
+        if (inProgress.length > 0) reasons.push(`진행 중인 반 ${inProgress.length}개가 포함되어 있습니다. 해당 학생들이 즉시 정규로 복귀합니다.`);
+        const first = confirm(`⚠️ ${selected.length}개 반 일괄 삭제\n\n${reasons.join('\n')}\n\n${labels}\n\n진짜 삭제하시겠습니까?`);
         if (!first) return;
         const typed = prompt(`정말 일괄 삭제하려면 "삭제"를 입력하세요`);
         if (typed !== '삭제') {
@@ -947,8 +955,12 @@ window.cleanupExpiredClasses = async function() {
         return;
     }
 
-    const list = expired.map(e => `[${CLASS_MODE_LABELS[e.mode] || e.mode}] ${e.code} (종료: ${e.end})`).join('\n');
-    const ok = confirm(`종료된 반 ${expired.length}개를 정리합니다:\n\n${list}\n\n진행하시겠습니까?`);
+    const counts = expired.reduce((acc, e) => { acc[e.mode] = (acc[e.mode] || 0) + 1; return acc; }, {});
+    const summary = ['free', 'naesin', 'teukang']
+        .filter(m => counts[m])
+        .map(m => `${CLASS_MODE_LABELS[m]} ${counts[m]}`)
+        .join(' / ');
+    const ok = confirm(`종료된 반 ${expired.length}개 (${summary})를 정리합니다.\n진행하시겠습니까?`);
     if (!ok) return;
 
     await _runBulkDelete(expired, '종료반 정리');

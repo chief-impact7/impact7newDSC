@@ -664,6 +664,7 @@ const _MODES = {
         csFieldsToDelete: ['free_schedule', 'free_start', 'free_end'],
         describe: (count) => `자유학기 ${count}명이 정규로 복귀합니다. (정규 반 코드 자체는 보존됨)`,
         toast: (code, count) => `자유학기 "${code}" 정리 완료 (${count}명 정규 복귀)`,
+        getPeriod: (cs) => ({ start: cs?.free_start, end: cs?.free_end }),
         applyToStudent: (s, code) => {
             const original = s.enrollments || [];
             const updated = original.filter(e => !(e.class_type === '자유학기' && enrollmentCode(e) === code));
@@ -675,6 +676,7 @@ const _MODES = {
         deleteClassDoc: true,
         describe: (count) => `특강 반에 등록된 ${count}명이 영향을 받습니다.`,
         toast: (code, count) => `특강 "${code}" 삭제 완료 (${count}명)`,
+        getPeriod: (cs) => ({ start: cs?.special_start, end: cs?.special_end }),
         applyToStudent: (s, code) => {
             const original = s.enrollments || [];
             const updated = original.filter(e => !(e.class_type === '특강' && enrollmentCode(e) === code));
@@ -691,6 +693,7 @@ const _MODES = {
         deleteClassDoc: true,
         describe: (count) => `정규 반 삭제는 학생 ${count}명의 정규 등록을 모두 끊는 위험한 작업입니다. 진짜 삭제할 반인지 한 번 더 확인하세요.`,
         toast: (code, count) => `정규 "${code}" 삭제 완료 (${count}명 정규 enrollment 제거)`,
+        getPeriod: () => null,
         applyToStudent: (s, code) => {
             const original = s.enrollments || [];
             const updated = original.filter(e =>
@@ -703,6 +706,7 @@ const _MODES = {
         deleteClassDoc: true,
         describe: (count) => `내신 반에 등록된 ${count}명이 영향을 받습니다.`,
         toast: (code, count) => `내신 "${code}" 삭제 완료 (${count}명)`,
+        getPeriod: (cs) => ({ start: cs?.naesin_start, end: cs?.naesin_end }),
         applyToStudent: (s, csKey) => {
             const original = s.enrollments || [];
             const reg = original.find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
@@ -742,6 +746,17 @@ function _countAffectedStudents(classCode, mode) {
     const M = _MODES[mode];
     if (!M) return 0;
     return state.allStudents.filter(s => M.applyToStudent(s, classCode) !== null).length;
+}
+
+export function getClassPeriodInfo(classCode, mode) {
+    const M = _MODES[mode];
+    if (!M?.getPeriod) return null;
+    const cs = state.classSettings[classCode] || {};
+    const { start, end } = M.getPeriod(cs) || {};
+    if (!start && !end) return null;
+    const today = todayStr();
+    const inProgress = !!(start && end && start <= today && today <= end);
+    return { start: start || '', end: end || '', inProgress };
 }
 
 export async function deleteClass(classCode, mode, opts = {}) {
@@ -823,6 +838,7 @@ export function renderClassDeleteCard(classCode, mode) {
 export async function confirmDeleteClass(classCode, mode) {
     const label = CLASS_MODE_LABELS[mode] || mode;
     const count = _countAffectedStudents(classCode, mode);
+    const period = getClassPeriodInfo(classCode, mode);
 
     if (mode === 'regular') {
         const first = confirm(`⚠️ 정규 반 "${classCode}" 삭제\n\n학생 ${count}명의 정규 등록이 모두 끊깁니다.\n진짜 삭제하시겠습니까?`);
@@ -832,8 +848,17 @@ export async function confirmDeleteClass(classCode, mode) {
             alert('입력이 일치하지 않아 취소되었습니다.');
             return;
         }
+    } else if (period?.inProgress) {
+        const first = confirm(`⚠️ ${label} 반 "${classCode}" 삭제 (현재 진행 중)\n\n기간: ${period.start} ~ ${period.end}\n영향 학생: ${count}명\n\n진행 중인 반을 삭제하면 학생들이 즉시 정규로 복귀합니다.\n진짜 삭제하시겠습니까?`);
+        if (!first) return;
+        const typed = prompt(`진행 중인 반입니다. 정말 삭제하려면 "삭제"를 입력하세요`);
+        if (typed !== '삭제') {
+            alert('입력이 일치하지 않아 취소되었습니다.');
+            return;
+        }
     } else {
-        const ok = confirm(`${label} 반 "${classCode}" 삭제\n영향 학생 ${count}명. 삭제하시겠습니까?`);
+        const periodNote = period ? `\n기간: ${period.start || '-'} ~ ${period.end || '-'}` : '';
+        const ok = confirm(`${label} 반 "${classCode}" 삭제${periodNote}\n영향 학생 ${count}명. 삭제하시겠습니까?`);
         if (!ok) return;
     }
 
