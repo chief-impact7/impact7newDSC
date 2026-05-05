@@ -15,7 +15,8 @@ import {
 } from './ui-utils.js';
 import {
     enrollmentCode, findStudent,
-    branchFromStudent, makeDailyRecordId
+    branchFromStudent, makeDailyRecordId,
+    getActiveEnrollments
 } from './student-helpers.js';
 import {
     parseDateKST, todayStr, getDayName
@@ -415,12 +416,20 @@ function renderReportCard(records) {
     }
 
     // ── 출석 집계 ──
+    const student = state.allStudents.find(s => s.docId === state.selectedStudentId);
     const attendanceRows = records.map(rec => {
         const date = rec.date || '';
         const dayName = date ? getDayName(date) : '';
         const status = rec.attendance?.status || '';
         const reason = rec.attendance?.reason || '';
-        return { date, dayName, status, reason };
+        let classLabel = '';
+        if (student && date) {
+            const types = [...new Set(getActiveEnrollments(student, date)
+                .filter(e => (e.day || []).includes(dayName))
+                .map(e => e.class_type || '정규'))];
+            classLabel = types.join('/');
+        }
+        return { date, dayName, status, reason, classLabel };
     }).filter(r => r.date);
 
     const attendanceHtml = `
@@ -430,7 +439,7 @@ function renderReportCard(records) {
                 출석 (${attendanceRows.length}일)
             </div>
             <table class="report-attendance-table">
-                <thead><tr><th>날짜</th><th>구분</th><th>비고</th></tr></thead>
+                <thead><tr><th>날짜</th><th>구분</th><th>반</th><th>비고</th></tr></thead>
                 <tbody>
                     ${attendanceRows.map(r => {
                         const dateShort = r.date.slice(5).replace('-', '/');
@@ -441,6 +450,7 @@ function renderReportCard(records) {
                         return `<tr>
                             <td>${esc(dateShort)}(${esc(r.dayName)})</td>
                             <td class="${cls}">${esc(r.status || '-')}</td>
+                            <td>${esc(r.classLabel || '-')}</td>
                             <td>${esc(r.reason)}</td>
                         </tr>`;
                     }).join('')}
