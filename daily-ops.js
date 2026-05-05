@@ -1622,6 +1622,7 @@ function getFilteredStudents() {
         const visitStudents = state.allStudents.filter(s => {
             if (existingIds.has(s.docId)) return false;
             if (state.selectedClassCode && !s.enrollments.some(e => enrollmentCode(e) === state.selectedClassCode)) return false;
+            if (!matchesBranchFilter(s)) return false;
             return isVisitStudent(s.docId);
         });
         if (visitStudents.length > 0) {
