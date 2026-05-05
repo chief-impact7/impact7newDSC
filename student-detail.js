@@ -340,6 +340,20 @@ function buildStayStatsHtml(student) {
 }
 
 // ─── 출결현황 탭 ──────────────────────────────────────────────────────────────
+
+function _ensureReportInputDefaults() {
+    const startEl = document.getElementById('report-start');
+    const endEl = document.getElementById('report-end');
+    if (!startEl || !endEl) return;
+    if (startEl.value && endEl.value) return;
+    const today = new Date();
+    const monthAgo = new Date(today);
+    monthAgo.setMonth(monthAgo.getMonth() - 1);
+    const fmt = d => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+    if (!startEl.value) startEl.value = fmt(monthAgo);
+    if (!endEl.value) endEl.value = fmt(today);
+}
+
 export function switchDetailTab(tab) {
     state.detailTab = tab;
     document.querySelectorAll('.detail-tab').forEach(t => {
@@ -349,6 +363,10 @@ export function switchDetailTab(tab) {
     document.getElementById('report-tab').style.display = tab === 'report' ? '' : 'none';
     document.getElementById('score-tab').style.display = tab === 'score' ? '' : 'none';
     if (tab === 'score') loadScoreCard();
+    if (tab === 'report') {
+        _ensureReportInputDefaults();
+        if (state.selectedStudentId) loadReportCard();
+    }
 }
 
 export async function loadReportCard() {
@@ -788,11 +806,18 @@ function renderTempClassOverrideCard(studentId) {
 }
 
 export function renderStudentDetail(studentId) {
+    const studentChanged = studentId !== _lastRenderedStudentId;
     // 다른 학생으로 이동할 때 pending 클리닉 플래그 해제
-    if (studentId !== _lastRenderedStudentId) {
+    if (studentChanged) {
         state._pendingClinicStudentId = null;
     }
     _lastRenderedStudentId = studentId;
+
+    // 학생 전환 + 출결 탭 활성 시 자동 재조회 (입력 기간은 유지)
+    if (studentChanged && studentId && state.detailTab === 'report') {
+        _ensureReportInputDefaults();
+        loadReportCard();
+    }
 
     if (!studentId) {
         document.getElementById('detail-empty').style.display = '';
