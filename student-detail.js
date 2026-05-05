@@ -8,7 +8,7 @@ import {
     query, where, deleteField
 } from 'firebase/firestore';
 import { db } from './firebase-config.js';
-import { state, LEAVE_STATUSES } from './state.js';
+import { state, LEAVE_STATUSES, LEVEL_SHORT } from './state.js';
 import {
     esc, escAttr, formatTime12h, oxDisplayClass,
     nowTimeStr, showSaveIndicator
@@ -607,7 +607,11 @@ function renderScoreTable(title, icon, rows, emptyText, columns) {
 
 function externalEventLabel(event) {
     if (event.type === 'school') {
-        return `${event.year || ''} ${event.level || ''} ${event.school || ''} ${event.grade || ''}학년 ${event.semester || ''}학기 ${event.examName || ''}`.replace(/\s+/g, ' ').trim();
+        const school = event.school || '';
+        const levelRaw = event.level || '';
+        const levelShort = LEVEL_SHORT[levelRaw] || levelRaw;
+        const schoolWithLevel = levelShort && !school.endsWith(levelShort) ? `${school}${levelShort}` : school;
+        return `${event.year || ''} ${schoolWithLevel}${event.grade || ''} ${event.semester || ''}학기 ${event.examName || ''}`.replace(/\s+/g, ' ').trim();
     }
     return `${event.year || ''} ${event.month || ''}월 모의고사 ${event.grade ? `${event.grade}학년` : ''}`.replace(/\s+/g, ' ').trim();
 }
@@ -700,6 +704,14 @@ async function loadExternalScores(studentId, type) {
         const diff = scoreNum(s.finalScore) != null && scoreNum(s.predictedScore) != null
             ? scoreNum(s.finalScore - s.predictedScore)
             : null;
+        // 학교내신은 작성일시 숨김. 정렬은 시험 시점 기준 — 한글 lexicographic은
+        // "기말"<"중간"이라 시간 역순이 깨지므로 examName을 시간순 코드로 매핑.
+        const isSchool = type === 'school';
+        const examNameOrder = ({ '중간': '1', '기말': '2' })[event.examName] || event.examName || '';
+        const gradeKey = String(event.grade || '').padStart(2, '0');
+        const sortKey = isSchool
+            ? `${event.year || ''}-${gradeKey}-${event.semester || ''}-${examNameOrder}`
+            : (event.date || event.updatedAt || '');
         return {
             title: esc(externalEventLabel(event) || event.title || ''),
             predicted: esc(scoreValue(s.predictedScore)),
@@ -713,11 +725,12 @@ async function loadExternalScores(studentId, type) {
                 ].filter(Boolean).join(', ') || '—')
                 : esc(s.memo || '—'),
             report: scoreLink(s.reportImageUrl, s.reportImageName || '성적표'),
-            date: event.date || event.updatedAt || '',
+            date: isSchool ? '' : (event.date || event.updatedAt || ''),
+            _sortKey: sortKey,
         };
     }));
 
-    return rows.filter(Boolean).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    return rows.filter(Boolean).sort((a, b) => (b._sortKey || '').localeCompare(a._sortKey || ''));
 }
 
 export async function loadScoreCard() {
