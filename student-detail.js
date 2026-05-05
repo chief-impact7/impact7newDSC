@@ -16,7 +16,7 @@ import {
 import {
     enrollmentCode, findStudent,
     branchFromStudent, makeDailyRecordId,
-    getActiveEnrollments
+    getActiveEnrollments, resolveNaesinCsKey
 } from './student-helpers.js';
 import {
     parseDateKST, todayStr, getDayName
@@ -342,6 +342,30 @@ function buildStayStatsHtml(student) {
 
 // ─── 출결현황 탭 ──────────────────────────────────────────────────────────────
 
+// 자유학기/내신은 정규와 공존 시 우선 표시 (둘 다 정규의 일시적 전환이라 짧게)
+function _classTypeLabel(types) {
+    if (types.has('자유학기')) return '자유';
+    if (types.has('내신')) return '내신';
+    return [...types].join('/');
+}
+
+// 내신 활성 체크 — class_type='내신' enrollment 또는 class_settings.naesin_*로 자동 유도
+function _isNaesinActiveAt(student, date) {
+    const enrolls = student.enrollments || [];
+    const valid = (d) => d && /^\d{4}-/.test(d);
+    if (enrolls.some(e =>
+        e.class_type === '내신' &&
+        valid(e.start_date) && e.start_date <= date &&
+        (!valid(e.end_date) || e.end_date >= date))) return true;
+    const regular = enrolls.find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
+    if (!regular) return false;
+    const csKey = resolveNaesinCsKey(student, regular);
+    if (!csKey) return false;
+    const cs = state.classSettings[csKey];
+    if (!cs?.naesin_start || !cs?.naesin_end) return false;
+    return cs.naesin_start <= date && date <= cs.naesin_end;
+}
+
 function _ensureReportInputDefaults() {
     const startEl = document.getElementById('report-start');
     const endEl = document.getElementById('report-end');
@@ -424,10 +448,16 @@ function renderReportCard(records) {
         const reason = rec.attendance?.reason || '';
         let classLabel = '';
         if (student && date) {
-            const types = [...new Set(getActiveEnrollments(student, date)
-                .filter(e => (e.day || []).includes(dayName))
-                .map(e => e.class_type || '정규'))];
-            classLabel = types.join('/');
+            // 내신 활성은 자동 유도라 enrollment에 '내신' 항목이 없을 수 있어 우선 검사.
+            // 그 외에는 그 날짜 활성 enrollment의 class_type 표시 (day 매칭 우선, 없으면 활성 전체).
+            if (_isNaesinActiveAt(student, date)) {
+                classLabel = '내신';
+            } else {
+                const active = getActiveEnrollments(student, date);
+                const matched = active.filter(e => (e.day || []).includes(dayName));
+                const source = matched.length > 0 ? matched : active;
+                classLabel = _classTypeLabel(new Set(source.map(e => e.class_type || '정규')));
+            }
         }
         return { date, dayName, status, reason, classLabel };
     }).filter(r => r.date);
@@ -439,7 +469,7 @@ function renderReportCard(records) {
                 출석 (${attendanceRows.length}일)
             </div>
             <table class="report-attendance-table">
-                <thead><tr><th>날짜</th><th>구분</th><th>반</th><th>비고</th></tr></thead>
+                <thead><tr><th>날짜</th><th>반</th><th>구분</th><th>비고</th></tr></thead>
                 <tbody>
                     ${attendanceRows.map(r => {
                         const dateShort = r.date.slice(5).replace('-', '/');
@@ -449,8 +479,8 @@ function renderReportCard(records) {
                                     r.status === '보충' ? 'att-makeup' : '';
                         return `<tr>
                             <td>${esc(dateShort)}(${esc(r.dayName)})</td>
-                            <td class="${cls}">${esc(r.status || '-')}</td>
                             <td>${esc(r.classLabel || '-')}</td>
+                            <td class="${cls}">${esc(r.status || '-')}</td>
                             <td>${esc(r.reason)}</td>
                         </tr>`;
                     }).join('')}
