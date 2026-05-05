@@ -587,11 +587,14 @@ function renderBranchFilter() {
         { key: '10단지', label: '10단지', children: ['초등', '중등', '고등'] }
     ];
     const dayName = getDayName(state.selectedDate);
-    const active = state.allStudents.filter(s =>
-        !isWithdrawnAt(s, state.selectedDate) && getActiveEnrollments(s, state.selectedDate).some(e =>
-            e.day.includes(dayName)
-        )
-    );
+    // attendance에서만 휴원 학생을 별도 섹션으로 표시하므로 카운트에 포함.
+    // 그 외 카테고리(숙제·테스트·행정)에서는 휴원 학생이 화면에서 빠지므로 카운트도 제외.
+    const includeOnLeave = state.currentCategory === 'attendance';
+    const active = state.allStudents.filter(s => {
+        if (isWithdrawnAt(s, state.selectedDate)) return false;
+        if (!includeOnLeave && isOnLeaveAt(s, state.selectedDate)) return false;
+        return getActiveEnrollments(s, state.selectedDate).some(e => e.day.includes(dayName));
+    });
 
     let html = '';
     for (const b of branches) {
@@ -1477,7 +1480,9 @@ function getFilteredStudents() {
                     e.class_type === '특강' && e.day.includes(dayName)
                 );
             }
-            if (isOnLeaveAt(s, state.selectedDate)) return false;
+            // attendance 카테고리에선 휴원 학생도 통과(목록 하단 휴원 섹션으로 분리),
+            // 그 외 카테고리에선 제외
+            if (isOnLeaveAt(s, state.selectedDate) && state.currentCategory !== 'attendance') return false;
             return getActiveEnrollments(s, state.selectedDate).some(e => e.day.includes(dayName));
         });
         // 세션 내 퇴원처리된 학생도 특강 수강 중이면 포함
