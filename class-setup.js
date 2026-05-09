@@ -8,7 +8,7 @@ import { signInWithGoogle, logout } from './auth.js';
 import { todayStr, studentShortLabel, ACTIVE_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { LEAVE_STATUSES, LEVEL_SHORT } from './state.js';
 import { buildNaesinCsKey } from './student-helpers.js';
-import { auditSet, batchUpdate } from './audit.js';
+import { batchSet, batchUpdate } from './audit.js';
 
 const CLASS_TYPE_LABELS = {
     '정규': '정규반',
@@ -211,13 +211,13 @@ window.renderNaesinPlanner = function () {
 
     const grouped = new Map();
     rows.forEach(row => {
-        const key = [row.school, row.level, row.grade, row.dayKey].join('|');
+        const key = [row.branch, row.level, row.school, row.grade, row.dayKey].join('|');
         if (!grouped.has(key)) grouped.set(key, []);
         grouped.get(key).push(row);
     });
 
     groups.innerHTML = [...grouped.entries()].map(([key, groupRows]) => {
-        const [school, level, grade, dayKey] = key.split('|');
+        const [branch, level, school, grade, dayKey] = key.split('|');
         const studentHtml = groupRows.map(row => `
             <div class="planner-student">
                 <span class="planner-student-name">${esc(row.name)}</span>
@@ -227,7 +227,7 @@ window.renderNaesinPlanner = function () {
         return `
             <section class="planner-group">
                 <div class="planner-group-head">
-                    <div class="planner-group-title">${esc(school)} · ${esc(level)} · ${esc(grade)} · ${esc(dayKey)}</div>
+                    <div class="planner-group-title">${esc(branch)} · ${esc(level)} · ${esc(school)} · ${esc(grade)} · ${esc(dayKey)}</div>
                     <span class="planner-count">${groupRows.length}명</span>
                 </div>
                 <div class="planner-student-list">${studentHtml}</div>
@@ -246,9 +246,10 @@ function buildPlannerMatrix() {
 
     const groupMap = new Map();
     rows.forEach(r => {
-        const key = [r.level, r.school, r.grade, r.dayKey].join('|');
+        const key = [r.branch, r.level, r.school, r.grade, r.dayKey].join('|');
         if (!groupMap.has(key)) {
             groupMap.set(key, {
+                branch: r.branch,
                 level: r.level,
                 school: r.school,
                 grade: r.grade,
@@ -261,16 +262,18 @@ function buildPlannerMatrix() {
 
     const groups = [...groupMap.values()];
     const maxNames = Math.max(...groups.map(g => g.names.length), 0);
-    const totalRows = 4 + maxNames;
+    const HEADER_ROWS = 5; // 소속 / 학부 / 학교 / 학년 / 요일
+    const totalRows = HEADER_ROWS + maxNames;
 
     const matrix = Array.from({ length: totalRows }, () => Array(groups.length).fill(''));
     groups.forEach((g, c) => {
-        matrix[0][c] = g.level;
-        matrix[1][c] = g.school;
-        matrix[2][c] = g.grade;
-        matrix[3][c] = g.dayKey;
+        matrix[0][c] = g.branch;
+        matrix[1][c] = g.level;
+        matrix[2][c] = g.school;
+        matrix[3][c] = g.grade;
+        matrix[4][c] = g.dayKey;
         g.names.forEach((name, i) => {
-            matrix[4 + i][c] = name;
+            matrix[HEADER_ROWS + i][c] = name;
         });
     });
 
@@ -408,8 +411,21 @@ window.prevStep = function () {
     goToStep(currentStep - 1);
 };
 
+// DOM에서 wizardData로 모든 form 데이터를 한 번에 끌어모은다 (부수효과 전용).
+function collectFormData() {
+    buildClassCode();
+    wizardData.teacher = document.getElementById('input-teacher').value;
+    wizardData.schedule = Object.fromEntries(
+        wizardData.days.map(day => [
+            day,
+            document.getElementById(`time-${day}`)?.value || '16:00',
+        ])
+    );
+}
+
+// wizardData만 검사하는 순수 검증기 (부수효과 없음).
 function validateForm() {
-    if (!buildClassCode()) {
+    if (!wizardData.classCode) {
         showToast('반 이름 정보를 입력하세요.', 'error');
         return false;
     }
@@ -417,7 +433,6 @@ function validateForm() {
         showToast('유료/무료를 선택하세요.', 'error');
         return false;
     }
-    wizardData.teacher = document.getElementById('input-teacher').value;
     if (wizardData.students.length === 0) {
         showToast('학생을 1명 이상 추가하세요.', 'error');
         return false;
@@ -426,16 +441,12 @@ function validateForm() {
         showToast('요일을 1개 이상 선택하세요.', 'error');
         return false;
     }
-    wizardData.schedule = {};
-    wizardData.days.forEach(day => {
-        const input = document.getElementById(`time-${day}`);
-        wizardData.schedule[day] = input?.value || '16:00';
-    });
     return true;
 }
 
 // ─── Step 1: 반 유형 ────────────────────────────────────────────────────────
-window.selectClassType = function (type) {
+// 카드 클릭 시 type 저장 → 자동으로 Step 2 진행. 서로 다른 type으로 전환 시 stale 데이터 reset.
+window.chooseClassTypeAndAdvance = function (type) {
     if (wizardData.classType && wizardData.classType !== type) {
         resetWizardForTypeChange();
     }
@@ -488,15 +499,34 @@ function resetWizardForTypeChange() {
 // ─── Step 2: 반 이름 ────────────────────────────────────────────────────────
 function onEnterStep2() {
     const t = wizardData.classType;
+    toggleNameForms(t);
+    refreshStepTitles();
+    togglePlannerPanel(t);
+
+    renderSelectedStudents();
+    renderTimeSettings();
+    renderSummary();
+
+    bindDateValidations();
+    bindPreviewListeners();
+    syncPreviewFromDom(t);
+    restoreFeeButtonState(t);
+}
+
+function toggleNameForms(t) {
     document.getElementById('name-regular').style.display = (t === '정규' || t === '자유학기') ? '' : 'none';
     document.getElementById('name-naesin').style.display = t === '내신' ? '' : 'none';
     document.getElementById('name-special').style.display = t === '특강' ? '' : 'none';
     document.getElementById('free-semester-dates').style.display = t === '자유학기' ? '' : 'none';
+}
 
+function refreshStepTitles() {
     setStepTitle('step-2-title', '상세 설정');
     setStepTitle('section-title-name', '이름');
     setStepTitle('section-title-students', '학생 추가');
+}
 
+function togglePlannerPanel(t) {
     const isNaesin = t === '내신';
     const body = document.getElementById('step-2-body');
     const planner = document.getElementById('planner-panel');
@@ -506,55 +536,53 @@ function onEnterStep2() {
         initNaesinPlanner();
         populateSchoolList();
     }
+}
 
-    renderSelectedStudents();
-    renderTimeSettings();
-    renderSummary();
-
-    // 날짜 유효성: 종료일 >= 시작일
+function bindDateValidations() {
     setupDateValidation('input-free-start', 'input-free-end');
     setupDateValidation('input-naesin-start', 'input-naesin-end');
     setupDateValidation('input-special-start', 'input-special-end');
+}
 
-    // 프리뷰 업데이트 이벤트 — 날짜 input은 change 이벤트가 주력이므로 함께 등록
-    ['input-level', 'input-class-number', 'input-free-start', 'input-free-end'].forEach(id => {
+// 동일 element-event 조합에 핸들러를 안전하게 재바인딩(중복 등록 방지).
+function rebind(ids, events, handler) {
+    (Array.isArray(ids) ? ids : [ids]).forEach(id => {
         const el = document.getElementById(id);
-        el.removeEventListener('input', updateRegularPreview);
-        el.addEventListener('input', updateRegularPreview);
-        el.removeEventListener('change', updateRegularPreview);
-        el.addEventListener('change', updateRegularPreview);
+        if (!el) return;
+        (Array.isArray(events) ? events : [events]).forEach(ev => {
+            el.removeEventListener(ev, handler);
+            el.addEventListener(ev, handler);
+        });
     });
-    ['input-naesin-branch', 'input-naesin-level', 'input-school', 'input-grade',
-     'input-naesin-group', 'input-naesin-start', 'input-naesin-end'].forEach(id => {
-        const el = document.getElementById(id);
-        el.removeEventListener('input', updateNaesinPreview);
-        el.addEventListener('input', updateNaesinPreview);
-        el.removeEventListener('change', updateNaesinPreview);
-        el.addEventListener('change', updateNaesinPreview);
-    });
-    ['input-special-name', 'input-special-start', 'input-special-end'].forEach(id => {
-        const el = document.getElementById(id);
-        el.removeEventListener('input', updateSpecialPreview);
-        el.addEventListener('input', updateSpecialPreview);
-        el.removeEventListener('change', updateSpecialPreview);
-        el.addEventListener('change', updateSpecialPreview);
-    });
+}
 
-    const teacherSel = document.getElementById('input-teacher');
-    teacherSel.removeEventListener('change', updateTeacherPreview);
-    teacherSel.addEventListener('change', updateTeacherPreview);
+function bindPreviewListeners() {
+    rebind(
+        ['input-level', 'input-class-number', 'input-free-start', 'input-free-end'],
+        ['input', 'change'], updateRegularPreview);
+    rebind(
+        ['input-naesin-branch', 'input-naesin-level', 'input-school', 'input-grade',
+         'input-naesin-group', 'input-naesin-start', 'input-naesin-end'],
+        ['input', 'change'], updateNaesinPreview);
+    rebind(
+        ['input-special-name', 'input-special-start', 'input-special-end'],
+        ['input', 'change'], updateSpecialPreview);
+    rebind('input-teacher', 'change', updateTeacherPreview);
+}
 
-    // step 재진입 시 DOM ↔ wizardData를 강제 동기화하고 미리보기를 즉시 갱신
+// step 재진입 시 DOM 값을 wizardData로 강제 동기화하고 미리보기 갱신
+function syncPreviewFromDom(t) {
     if (t === '정규' || t === '자유학기') updateRegularPreview();
     else if (t === '내신') updateNaesinPreview();
     else if (t === '특강') updateSpecialPreview();
     updateTeacherPreview();
+}
 
-    if (t === '특강') {
-        document.querySelectorAll('.fee-type-btn').forEach(b => {
-            b.classList.toggle('selected', b.dataset.fee === wizardData.feeType);
-        });
-    }
+function restoreFeeButtonState(t) {
+    if (t !== '특강') return;
+    document.querySelectorAll('.fee-type-btn').forEach(b => {
+        b.classList.toggle('selected', b.dataset.fee === wizardData.feeType);
+    });
 }
 
 function updateTeacherPreview() {
@@ -774,16 +802,22 @@ window.addStudent = function (docId) {
 
     wizardData.students.push(found);
     renderSelectedStudents();
-    const searchInput = document.getElementById('student-search');
-    if (searchInput.value) _doSearchStudents(searchInput.value);
+    refreshSearchAfterMutation();
 };
 
 window.removeStudent = function (docId) {
     wizardData.students = wizardData.students.filter(s => s.docId !== docId);
     renderSelectedStudents();
-    const searchInput = document.getElementById('student-search');
-    if (searchInput.value) window.searchStudents(searchInput.value);
+    refreshSearchAfterMutation();
 };
+
+// 학생 추가/제거 직후엔 즉시 재검색하되 pending debounce를 취소해 중복 렌더 방지.
+function refreshSearchAfterMutation() {
+    const searchInput = document.getElementById('student-search');
+    if (!searchInput?.value) return;
+    clearTimeout(_searchTimer);
+    _doSearchStudents(searchInput.value);
+}
 
 function renderSelectedStudents() {
     document.getElementById('selected-count').textContent = wizardData.students.length;
@@ -892,6 +926,7 @@ function renderSummary() {
 
 // ─── Submit ─────────────────────────────────────────────────────────────────
 window.submitWizard = async function () {
+    collectFormData();
     if (!validateForm()) return;
     const btn = document.getElementById('btn-submit');
     btn.disabled = true;
@@ -907,7 +942,7 @@ window.submitWizard = async function () {
             if (!ok) { btn.disabled = false; btn.textContent = '반 생성'; return; }
         }
 
-        // 2. class_settings 문서 생성/업데이트
+        // 2. class_settings 데이터 준비 (commit은 batch에서 한번에)
         const classSettingsData = { teacher: d.teacher || '' };
         if (d.classType === '내신') {
             classSettingsData.class_type = '내신';
@@ -928,7 +963,6 @@ window.submitWizard = async function () {
                 if (d.specialEnd) classSettingsData.special_end = d.specialEnd;
             }
         }
-        await auditSet(doc(db, 'class_settings', d.classCode), classSettingsData, { merge: true });
 
         // 3. 학생별 enrollment 추가 (batch + arrayUnion으로 경합 방지)
         const today = todayStr();
@@ -945,7 +979,9 @@ window.submitWizard = async function () {
             });
         }
 
+        // class_settings + 학생 enrollment를 한 batch에 묶어 부분 실패 시 데이터 불일치를 방지.
         const batch = writeBatch(db);
+        batchSet(batch, doc(db, 'class_settings', d.classCode), classSettingsData, { merge: true });
         for (const student of d.students) {
             const studentRef = doc(db, 'students', student.docId);
 

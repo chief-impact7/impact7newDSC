@@ -60,22 +60,22 @@
             <section class="wizard-step" id="step-1">
                 <h2 class="step-title">어떤 반을 만드시겠어요?</h2>
                 <div class="type-cards">
-                    <button class="type-card" data-type="정규" onclick="selectClassType('정규')">
+                    <button class="type-card" data-type="정규" onclick="chooseClassTypeAndAdvance('정규')">
                         <span class="material-symbols-outlined type-icon">school</span>
                         <span class="type-name">정규</span>
                         <span class="type-desc">레벨 + 반번호 (예: A101)</span>
                     </button>
-                    <button class="type-card" data-type="내신" onclick="selectClassType('내신')">
+                    <button class="type-card" data-type="내신" onclick="chooseClassTypeAndAdvance('내신')">
                         <span class="material-symbols-outlined type-icon">menu_book</span>
                         <span class="type-name">내신</span>
                         <span class="type-desc">학교 + 학년 (예: 불곡중1A)</span>
                     </button>
-                    <button class="type-card" data-type="자유학기" onclick="selectClassType('자유학기')">
+                    <button class="type-card" data-type="자유학기" onclick="chooseClassTypeAndAdvance('자유학기')">
                         <span class="material-symbols-outlined type-icon">explore</span>
                         <span class="type-name">자유학기</span>
                         <span class="type-desc">레벨 + 반번호 (정규와 동일 구조)</span>
                     </button>
-                    <button class="type-card" data-type="특강" onclick="selectClassType('특강')">
+                    <button class="type-card" data-type="특강" onclick="chooseClassTypeAndAdvance('특강')">
                         <span class="material-symbols-outlined type-icon">bolt</span>
                         <span class="type-name">특강</span>
                         <span class="type-desc">자유 텍스트 (예: 여름특강A)</span>
