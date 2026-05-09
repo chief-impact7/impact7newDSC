@@ -389,53 +389,38 @@ function goToStep(step) {
     });
 
     document.getElementById('btn-back').style.display = currentStep === 1 ? 'none' : '';
-    // Step 1은 카드 클릭으로 자동 진행, Step 2는 마지막 → 다음 버튼은 항상 숨김
-    document.getElementById('btn-next').style.display = 'none';
     document.getElementById('btn-submit').style.display = currentStep === TOTAL_STEPS ? '' : 'none';
 
     if (currentStep === 2) onEnterStep2();
 }
 
-window.nextStep = function () {
-    if (!validateStep(currentStep)) return;
-    goToStep(currentStep + 1);
-};
-
 window.prevStep = function () {
     goToStep(currentStep - 1);
 };
 
-function validateStep(step) {
-    if (step === 1) {
-        if (!wizardData.classType) {
-            showToast('반 유형을 선택하세요.', 'error');
-            return false;
-        }
+function validateForm() {
+    if (!buildClassCode()) {
+        showToast('반 이름 정보를 입력하세요.', 'error');
+        return false;
     }
-    if (step === 2) {
-        if (!buildClassCode()) {
-            showToast('반 이름 정보를 입력하세요.', 'error');
-            return false;
-        }
-        if (wizardData.classType === '특강' && !wizardData.feeType) {
-            showToast('유료/무료를 선택하세요.', 'error');
-            return false;
-        }
-        wizardData.teacher = document.getElementById('input-teacher').value;
-        if (wizardData.students.length === 0) {
-            showToast('학생을 1명 이상 추가하세요.', 'error');
-            return false;
-        }
-        if (wizardData.days.length === 0) {
-            showToast('요일을 1개 이상 선택하세요.', 'error');
-            return false;
-        }
-        wizardData.schedule = {};
-        wizardData.days.forEach(day => {
-            const input = document.getElementById(`time-${day}`);
-            wizardData.schedule[day] = input?.value || '16:00';
-        });
+    if (wizardData.classType === '특강' && !wizardData.feeType) {
+        showToast('유료/무료를 선택하세요.', 'error');
+        return false;
     }
+    wizardData.teacher = document.getElementById('input-teacher').value;
+    if (wizardData.students.length === 0) {
+        showToast('학생을 1명 이상 추가하세요.', 'error');
+        return false;
+    }
+    if (wizardData.days.length === 0) {
+        showToast('요일을 1개 이상 선택하세요.', 'error');
+        return false;
+    }
+    wizardData.schedule = {};
+    wizardData.days.forEach(day => {
+        const input = document.getElementById(`time-${day}`);
+        wizardData.schedule[day] = input?.value || '16:00';
+    });
     return true;
 }
 
@@ -811,6 +796,7 @@ function renderSummary() {
 
 // ─── Submit ─────────────────────────────────────────────────────────────────
 window.submitWizard = async function () {
+    if (!validateForm()) return;
     const btn = document.getElementById('btn-submit');
     btn.disabled = true;
     btn.textContent = '생성 중...';
