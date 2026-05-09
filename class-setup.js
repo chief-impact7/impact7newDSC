@@ -389,7 +389,8 @@ function goToStep(step) {
     });
 
     document.getElementById('btn-back').style.display = currentStep === 1 ? 'none' : '';
-    document.getElementById('btn-next').style.display = currentStep === TOTAL_STEPS ? 'none' : '';
+    // Step 1은 카드 클릭으로 자동 진행, Step 2는 마지막 → 다음 버튼은 항상 숨김
+    document.getElementById('btn-next').style.display = 'none';
     document.getElementById('btn-submit').style.display = currentStep === TOTAL_STEPS ? '' : 'none';
 
     if (currentStep === 2) onEnterStep2();
@@ -444,6 +445,7 @@ window.selectClassType = function (type) {
     document.querySelectorAll('.type-card').forEach(c => {
         c.classList.toggle('selected', c.dataset.type === type);
     });
+    goToStep(2);
 };
 
 // ─── Step 2: 반 이름 ────────────────────────────────────────────────────────
