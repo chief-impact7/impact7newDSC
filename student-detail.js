@@ -941,7 +941,8 @@ export function renderStudentDetail(studentId) {
         const period = pauseStart && pauseEnd ? ` (${pauseStart} ~ ${pauseEnd})` : pauseStart ? ` (${pauseStart} ~)` : '';
         tagText = `${student.status}${period}`;
     } else {
-        const displayStatus = attStatus === '미확인' ? '정규' : attStatus;
+        const isNaesinActive = _isNaesinActiveAt(student, state.selectedDate);
+        const displayStatus = attStatus === '미확인' ? (isNaesinActive ? '내신' : '정규') : attStatus;
         tagClass = attStatus === '출석' ? 'tag-present' :
                    attStatus === '결석' ? 'tag-absent' :
                    attStatus === '지각' ? 'tag-late' : 'tag-pending';

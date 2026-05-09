@@ -8,7 +8,7 @@ import { getDayName, todayStr } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditDelete, batchUpdate, READ_ONLY } from './audit.js';
 import { state, DAY_ORDER } from './state.js';
 import { esc, escAttr, showSaveIndicator, showToast } from './ui-utils.js';
-import { matchesBranchFilter, enrollmentCode, getActiveEnrollments, resolveNaesinCsKey } from './student-helpers.js';
+import { matchesBranchFilter, enrollmentCode, getActiveEnrollments, resolveNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
@@ -722,6 +722,12 @@ const _MODES = {
         describe: (count) => `내신 반에 등록된 ${count}명이 영향을 받습니다.`,
         toast: (code, count) => `내신 "${code}" 삭제 완료 (${count}명)`,
         getPeriod: (cs) => ({ start: cs?.naesin_start, end: cs?.naesin_end }),
+        // 자동 유도 학생(내신 enrollment·override 없이 csKey만 매칭)도 영향 카운트에 포함하기 위한 별도 매처.
+        // applyToStudent는 enrollment 변경이 있는 학생만 update 대상으로 반환하므로 카운트와 분리.
+        countMatch: (s, csKey) => {
+            const reg = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
+            return !!reg && resolveNaesinCsKey(s, reg) === csKey;
+        },
         applyToStudent: (s, csKey) => {
             const original = s.enrollments || [];
             const reg = original.find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
@@ -729,10 +735,18 @@ const _MODES = {
             let changed = false;
             const updated = original.flatMap(e => {
                 if (e.class_type === '내신') { changed = true; return []; }
-                if ((e.class_type === '정규' || e.class_type === '자유학기') && e.naesin_class_override === csKey) {
-                    changed = true;
-                    const { naesin_class_override: _drop, ...rest } = e;
-                    return [rest];
+                if (e.class_type === '정규' || e.class_type === '자유학기') {
+                    // override가 csKey 매칭이면 제거 → 자동 유도로 fallback
+                    if (e.naesin_class_override === csKey) {
+                        changed = true;
+                        const { naesin_class_override: _drop, ...rest } = e;
+                        return [rest];
+                    }
+                    // override 미설정 + 자동 유도가 csKey 매칭이면 EXCLUDE 센티넬로 차단
+                    if (typeof e.naesin_class_override !== 'string' && resolveNaesinCsKey(s, e) === csKey) {
+                        changed = true;
+                        return [{ ...e, naesin_class_override: NAESIN_OVERRIDE_EXCLUDE }];
+                    }
                 }
                 return [e];
             });
@@ -765,7 +779,8 @@ async function _logClassDeletion(classCode, mode, csBefore, affected) {
 function _countAffectedStudents(classCode, mode) {
     const M = _MODES[mode];
     if (!M) return 0;
-    return state.allStudents.filter(s => M.applyToStudent(s, classCode) !== null).length;
+    const matcher = M.countMatch || ((s, c) => M.applyToStudent(s, c) !== null);
+    return state.allStudents.filter(s => matcher(s, classCode)).length;
 }
 
 export function getClassPeriodInfo(classCode, mode) {

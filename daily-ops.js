@@ -667,57 +667,48 @@ function getFreeSemesterClassStudents(classCode) {
 }
 
 function _getAllClassCodes() {
+    // class_settings에 등록된 반만 사이드바에 노출 (자동 유도 가상 반 제외)
     const regularCodes = new Set();
     const freeCounts = new Map();
     const naesinCounts = new Map();
+    const BRANCHES = ['10단지', '2단지'];
+
+    // 1. class_settings 기반 등록 — 자유학기/내신/정규/특강 분류
+    Object.entries(state.classSettings).forEach(([code, cs]) => {
+        if (!cs) return;
+        if (cs.class_type === '특강') return; // teukang 그룹에서 별도 처리
+
+        if (cs.naesin_start && cs.naesin_end) {
+            const branch = BRANCHES.find(b => code.startsWith(b)) || '';
+            if (state.selectedBranch && branch !== state.selectedBranch) return;
+            naesinCounts.set(code, { displayCode: displayCodeFromCsKey(code, branch), count: 0 });
+            return;
+        }
+
+        if (cs.free_schedule !== undefined || cs.free_start) {
+            freeCounts.set(code, 0);
+        }
+        regularCodes.add(code);
+    });
+
+    // 2. 학생 enrollment로 카운트 (등록된 반에 한해)
     state.allStudents.forEach(s => {
         if (isWithdrawnAt(s, state.selectedDate)) return;
         if (!matchesBranchFilter(s)) return;
-        const levelShort = LEVEL_SHORT[s.level] || '';
 
-        let hasRegular = false;
+        // 자유학기 enrollment 카운트
         (s.enrollments || []).forEach(e => {
+            if (e.class_type !== '자유학기') return;
             const code = enrollmentCode(e);
-            if (!code) return;
-            if (e.class_type === '내신' || e.class_type === '특강') return;
-            if (e.class_type === '자유학기') {
-                freeCounts.set(code, (freeCounts.get(code) || 0) + 1);
-                return;
-            }
-            regularCodes.add(code);
-            hasRegular = true;
+            if (!code || !freeCounts.has(code)) return;
+            freeCounts.set(code, freeCounts.get(code) + 1);
         });
 
-        // 내신 반코드 유도 (초등 제외, 정규 enrollment이 있는 학생만, 휴원 중 제외)
-        // key = 소속+반코드 (Firestore 키), displayCode = 반코드만 (표시용)
-        if (hasRegular && levelShort && levelShort !== '초' && !isOnLeaveAt(s, state.selectedDate)) {
-            const regularEnroll = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number) || {};
-            const key = resolveNaesinCsKey(s, regularEnroll);
-            if (key) {
-                const displayCode = displayCodeFromCsKey(key, branchFromStudent(s));
-                if (!naesinCounts.has(key)) naesinCounts.set(key, { displayCode, count: 0 });
-                naesinCounts.get(key).count++;
-            }
-        }
-    });
-
-    // 학생이 없는 자유학기 반도 노출 — class_settings에 free_schedule 또는 free_start이 설정됨
-    Object.entries(state.classSettings).forEach(([code, cs]) => {
-        if (cs?.free_schedule === undefined && !cs?.free_start) return;
-        if (cs.class_type === '내신' || cs.class_type === '특강') return;
-        if (freeCounts.has(code)) return;
-        freeCounts.set(code, 0);
-    });
-
-    // 학생이 아직 없는 내신 반도 L3 칩에 노출 — naesin 기간이 설정된 class_settings 기반
-    const BRANCHES = ['10단지', '2단지'];
-    Object.entries(state.classSettings).forEach(([key, cs]) => {
-        if (!cs?.naesin_start || !cs?.naesin_end) return;
-        if (cs.class_type === '특강') return;
-        if (naesinCounts.has(key)) return;
-        const branch = BRANCHES.find(b => key.startsWith(b)) || '';
-        if (state.selectedBranch && branch !== state.selectedBranch) return;
-        naesinCounts.set(key, { displayCode: displayCodeFromCsKey(key, branch), count: 0 });
+        // 내신 카운트 (class_settings 등록된 csKey만)
+        const reg = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
+        if (!reg) return;
+        const csKey = resolveNaesinCsKey(s, reg);
+        if (csKey && naesinCounts.has(csKey)) naesinCounts.get(csKey).count++;
     });
 
     const naesinWithCounts = [...naesinCounts.entries()]
