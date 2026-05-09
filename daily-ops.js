@@ -1157,13 +1157,10 @@ function getEffectiveAttendanceTime(s, date, dayName) {
 function isVisitStudent(docId) {
     const hwFail = state.dailyRecords[docId]?.hw_fail_action || {};
     if (Object.values(hwFail).some(a => a.type === '등원' && a.scheduled_date === state.selectedDate)) return true;
-    const today = todayStr();
-    const isToday = state.selectedDate === today;
-    // 오늘 예정이거나, 오늘 볼 때 지연된(overdue) pending task도 포함
     if (state.hwFailTasks.some(t => t.student_id === docId && t.type === '등원' && t.status === 'pending' &&
-        (t.scheduled_date === state.selectedDate || (isToday && t.scheduled_date && t.scheduled_date < today)))) return true;
+        t.scheduled_date === state.selectedDate)) return true;
     if (state.testFailTasks.some(t => t.student_id === docId && t.type === '등원' && t.status === 'pending' &&
-        (t.scheduled_date === state.selectedDate || (isToday && t.scheduled_date && t.scheduled_date < today)))) return true;
+        t.scheduled_date === state.selectedDate)) return true;
     if (state.dailyRecords[docId]?.extra_visit?.date === state.selectedDate) return true;
     return false;
 }
