@@ -666,19 +666,6 @@ function getFreeSemesterClassStudents(classCode) {
     });
 }
 
-function hasCurrentRegularStudentsInClass(classCode) {
-    const today = todayStr();
-    return state.allStudents.some(s => {
-        if (isWithdrawnAt(s, today)) return false;
-        return (s.enrollments || []).some(e => {
-            const type = e.class_type || '정규';
-            if (type !== '정규' && type !== '자유학기') return false;
-            if (e.end_date && e.end_date < today) return false;
-            return enrollmentCode(e) === classCode;
-        });
-    });
-}
-
 function _getAllClassCodes() {
     // class_settings에 등록된 반만 사이드바에 노출 (자동 유도 가상 반 제외)
     const regularCodes = new Set();
@@ -940,26 +927,6 @@ window.bulkDeleteSelectedClasses = async function() {
 
     await _runBulkDelete(selected, '일괄 삭제');
 };
-
-async function autoCleanupStaleClasses() {
-    const today = todayStr();
-    const targets = [];
-    Object.entries(state.classSettings).forEach(([code, cs]) => {
-        if (!cs) return;
-        if (cs.class_type === '특강' && cs.special_end && cs.special_end < today) {
-            targets.push({ mode: 'teukang', code });
-        } else if (cs.naesin_end && cs.naesin_end < today && cs.class_type !== '특강') {
-            targets.push({ mode: 'naesin', code });
-        } else if (cs.free_end && cs.free_end < today && cs.class_type !== '특강' && cs.class_type !== '내신') {
-            targets.push({ mode: 'free', code });
-        } else if (!cs.class_type && !cs.naesin_start && !cs.free_start && !cs.free_schedule && !hasCurrentRegularStudentsInClass(code)) {
-            targets.push({ mode: 'regular', code });
-        }
-    });
-
-    if (targets.length === 0) return;
-    await _runBulkDelete(targets, '자동 반 정리');
-}
 
 window.setClassMgmtMode = function(mode) {
     state._classMgmtMode = (state._classMgmtMode === mode) ? null : mode; // 토글
@@ -2773,7 +2740,6 @@ onAuthStateChanged(auth, async (user) => {
             buildSiblingMap();
             await trackTeacherLogin(user);
             await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadUserRole(), loadClassSettings(), loadClassNextHw(state.selectedDate), loadTeachers()]);
-            await autoCleanupStaleClasses();
             await syncAbsenceRecords();
             await loadRoleMemos().catch(() => {});
         } catch (err) {
@@ -2899,7 +2865,6 @@ window.refreshData = async () => {
     await promoteWithdrawalDate();
     await loadWithdrawnStudents();
     await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadRoleMemos(), loadClassSettings(true), loadClassNextHw(state.selectedDate), loadTeachers()]);
-    await autoCleanupStaleClasses();
     await syncAbsenceRecords();
     renderBranchFilter();
     renderSubFilters();
