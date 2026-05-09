@@ -3,7 +3,7 @@ import {
     collection, getDocs, doc,
     query, where, arrayUnion, deleteField
 } from 'firebase/firestore';
-import { auth, db, geminiModel } from './firebase-config.js';
+import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
 import { initHelpGuide } from './help-guide.js';
 import { toDateStrKST, parseDateKST, todayStr, getDayName, studentShortLabel, ACTIVE_STUDENT_STATUSES, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
@@ -888,8 +888,9 @@ async function _runBulkDelete(items, label) {
     let success = 0, failed = 0;
     for (const { mode, code } of items) {
         try {
-            await deleteClass(code, mode, { skipRender: true });
-            success++;
+            const result = await deleteClass(code, mode, { skipRender: true });
+            if (result?.readOnly) failed++;
+            else success++;
         } catch (err) {
             console.error(`[${label}] ${mode}/${code} 실패:`, err);
             failed++;
@@ -2787,10 +2788,9 @@ onAuthStateChanged(auth, async (user) => {
             console.error('[init] 데이터 로드 중 오류:', err);
         }
         // 백그라운드 후처리 (실패해도 앱 동작에 영향 없음)
-        autoCloseOldRecords().catch(e => console.warn('[autoClose]', e));
         syncTaskStudentNames().catch(e => console.warn('[syncNames]', e));
         updateDateDisplay();
-            renderBranchFilter();
+        renderBranchFilter();
         renderSubFilters();
         updateL1ExpandIcons();
         renderListPanel();
@@ -2913,6 +2913,14 @@ window.refreshData = async () => {
     renderListPanel();
     if (state.selectedStudentId) renderStudentDetail(state.selectedStudentId);
     showSaveIndicator('saved');
+};
+
+window.runOldRecordCleanup = async (force = false) => {
+    if (!force && !confirm('오래된 결석/휴퇴원/미통과 기록을 자동 정리합니다. production 데이터가 변경됩니다. 진행하시겠습니까?')) return;
+    await autoCloseOldRecords();
+    renderSubFilters();
+    renderListPanel();
+    if (state.selectedStudentId) renderStudentDetail(state.selectedStudentId);
 };
 
 window.selectStudent = selectStudent;

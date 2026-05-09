@@ -2,10 +2,10 @@
 // daily-ops.js에서 추출한 반 관리 상세 + 타반수업 관련 함수
 // Phase 3-3
 
-import { doc, getDoc, getDocFromServer, writeBatch, arrayUnion, deleteDoc, deleteField, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, getDocFromServer, writeBatch, arrayUnion, deleteField, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { getDayName, todayStr } from './src/shared/firestore-helpers.js';
-import { auditUpdate, batchUpdate } from './audit.js';
+import { auditUpdate, auditDelete, batchUpdate, READ_ONLY } from './audit.js';
 import { state, DAY_ORDER } from './state.js';
 import { esc, escAttr, showSaveIndicator, showToast } from './ui-utils.js';
 import { matchesBranchFilter, enrollmentCode, getActiveEnrollments, resolveNaesinCsKey } from './student-helpers.js';
@@ -419,6 +419,7 @@ export async function toggleRegularClassDay(classCode, day, isAdd) {
     try {
         const batch = writeBatch(db);
         let hasOps = false;
+        const studentUpdates = [];
         for (const student of state.allStudents) {
             if (student.status === '퇴원') continue;
             let changed = false;
@@ -431,13 +432,16 @@ export async function toggleRegularClassDay(classCode, day, isAdd) {
             });
             if (!changed) continue;
             batchUpdate(batch, doc(db, 'students', student.docId), { enrollments: updated });
-            student.enrollments = updated;
+            studentUpdates.push({ student, enrollments: updated });
             hasOps = true;
         }
         await Promise.all([
             saveClassSettings(classCode, { default_days: newDays }),
             hasOps ? batch.commit() : Promise.resolve(),
         ]);
+        if (!READ_ONLY) {
+            studentUpdates.forEach(({ student, enrollments }) => { student.enrollments = enrollments; });
+        }
         showSaveIndicator('saved');
         renderClassDetail(classCode);
     } catch (err) {
@@ -520,6 +524,7 @@ export async function toggleClassDay(classCode, day, isAdd) {
         const newDays = Object.keys(schedule).sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b));
         const batch = writeBatch(db);
         let hasOps = false;
+        const studentUpdates = [];
         for (const student of state.allStudents) {
             if (student.status === '퇴원') continue;
             let changed = false;
@@ -532,10 +537,13 @@ export async function toggleClassDay(classCode, day, isAdd) {
             });
             if (!changed) continue;
             batchUpdate(batch, doc(db, 'students', student.docId), { enrollments: updated });
-            student.enrollments = updated;
+            studentUpdates.push({ student, enrollments: updated });
             hasOps = true;
         }
         if (hasOps) await batch.commit();
+        if (!READ_ONLY) {
+            studentUpdates.forEach(({ student, enrollments }) => { student.enrollments = enrollments; });
+        }
         showSaveIndicator('saved');
         renderClassDetail(classCode);
     } catch (err) {
@@ -590,6 +598,7 @@ export async function saveFreeSemesterPeriod(classCode, field, value) {
         const enrollmentField = field === 'free_start' ? 'start_date' : 'end_date';
         const batch = writeBatch(db);
         let hasOps = false;
+        const studentUpdates = [];
         for (const student of state.allStudents) {
             let changed = false;
             const updated = (student.enrollments || []).map(e => {
@@ -601,13 +610,16 @@ export async function saveFreeSemesterPeriod(classCode, field, value) {
             });
             if (!changed) continue;
             batchUpdate(batch, doc(db, 'students', student.docId), { enrollments: updated });
-            student.enrollments = updated;
+            studentUpdates.push({ student, enrollments: updated });
             hasOps = true;
         }
         await Promise.all([
             saveClassSettings(classCode, { [field]: value }),
             hasOps ? batch.commit() : Promise.resolve(),
         ]);
+        if (!READ_ONLY) {
+            studentUpdates.forEach(({ student, enrollments }) => { student.enrollments = enrollments; });
+        }
         showSaveIndicator('saved');
         renderClassDetail(classCode);
     } catch (err) {
@@ -682,9 +694,12 @@ const _MODES = {
             const updated = original.filter(e => !(e.class_type === '특강' && enrollmentCode(e) === code));
             if (updated.length === original.length) return null;
             const update = { enrollments: updated };
-            // 이 학생의 마지막 특강이었으면 status2='특강' 정리
-            if (s.status2 === '특강' && !updated.some(e => e.class_type === '특강')) {
+            const hasTeukang = updated.some(e => e.class_type === '특강');
+            if (s.status2 === '특강' && !hasTeukang) {
                 update.status2 = '';
+            }
+            if (updated.length === 0 && s.status !== '상담') {
+                update.status = '퇴원';
             }
             return { update, before: original };
         },
@@ -728,15 +743,20 @@ const _MODES = {
 };
 
 async function _logClassDeletion(classCode, mode, csBefore, affected) {
+    if (READ_ONLY) {
+        console.log('[READ-ONLY] history_logs CLASS_DELETE 차단:', classCode, mode, affected.length);
+        return;
+    }
     await addDoc(collection(db, 'history_logs'), {
-        change_type: 'CLASS_DELETE',
-        class_code: classCode,
-        class_mode: mode,
+        doc_id: classCode,
+        change_type: 'DELETE',
         before: JSON.stringify({
+            type: 'CLASS_DELETE',
+            mode,
             class_settings: csBefore,
             students: affected.map(s => ({ docId: s.docId, name: s.name, enrollments: s.before })),
         }),
-        affected_count: affected.length,
+        after: JSON.stringify({ deleted: true, mode, affected_count: affected.length }),
         google_login_id: state.currentUser?.email || 'unknown',
         timestamp: serverTimestamp(),
     });
@@ -767,18 +787,19 @@ export async function deleteClass(classCode, mode, opts = {}) {
 
     const batch = writeBatch(db);
     const affected = [];
+    const studentUpdates = [];
     for (const student of state.allStudents) {
         const result = M.applyToStudent(student, classCode);
         if (!result) continue;
         affected.push({ docId: student.docId, name: student.name, before: result.before });
         batchUpdate(batch, doc(db, 'students', student.docId), result.update);
-        Object.assign(student, result.update);
+        studentUpdates.push({ student, update: result.update });
     }
 
     let csOp = Promise.resolve();
     let csBefore = cs;
     if (M.deleteClassDoc) {
-        csOp = deleteDoc(doc(db, 'class_settings', classCode));
+        csOp = auditDelete(doc(db, 'class_settings', classCode));
     } else if (M.csFieldsToDelete) {
         const csUpdate = {};
         const fieldsBefore = {};
@@ -795,7 +816,23 @@ export async function deleteClass(classCode, mode, opts = {}) {
     }
 
     await Promise.all([csOp, affected.length > 0 ? batch.commit() : Promise.resolve()]);
-    await _logClassDeletion(classCode, mode, csBefore, affected);
+
+    if (!READ_ONLY) {
+        studentUpdates.forEach(({ student, update }) => Object.assign(student, update));
+    }
+
+    try {
+        await _logClassDeletion(classCode, mode, csBefore, affected);
+    } catch (err) {
+        console.warn('반 삭제 이력 기록 실패:', err);
+    }
+
+    if (READ_ONLY) {
+        if (!skipRender) {
+            showToast(`READ-ONLY 모드: "${classCode}" 삭제가 차단되었습니다.`);
+        }
+        return { affected: affected.length, readOnly: true };
+    }
 
     if (M.deleteClassDoc) {
         delete state.classSettings[classCode];
@@ -959,13 +996,13 @@ export async function addStudentToTeukang(classCode, studentId) {
             enrollments: arrayUnion(newEnrollment),
             status2: '특강',
         });
-        // 로컬 캐시 업데이트
-        student.enrollments = [...(student.enrollments || []), newEnrollment];
-        student.status2 = '특강';
-        // 리모트에서 가져온 학생은 allStudents에 추가 (status2='특강' 쿼리에 매칭)
-        if (isFromRemote) {
-            state.allStudents.push(student);
-            state.allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+        if (!READ_ONLY) {
+            student.enrollments = [...(student.enrollments || []), newEnrollment];
+            student.status2 = '특강';
+            if (isFromRemote) {
+                state.allStudents.push(student);
+                state.allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+            }
         }
         showSaveIndicator('saved');
         renderClassDetail(classCode);

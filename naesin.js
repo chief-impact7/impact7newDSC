@@ -899,23 +899,25 @@ window.removeFromTeukang = async function(studentId, classCode) {
 
     if (!confirm(`${student.name} 학생을 ${classCode} 반에서 제거합니다. 계속할까요?`)) return;
 
-    // 단일 패스로 제거 + 다른 특강 존재 여부 판정
-    let hasOtherTeukang = false;
     const enrollments = (student.enrollments || []).filter(e => {
         const isTarget = e.class_type === '특강' && window.enrollmentCode?.(e) === classCode;
-        if (!isTarget && e.class_type === '특강') hasOtherTeukang = true;
         return !isTarget;
     });
+    const hasTeukang = enrollments.some(e => e.class_type === '특강');
     const updateData = { enrollments };
-    if (!hasOtherTeukang && student.status2 === '특강') {
+    if (!hasTeukang && student.status2 === '특강') {
         updateData.status2 = '';
+    }
+    if (enrollments.length === 0 && student.status !== '상담') {
+        updateData.status = '퇴원';
     }
 
     window.showSaveIndicator?.('saving');
     try {
         await auditUpdate(doc(db, 'students', studentId), updateData);
         student.enrollments = enrollments;
-        if (!hasOtherTeukang && student.status2 === '특강') student.status2 = '';
+        if (!hasTeukang && student.status2 === '특강') student.status2 = '';
+        if (updateData.status) student.status = updateData.status;
         window.showSaveIndicator?.('saved');
     } catch (err) {
         console.error('[removeFromTeukang] 저장 실패:', err);

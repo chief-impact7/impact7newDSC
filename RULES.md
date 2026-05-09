@@ -18,7 +18,7 @@
 | 영역 | 기술 |
 |------|------|
 | 언어 | JavaScript (ES Modules) |
-| DSC 입력 페이지 | Vanilla JS + Vite (`index.html`, `app.js`) |
+| DSC 입력 페이지 | Vanilla JS + Vite (`index.html`, `daily-ops.js`) |
 | 대시보드 페이지 | React + Vite (`dashboard.html`, `src/dashboard/`) |
 | 차트 | Recharts |
 | 스타일링 | CSS (`:root` 변수 기반) |
@@ -32,11 +32,14 @@
 ```
 impact7newDSC/
 ├── index.html              # DSC 입력 페이지 (Vanilla JS)
-├── app.js                  # DSC 메인 로직 (state, render, Firestore CRUD)
+├── daily-ops.js            # DSC 메인 오케스트레이터
+├── app.js                  # excel.html용 구형/엑셀형 입력 로직
 ├── dashboard.html          # 대시보드 페이지 (React)
+├── class-setup.html        # 반 편성 도우미
 ├── auth.js                 # Google 로그인/로그아웃 (공유)
-├── firebase-config.js      # Firebase 초기화 (공유)
-├── style.css               # DSC 입력 페이지 스타일
+├── firebase-config.js      # Firebase Auth/Firestore 초기화 (공유)
+├── firebase-ai.js          # 학부모 알림용 Firebase AI 초기화
+├── daily-ops.css           # DSC 입력 페이지 스타일
 ├── vite.config.js          # Vite 멀티페이지 설정
 ├── package.json
 ├── .env                    # Firebase 환경변수 (git 제외)
@@ -55,9 +58,10 @@ impact7newDSC/
 
 ### 파일 역할 - 수정 시 주의
 
-- **app.js**: 모든 핵심 로직이 여기에 있음. 파일이 커지면 모듈 분리 가능하지만, 분리 시 반드시 ES Module (`import/export`) 사용
-- **index.html**: 구조적 변경(섹션 추가/삭제) 시 `app.js`의 `SECTIONS` 배열과 반드시 동기화
-- **style.css**: CSS 변수(`:root`)를 적극 활용. 섹션별 컬러는 `--sec-*` 변수로 관리
+- **daily-ops.js**: 메인 DSC 입력 앱의 오케스트레이터. 기능별 세부 로직은 `attendance.js`, `data-layer.js`, `student-detail.js` 등으로 분리되어 있음
+- **app.js**: `excel.html`에서 사용하는 구형/엑셀형 입력 로직. 메인 입력 앱으로 착각하지 말 것
+- **index.html**: 구조적 변경(탭/패널/모달 추가·삭제) 시 `daily-ops.js`와 관련 기능 모듈의 `window.*` 노출을 함께 확인
+- **daily-ops.css**: 메인 DSC 입력 페이지 스타일
 - **.env**: 절대 커밋하지 않음. `VITE_` 접두사 필수
 
 ---

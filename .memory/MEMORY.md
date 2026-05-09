@@ -20,3 +20,4 @@
 - [project_contacts_deprecation.md](project_contacts_deprecation.md) — contacts/students 병합 완료, Phase 5(코드 제거) + Phase 6(특강반 학생 추가 UI) 잔여
 - [feedback_checklist_before_work.md](feedback_checklist_before_work.md) — 다단계 작업 시작 전 항상 TaskCreate로 체크리스트 만들고 승인받기
 - [feedback_naesin_regular_identification.md](feedback_naesin_regular_identification.md) — 정규 enrollment 식별은 `(정규 || 자유학기)` 화이트리스트만 사용 (특강 오인 방지, 67c92d0)
+- [project_code_quality_hardening_2026-05-06.md](project_code_quality_hardening_2026-05-06.md) — production Firestore 안전성 보강: READ-ONLY 로컬 오염 방지, 반 삭제 로그/rules 정합성, 결석대장 race 완화, 자동 정리 명시 실행화, Firebase AI 분리

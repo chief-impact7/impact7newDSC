@@ -2,7 +2,7 @@
 // daily-ops.js에서 분리 (Phase 2-1)
 
 import { state } from './state.js';
-import { geminiModel } from './firebase-config.js';
+import { geminiModel } from './firebase-ai.js';
 import { parseDateKST, getDayName } from './src/shared/firestore-helpers.js';
 import { esc, decodeHtmlEntities, formatTime12h, showSaveIndicator } from './ui-utils.js';
 import { enrollmentCode } from './student-helpers.js';

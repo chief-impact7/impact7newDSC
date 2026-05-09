@@ -8,7 +8,7 @@ import {
     onSnapshot
 } from 'firebase/firestore';
 import { db } from './firebase-config.js';
-import { auditUpdate, auditSet, auditAdd, batchUpdate, batchSet } from './audit.js';
+import { auditUpdate, auditSet, auditAdd, batchUpdate, batchSet, READ_ONLY } from './audit.js';
 import { parseDateKST, toDateStrKST, todayStr, getDayName } from './src/shared/firestore-helpers.js';
 import { state, DEFAULT_DOMAINS } from './state.js';
 import { showSaveIndicator } from './ui-utils.js';
@@ -236,10 +236,11 @@ export async function promoteEnrollPending() {
     const batch = writeBatch(db);
     for (const s of pending) {
         batchUpdate(batch, doc(db, 'students', s.docId), { status: '재원' });
-        s.status = '재원';
     }
     try {
         await batch.commit();
+        if (READ_ONLY) return;
+        pending.forEach(s => { s.status = '재원'; });
         console.log(`[promoteEnrollPending] ${pending.length}명 등원예정→재원 전환:`, pending.map(s => s.name));
     } catch (err) {
         console.error('[promoteEnrollPending] 전환 실패:', err);
@@ -256,10 +257,11 @@ export async function promoteWithdrawalDate() {
     const batch = writeBatch(db);
     for (const s of toWithdraw) {
         batchUpdate(batch, doc(db, 'students', s.docId), { status: '퇴원' });
-        s.status = '퇴원';
     }
     try {
         await batch.commit();
+        if (READ_ONLY) return;
+        toWithdraw.forEach(s => { s.status = '퇴원'; });
         const toWithdrawSet = new Set(toWithdraw);
         state.allStudents = state.allStudents.filter(s => !toWithdrawSet.has(s));
         state.withdrawnStudents.push(...toWithdraw);
@@ -536,8 +538,10 @@ export async function autoCloseOldRecords() {
         }
     }
     if (oldAbsences.length > 0) {
-        state.absenceRecords = state.absenceRecords.filter(r => !oldAbsences.includes(r));
-        console.log(`결석대장 자동 행정완료: ${oldAbsences.length}건`);
+        if (!READ_ONLY) {
+            state.absenceRecords = state.absenceRecords.filter(r => !oldAbsences.includes(r));
+        }
+        console.log(`결석대장 자동 행정완료${READ_ONLY ? ' 시뮬레이션' : ''}: ${oldAbsences.length}건`);
     }
 
     // 휴퇴원요청: 1개월 경과 requested → 자동승인
@@ -556,9 +560,11 @@ export async function autoCloseOldRecords() {
                 updates.teacher_approved_at = serverTimestamp();
             }
             await auditUpdate(doc(db, 'leave_requests', r.docId), updates);
-            r.status = 'approved';
-            if (!r.teacher_approved_by) r.teacher_approved_by = 'system_auto';
-            if (!r.approved_by) r.approved_by = 'system_auto';
+            if (!READ_ONLY) {
+                r.status = 'approved';
+                if (!r.teacher_approved_by) r.teacher_approved_by = 'system_auto';
+                if (!r.approved_by) r.approved_by = 'system_auto';
+            }
             // 학생 status 실제 변경은 Cloud Function(onLeaveRequestApproved)이 처리
         } catch (err) {
             console.error('휴퇴원요청 자동승인 실패:', r.docId, err);
@@ -577,7 +583,7 @@ export async function autoCloseOldRecords() {
                 completed_by: 'system_auto',
                 completed_at: new Date().toISOString()
             });
-            t.status = '기타';
+            if (!READ_ONLY) t.status = '기타';
         } catch (err) {
             console.error('숙제미통과 자동종료 실패:', t.docId, err);
         }
@@ -592,7 +598,7 @@ export async function autoCloseOldRecords() {
                 completed_by: 'system_auto',
                 completed_at: new Date().toISOString()
             });
-            t.status = '기타';
+            if (!READ_ONLY) t.status = '기타';
         } catch (err) {
             console.error('테스트미통과 자동종료 실패:', t.docId, err);
         }
@@ -630,7 +636,9 @@ export async function autoCloseOldRecords() {
         }
     }
     if (dupsToRemove.length > 0) {
-        state.absenceRecords = state.absenceRecords.filter(r => !dupsToRemove.includes(r));
+        if (!READ_ONLY) {
+            state.absenceRecords = state.absenceRecords.filter(r => !dupsToRemove.includes(r));
+        }
         console.log(`결석대장 중복 정리: ${dupsToRemove.length}건 제거`);
     }
 
@@ -644,7 +652,7 @@ export async function autoCloseOldRecords() {
         const fixed = [...new Set(r.class_code.split(',').map(s => s.trim()).filter(Boolean))].join(', ');
         try {
             await auditUpdate(doc(db, 'absence_records', r.docId), { class_code: fixed });
-            r.class_code = fixed;
+            if (!READ_ONLY) r.class_code = fixed;
         } catch (err) {
             console.error('class_code 중복 정리 실패:', r.docId, err);
         }

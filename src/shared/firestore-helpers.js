@@ -45,17 +45,27 @@ export function getSemestersForDate(dateStr, semesterSettings) {
 
 // 학생 전체 목록 (재원 학생만 — 퇴원 제외, 상담 포함)
 export async function fetchStudents() {
-    const q = query(
-        collection(db, 'students'),
-        where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원', '상담'])
-    );
-    const snap = await getDocs(q);
+    const [activeSnap, specialSnap] = await Promise.all([
+        getDocs(query(
+            collection(db, 'students'),
+            where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원', '상담'])
+        )),
+        getDocs(query(
+            collection(db, 'students'),
+            where('status2', '==', '특강')
+        )),
+    ]);
     const list = [];
-    snap.forEach(docSnap => {
+    const seenIds = new Set();
+    const addDoc = (docSnap) => {
+        if (seenIds.has(docSnap.id)) return;
+        seenIds.add(docSnap.id);
         const data = { id: docSnap.id, ...docSnap.data() };
         data.enrollments = normalizeEnrollments(data);
         list.push(data);
-    });
+    };
+    activeSnap.forEach(addDoc);
+    specialSnap.forEach(addDoc);
     list.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
     return list;
 }

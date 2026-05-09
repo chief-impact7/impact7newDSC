@@ -69,15 +69,16 @@ export function toggleAttendance(studentId, displayStatus) {
     applyAttendance(studentId, displayStatus);
 }
 
-export async function autoCreateAbsenceRecord(studentId, overrides) {
+export async function autoCreateAbsenceRecord(studentId, overrides, date = state.selectedDate) {
     // 결정적 문서 ID — 동일 학생+날짜 조합은 항상 같은 ID → race condition 방지
-    const absDocId = `${studentId}_${state.selectedDate}`;
+    const absDocId = `${studentId}_${date}`;
 
     // 행정완료 마커 체크 — 이미 종료된 건은 재생성하지 않음
     if (state.dailyRecords[studentId]?.absence_closed) return;
+    if (!overrides && state.dailyRecords[studentId]?.attendance?.status !== '결석') return;
 
     // 메모리 중복 체크
-    const exists = state.absenceRecords.some(r => r.student_id === studentId && r.absence_date === state.selectedDate);
+    const exists = state.absenceRecords.some(r => r.student_id === studentId && r.absence_date === date);
     if (exists) return;
 
     // Firestore 서버 측 중복 체크
@@ -94,7 +95,7 @@ export async function autoCreateAbsenceRecord(studentId, overrides) {
         // 2) 기존 auto-ID 레코드 호환: 필드 기반 쿼리 폴백 (2026-03 배포, 2026-05 이후 제거 가능)
         const existQ = query(collection(db, 'absence_records'),
             where('student_id', '==', studentId),
-            where('absence_date', '==', state.selectedDate),
+            where('absence_date', '==', date),
             where('status', 'in', ['open', 'closed']));
         const existSnap = await getDocs(existQ);
         if (!existSnap.empty) {
@@ -114,7 +115,7 @@ export async function autoCreateAbsenceRecord(studentId, overrides) {
 
     let name, branch, classCode, reason;
     if (student) {
-        const dayName = getDayName(state.selectedDate);
+        const dayName = getDayName(date);
         const classCodes = (student.enrollments || [])
             .filter(e => e.day && e.day.includes(dayName))
             .map(e => enrollmentCode(e))
@@ -138,7 +139,7 @@ export async function autoCreateAbsenceRecord(studentId, overrides) {
             student_name: name,
             branch,
             class_code: classCode,
-            absence_date: state.selectedDate,
+            absence_date: date,
             consultation_done: false,
             consultation_note: '',
             reason,
@@ -157,6 +158,8 @@ export async function autoCreateAbsenceRecord(studentId, overrides) {
             marked_absent_at: state.dailyRecords[studentId]?.updated_at || '',
             created_by: state.currentUser?.email || ''
         };
+        if (!overrides && state.dailyRecords[studentId]?.attendance?.status !== '결석') return;
+
         await auditSet(doc(db, 'absence_records', absDocId), {
             ...record,
             created_at: serverTimestamp()
@@ -169,13 +172,16 @@ export async function autoCreateAbsenceRecord(studentId, overrides) {
                 updated_at: new Date().toISOString()
             });
         }
+        if (!overrides && state.dailyRecords[studentId]?.attendance?.status !== '결석') {
+            await autoRemoveAbsenceRecord(studentId, date);
+        }
     } catch (err) {
         console.error('결석대장 자동 생성 실패:', err);
     }
 }
 
-export async function autoRemoveAbsenceRecord(studentId) {
-    const idx = state.absenceRecords.findIndex(r => r.student_id === studentId && r.absence_date === state.selectedDate);
+export async function autoRemoveAbsenceRecord(studentId, date = state.selectedDate) {
+    const idx = state.absenceRecords.findIndex(r => r.student_id === studentId && r.absence_date === date);
     if (idx === -1) return;
     const record = state.absenceRecords[idx];
     // 보충/정산 처리가 진행된 결석대장은 출석 토글로 삭제하지 않음
@@ -202,7 +208,7 @@ export async function syncAbsenceRecords() {
             state.allStudents.some(s => s.docId === studentId) &&
             !state.absenceRecords.some(r => r.student_id === studentId && r.absence_date === state.selectedDate)
         )
-        .map(([studentId]) => autoCreateAbsenceRecord(studentId));
+        .map(([studentId]) => autoCreateAbsenceRecord(studentId, null, state.selectedDate));
 
     await Promise.all(tasks);
 }
@@ -237,9 +243,9 @@ export function applyAttendance(studentId, displayStatus, force = false, silent 
 
     // 결석 시 결석대장 자동 생성, 결석 아닌 상태로 변경 시 자동 삭제
     if (newStatus === '결석') {
-        autoCreateAbsenceRecord(studentId);
+        autoCreateAbsenceRecord(studentId, null, state.selectedDate);
     } else if (currentStatus === '결석' && newStatus !== '결석') {
-        autoRemoveAbsenceRecord(studentId);
+        autoRemoveAbsenceRecord(studentId, state.selectedDate);
     }
 
     if (silent) return;
