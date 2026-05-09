@@ -13,6 +13,7 @@ import { auditSet, batchUpdate } from './audit.js';
 let currentUser = null;
 let currentStep = 1;
 const TOTAL_STEPS = 5;
+const PLANNER_DAYS = ['월', '화', '수', '목', '금', '토'];
 
 // 마법사 데이터
 const wizardData = {
@@ -58,6 +59,7 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('main-screen').style.display = '';
         document.getElementById('user-email').textContent = email.split('@')[0];
         await Promise.all([loadStudents(), loadTeachers()]);
+        initNaesinPlanner();
     } else {
         currentUser = null;
         document.getElementById('login-screen').style.display = '';
@@ -73,6 +75,196 @@ async function loadStudents() {
         allStudents.push({ docId: d.id, ...data });
     });
     allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+}
+
+// ─── 내신반 계획 ─────────────────────────────────────────────────────────────
+function initNaesinPlanner() {
+    populatePlannerFilters();
+    renderNaesinPlanner();
+}
+
+function getNaesinPlannerRows() {
+    return allStudents
+        .filter(s => s.status === '재원')
+        .map(s => {
+            const days = getPlanningDays(s);
+            return {
+                docId: s.docId,
+                name: s.name || '',
+                school: normalizeText(s.school, '학교 미지정'),
+                level: normalizeText(s.level, '학부 미지정'),
+                grade: normalizeGrade(s.grade),
+                days,
+                dayKey: days.length ? days.join('') : '요일 미지정',
+                classes: getPlanningClassCodes(s).join(', '),
+                phone: s.parent_phone_1 || s.student_phone || '',
+            };
+        })
+        .sort(comparePlannerRows);
+}
+
+function getPlanningEnrollments(student) {
+    const today = todayStr();
+    return (student.enrollments || []).filter(e => {
+        const type = e.class_type || '정규';
+        if (type !== '정규' && type !== '자유학기') return false;
+        return !e.end_date || e.end_date >= today;
+    });
+}
+
+function getPlanningDays(student) {
+    const set = new Set();
+    getPlanningEnrollments(student).forEach(e => {
+        (Array.isArray(e.day) ? e.day : []).forEach(day => {
+            if (PLANNER_DAYS.includes(day)) set.add(day);
+        });
+    });
+    return PLANNER_DAYS.filter(day => set.has(day));
+}
+
+function getPlanningClassCodes(student) {
+    const set = new Set();
+    getPlanningEnrollments(student).forEach(e => {
+        const code = `${e.level_symbol || ''}${e.class_number || ''}`.trim();
+        if (code) set.add(code);
+    });
+    return [...set].sort((a, b) => a.localeCompare(b, 'ko'));
+}
+
+function populatePlannerFilters() {
+    const rows = getNaesinPlannerRows();
+    fillPlannerSelect('planner-filter-school', '전체 학교', uniqueSorted(rows.map(r => r.school)));
+    fillPlannerSelect('planner-filter-level', '전체 학부', uniqueSorted(rows.map(r => r.level), compareLevel));
+    fillPlannerSelect('planner-filter-grade', '전체 학년', uniqueSorted(rows.map(r => r.grade), compareGrade));
+    fillPlannerSelect('planner-filter-day', '전체 요일', PLANNER_DAYS);
+}
+
+function fillPlannerSelect(id, allLabel, values) {
+    const el = document.getElementById(id);
+    const current = el.value;
+    el.innerHTML = `<option value="">${esc(allLabel)}</option>` +
+        values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+    if ([...el.options].some(o => o.value === current)) el.value = current;
+}
+
+function getFilteredPlannerRows() {
+    const school = document.getElementById('planner-filter-school')?.value || '';
+    const level = document.getElementById('planner-filter-level')?.value || '';
+    const grade = document.getElementById('planner-filter-grade')?.value || '';
+    const day = document.getElementById('planner-filter-day')?.value || '';
+    return getNaesinPlannerRows().filter(r =>
+        (!school || r.school === school) &&
+        (!level || r.level === level) &&
+        (!grade || r.grade === grade) &&
+        (!day || r.days.includes(day))
+    );
+}
+
+window.renderNaesinPlanner = function () {
+    const rows = getFilteredPlannerRows();
+    const stats = document.getElementById('planner-stats');
+    const groups = document.getElementById('planner-groups');
+    const total = getNaesinPlannerRows().length;
+    stats.textContent = `표시 ${rows.length}명 / 재원생 ${total}명`;
+
+    if (rows.length === 0) {
+        groups.innerHTML = '<div class="planner-empty">조건에 맞는 재원생이 없습니다.</div>';
+        return;
+    }
+
+    const grouped = new Map();
+    rows.forEach(row => {
+        const key = [row.school, row.level, row.grade, row.dayKey].join('|');
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key).push(row);
+    });
+
+    groups.innerHTML = [...grouped.entries()].map(([key, groupRows]) => {
+        const [school, level, grade, dayKey] = key.split('|');
+        const studentHtml = groupRows.map(row => `
+            <div class="planner-student">
+                <span class="planner-student-name">${esc(row.name)}</span>
+                <span class="planner-student-meta">${esc(row.classes || '반 미지정')}</span>
+            </div>
+        `).join('');
+        return `
+            <section class="planner-group">
+                <div class="planner-group-head">
+                    <div class="planner-group-title">${esc(school)} · ${esc(level)} · ${esc(grade)} · ${esc(dayKey)}</div>
+                    <span class="planner-count">${groupRows.length}명</span>
+                </div>
+                <div class="planner-student-list">${studentHtml}</div>
+            </section>
+        `;
+    }).join('');
+};
+
+window.downloadNaesinPlanCsv = function () {
+    const rows = getFilteredPlannerRows();
+    if (rows.length === 0) {
+        showToast('다운로드할 재원생이 없습니다.', 'error');
+        return;
+    }
+    const headers = ['학교', '학부', '학년', '등원요일', '이름', '현재반', '연락처', '문서ID'];
+    const csvRows = [
+        headers,
+        ...rows.map(r => [r.school, r.level, r.grade, r.dayKey, r.name, r.classes, r.phone, r.docId]),
+    ];
+    const csv = '\uFEFF' + csvRows.map(row => row.map(csvCell).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `내신반_계획_${todayStr()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast(`내신반 계획 CSV 다운로드 (${rows.length}명)`, 'success');
+};
+
+function normalizeText(value, fallback) {
+    const text = String(value || '').trim();
+    return text || fallback;
+}
+
+function normalizeGrade(value) {
+    const text = String(value || '').trim();
+    if (!text) return '학년 미지정';
+    return text.endsWith('학년') ? text : `${text}학년`;
+}
+
+function uniqueSorted(values, compareFn) {
+    return [...new Set(values.filter(Boolean))].sort(compareFn || ((a, b) => a.localeCompare(b, 'ko')));
+}
+
+function comparePlannerRows(a, b) {
+    return a.school.localeCompare(b.school, 'ko') ||
+        compareLevel(a.level, b.level) ||
+        compareGrade(a.grade, b.grade) ||
+        compareDayKey(a.dayKey, b.dayKey) ||
+        a.name.localeCompare(b.name, 'ko');
+}
+
+function compareLevel(a, b) {
+    const order = ['초등', '중등', '고등', '학부 미지정'];
+    return order.indexOf(a) - order.indexOf(b) || a.localeCompare(b, 'ko');
+}
+
+function compareGrade(a, b) {
+    const na = parseInt(a, 10);
+    const nb = parseInt(b, 10);
+    if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+    return a.localeCompare(b, 'ko');
+}
+
+function compareDayKey(a, b) {
+    const score = (key) => PLANNER_DAYS.reduce((sum, day, idx) => sum + (key.includes(day) ? idx + 1 : 0), 0);
+    return score(a) - score(b) || a.localeCompare(b, 'ko');
+}
+
+function csvCell(value) {
+    return `"${String(value ?? '').replace(/"/g, '""')}"`;
 }
 
 async function loadTeachers() {
@@ -259,7 +451,10 @@ window.selectFeeType = function (type) {
 
 function populateSchoolList() {
     const schools = new Set();
-    allStudents.forEach(s => { if (s.school) schools.add(s.school); });
+    allStudents.forEach(s => {
+        const school = (s.school || '').trim();
+        if (s.status === '재원' && school) schools.add(school);
+    });
     const dl = document.getElementById('school-list');
     dl.innerHTML = [...schools].sort((a, b) => a.localeCompare(b, 'ko'))
         .map(s => `<option value="${esc(s)}">`).join('');

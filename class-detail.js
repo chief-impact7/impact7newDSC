@@ -8,7 +8,7 @@ import { getDayName, todayStr } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditDelete, batchUpdate, READ_ONLY } from './audit.js';
 import { state, DAY_ORDER } from './state.js';
 import { esc, escAttr, showSaveIndicator, showToast } from './ui-utils.js';
-import { matchesBranchFilter, enrollmentCode, getActiveEnrollments, resolveNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE } from './student-helpers.js';
+import { matchesBranchFilter, enrollmentCode, getActiveEnrollments, resolveNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE, isWithdrawnAt } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
@@ -673,8 +673,9 @@ export const CLASS_MODE_LABELS = Object.freeze({
 const _MODES = {
     free: {
         deleteClassDoc: false,
+        deleteClassDocWhenEmpty: true,
         csFieldsToDelete: ['free_schedule', 'free_start', 'free_end'],
-        describe: (count) => `자유학기 ${count}명이 정규로 복귀합니다. (정규 반 코드 자체는 보존됨)`,
+        describe: (count) => `자유학기 ${count}명이 정규로 복귀합니다. 정규 복귀 후 학생이 0명이면 반명도 삭제됩니다.`,
         toast: (code, count) => `자유학기 "${code}" 정리 완료 (${count}명 정규 복귀)`,
         getPeriod: (cs) => ({ start: cs?.free_start, end: cs?.free_end }),
         applyToStudent: (s, code) => {
@@ -783,6 +784,22 @@ function _countAffectedStudents(classCode, mode) {
     return state.allStudents.filter(s => matcher(s, classCode)).length;
 }
 
+function _countRemainingStudentsInClass(classCode, studentUpdates) {
+    const today = todayStr();
+    const updatesById = new Map(studentUpdates.map(({ student, update }) => [student.docId, update]));
+    return state.allStudents.filter(student => {
+        if (isWithdrawnAt(student, today)) return false;
+        const updated = updatesById.get(student.docId);
+        const enrollments = updated?.enrollments || student.enrollments || [];
+        return enrollments.some(e => {
+            const type = e.class_type || '정규';
+            if (type !== '정규' && type !== '자유학기') return false;
+            if (e.end_date && e.end_date < today) return false;
+            return enrollmentCode(e) === classCode;
+        });
+    }).length;
+}
+
 export function getClassPeriodInfo(classCode, mode) {
     const M = _MODES[mode];
     if (!M?.getPeriod) return null;
@@ -813,7 +830,10 @@ export async function deleteClass(classCode, mode, opts = {}) {
 
     let csOp = Promise.resolve();
     let csBefore = cs;
-    if (M.deleteClassDoc) {
+    const deleteClassDoc = M.deleteClassDoc ||
+        (M.deleteClassDocWhenEmpty && _countRemainingStudentsInClass(classCode, studentUpdates) === 0);
+
+    if (deleteClassDoc) {
         csOp = auditDelete(doc(db, 'class_settings', classCode));
     } else if (M.csFieldsToDelete) {
         const csUpdate = {};
@@ -849,7 +869,7 @@ export async function deleteClass(classCode, mode, opts = {}) {
         return { affected: affected.length, readOnly: true };
     }
 
-    if (M.deleteClassDoc) {
+    if (deleteClassDoc) {
         delete state.classSettings[classCode];
     } else if (M.csFieldsToDelete && state.classSettings[classCode]) {
         for (const f of M.csFieldsToDelete) delete state.classSettings[classCode][f];

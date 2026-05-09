@@ -666,6 +666,41 @@ function getFreeSemesterClassStudents(classCode) {
     });
 }
 
+function hasCurrentRegularStudentsInClass(classCode) {
+    const today = todayStr();
+    return state.allStudents.some(s => {
+        if (isWithdrawnAt(s, today)) return false;
+        return (s.enrollments || []).some(e => {
+            const type = e.class_type || '정규';
+            if (type !== '정규' && type !== '자유학기') return false;
+            if (e.end_date && e.end_date < today) return false;
+            return enrollmentCode(e) === classCode;
+        });
+    });
+}
+
+function hasStudentsInClassMode(classCode, mode) {
+    const today = todayStr();
+    return state.allStudents.some(s => {
+        if (mode !== 'teukang' && isWithdrawnAt(s, today)) return false;
+        if (mode === 'teukang') {
+            return (s.enrollments || []).some(e => e.class_type === '특강' && enrollmentCode(e) === classCode);
+        }
+        if (mode === 'free') {
+            return (s.enrollments || []).some(e => {
+                if (e.class_type !== '자유학기') return false;
+                if (e.end_date && e.end_date < today) return false;
+                return enrollmentCode(e) === classCode;
+            });
+        }
+        if (mode === 'naesin') {
+            const reg = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
+            return !!reg && resolveNaesinCsKey(s, reg) === classCode;
+        }
+        return hasCurrentRegularStudentsInClass(classCode);
+    });
+}
+
 function _getAllClassCodes() {
     // class_settings에 등록된 반만 사이드바에 노출 (자동 유도 가상 반 제외)
     const regularCodes = new Set();
@@ -794,9 +829,6 @@ function renderClassCodeFilter() {
     html += `<div class="nav-l2-actions" style="padding:6px 8px;display:flex;gap:6px;flex-wrap:nowrap;border-bottom:1px solid var(--border);">
         <button class="btn btn-secondary btn-sm" style="font-size:11px;flex:1;white-space:nowrap;padding:4px 6px;" onclick="window.toggleClassDeleteMode()">
             ${isDeleteMode ? '선택 취소' : '선택 모드'}
-        </button>
-        <button class="btn btn-secondary btn-sm" style="font-size:11px;flex:1;white-space:nowrap;padding:4px 6px;" onclick="window.cleanupExpiredClasses()" title="종료된 자유학기/내신/특강 일괄 정리">
-            종료반 정리
         </button>
     </div>`;
     if (isDeleteMode && selectedCount > 0) {
@@ -931,35 +963,31 @@ window.bulkDeleteSelectedClasses = async function() {
     await _runBulkDelete(selected, '일괄 삭제');
 };
 
-window.cleanupExpiredClasses = async function() {
+async function autoCleanupStaleClasses() {
     const today = todayStr();
-    const expired = [];
+    const targets = [];
     Object.entries(state.classSettings).forEach(([code, cs]) => {
         if (!cs) return;
         if (cs.class_type === '특강' && cs.special_end && cs.special_end < today) {
-            expired.push({ mode: 'teukang', code, end: cs.special_end });
+            targets.push({ mode: 'teukang', code });
+        } else if (cs.class_type === '특강' && !hasStudentsInClassMode(code, 'teukang')) {
+            targets.push({ mode: 'teukang', code });
         } else if (cs.naesin_end && cs.naesin_end < today && cs.class_type !== '특강') {
-            expired.push({ mode: 'naesin', code, end: cs.naesin_end });
+            targets.push({ mode: 'naesin', code });
+        } else if (cs.naesin_start && cs.naesin_end && cs.class_type !== '특강' && !hasStudentsInClassMode(code, 'naesin')) {
+            targets.push({ mode: 'naesin', code });
         } else if (cs.free_end && cs.free_end < today && cs.class_type !== '특강' && cs.class_type !== '내신') {
-            expired.push({ mode: 'free', code, end: cs.free_end });
+            targets.push({ mode: 'free', code });
+        } else if ((cs.free_schedule !== undefined || cs.free_start || cs.free_end) && cs.class_type !== '특강' && cs.class_type !== '내신' && !hasStudentsInClassMode(code, 'free')) {
+            targets.push({ mode: 'free', code });
+        } else if (!cs.class_type && !cs.naesin_start && !cs.free_start && !cs.free_schedule && !hasCurrentRegularStudentsInClass(code)) {
+            targets.push({ mode: 'regular', code });
         }
     });
 
-    if (expired.length === 0) {
-        alert('종료된 자유학기/내신/특강 반이 없습니다.');
-        return;
-    }
-
-    const counts = expired.reduce((acc, e) => { acc[e.mode] = (acc[e.mode] || 0) + 1; return acc; }, {});
-    const summary = ['free', 'naesin', 'teukang']
-        .filter(m => counts[m])
-        .map(m => `${CLASS_MODE_LABELS[m]} ${counts[m]}`)
-        .join(' / ');
-    const ok = confirm(`종료된 반 ${expired.length}개 (${summary})를 정리합니다.\n진행하시겠습니까?`);
-    if (!ok) return;
-
-    await _runBulkDelete(expired, '종료반 정리');
-};
+    if (targets.length === 0) return;
+    await _runBulkDelete(targets, '자동 반 정리');
+}
 
 window.setClassMgmtMode = function(mode) {
     state._classMgmtMode = (state._classMgmtMode === mode) ? null : mode; // 토글
@@ -2773,6 +2801,7 @@ onAuthStateChanged(auth, async (user) => {
             buildSiblingMap();
             await trackTeacherLogin(user);
             await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadUserRole(), loadClassSettings(), loadClassNextHw(state.selectedDate), loadTeachers()]);
+            await autoCleanupStaleClasses();
             await syncAbsenceRecords();
             await loadRoleMemos().catch(() => {});
         } catch (err) {
@@ -2898,6 +2927,7 @@ window.refreshData = async () => {
     await promoteWithdrawalDate();
     await loadWithdrawnStudents();
     await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadRoleMemos(), loadClassSettings(true), loadClassNextHw(state.selectedDate), loadTeachers()]);
+    await autoCleanupStaleClasses();
     await syncAbsenceRecords();
     renderBranchFilter();
     renderSubFilters();

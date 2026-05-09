@@ -43,6 +43,41 @@
 
         <!-- 마법사 컨테이너 -->
         <main class="wizard-container">
+            <section class="planner-panel">
+                <div class="planner-header">
+                    <div>
+                        <h2 class="planner-title">내신반 계획</h2>
+                        <p class="planner-subtitle">재원생만 학교, 학부, 학년, 등원요일 기준으로 분류합니다.</p>
+                    </div>
+                    <button class="planner-download-btn" type="button" onclick="downloadNaesinPlanCsv()">
+                        <span class="material-symbols-outlined">download</span>
+                        CSV
+                    </button>
+                </div>
+                <div class="planner-filters">
+                    <label>
+                        학교
+                        <select id="planner-filter-school" onchange="renderNaesinPlanner()"></select>
+                    </label>
+                    <label>
+                        학부
+                        <select id="planner-filter-level" onchange="renderNaesinPlanner()"></select>
+                    </label>
+                    <label>
+                        학년
+                        <select id="planner-filter-grade" onchange="renderNaesinPlanner()"></select>
+                    </label>
+                    <label>
+                        등원요일
+                        <select id="planner-filter-day" onchange="renderNaesinPlanner()"></select>
+                    </label>
+                </div>
+                <div class="planner-stats" id="planner-stats"></div>
+                <div class="planner-groups" id="planner-groups">
+                    <div class="planner-empty">학생 정보를 불러오는 중입니다.</div>
+                </div>
+            </section>
+
             <!-- 진행 표시 -->
             <div class="wizard-progress">
                 <div class="progress-step active" data-step="1">
@@ -100,7 +135,7 @@
 
             <!-- Step 2: 반 이름 -->
             <section class="wizard-step" id="step-2" style="display:none;">
-                <h2 class="step-title">반 이름을 설정하세요</h2>
+                <h2 class="step-title">(정규/내신/자유학기/특강)반 이름을 설정하세요.</h2>
                 <div id="name-form" class="name-form">
                     <!-- 정규/자유학기: 레벨 + 반번호 -->
                     <div id="name-regular" style="display:none;">
@@ -224,7 +259,7 @@
 
             <!-- Step 3: 학생 추가 -->
             <section class="wizard-step" id="step-3" style="display:none;">
-                <h2 class="step-title">학생을 추가하세요</h2>
+                <h2 class="step-title">(정규/내신/자유학기/특강) 학생을 추가하세요.</h2>
                 <div class="student-search-area">
                     <div class="search-input-wrap">
                         <span class="material-symbols-outlined">search</span>
