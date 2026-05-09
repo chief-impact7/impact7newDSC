@@ -823,18 +823,12 @@ function renderClassCodeFilter() {
     }
 
     // 내신 L2
-    // 선택 요일에 따라 A(홀수=월수금)/B(짝수=화목토) 필터
-    const dayName = getDayName(state.selectedDate);
-    const dayIdx = ['월','화','수','목','금','토','일'].indexOf(dayName);
-    const todayGroup = (dayIdx >= 0) ? ((dayIdx % 2 === 0) ? 'A' : 'B') : null; // 월(0)수(2)금(4)=A, 화(1)목(3)토(5)=B
-    const filteredNaesin = todayGroup ? naesin.filter(n => n.code.endsWith(todayGroup)) : naesin;
-
     html += `<div class="nav-l2 l2-parent ${naeExpanded ? 'active l2-expanded' : ''}" onclick="window.setClassMgmtMode('naesin')">
-        내신<span class="nav-l2-count">${filteredNaesin.length}</span>
+        내신<span class="nav-l2-count">${naesin.length}</span>
         <span class="material-symbols-outlined l2-expand-icon">${naeExpanded ? 'expand_less' : 'expand_more'}</span>
     </div>`;
     if (naeExpanded) {
-        html += filteredNaesin.map(({ code, displayCode, count }) => _renderL3Chip(code, displayCode, count, 'naesin')).join('');
+        html += naesin.map(({ code, displayCode, count }) => _renderL3Chip(code, displayCode, count, 'naesin')).join('');
     }
 
     // 특강 L2
