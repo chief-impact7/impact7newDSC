@@ -52,22 +52,7 @@
                 <div class="progress-line"></div>
                 <div class="progress-step" data-step="2">
                     <div class="step-circle">2</div>
-                    <span class="step-label">반 이름</span>
-                </div>
-                <div class="progress-line"></div>
-                <div class="progress-step" data-step="3">
-                    <div class="step-circle">3</div>
-                    <span class="step-label">학생 추가</span>
-                </div>
-                <div class="progress-line"></div>
-                <div class="progress-step" data-step="4">
-                    <div class="step-circle">4</div>
-                    <span class="step-label">요일</span>
-                </div>
-                <div class="progress-line"></div>
-                <div class="progress-step" data-step="5">
-                    <div class="step-circle">5</div>
-                    <span class="step-label">확인</span>
+                    <span class="step-label">상세 설정</span>
                 </div>
             </div>
 
@@ -98,11 +83,13 @@
                 </div>
             </section>
 
-            <!-- Step 2: 반 이름 -->
+            <!-- Step 2: 상세 설정 (반 이름 + 학생 + 요일/시간 + 미리보기) -->
             <section class="wizard-step" id="step-2" style="display:none;">
-                <h2 class="step-title" id="step-2-title">반 이름을 설정하세요.</h2>
+                <h2 class="step-title" id="step-2-title">상세 설정</h2>
                 <div id="step-2-body" class="step-2-body">
+                <div id="step-2-main" class="step-2-main">
                 <div id="name-form" class="name-form">
+                <h3 class="section-title" id="section-title-name">반 이름</h3>
                     <!-- 정규/자유학기: 레벨 + 반번호 -->
                     <div id="name-regular" style="display:none;">
                         <div class="form-row">
@@ -222,8 +209,46 @@
                     </div>
                 </div>
 
+                <!-- 학생 추가 -->
+                <div class="form-section" id="students-section">
+                    <h3 class="section-title" id="section-title-students">학생 추가</h3>
+                    <div class="student-search-area">
+                        <div class="search-input-wrap">
+                            <span class="material-symbols-outlined">search</span>
+                            <input type="text" id="student-search" placeholder="이름, 학교로 검색..." oninput="searchStudents(this.value)">
+                        </div>
+                        <div class="search-results" id="search-results"></div>
+                    </div>
+                    <div class="selected-students" id="selected-students">
+                        <h4 class="selected-title">선택된 학생 (<span id="selected-count">0</span>명)</h4>
+                        <div class="selected-list" id="selected-list"></div>
+                    </div>
+                </div>
+
+                <!-- 요일 + 시간 -->
+                <div class="form-section" id="days-section">
+                    <h3 class="section-title">수업 요일 / 시간</h3>
+                    <div class="day-selector">
+                        <button class="day-chip" data-day="월" onclick="toggleDay('월')">월</button>
+                        <button class="day-chip" data-day="화" onclick="toggleDay('화')">화</button>
+                        <button class="day-chip" data-day="수" onclick="toggleDay('수')">수</button>
+                        <button class="day-chip" data-day="목" onclick="toggleDay('목')">목</button>
+                        <button class="day-chip" data-day="금" onclick="toggleDay('금')">금</button>
+                        <button class="day-chip" data-day="토" onclick="toggleDay('토')">토</button>
+                    </div>
+                    <div class="time-settings" id="time-settings"></div>
+                </div>
+                </div>
+
+                <!-- 우측 사이드: 미리보기 (기본) / 내신반 계획 (내신 시) -->
+                <aside class="step-2-side" id="step-2-side">
+                <div class="summary-panel" id="summary-panel">
+                    <h3 class="section-title">미리보기</h3>
+                    <div class="summary-card" id="summary-card"></div>
+                </div>
+
                 <!-- 내신 전용 사이드 패널: 내신반 계획 -->
-                <aside class="planner-panel" id="planner-panel" style="display:none;">
+                <div class="planner-panel" id="planner-panel" style="display:none;">
                     <div class="planner-header">
                         <div>
                             <h3 class="planner-title">내신반 계획</h3>
@@ -246,12 +271,12 @@
                             <select id="planner-filter-branch" onchange="renderNaesinPlanner()"></select>
                         </label>
                         <label>
-                            학교
-                            <select id="planner-filter-school" onchange="renderNaesinPlanner()"></select>
-                        </label>
-                        <label>
                             학부
                             <select id="planner-filter-level" onchange="renderNaesinPlanner()"></select>
+                        </label>
+                        <label>
+                            학교
+                            <select id="planner-filter-school" onchange="renderNaesinPlanner()"></select>
                         </label>
                         <label>
                             학년
@@ -266,47 +291,8 @@
                     <div class="planner-groups" id="planner-groups">
                         <div class="planner-empty">학생 정보를 불러오는 중입니다.</div>
                     </div>
+                </div>
                 </aside>
-                </div>
-            </section>
-
-            <!-- Step 3: 학생 추가 -->
-            <section class="wizard-step" id="step-3" style="display:none;">
-                <h2 class="step-title" id="step-3-title">학생을 추가하세요.</h2>
-                <div class="student-search-area">
-                    <div class="search-input-wrap">
-                        <span class="material-symbols-outlined">search</span>
-                        <input type="text" id="student-search" placeholder="이름, 학교로 검색..." oninput="searchStudents(this.value)">
-                    </div>
-                    <div class="search-results" id="search-results"></div>
-                </div>
-                <div class="selected-students" id="selected-students">
-                    <h3 class="selected-title">선택된 학생 (<span id="selected-count">0</span>명)</h3>
-                    <div class="selected-list" id="selected-list"></div>
-                </div>
-            </section>
-
-            <!-- Step 4: 요일 선택 -->
-            <section class="wizard-step" id="step-4" style="display:none;">
-                <h2 class="step-title">수업 요일을 선택하세요</h2>
-                <div class="day-selector">
-                    <button class="day-chip" data-day="월" onclick="toggleDay('월')">월</button>
-                    <button class="day-chip" data-day="화" onclick="toggleDay('화')">화</button>
-                    <button class="day-chip" data-day="수" onclick="toggleDay('수')">수</button>
-                    <button class="day-chip" data-day="목" onclick="toggleDay('목')">목</button>
-                    <button class="day-chip" data-day="금" onclick="toggleDay('금')">금</button>
-                    <button class="day-chip" data-day="토" onclick="toggleDay('토')">토</button>
-                </div>
-                <div class="time-settings" id="time-settings">
-                    <!-- 선택된 요일별 시간 입력 동적 렌더링 -->
-                </div>
-            </section>
-
-            <!-- Step 5: 최종 확인 -->
-            <section class="wizard-step" id="step-5" style="display:none;">
-                <h2 class="step-title">설정을 확인하세요</h2>
-                <div class="summary-card" id="summary-card">
-                    <!-- 동적 렌더링 -->
                 </div>
             </section>
 

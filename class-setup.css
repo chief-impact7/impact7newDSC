@@ -152,19 +152,72 @@ body {
 /* ===== Naesin Planner ===== */
 .step-2-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
   gap: 20px;
   align-items: start;
 }
 
-.step-2-body.with-planner {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+@media (max-width: 900px) {
+  .step-2-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.step-2-main {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+.step-2-side {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-self: start;
+  min-width: 0;
 }
 
 @media (max-width: 900px) {
-  .step-2-body.with-planner {
-    grid-template-columns: minmax(0, 1fr);
+  .step-2-side {
+    position: static;
   }
+}
+
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.section-title {
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.summary-panel {
+  background: var(--surface-container);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.summary-panel .section-title {
+  margin-bottom: 4px;
+}
+
+.summary-panel .summary-card {
+  padding: 0;
+  border: none;
+  background: transparent;
 }
 
 .planner-panel {
@@ -173,6 +226,14 @@ body {
   border-radius: 12px;
   padding: 20px;
   align-self: stretch;
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+}
+
+@media (max-width: 900px) {
+  .planner-panel {
+    max-height: none;
+  }
 }
 
 .planner-download-actions {

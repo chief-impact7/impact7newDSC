@@ -27,7 +27,7 @@ function setStepTitle(id, suffix) {
 // ─── State ──────────────────────────────────────────────────────────────────
 let currentUser = null;
 let currentStep = 1;
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 2;
 const PLANNER_DAYS = ['월', '화', '수', '목', '금', '토'];
 
 // 마법사 데이터
@@ -375,12 +375,10 @@ async function loadTeachers() {
 // ─── Navigation ─────────────────────────────────────────────────────────────
 function goToStep(step) {
     if (step < 1 || step > TOTAL_STEPS) return;
-    // 현재 스텝 숨기기
     document.getElementById(`step-${currentStep}`).style.display = 'none';
     currentStep = step;
     document.getElementById(`step-${currentStep}`).style.display = '';
 
-    // 진행 표시 업데이트
     document.querySelectorAll('.progress-step').forEach((el, i) => {
         const s = i + 1;
         el.classList.toggle('active', s === currentStep);
@@ -390,15 +388,11 @@ function goToStep(step) {
         el.classList.toggle('done', i + 1 < currentStep);
     });
 
-    // 버튼 업데이트
     document.getElementById('btn-back').style.display = currentStep === 1 ? 'none' : '';
     document.getElementById('btn-next').style.display = currentStep === TOTAL_STEPS ? 'none' : '';
     document.getElementById('btn-submit').style.display = currentStep === TOTAL_STEPS ? '' : 'none';
 
-    // 스텝별 진입 처리
     if (currentStep === 2) onEnterStep2();
-    if (currentStep === 3) onEnterStep3();
-    if (currentStep === 5) renderSummary();
 }
 
 window.nextStep = function () {
@@ -427,19 +421,14 @@ function validateStep(step) {
             return false;
         }
         wizardData.teacher = document.getElementById('input-teacher').value;
-    }
-    if (step === 3) {
         if (wizardData.students.length === 0) {
             showToast('학생을 1명 이상 추가하세요.', 'error');
             return false;
         }
-    }
-    if (step === 4) {
         if (wizardData.days.length === 0) {
             showToast('요일을 1개 이상 선택하세요.', 'error');
             return false;
         }
-        // 시간 수집
         wizardData.schedule = {};
         wizardData.days.forEach(day => {
             const input = document.getElementById(`time-${day}`);
@@ -465,17 +454,25 @@ function onEnterStep2() {
     document.getElementById('name-special').style.display = t === '특강' ? '' : 'none';
     document.getElementById('free-semester-dates').style.display = t === '자유학기' ? '' : 'none';
 
-    setStepTitle('step-2-title', '이름을 설정하세요.');
+    setStepTitle('step-2-title', '상세 설정');
+    setStepTitle('section-title-name', '이름');
+    setStepTitle('section-title-students', '학생 추가');
 
     const isNaesin = t === '내신';
     const body = document.getElementById('step-2-body');
     const planner = document.getElementById('planner-panel');
+    const summary = document.getElementById('summary-panel');
     if (planner) planner.style.display = isNaesin ? '' : 'none';
+    if (summary) summary.style.display = isNaesin ? 'none' : '';
     if (body) body.classList.toggle('with-planner', isNaesin);
     if (isNaesin) {
         initNaesinPlanner();
         populateSchoolList();
     }
+
+    renderSelectedStudents();
+    renderTimeSettings();
+    renderSummary();
 
     // 날짜 유효성: 종료일 >= 시작일
     setupDateValidation('input-free-start', 'input-free-end');
@@ -498,6 +495,15 @@ function onEnterStep2() {
     const specialInput = document.getElementById('input-special-name');
     specialInput.removeEventListener('input', updateSpecialPreview);
     specialInput.addEventListener('input', updateSpecialPreview);
+
+    const teacherSel = document.getElementById('input-teacher');
+    teacherSel.removeEventListener('change', updateTeacherPreview);
+    teacherSel.addEventListener('change', updateTeacherPreview);
+}
+
+function updateTeacherPreview() {
+    wizardData.teacher = document.getElementById('input-teacher').value;
+    renderSummary();
 }
 
 const _dateHandlers = new Map();
@@ -522,9 +528,11 @@ function updateRegularPreview() {
     const level = document.getElementById('input-level').value.trim();
     const num = document.getElementById('input-class-number').value.trim();
     const code = level && num ? `${level}${num}` : '';
-    document.getElementById('regular-preview').textContent = code || '';
+    document.getElementById('regular-preview').textContent = code;
     wizardData.levelSymbol = level;
     wizardData.classNumber = num;
+    wizardData.classCode = code;
+    renderSummary();
 }
 
 function updateNaesinPreview() {
@@ -532,14 +540,17 @@ function updateNaesinPreview() {
     document.getElementById('naesin-preview').textContent = code || '';
     wizardData.naesinStart = document.getElementById('input-naesin-start').value;
     wizardData.naesinEnd = document.getElementById('input-naesin-end').value;
+    renderSummary();
 }
 
 function updateSpecialPreview() {
     const name = document.getElementById('input-special-name').value.trim();
-    document.getElementById('special-preview').textContent = name || '';
+    document.getElementById('special-preview').textContent = name;
     wizardData.specialName = name;
     wizardData.specialStart = document.getElementById('input-special-start').value;
     wizardData.specialEnd = document.getElementById('input-special-end').value;
+    wizardData.classCode = name;
+    renderSummary();
 }
 
 window.selectFeeType = function (type) {
@@ -547,6 +558,7 @@ window.selectFeeType = function (type) {
     document.querySelectorAll('.fee-type-btn').forEach(b => {
         b.classList.toggle('selected', b.dataset.fee === type);
     });
+    renderSummary();
 };
 
 function populateSchoolList() {
@@ -604,11 +616,6 @@ function phoneSuffix(s) {
     const digits = ph.replace(/\D/g, '');
     if (digits.length < 4) return '';
     return ` (${digits.slice(-4)})`;
-}
-
-function onEnterStep3() {
-    setStepTitle('step-3-title', '학생을 추가하세요.');
-    renderSelectedStudents();
 }
 
 let _searchTimer = null;
@@ -702,20 +709,21 @@ function renderSelectedStudents() {
     const list = document.getElementById('selected-list');
     if (wizardData.students.length === 0) {
         list.innerHTML = '<div class="empty-selected">검색으로 학생을 추가하세요</div>';
-        return;
+    } else {
+        list.innerHTML = wizardData.students.map(s => {
+            const meta = studentShortLabel(s);
+            return `<div class="selected-chip">
+                        <div class="selected-chip-info">
+                            <span class="selected-chip-name">${esc(s.name)}</span>
+                            <span class="selected-chip-meta">${esc(meta)}</span>
+                        </div>
+                        <button class="remove-btn" onclick="removeStudent('${s.docId}')">
+                            <span class="material-symbols-outlined" style="font-size:18px;">close</span>
+                        </button>
+                    </div>`;
+        }).join('');
     }
-    list.innerHTML = wizardData.students.map(s => {
-        const meta = studentShortLabel(s);
-        return `<div class="selected-chip">
-                    <div class="selected-chip-info">
-                        <span class="selected-chip-name">${esc(s.name)}</span>
-                        <span class="selected-chip-meta">${esc(meta)}</span>
-                    </div>
-                    <button class="remove-btn" onclick="removeStudent('${s.docId}')">
-                        <span class="material-symbols-outlined" style="font-size:18px;">close</span>
-                    </button>
-                </div>`;
-    }).join('');
+    renderSummary();
 }
 
 // ─── Step 4: 요일 ───────────────────────────────────────────────────────────
@@ -724,37 +732,47 @@ window.toggleDay = function (day) {
     if (idx >= 0) wizardData.days.splice(idx, 1);
     else wizardData.days.push(day);
 
-    // 요일 순서 정렬
-    const order = ['월', '화', '수', '목', '금', '토'];
-    wizardData.days.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    wizardData.days.sort((a, b) => PLANNER_DAYS.indexOf(a) - PLANNER_DAYS.indexOf(b));
 
-    // 칩 상태 업데이트
     document.querySelectorAll('.day-chip').forEach(c => {
         c.classList.toggle('selected', wizardData.days.includes(c.dataset.day));
     });
 
-    // 시간 입력 렌더링
     renderTimeSettings();
 };
 
 function renderTimeSettings() {
     const container = document.getElementById('time-settings');
     container.innerHTML = wizardData.days.map(day => {
-        const prev = wizardData.schedule[day] || '16:00';
+        const time = wizardData.schedule[day] || '16:00';
+        wizardData.schedule[day] = time;
         return `<div class="time-row">
                     <label>${day}</label>
-                    <input type="time" id="time-${day}" value="${prev}">
+                    <input type="time" id="time-${day}" value="${time}" oninput="syncTimeFromInputs()">
                 </div>`;
     }).join('');
+    renderSummary();
 }
 
-// ─── Step 5: 요약 ───────────────────────────────────────────────────────────
+window.syncTimeFromInputs = function () {
+    wizardData.days.forEach(day => {
+        const input = document.getElementById(`time-${day}`);
+        if (input) wizardData.schedule[day] = input.value || '16:00';
+    });
+    renderSummary();
+};
+
+// ─── 미리보기 ─────────────────────────────────────────────────────────────
 function renderSummary() {
+    const card = document.getElementById('summary-card');
+    if (!card) return;
     const d = wizardData;
     const teacherName = d.teacher ? d.teacher.split('@')[0] : '미지정';
-    const dayTimeStr = d.days.map(day => `${day} ${d.schedule[day] || ''}`).join(', ');
+    const dayTimeStr = d.days.length
+        ? d.days.map(day => `${day} ${d.schedule[day] || ''}`).join(', ')
+        : '미선택';
 
-    let typeLabel = d.classType;
+    let typeLabel = d.classType || '미선택';
     if (d.classType === '내신' && d.naesinStart && d.naesinEnd) {
         typeLabel += ` (${d.naesinStart} ~ ${d.naesinEnd})`;
     }
@@ -765,7 +783,6 @@ function renderSummary() {
         typeLabel += ` (${d.specialStart} ~ ${d.specialEnd || '미정'})`;
     }
 
-    const card = document.getElementById('summary-card');
     card.innerHTML = `
         <div class="summary-row">
             <span class="summary-label">반 유형</span>
@@ -773,7 +790,7 @@ function renderSummary() {
         </div>
         <div class="summary-row">
             <span class="summary-label">반 코드</span>
-            <span class="summary-value">${esc(d.classCode)}</span>
+            <span class="summary-value">${esc(d.classCode || '미입력')}</span>
         </div>
         <div class="summary-row">
             <span class="summary-label">담당</span>
