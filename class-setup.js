@@ -461,9 +461,7 @@ function onEnterStep2() {
     const isNaesin = t === '내신';
     const body = document.getElementById('step-2-body');
     const planner = document.getElementById('planner-panel');
-    const summary = document.getElementById('summary-panel');
     if (planner) planner.style.display = isNaesin ? '' : 'none';
-    if (summary) summary.style.display = isNaesin ? 'none' : '';
     if (body) body.classList.toggle('with-planner', isNaesin);
     if (isNaesin) {
         initNaesinPlanner();
@@ -643,7 +641,10 @@ function _doSearchStudents(q) {
             }
             const name = (s.name || '').toLowerCase();
             const school = (s.school || '').toLowerCase();
-            return name.includes(q) || school.includes(q);
+            const codeMatches = (s.enrollments || []).some(e =>
+                `${e.level_symbol || ''}${e.class_number || ''}`.toLowerCase().includes(q)
+            );
+            return name.includes(q) || school.includes(q) || codeMatches;
         })
         .sort((a, b) => {
             // 활성 학생 우선 → 이름순
@@ -690,11 +691,8 @@ window.addStudent = function (docId) {
 
     wizardData.students.push(found);
     renderSelectedStudents();
-    // 선택 후 검색창 초기화 (다음 학생 검색 편의성)
     const searchInput = document.getElementById('student-search');
-    searchInput.value = '';
-    document.getElementById('search-results').innerHTML = '';
-    searchInput.focus();
+    if (searchInput.value) _doSearchStudents(searchInput.value);
 };
 
 window.removeStudent = function (docId) {

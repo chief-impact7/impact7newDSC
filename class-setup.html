@@ -215,7 +215,7 @@
                     <div class="student-search-area">
                         <div class="search-input-wrap">
                             <span class="material-symbols-outlined">search</span>
-                            <input type="text" id="student-search" placeholder="이름, 학교로 검색..." oninput="searchStudents(this.value)">
+                            <input type="text" id="student-search" placeholder="이름, 학교, 반 코드(I201 등) 검색..." oninput="searchStudents(this.value)">
                         </div>
                         <div class="search-results" id="search-results"></div>
                     </div>
@@ -240,14 +240,7 @@
                 </div>
                 </div>
 
-                <!-- 우측 사이드: 미리보기 (기본) / 내신반 계획 (내신 시) -->
-                <aside class="step-2-side" id="step-2-side">
-                <div class="summary-panel" id="summary-panel">
-                    <h3 class="section-title">미리보기</h3>
-                    <div class="summary-card" id="summary-card"></div>
-                </div>
-
-                <!-- 내신 전용 사이드 패널: 내신반 계획 -->
+                <!-- 내신 전용: 상단 가로 패널 (내신반 계획) -->
                 <div class="planner-panel" id="planner-panel" style="display:none;">
                     <div class="planner-header">
                         <div>
@@ -292,6 +285,13 @@
                         <div class="planner-empty">학생 정보를 불러오는 중입니다.</div>
                     </div>
                 </div>
+
+                <!-- 우측 사이드: 미리보기 -->
+                <aside class="step-2-side" id="step-2-side">
+                    <div class="summary-panel" id="summary-panel">
+                        <h3 class="section-title">미리보기</h3>
+                        <div class="summary-card" id="summary-card"></div>
+                    </div>
                 </aside>
                 </div>
             </section>

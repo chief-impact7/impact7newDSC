@@ -153,13 +153,37 @@ body {
 .step-2-body {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  grid-template-areas: "main side";
   gap: 20px;
   align-items: start;
 }
 
+.step-2-body > .step-2-main {
+  grid-area: main;
+}
+
+.step-2-body > .step-2-side {
+  grid-area: side;
+}
+
+.step-2-body.with-planner {
+  grid-template-areas:
+    "planner planner"
+    "main side";
+}
+
+.step-2-body > .planner-panel {
+  grid-area: planner;
+}
+
 @media (max-width: 900px) {
-  .step-2-body {
+  .step-2-body,
+  .step-2-body.with-planner {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "planner"
+      "main"
+      "side";
   }
 }
 
@@ -225,15 +249,6 @@ body {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 20px;
-  align-self: stretch;
-  max-height: calc(100vh - 80px);
-  overflow: auto;
-}
-
-@media (max-width: 900px) {
-  .planner-panel {
-    max-height: none;
-  }
 }
 
 .planner-download-actions {
