@@ -2,12 +2,27 @@ import { onAuthStateChanged } from 'firebase/auth';
 import {
     collection, getDocs, doc, getDoc, writeBatch, arrayUnion
 } from 'firebase/firestore';
+import * as XLSX from 'xlsx';
 import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
 import { todayStr, studentShortLabel, ACTIVE_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { LEAVE_STATUSES, LEVEL_SHORT } from './state.js';
 import { buildNaesinCsKey } from './student-helpers.js';
 import { auditSet, batchUpdate } from './audit.js';
+
+const CLASS_TYPE_LABELS = {
+    '정규': '정규반',
+    '내신': '내신반',
+    '자유학기': '자유학기반',
+    '특강': '특강',
+};
+
+function setStepTitle(id, suffix) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const label = CLASS_TYPE_LABELS[wizardData.classType] || '반';
+    el.textContent = `${label} ${suffix}`;
+}
 
 // ─── State ──────────────────────────────────────────────────────────────────
 let currentUser = null;
@@ -59,7 +74,6 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('main-screen').style.display = '';
         document.getElementById('user-email').textContent = email.split('@')[0];
         await Promise.all([loadStudents(), loadTeachers()]);
-        initNaesinPlanner();
     } else {
         currentUser = null;
         document.getElementById('login-screen').style.display = '';
@@ -91,16 +105,30 @@ function getNaesinPlannerRows() {
             return {
                 docId: s.docId,
                 name: s.name || '',
+                branch: getStudentBranch(s),
                 school: normalizeText(s.school, '학교 미지정'),
                 level: normalizeText(s.level, '학부 미지정'),
                 grade: normalizeGrade(s.grade),
                 days,
-                dayKey: days.length ? days.join('') : '요일 미지정',
+                dayKey: days.length ? days.join(',') : '요일 미지정',
                 classes: getPlanningClassCodes(s).join(', '),
                 phone: s.parent_phone_1 || s.student_phone || '',
             };
         })
         .sort(comparePlannerRows);
+}
+
+function getStudentBranch(student) {
+    const direct = String(student.branch || '').trim();
+    if (direct === '2단지' || direct === '10단지') return direct;
+    // class_number 첫 자리로 추론 (RULES.md): 1→2단지, 2→10단지
+    const enrolls = getPlanningEnrollments(student);
+    for (const e of enrolls) {
+        const head = String(e.class_number || '').trim().charAt(0);
+        if (head === '1') return '2단지';
+        if (head === '2') return '10단지';
+    }
+    return '소속 미지정';
 }
 
 function getPlanningEnrollments(student) {
@@ -133,10 +161,16 @@ function getPlanningClassCodes(student) {
 
 function populatePlannerFilters() {
     const rows = getNaesinPlannerRows();
+    fillPlannerSelect('planner-filter-branch', '전체 소속', uniqueSorted(rows.map(r => r.branch), compareBranch));
     fillPlannerSelect('planner-filter-school', '전체 학교', uniqueSorted(rows.map(r => r.school)));
     fillPlannerSelect('planner-filter-level', '전체 학부', uniqueSorted(rows.map(r => r.level), compareLevel));
     fillPlannerSelect('planner-filter-grade', '전체 학년', uniqueSorted(rows.map(r => r.grade), compareGrade));
     fillPlannerSelect('planner-filter-day', '전체 요일', PLANNER_DAYS);
+}
+
+function compareBranch(a, b) {
+    const order = ['2단지', '10단지', '소속 미지정'];
+    return order.indexOf(a) - order.indexOf(b) || a.localeCompare(b, 'ko');
 }
 
 function fillPlannerSelect(id, allLabel, values) {
@@ -148,11 +182,13 @@ function fillPlannerSelect(id, allLabel, values) {
 }
 
 function getFilteredPlannerRows() {
+    const branch = document.getElementById('planner-filter-branch')?.value || '';
     const school = document.getElementById('planner-filter-school')?.value || '';
     const level = document.getElementById('planner-filter-level')?.value || '';
     const grade = document.getElementById('planner-filter-grade')?.value || '';
     const day = document.getElementById('planner-filter-day')?.value || '';
     return getNaesinPlannerRows().filter(r =>
+        (!branch || r.branch === branch) &&
         (!school || r.school === school) &&
         (!level || r.level === level) &&
         (!grade || r.grade === grade) &&
@@ -199,18 +235,54 @@ window.renderNaesinPlanner = function () {
     }).join('');
 };
 
-window.downloadNaesinPlanCsv = function () {
+/**
+ * 필터된 row들을 (학부, 학교, 학년, 요일) 그룹으로 묶어서
+ * 컬럼 = 그룹, 행 = [학부, 학교, 학년, 요일, 학생1, 학생2, ...] 형태의 2D 배열로 변환.
+ */
+function buildPlannerMatrix() {
     const rows = getFilteredPlannerRows();
-    if (rows.length === 0) {
+    if (rows.length === 0) return null;
+
+    const groupMap = new Map();
+    rows.forEach(r => {
+        const key = [r.level, r.school, r.grade, r.dayKey].join('|');
+        if (!groupMap.has(key)) {
+            groupMap.set(key, {
+                level: r.level,
+                school: r.school,
+                grade: r.grade,
+                dayKey: r.dayKey,
+                names: [],
+            });
+        }
+        groupMap.get(key).names.push(r.name);
+    });
+
+    const groups = [...groupMap.values()];
+    const maxNames = Math.max(...groups.map(g => g.names.length), 0);
+    const totalRows = 4 + maxNames;
+
+    const matrix = Array.from({ length: totalRows }, () => Array(groups.length).fill(''));
+    groups.forEach((g, c) => {
+        matrix[0][c] = g.level;
+        matrix[1][c] = g.school;
+        matrix[2][c] = g.grade;
+        matrix[3][c] = g.dayKey;
+        g.names.forEach((name, i) => {
+            matrix[4 + i][c] = name;
+        });
+    });
+
+    return { matrix, groupCount: groups.length, studentCount: rows.length };
+}
+
+window.downloadNaesinPlanCsv = function () {
+    const built = buildPlannerMatrix();
+    if (!built) {
         showToast('다운로드할 재원생이 없습니다.', 'error');
         return;
     }
-    const headers = ['학교', '학부', '학년', '등원요일', '이름', '현재반', '연락처', '문서ID'];
-    const csvRows = [
-        headers,
-        ...rows.map(r => [r.school, r.level, r.grade, r.dayKey, r.name, r.classes, r.phone, r.docId]),
-    ];
-    const csv = '\uFEFF' + csvRows.map(row => row.map(csvCell).join(',')).join('\n');
+    const csv = '\uFEFF' + built.matrix.map(row => row.map(csvCell).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -220,7 +292,24 @@ window.downloadNaesinPlanCsv = function () {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    showToast(`내신반 계획 CSV 다운로드 (${rows.length}명)`, 'success');
+    showToast(`내신반 계획 CSV 다운로드 (${built.studentCount}명, ${built.groupCount}그룹)`, 'success');
+};
+
+window.downloadNaesinPlanXlsx = function () {
+    const built = buildPlannerMatrix();
+    if (!built) {
+        showToast('다운로드할 재원생이 없습니다.', 'error');
+        return;
+    }
+    const ws = XLSX.utils.aoa_to_sheet(built.matrix);
+    ws['!cols'] = built.matrix[0].map((_, c) => {
+        const maxLen = built.matrix.reduce((m, row) => Math.max(m, String(row[c] ?? '').length), 0);
+        return { wch: Math.min(Math.max(maxLen + 2, 8), 24) };
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '내신반 계획');
+    XLSX.writeFile(wb, `내신반_계획_${todayStr()}.xlsx`);
+    showToast(`내신반 계획 Excel 다운로드 (${built.studentCount}명, ${built.groupCount}그룹)`, 'success');
 };
 
 function normalizeText(value, fallback) {
@@ -239,8 +328,9 @@ function uniqueSorted(values, compareFn) {
 }
 
 function comparePlannerRows(a, b) {
-    return a.school.localeCompare(b.school, 'ko') ||
+    return compareBranch(a.branch, b.branch) ||
         compareLevel(a.level, b.level) ||
+        a.school.localeCompare(b.school, 'ko') ||
         compareGrade(a.grade, b.grade) ||
         compareDayKey(a.dayKey, b.dayKey) ||
         a.name.localeCompare(b.name, 'ko');
@@ -375,7 +465,17 @@ function onEnterStep2() {
     document.getElementById('name-special').style.display = t === '특강' ? '' : 'none';
     document.getElementById('free-semester-dates').style.display = t === '자유학기' ? '' : 'none';
 
-    if (t === '내신') populateSchoolList();
+    setStepTitle('step-2-title', '이름을 설정하세요.');
+
+    const isNaesin = t === '내신';
+    const body = document.getElementById('step-2-body');
+    const planner = document.getElementById('planner-panel');
+    if (planner) planner.style.display = isNaesin ? '' : 'none';
+    if (body) body.classList.toggle('with-planner', isNaesin);
+    if (isNaesin) {
+        initNaesinPlanner();
+        populateSchoolList();
+    }
 
     // 날짜 유효성: 종료일 >= 시작일
     setupDateValidation('input-free-start', 'input-free-end');
@@ -507,6 +607,7 @@ function phoneSuffix(s) {
 }
 
 function onEnterStep3() {
+    setStepTitle('step-3-title', '학생을 추가하세요.');
     renderSelectedStudents();
 }
 
