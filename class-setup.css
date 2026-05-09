@@ -628,7 +628,7 @@ body {
   display: none;
 }
 
-/* ===== Step 3: Student Search ===== */
+/* ===== Student Search (Step 2 - students-section) ===== */
 .student-search-area {
   margin-bottom: 20px;
 }
@@ -800,7 +800,7 @@ body {
   font-size: 13px;
 }
 
-/* ===== Step 4: Day Selector ===== */
+/* ===== Day Selector & Time (Step 2 - days-section) ===== */
 .day-selector {
   display: flex;
   justify-content: center;
@@ -878,7 +878,7 @@ body {
   border-color: var(--primary);
 }
 
-/* ===== Step 5: Summary ===== */
+/* ===== Summary Card (Step 2 - side preview) ===== */
 .summary-card {
   background: var(--surface-container);
   border: 1px solid var(--border);
@@ -941,7 +941,6 @@ body {
 }
 
 .btn-back,
-.btn-next,
 .btn-submit {
   display: inline-flex;
   align-items: center;
@@ -962,20 +961,6 @@ body {
 
 .btn-back:hover {
   background: var(--surface-hover);
-}
-
-.btn-next {
-  background: var(--primary);
-  color: var(--on-primary);
-}
-
-.btn-next:hover {
-  opacity: 0.9;
-}
-
-.btn-next:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 .btn-submit {

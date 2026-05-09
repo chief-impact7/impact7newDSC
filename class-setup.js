@@ -74,6 +74,7 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('main-screen').style.display = '';
         document.getElementById('user-email').textContent = email.split('@')[0];
         await Promise.all([loadStudents(), loadTeachers()]);
+        bindStudentEventDelegation();
     } else {
         currentUser = null;
         document.getElementById('login-screen').style.display = '';
@@ -301,9 +302,10 @@ window.downloadNaesinPlanXlsx = function () {
         showToast('다운로드할 재원생이 없습니다.', 'error');
         return;
     }
-    const ws = XLSX.utils.aoa_to_sheet(built.matrix);
-    ws['!cols'] = built.matrix[0].map((_, c) => {
-        const maxLen = built.matrix.reduce((m, row) => Math.max(m, String(row[c] ?? '').length), 0);
+    const safeMatrix = built.matrix.map(row => row.map(safeCell));
+    const ws = XLSX.utils.aoa_to_sheet(safeMatrix);
+    ws['!cols'] = safeMatrix[0].map((_, c) => {
+        const maxLen = safeMatrix.reduce((m, row) => Math.max(m, row[c].length), 0);
         return { wch: Math.min(Math.max(maxLen + 2, 8), 24) };
     });
     const wb = XLSX.utils.book_new();
@@ -353,8 +355,16 @@ function compareDayKey(a, b) {
     return score(a) - score(b) || a.localeCompare(b, 'ko');
 }
 
+// 셀 내용이 =, +, -, @, 탭, CR로 시작하면 Excel/Sheets가 수식으로 평가하므로
+// 작은따옴표 prefix를 부착해 텍스트로 강제한다 (CSV/XLSX 공용).
+const FORMULA_TRIGGER = /^[=+\-@\t\r]/;
+function safeCell(value) {
+    const s = String(value ?? '');
+    return FORMULA_TRIGGER.test(s) ? "'" + s : s;
+}
+
 function csvCell(value) {
-    return `"${String(value ?? '').replace(/"/g, '""')}"`;
+    return `"${safeCell(value).replace(/"/g, '""')}"`;
 }
 
 async function loadTeachers() {
@@ -426,12 +436,54 @@ function validateForm() {
 
 // ─── Step 1: 반 유형 ────────────────────────────────────────────────────────
 window.selectClassType = function (type) {
+    if (wizardData.classType && wizardData.classType !== type) {
+        resetWizardForTypeChange();
+    }
     wizardData.classType = type;
     document.querySelectorAll('.type-card').forEach(c => {
         c.classList.toggle('selected', c.dataset.type === type);
     });
     goToStep(2);
 };
+
+// 타입 전환 시 stale 데이터 누적을 막기 위해 type 외 모든 wizardData 필드와
+// 관련 DOM(input value, day-chip/fee-btn .selected)을 초기화한다.
+// classType 자체는 호출자가 직후에 새 값으로 덮어쓴다.
+function resetWizardForTypeChange() {
+    Object.assign(wizardData, {
+        feeType: '', classCode: '',
+        levelSymbol: '', classNumber: '',
+        school: '', grade: '',
+        naesinBranch: '', naesinLevel: '', naesinGroup: '',
+        specialName: '',
+        naesinStart: '', naesinEnd: '',
+        specialStart: '', specialEnd: '',
+        freeStart: '', freeEnd: '',
+        teacher: '',
+        students: [], days: [], schedule: {},
+    });
+
+    [
+        'input-level', 'input-class-number',
+        'input-free-start', 'input-free-end',
+        'input-naesin-branch', 'input-naesin-level',
+        'input-school', 'input-grade', 'input-naesin-group',
+        'input-naesin-start', 'input-naesin-end',
+        'input-special-name', 'input-special-start', 'input-special-end',
+        'input-teacher',
+    ].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+
+    document.querySelectorAll('.day-chip').forEach(c => c.classList.remove('selected'));
+    document.querySelectorAll('.fee-type-btn').forEach(c => c.classList.remove('selected'));
+
+    ['regular-preview', 'naesin-preview', 'special-preview'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '';
+    });
+}
 
 // ─── Step 2: 반 이름 ────────────────────────────────────────────────────────
 function onEnterStep2() {
@@ -464,26 +516,45 @@ function onEnterStep2() {
     setupDateValidation('input-naesin-start', 'input-naesin-end');
     setupDateValidation('input-special-start', 'input-special-end');
 
-    // 프리뷰 업데이트 이벤트
-    ['input-level', 'input-class-number'].forEach(id => {
+    // 프리뷰 업데이트 이벤트 — 날짜 input은 change 이벤트가 주력이므로 함께 등록
+    ['input-level', 'input-class-number', 'input-free-start', 'input-free-end'].forEach(id => {
         const el = document.getElementById(id);
         el.removeEventListener('input', updateRegularPreview);
         el.addEventListener('input', updateRegularPreview);
+        el.removeEventListener('change', updateRegularPreview);
+        el.addEventListener('change', updateRegularPreview);
     });
-    ['input-naesin-branch', 'input-naesin-level', 'input-school', 'input-grade', 'input-naesin-group'].forEach(id => {
+    ['input-naesin-branch', 'input-naesin-level', 'input-school', 'input-grade',
+     'input-naesin-group', 'input-naesin-start', 'input-naesin-end'].forEach(id => {
         const el = document.getElementById(id);
         el.removeEventListener('input', updateNaesinPreview);
         el.addEventListener('input', updateNaesinPreview);
         el.removeEventListener('change', updateNaesinPreview);
         el.addEventListener('change', updateNaesinPreview);
     });
-    const specialInput = document.getElementById('input-special-name');
-    specialInput.removeEventListener('input', updateSpecialPreview);
-    specialInput.addEventListener('input', updateSpecialPreview);
+    ['input-special-name', 'input-special-start', 'input-special-end'].forEach(id => {
+        const el = document.getElementById(id);
+        el.removeEventListener('input', updateSpecialPreview);
+        el.addEventListener('input', updateSpecialPreview);
+        el.removeEventListener('change', updateSpecialPreview);
+        el.addEventListener('change', updateSpecialPreview);
+    });
 
     const teacherSel = document.getElementById('input-teacher');
     teacherSel.removeEventListener('change', updateTeacherPreview);
     teacherSel.addEventListener('change', updateTeacherPreview);
+
+    // step 재진입 시 DOM ↔ wizardData를 강제 동기화하고 미리보기를 즉시 갱신
+    if (t === '정규' || t === '자유학기') updateRegularPreview();
+    else if (t === '내신') updateNaesinPreview();
+    else if (t === '특강') updateSpecialPreview();
+    updateTeacherPreview();
+
+    if (t === '특강') {
+        document.querySelectorAll('.fee-type-btn').forEach(b => {
+            b.classList.toggle('selected', b.dataset.fee === wizardData.feeType);
+        });
+    }
 }
 
 function updateTeacherPreview() {
@@ -517,6 +588,10 @@ function updateRegularPreview() {
     wizardData.levelSymbol = level;
     wizardData.classNumber = num;
     wizardData.classCode = code;
+    if (wizardData.classType === '자유학기') {
+        wizardData.freeStart = document.getElementById('input-free-start').value;
+        wizardData.freeEnd = document.getElementById('input-free-end').value;
+    }
     renderSummary();
 }
 
@@ -594,7 +669,7 @@ function buildClassCode() {
     return '';
 }
 
-// ─── Step 3: 학생 추가 ─────────────────────────────────────────────────────
+// ─── 학생 추가 (Step 2 - students-section) ─────────────────────────────────
 /** 전화번호 뒷 4자리 표시 (parent_phone_1 우선, 없으면 student_phone) */
 function phoneSuffix(s) {
     const ph = s.parent_phone_1 || s.student_phone || '';
@@ -645,7 +720,7 @@ function _doSearchStudents(q) {
         const alreadySelected = selectedIds.has(s.docId);
         const isInactive = !ACTIVE_STUDENT_STATUSES.has(s.status);
         return `<div class="search-result-item ${alreadySelected ? 'already-selected' : ''}"
-                     onclick="addStudent('${s.docId}')">
+                     data-doc-id="${esc(s.docId)}">
                     <div class="result-info">
                         <span class="result-name">${esc(s.name)}</span>
                         <span class="result-meta">${esc(studentShortLabel(s))}${phoneSuffix(s)}</span>
@@ -655,6 +730,27 @@ function _doSearchStudents(q) {
     }).join('');
 
     results.innerHTML = html || '<div class="empty-selected">검색 결과 없음</div>';
+}
+
+// 검색 결과 / 선택 chip은 docId가 임의 ID일 수 있어 onclick 인라인을 피하고
+// 컨테이너 단위 이벤트 위임으로 처리한다 (JS 문자열 인젝션 차단).
+function bindStudentEventDelegation() {
+    const results = document.getElementById('search-results');
+    if (results && !results.dataset.delegated) {
+        results.addEventListener('click', e => {
+            const item = e.target.closest('.search-result-item[data-doc-id]');
+            if (item) window.addStudent(item.dataset.docId);
+        });
+        results.dataset.delegated = '1';
+    }
+    const list = document.getElementById('selected-list');
+    if (list && !list.dataset.delegated) {
+        list.addEventListener('click', e => {
+            const btn = e.target.closest('.remove-btn[data-doc-id]');
+            if (btn) window.removeStudent(btn.dataset.docId);
+        });
+        list.dataset.delegated = '1';
+    }
 }
 
 window.addStudent = function (docId) {
@@ -702,7 +798,7 @@ function renderSelectedStudents() {
                             <span class="selected-chip-name">${esc(s.name)}</span>
                             <span class="selected-chip-meta">${esc(meta)}</span>
                         </div>
-                        <button class="remove-btn" onclick="removeStudent('${s.docId}')">
+                        <button class="remove-btn" type="button" data-doc-id="${esc(s.docId)}">
                             <span class="material-symbols-outlined" style="font-size:18px;">close</span>
                         </button>
                     </div>`;
@@ -711,7 +807,7 @@ function renderSelectedStudents() {
     renderSummary();
 }
 
-// ─── Step 4: 요일 ───────────────────────────────────────────────────────────
+// ─── 요일 / 시간 (Step 2 - days-section) ────────────────────────────────────
 window.toggleDay = function (day) {
     const idx = wizardData.days.indexOf(day);
     if (idx >= 0) wizardData.days.splice(idx, 1);
