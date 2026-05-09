@@ -679,28 +679,6 @@ function hasCurrentRegularStudentsInClass(classCode) {
     });
 }
 
-function hasStudentsInClassMode(classCode, mode) {
-    const today = todayStr();
-    return state.allStudents.some(s => {
-        if (mode !== 'teukang' && isWithdrawnAt(s, today)) return false;
-        if (mode === 'teukang') {
-            return (s.enrollments || []).some(e => e.class_type === '특강' && enrollmentCode(e) === classCode);
-        }
-        if (mode === 'free') {
-            return (s.enrollments || []).some(e => {
-                if (e.class_type !== '자유학기') return false;
-                if (e.end_date && e.end_date < today) return false;
-                return enrollmentCode(e) === classCode;
-            });
-        }
-        if (mode === 'naesin') {
-            const reg = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
-            return !!reg && resolveNaesinCsKey(s, reg) === classCode;
-        }
-        return hasCurrentRegularStudentsInClass(classCode);
-    });
-}
-
 function _getAllClassCodes() {
     // class_settings에 등록된 반만 사이드바에 노출 (자동 유도 가상 반 제외)
     const regularCodes = new Set();
@@ -970,15 +948,9 @@ async function autoCleanupStaleClasses() {
         if (!cs) return;
         if (cs.class_type === '특강' && cs.special_end && cs.special_end < today) {
             targets.push({ mode: 'teukang', code });
-        } else if (cs.class_type === '특강' && !hasStudentsInClassMode(code, 'teukang')) {
-            targets.push({ mode: 'teukang', code });
         } else if (cs.naesin_end && cs.naesin_end < today && cs.class_type !== '특강') {
             targets.push({ mode: 'naesin', code });
-        } else if (cs.naesin_start && cs.naesin_end && cs.class_type !== '특강' && !hasStudentsInClassMode(code, 'naesin')) {
-            targets.push({ mode: 'naesin', code });
         } else if (cs.free_end && cs.free_end < today && cs.class_type !== '특강' && cs.class_type !== '내신') {
-            targets.push({ mode: 'free', code });
-        } else if ((cs.free_schedule !== undefined || cs.free_start || cs.free_end) && cs.class_type !== '특강' && cs.class_type !== '내신' && !hasStudentsInClassMode(code, 'free')) {
             targets.push({ mode: 'free', code });
         } else if (!cs.class_type && !cs.naesin_start && !cs.free_start && !cs.free_schedule && !hasCurrentRegularStudentsInClass(code)) {
             targets.push({ mode: 'regular', code });
