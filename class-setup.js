@@ -629,6 +629,7 @@ function updateNaesinPreview() {
     document.getElementById('naesin-preview').textContent = code || '';
     wizardData.naesinStart = document.getElementById('input-naesin-start').value;
     wizardData.naesinEnd = document.getElementById('input-naesin-end').value;
+    populateSchoolList();
     renderSummary();
 }
 
@@ -651,10 +652,13 @@ window.selectFeeType = function (type) {
 };
 
 function populateSchoolList() {
+    const selectedShort = document.getElementById('input-naesin-level')?.value || '';
     const schools = new Set();
     allStudents.forEach(s => {
         const school = (s.school || '').trim();
-        if (s.status === '재원' && school) schools.add(school);
+        if (s.status !== '재원' || !school) return;
+        if (selectedShort && LEVEL_SHORT[s.level] !== selectedShort) return;
+        schools.add(school);
     });
     const dl = document.getElementById('school-list');
     dl.innerHTML = [...schools].sort((a, b) => a.localeCompare(b, 'ko'))
