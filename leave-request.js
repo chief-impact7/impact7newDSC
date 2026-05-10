@@ -9,6 +9,7 @@ import { auditUpdate, auditAdd } from './audit.js';
 import { state, LEAVE_STATUSES } from './state.js';
 import { esc, escAttr, showSaveIndicator, _fmtTs } from './ui-utils.js';
 import { branchFromStudent, allClassCodes, activeClassCodes, enrollmentCode, findStudent } from './student-helpers.js';
+import { schoolSearchTerms } from './school-normalizer.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, _isOlderThan, loadWithdrawnStudents, renderFilterChips;
@@ -577,7 +578,12 @@ export function searchLeaveRequestStudent(term) {
         pool = state.allStudents.filter(s => s.status === '재원' || s.status === '등원예정');
     }
 
-    const matched = pool.filter(s => s.name.includes(term)).slice(0, 10);
+    const termLower = term.toLowerCase();
+    const matched = pool.filter(s => {
+        if (s.name?.includes(term)) return true;
+        const terms = schoolSearchTerms(s).map(t => t.toLowerCase());
+        return terms.some(t => t.includes(termLower));
+    }).slice(0, 10);
 
     if (matched.length === 0) {
         results.innerHTML = '<div style="padding:8px;font-size:12px;color:var(--text-sec);">결과 없음</div>';

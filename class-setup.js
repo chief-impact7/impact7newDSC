@@ -8,6 +8,7 @@ import { signInWithGoogle, logout } from './auth.js';
 import { todayStr, studentShortLabel, ACTIVE_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { LEAVE_STATUSES, LEVEL_SHORT } from './state.js';
 import { buildNaesinCsKey } from './student-helpers.js';
+import { schoolSearchTerms } from './school-normalizer.js';
 import { batchSet, batchUpdate } from './audit.js';
 
 const CLASS_TYPE_LABELS = {
@@ -730,11 +731,11 @@ function _doSearchStudents(q) {
                 if (LEAVE_STATUSES.includes(s.status)) return false;
             }
             const name = (s.name || '').toLowerCase();
-            const school = (s.school || '').toLowerCase();
+            const schoolTerms = schoolSearchTerms(s).map(t => t.toLowerCase());
             const codeMatches = (s.enrollments || []).some(e =>
                 `${e.level_symbol || ''}${e.class_number || ''}`.toLowerCase().includes(q)
             );
-            return name.includes(q) || school.includes(q) || codeMatches;
+            return name.includes(q) || schoolTerms.some(t => t.includes(q)) || codeMatches;
         })
         .sort((a, b) => {
             // 활성 학생 우선 → 이름순

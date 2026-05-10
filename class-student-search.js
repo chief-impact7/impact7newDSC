@@ -12,6 +12,7 @@
 import { studentShortLabel, ACTIVE_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { _searchContactsDSC } from './past-search.js';
 import { LEAVE_STATUSES } from './state.js';
+import { schoolSearchTerms } from './school-normalizer.js';
 
 // daily-ops.js에서 window로 노출된 이스케이프 헬퍼
 const _esc = (str) => window._esc(str);
@@ -68,8 +69,8 @@ export function createStudentSearcher({ idPrefix, addHandlerName, getEnrolledIds
             if (excludeOnLeave && LEAVE_STATUSES.includes(s.status)) return false;
             if (enrolledIds.has(s.docId)) return false;
             const name = (s.name || '').toLowerCase();
-            const school = (s.school || '').toLowerCase();
-            return name.includes(q) || school.includes(q);
+            const terms = schoolSearchTerms(s).map(t => t.toLowerCase());
+            return name.includes(q) || terms.some(t => t.includes(q));
         });
 
         const renderCombined = (localList, pastList) => {
