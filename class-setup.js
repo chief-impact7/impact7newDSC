@@ -800,6 +800,12 @@ window.addStudent = function (docId) {
         }
     }
 
+    // 자유학기제는 중학교 한정 운영 → 중등이 아니면 추가 차단
+    if (wizardData.classType === '자유학기' && (found.level || '') !== '중등') {
+        showToast(`자유학기는 중학생만 추가 가능합니다 (학부: ${found.level || '미지정'})`, 'error');
+        return;
+    }
+
     wizardData.students.push(found);
     renderSelectedStudents();
     refreshSearchAfterMutation();
