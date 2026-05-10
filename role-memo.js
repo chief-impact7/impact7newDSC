@@ -357,11 +357,10 @@ export function searchMemoStudent(q) {
     }
 
     const qLower = q.toLowerCase();
-    const matches = state.allStudents.filter(s => {
-        if (s.name?.toLowerCase().includes(qLower)) return true;
-        const terms = schoolSearchTerms(s).map(t => t.toLowerCase());
-        return terms.some(t => t.includes(qLower));
-    }).slice(0, 8);
+    const matches = state.allStudents.filter(s =>
+        s.name?.toLowerCase().includes(qLower) ||
+        schoolSearchTerms(s).some(t => t.toLowerCase().includes(qLower))
+    ).slice(0, 8);
 
     if (matches.length === 0) {
         dropdown.style.display = 'none';

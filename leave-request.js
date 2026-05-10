@@ -579,11 +579,10 @@ export function searchLeaveRequestStudent(term) {
     }
 
     const termLower = term.toLowerCase();
-    const matched = pool.filter(s => {
-        if (s.name?.includes(term)) return true;
-        const terms = schoolSearchTerms(s).map(t => t.toLowerCase());
-        return terms.some(t => t.includes(termLower));
-    }).slice(0, 10);
+    const matched = pool.filter(s =>
+        s.name?.includes(term) ||
+        schoolSearchTerms(s).some(t => t.toLowerCase().includes(termLower))
+    ).slice(0, 10);
 
     if (matched.length === 0) {
         results.innerHTML = '<div style="padding:8px;font-size:12px;color:var(--text-sec);">결과 없음</div>';
