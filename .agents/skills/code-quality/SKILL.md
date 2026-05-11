@@ -15,10 +15,10 @@ description: "코드 품질 검사를 수행하는 오케스트레이터. 코드
 
 | 에이전트 | 파일 | 담당 범위 | 출력 |
 |---------|------|---------|------|
-| code-reviewer | `.Codex/agents/code-reviewer.md` | 클라이언트 JS 버그, 로직 오류, 패턴 일관성 | `_workspace/01_review.md` |
-| refactorer | `.Codex/agents/refactorer.md` | 클라이언트 중복 코드, 구조 개선, 미사용 코드 | `_workspace/02_refactor.md` |
-| security-auditor | `.Codex/agents/security-auditor.md` | Firebase 보안, XSS, 인증 패턴 | `_workspace/03_security.md` |
-| functions-reviewer | `.Codex/agents/functions-reviewer.md` | Cloud Functions 런타임·Transaction·트리거·emulator 테스트 | `_workspace/04_functions_review.md` |
+| code-reviewer | `.claude/agents/code-reviewer.md` | 클라이언트 JS 버그, 로직 오류, 패턴 일관성 | `_workspace/01_review.md` |
+| refactorer | `.claude/agents/refactorer.md` | 클라이언트 중복 코드, 구조 개선, 미사용 코드 | `_workspace/02_refactor.md` |
+| security-auditor | `.claude/agents/security-auditor.md` | Firebase 보안, XSS, 인증 패턴 | `_workspace/03_security.md` |
+| functions-reviewer | `.claude/agents/functions-reviewer.md` | Cloud Functions 런타임·Transaction·트리거·emulator 테스트 | `_workspace/04_functions_review.md` |
 
 **functions-reviewer는 조건부 실행**: 변경 범위에 `~/projects/impact7DB/functions/**/*.js` 파일이 포함될 때만 스폰. 나머지 3명은 항상 실행.
 
@@ -47,7 +47,7 @@ description: "코드 품질 검사를 수행하는 오케스트레이터. 코드
 ### Phase 2: 팬아웃 (병렬 분석)
 
 변경 범위에 따라 3~4개 에이전트를 병렬로 스폰한다. 각 에이전트의 프롬프트에 포함할 내용:
-- 에이전트 정의 파일(`.Codex/agents/{name}.md`)을 먼저 읽으라는 지시
+- 에이전트 정의 파일(`.claude/agents/{name}.md`)을 먼저 읽으라는 지시
 - 분석 대상 파일 목록 (`_workspace/00_scope.md` 참조)
 - RULES.md를 읽어 프로젝트 컨텍스트를 파악하라는 지시
 - 결과를 `_workspace/{번호}_{이름}.md`에 저장하라는 지시

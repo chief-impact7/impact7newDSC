@@ -40,3 +40,4 @@ scripts/oneoff/
 service-account*.json
 *.bak
 *.bak.*
+.agents/.migration-bak.*

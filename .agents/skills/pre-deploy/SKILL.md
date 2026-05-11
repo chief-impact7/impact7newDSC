@@ -73,7 +73,7 @@ diff /Users/jongsooyi/projects/impact7newDSC/firestore.rules \
 기존 code-quality 하네스 패턴을 실행한다:
 1. git diff로 변경 파일 범위 결정
 2. 3개 에이전트(code-reviewer, refactorer, security-auditor) 병렬 스폰 (model: opus, run_in_background: true)
-3. 각 에이전트 정의 파일(`.Codex/agents/{name}.md`)을 먼저 읽도록 지시
+3. 각 에이전트 정의 파일(`.claude/agents/{name}.md`)을 먼저 읽도록 지시
 4. 결과 통합
 
 Phase 4는 code-quality 오케스트레이터의 Phase 1~4를 그대로 따른다. 범위만 "변경된 파일"로 한정한다. functions/ 변경이 포함되면 code-quality 오케스트레이터가 자동으로 functions-reviewer까지 스폰한다.

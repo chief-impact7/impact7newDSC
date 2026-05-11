@@ -15,8 +15,8 @@ description: "대규모 JavaScript 파일을 안전하게 모듈로 분리하는
 
 | 에이전트 | 파일 | 역할 | 출력 |
 |---------|------|------|------|
-| dependency-analyzer | `.Codex/agents/dependency-analyzer.md` | 함수 의존관계 분석 + 클러스터링 | `_workspace/dependency_analysis.md` |
-| module-executor | `.Codex/agents/module-executor.md` | 단계별 모듈 분리 실행 + 빌드 검증 | 분리된 파일들 + `_workspace/module_execution_log.md` |
+| dependency-analyzer | `.claude/agents/dependency-analyzer.md` | 함수 의존관계 분석 + 클러스터링 | `_workspace/dependency_analysis.md` |
+| module-executor | `.claude/agents/module-executor.md` | 단계별 모듈 분리 실행 + 빌드 검증 | 분리된 파일들 + `_workspace/module_execution_log.md` |
 
 ## 워크플로우
 
@@ -40,7 +40,7 @@ description: "대규모 JavaScript 파일을 안전하게 모듈로 분리하는
 ```
 Agent(
   description: "JS 파일 의존관계 분석",
-  prompt: "에이전트 정의 `.Codex/agents/dependency-analyzer.md`를 먼저 읽고 따르라.
+  prompt: "에이전트 정의 `.claude/agents/dependency-analyzer.md`를 먼저 읽고 따르라.
     분석 대상: {파일경로}.
     RULES.md를 읽어 비즈니스 도메인(숙제/테스트/출결/특강/내신)을 파악한 뒤 분석하라.
     결과를 `_workspace/dependency_analysis.md`에 저장하라.",
@@ -76,7 +76,7 @@ dependency-analyzer 결과를 읽고 사용자에게 제시:
 ```
 Agent(
   description: "모듈 분리 실행",
-  prompt: "에이전트 정의 `.Codex/agents/module-executor.md`를 먼저 읽고 따르라.
+  prompt: "에이전트 정의 `.claude/agents/module-executor.md`를 먼저 읽고 따르라.
     분석 결과: `_workspace/dependency_analysis.md`를 읽어 분리 계획과
     '심볼 해결 요구사항' 테이블을 파악하라.
     {사용자가 지정한 범위 또는 전체} 클러스터를 순서대로 분리하라.
