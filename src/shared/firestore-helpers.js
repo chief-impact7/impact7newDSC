@@ -183,6 +183,7 @@ export const PAST_STUDENT_STATUSES = new Set(['퇴원', '종강']);
 //     (진명여자고등학교, 고등, 1) → "진명여고1"
 //     (신목중, 중등, 3) → "신목중3"  (중복 '중' 방지)
 //     (신목중학교, 중등, 3) → "신목중3"
+//     (윤중, 초등, 6) → "윤중초6"   (학교가 '중'으로 끝나도 학부가 다르면 suffix 붙임)
 export function studentShortLabel(s) {
     if (!s) return '';
     let school = (s.school || '').replace('여자', '여');
@@ -196,12 +197,13 @@ export function studentShortLabel(s) {
                      : level === '고등' ? '고'
                      : (level[0] || '');
 
-    // 학교명이 이미 '초/중/고'로 끝나거나 긴 형식이면 접미어 중복 방지
+    // 학교명 긴 형식 → 짧은 형식
     school = school.replace(/초등학교$/, '초')
                    .replace(/중학교$/, '중')
                    .replace(/고등학교$/, '고');
-    const endsWithLevel = /[초중고]$/.test(school);
-    const suffix = endsWithLevel ? '' : levelShort;
+    // 학교명이 이미 '학부 접미어와 같은' 글자로 끝날 때만 중복 방지.
+    // (예: '신목중' + 중등 → '신목중3', '윤중' + 초등 → '윤중초6')
+    const suffix = (levelShort && school.endsWith(levelShort)) ? '' : levelShort;
     return school + suffix + grade;
 }
 
