@@ -1,4 +1,4 @@
-// ─── 과거 학생 검색 ───────────────────────────────────────────────────────
+// ─── 비원생 검색 ───────────────────────────────────────────────────────
 // daily-ops.js에서 분리 (Phase 2-4)
 
 import { collection, getDocs, query, where, limit } from 'firebase/firestore';
@@ -54,12 +54,12 @@ export function _renderPastContacts(pastContactResults, container) {
         const sub = [studentShortLabel(c), last4 ? `☎${last4}` : ''].filter(Boolean).join(' · ');
         return `<div class="list-item contact-item" style="cursor:pointer" onclick="window.openContactAsTemp('${escAttr(c.id)}')">
             <div class="item-info">
-                <span class="item-title">${esc(c.name || '—')} <span class="tag-past">과거</span></span>
+                <span class="item-title">${esc(c.name || '—')} <span class="tag-past">비원생</span></span>
                 <span class="item-desc">${esc(sub || '—')}</span>
             </div>
         </div>`;
     };
-    let pastHtml = `<div class="leave-section-divider"><span>과거 학생 (${pastContactResults.length}명)</span></div>`;
+    let pastHtml = `<div class="leave-section-divider"><span>비원생 (${pastContactResults.length}명)</span></div>`;
     pastHtml += visiblePast.map(renderPastItem).join('');
     if (!showAll) {
         pastHtml += `<div class="list-item" style="justify-content:center;cursor:pointer;color:var(--primary)" onclick="window._showAllPastStudents()">

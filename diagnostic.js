@@ -488,7 +488,7 @@ export function renderTempEditHistory(history) {
     `;
 }
 
-// 과거 학생 클릭 → 진단평가 모달 열기 + 자동채움
+// 비원생 클릭 → 진단평가 모달 열기 + 자동채움
 export async function openContactAsTemp(contactId) {
     try {
         const snap = await getDoc(doc(db, 'students', contactId));

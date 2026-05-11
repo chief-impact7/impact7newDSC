@@ -1414,7 +1414,7 @@ function getFilteredStudents() {
 
     const dayName = getDayName(state.selectedDate);
 
-    // 검색어가 있으면 요일 무관, 현재 학기 학생만 (퇴원/종강생은 과거 학생 검색에서 표시)
+    // 검색어가 있으면 요일 무관, 현재 학기 학생만 (퇴원/종강생은 비원생 검색에서 표시)
     // 내신 기간 중에는 getActiveEnrollments가 정규를 숨기므로 만료 여부만 직접 확인
     const today = state.selectedDate || todayStr();
     const validDateStr = (d) => d && /^\d{4}-/.test(d);
@@ -1677,7 +1677,7 @@ function renderListPanel() {
     // 필터 칩 렌더링
     renderFilterChips();
 
-    // 과거 학생 비동기 검색 (Firestore prefix 쿼리)
+    // 비원생 비동기 검색 (Firestore prefix 쿼리)
     let pastContactResults = [];
     if (state.searchQuery && state.searchQuery.trim().length >= 2) {
         const searchId = ++state._contactSearchId;
@@ -2060,7 +2060,7 @@ function renderListPanel() {
             if (hasCurrentSemester || isRecentWithdrawal) {
                 leaveBadge = `<span class="tag" style="background:#dc2626;color:#fff;">퇴원</span>`;
             } else {
-                leaveBadge = `<span class="tag-past">과거</span>`;
+                leaveBadge = `<span class="tag-past">비원생</span>`;
             }
         }
 
@@ -2184,7 +2184,7 @@ function renderListPanel() {
         container.insertAdjacentHTML('beforeend', otherHtml);
     }
 
-    // 과거 학생은 _searchContactsDSC에서 비동기로 렌더링 (위에서 호출됨)
+    // 비원생은 _searchContactsDSC에서 비동기로 렌더링 (위에서 호출됨)
 
     // 반 상세 표시: 반(+소속)만 선택되고, 콘텐츠 서브필터 없을 때
     // 내신/특강/자유학기 반 설정 모드에서는 항상 반 상세 표시
