@@ -62,9 +62,11 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
         `;
     }
 
-    // pending 또는 완료된 task가 있는 영역은 후속대책 카드에서 제외 (취소만 재생성 허용)
+    // pending task가 있는 영역만 후속대책 카드에서 제외.
+    // 완료/취소/기타로 닫힌 영역은 카드를 다시 보여서 사용자가 같은 사건에 후속대책을
+    // 재입력하면 saveHwFailAction → batchSet merge로 자동 reopen된다 (absence_records와 동일 패턴).
     const filteredDomains = failDomains.filter(domain =>
-        !state.hwFailTasks.find(t => t.student_id === studentId && t.domain === domain && t.source_date === state.selectedDate && (t.status === 'pending' || t.status === '완료'))
+        !state.hwFailTasks.find(t => t.student_id === studentId && t.domain === domain && t.source_date === state.selectedDate && t.status === 'pending')
     );
 
     if (filteredDomains.length === 0) {
@@ -273,6 +275,14 @@ export async function saveHwFailAction(studentId, hwFailAction, onlyDomain) {
                 created_at: existing?.created_at || new Date().toISOString(),
                 branch: branchFromStudent(student || {}),
             };
+            // 이전에 닫힌 task를 다시 활성화하는 경우(완료/취소/기타 → pending) leftover
+            // completed_*/cancelled_* 필드를 비워 reopen 상태가 깔끔하게 나타나도록 한다.
+            if (existing && existing.status && existing.status !== 'pending') {
+                taskData.completed_by = '';
+                taskData.completed_at = '';
+                taskData.cancelled_by = '';
+                taskData.cancelled_at = '';
+            }
             batchSet(hwWriteBatch, doc(db, 'hw_fail_tasks', taskDocId), taskData, { merge: true });
             hwWriteCount++;
             const idx = state.hwFailTasks.findIndex(t => t.docId === taskDocId);

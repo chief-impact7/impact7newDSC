@@ -71,9 +71,11 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
         `;
     }
 
-    // pending 또는 완료된 task가 있는 항목은 후속대책 카드에서 제외 (취소만 재생성 허용)
+    // pending task가 있는 항목만 후속대책 카드에서 제외.
+    // 완료/취소/기타로 닫힌 항목은 카드를 다시 보여 사용자가 같은 사건에 후속대책을
+    // 재입력하면 saveTestFailAction → batchSet merge로 자동 reopen된다.
     const filteredItems = failItems.filter(item =>
-        !state.testFailTasks.find(t => t.student_id === studentId && t.domain === item && t.source_date === state.selectedDate && (t.status === 'pending' || t.status === '완료'))
+        !state.testFailTasks.find(t => t.student_id === studentId && t.domain === item && t.source_date === state.selectedDate && t.status === 'pending')
     );
 
     if (filteredItems.length === 0) {
@@ -278,6 +280,13 @@ export async function saveTestFailAction(studentId, testFailAction, onlyDomain) 
                 created_at: existing?.created_at || new Date().toISOString(),
                 branch: branchFromStudent(student || {}),
             };
+            // 닫힌 task를 다시 활성화하는 경우 leftover completed_*/cancelled_* 정리 (hw_fail_tasks와 동일).
+            if (existing && existing.status && existing.status !== 'pending') {
+                taskData.completed_by = '';
+                taskData.completed_at = '';
+                taskData.cancelled_by = '';
+                taskData.cancelled_at = '';
+            }
             batchSet(testWriteBatch, doc(db, 'test_fail_tasks', taskDocId), taskData, { merge: true });
             testWriteCount++;
             const idx = state.testFailTasks.findIndex(t => t.docId === taskDocId);
