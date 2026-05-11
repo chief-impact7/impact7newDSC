@@ -242,14 +242,14 @@
                 </div>
                 </div>
 
-                <!-- 내신 전용: 상단 가로 패널 (내신반 계획) -->
+                <!-- 정규/내신 공용 패널 (제목·필터·다운로드는 모드별로 동적 변경) -->
                 <div class="planner-panel" id="planner-panel" style="display:none;">
                     <div class="planner-header">
                         <div>
-                            <h3 class="planner-title">내신반 계획</h3>
-                            <p class="planner-subtitle">재원생을 학교/학부/학년/요일로 분류해 보여줍니다.</p>
+                            <h3 class="planner-title" id="planner-title">내신반 계획</h3>
+                            <p class="planner-subtitle" id="planner-subtitle">재원생을 학교/학부/학년/요일로 분류해 보여줍니다.</p>
                         </div>
-                        <div class="planner-download-actions">
+                        <div class="planner-download-actions" id="planner-download-actions">
                             <button class="planner-download-btn" type="button" onclick="downloadNaesinPlanCsv()">
                                 <span class="material-symbols-outlined">download</span>
                                 CSV
@@ -263,23 +263,23 @@
                     <div class="planner-filters">
                         <label>
                             소속
-                            <select id="planner-filter-branch" onchange="renderNaesinPlanner()"></select>
+                            <select id="planner-filter-branch" onchange="renderPlanner()"></select>
                         </label>
                         <label>
                             학부
-                            <select id="planner-filter-level" onchange="renderNaesinPlanner()"></select>
+                            <select id="planner-filter-level" onchange="renderPlanner()"></select>
                         </label>
                         <label>
                             학교
-                            <select id="planner-filter-school" onchange="renderNaesinPlanner()"></select>
+                            <select id="planner-filter-school" onchange="renderPlanner()"></select>
                         </label>
                         <label>
                             학년
-                            <select id="planner-filter-grade" onchange="renderNaesinPlanner()"></select>
+                            <select id="planner-filter-grade" onchange="renderPlanner()"></select>
                         </label>
                         <label>
                             등원요일
-                            <select id="planner-filter-day" onchange="renderNaesinPlanner()"></select>
+                            <select id="planner-filter-day" onchange="renderPlanner()"></select>
                         </label>
                     </div>
                     <div class="planner-stats" id="planner-stats"></div>

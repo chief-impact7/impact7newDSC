@@ -29,7 +29,7 @@ function setStepTitle(id, suffix) {
 let currentUser = null;
 let currentStep = 1;
 const TOTAL_STEPS = 2;
-const PLANNER_DAYS = ['월', '화', '수', '목', '금', '토'];
+const PLANNER_DAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
 // 마법사 데이터
 const wizardData = {
@@ -93,31 +93,55 @@ async function loadStudents() {
     allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
 }
 
-// ─── 내신반 계획 ─────────────────────────────────────────────────────────────
-function initNaesinPlanner() {
-    populatePlannerFilters();
-    renderNaesinPlanner();
+// ─── 반 계획 패널 (정규/내신 공용) ─────────────────────────────────────────
+// mode: '정규' (자유학기 포함) | '내신'
+function initPlanner(mode) {
+    populatePlannerFilters(mode);
+    renderPlanner();
 }
 
-function getNaesinPlannerRows() {
-    return allStudents
-        .filter(s => s.status === '재원')
-        .map(s => {
-            const days = getPlanningDays(s);
-            return {
-                docId: s.docId,
-                name: s.name || '',
-                branch: getStudentBranch(s),
-                school: normalizeText(s.school, '학교 미지정'),
-                level: normalizeText(s.level, '학부 미지정'),
-                grade: normalizeGrade(s.grade),
-                days,
-                dayKey: days.length ? days.join(',') : '요일 미지정',
-                classes: getPlanningClassCodes(s).join(', '),
-                phone: s.parent_phone_1 || s.student_phone || '',
-            };
-        })
-        .sort(comparePlannerRows);
+function makeBaseRow(student) {
+    return {
+        docId: student.docId,
+        name: student.name || '',
+        // 학생 식별/표시는 항상 studentShortLabel 사용 (예: "양정중2")
+        shortLabel: studentShortLabel(student),
+        branch: getStudentBranch(student),
+        school: normalizeText(student.school, '학교 미지정'),
+        level: normalizeText(student.level, '학부 미지정'),
+        grade: normalizeGrade(student.grade),
+        phone: student.parent_phone_1 || student.student_phone || '',
+    };
+}
+
+// 정규 모드: enrollment(반) 단위로 펼친 row (한 학생이 N개 반에 등록되면 N개 row)
+// 내신 모드: 학생 단위 row (한 학생당 1개)
+function getPlannerRows(mode) {
+    const active = allStudents.filter(s => ACTIVE_STUDENT_STATUSES.has(s.status));
+    if (mode === '정규') {
+        return active.flatMap(s =>
+            getPlanningEnrollments(s).map(e => {
+                const code = `${e.level_symbol || ''}${e.class_number || ''}`.trim();
+                const days = Array.isArray(e.day) ? e.day.filter(d => PLANNER_DAYS.includes(d)) : [];
+                return {
+                    ...makeBaseRow(s),
+                    days,
+                    dayKey: days.length ? days.join(',') : '요일 미지정',
+                    classCode: code || '반 미지정',
+                    classes: code,
+                };
+            })
+        ).sort(comparePlannerRows);
+    }
+    return active.map(s => {
+        const days = getPlanningDays(s);
+        return {
+            ...makeBaseRow(s),
+            days,
+            dayKey: days.length ? days.join(',') : '요일 미지정',
+            classes: getPlanningClassCodes(s).join(', '),
+        };
+    }).sort(comparePlannerRows);
 }
 
 function getStudentBranch(student) {
@@ -161,13 +185,15 @@ function getPlanningClassCodes(student) {
     return [...set].sort((a, b) => a.localeCompare(b, 'ko'));
 }
 
-function populatePlannerFilters() {
-    const rows = getNaesinPlannerRows();
+function populatePlannerFilters(mode) {
+    const rows = getPlannerRows(mode);
     fillPlannerSelect('planner-filter-branch', '전체 소속', uniqueSorted(rows.map(r => r.branch), compareBranch));
-    fillPlannerSelect('planner-filter-school', '전체 학교', uniqueSorted(rows.map(r => r.school)));
     fillPlannerSelect('planner-filter-level', '전체 학부', uniqueSorted(rows.map(r => r.level), compareLevel));
-    fillPlannerSelect('planner-filter-grade', '전체 학년', uniqueSorted(rows.map(r => r.grade), compareGrade));
-    fillPlannerSelect('planner-filter-day', '전체 요일', PLANNER_DAYS);
+    if (mode === '내신') {
+        fillPlannerSelect('planner-filter-school', '전체 학교', uniqueSorted(rows.map(r => r.school)));
+        fillPlannerSelect('planner-filter-grade', '전체 학년', uniqueSorted(rows.map(r => r.grade), compareGrade));
+        fillPlannerSelect('planner-filter-day', '전체 요일', PLANNER_DAYS);
+    }
 }
 
 function compareBranch(a, b) {
@@ -183,66 +209,95 @@ function fillPlannerSelect(id, allLabel, values) {
     if ([...el.options].some(o => o.value === current)) el.value = current;
 }
 
-function getFilteredPlannerRows() {
+function getCurrentPlannerMode() {
+    const t = wizardData.classType;
+    return (t === '내신') ? '내신' : '정규';
+}
+
+function getFilteredPlannerRows(mode) {
     const branch = document.getElementById('planner-filter-branch')?.value || '';
-    const school = document.getElementById('planner-filter-school')?.value || '';
     const level = document.getElementById('planner-filter-level')?.value || '';
-    const grade = document.getElementById('planner-filter-grade')?.value || '';
-    const day = document.getElementById('planner-filter-day')?.value || '';
-    return getNaesinPlannerRows().filter(r =>
+    const school = (mode === '내신') ? (document.getElementById('planner-filter-school')?.value || '') : '';
+    const grade = (mode === '내신') ? (document.getElementById('planner-filter-grade')?.value || '') : '';
+    const day = (mode === '내신') ? (document.getElementById('planner-filter-day')?.value || '') : '';
+    return getPlannerRows(mode).filter(r =>
         (!branch || r.branch === branch) &&
-        (!school || r.school === school) &&
         (!level || r.level === level) &&
+        (!school || r.school === school) &&
         (!grade || r.grade === grade) &&
         (!day || r.days.includes(day))
     );
 }
 
-window.renderNaesinPlanner = function () {
-    const rows = getFilteredPlannerRows();
-    const stats = document.getElementById('planner-stats');
-    const groups = document.getElementById('planner-groups');
-    const total = getNaesinPlannerRows().length;
-    stats.textContent = `표시 ${rows.length}명 / 재원생 ${total}명`;
-
-    if (rows.length === 0) {
-        groups.innerHTML = '<div class="planner-empty">조건에 맞는 재원생이 없습니다.</div>';
-        return;
-    }
-
+function groupBy(rows, keyFn) {
     const grouped = new Map();
     rows.forEach(row => {
-        const key = [row.branch, row.level, row.school, row.grade, row.dayKey].join('|');
+        const key = keyFn(row);
         if (!grouped.has(key)) grouped.set(key, []);
         grouped.get(key).push(row);
     });
+    return grouped;
+}
 
-    groups.innerHTML = [...grouped.entries()].map(([key, groupRows]) => {
-        const [branch, level, school, grade, dayKey] = key.split('|');
+function renderPlannerGroups(grouped, { titleFn = (k) => k, metaFn }) {
+    return [...grouped.entries()].map(([key, groupRows]) => {
         const studentHtml = groupRows.map(row => `
             <div class="planner-student">
                 <span class="planner-student-name">${esc(row.name)}</span>
-                <span class="planner-student-meta">${esc(row.classes || '반 미지정')}</span>
+                <span class="planner-student-meta">${esc(metaFn(row))}</span>
             </div>
         `).join('');
         return `
             <section class="planner-group">
                 <div class="planner-group-head">
-                    <div class="planner-group-title">${esc(branch)} · ${esc(level)} · ${esc(school)} · ${esc(grade)} · ${esc(dayKey)}</div>
+                    <div class="planner-group-title">${esc(titleFn(key))}</div>
                     <span class="planner-count">${groupRows.length}명</span>
                 </div>
                 <div class="planner-student-list">${studentHtml}</div>
             </section>
         `;
     }).join('');
-};
+}
+
+function renderPlanner() {
+    const mode = getCurrentPlannerMode();
+    const rows = getFilteredPlannerRows(mode);
+    const stats = document.getElementById('planner-stats');
+    const groups = document.getElementById('planner-groups');
+    const totalRows = getPlannerRows(mode).length;
+    stats.textContent = (mode === '정규')
+        ? `표시 ${rows.length}건 / 정규 등록 ${totalRows}건`
+        : `표시 ${rows.length}명 / 재원생 ${totalRows}명`;
+
+    if (rows.length === 0) {
+        groups.innerHTML = '<div class="planner-empty">조건에 맞는 학생이 없습니다.</div>';
+        return;
+    }
+
+    if (mode === '정규') {
+        const grouped = groupBy(rows, row => row.classCode);
+        const sorted = new Map([...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0], 'ko')));
+        groups.innerHTML = renderPlannerGroups(sorted, {
+            metaFn: row => `${row.shortLabel} · ${row.branch}`,
+        });
+        return;
+    }
+
+    const grouped = groupBy(rows, row => [row.branch, row.level, row.school, row.grade, row.dayKey].join('|'));
+    groups.innerHTML = renderPlannerGroups(grouped, {
+        titleFn: key => key.split('|').join(' · '),
+        metaFn: row => row.classes || '반 미지정',
+    });
+}
+window.renderPlanner = renderPlanner;
 
 /**
  * 필터된 row들을 (학부, 학교, 학년, 요일) 그룹으로 묶어서
  * 컬럼 = 그룹, 행 = [학부, 학교, 학년, 요일, 학생1, 학생2, ...] 형태의 2D 배열로 변환.
  */
 function buildPlannerMatrix() {
-    const rows = getFilteredPlannerRows();
+    // 내신 다운로드 전용 — 정규 모드에선 다운로드 버튼이 숨겨져 호출되지 않음.
+    const rows = getFilteredPlannerRows('내신');
     if (rows.length === 0) return null;
 
     const groupMap = new Map();
@@ -528,15 +583,31 @@ function refreshStepTitles() {
 }
 
 function togglePlannerPanel(t) {
-    const isNaesin = t === '내신';
+    const showPlanner = (t === '내신' || t === '정규' || t === '자유학기');
+    const mode = (t === '내신') ? '내신' : '정규';
     const body = document.getElementById('step-2-body');
     const planner = document.getElementById('planner-panel');
-    if (planner) planner.style.display = isNaesin ? '' : 'none';
-    if (body) body.classList.toggle('with-planner', isNaesin);
-    if (isNaesin) {
-        initNaesinPlanner();
-        populateSchoolList();
-    }
+    if (planner) planner.style.display = showPlanner ? '' : 'none';
+    if (body) body.classList.toggle('with-planner', showPlanner);
+    if (!showPlanner) return;
+
+    // 모드별 헤더 + 필터 가시성
+    const titleEl = document.getElementById('planner-title');
+    const subtitleEl = document.getElementById('planner-subtitle');
+    if (titleEl) titleEl.textContent = (mode === '내신') ? '내신반 계획' : '정규반 분석';
+    if (subtitleEl) subtitleEl.textContent = (mode === '내신')
+        ? '재원생을 학교/학부/학년/요일로 분류해 보여줍니다.'
+        : '재원생을 정규반(예: I102)별로 묶고 소속/학부로 필터합니다.';
+    const showNaesinOnly = (mode === '내신');
+    ['planner-filter-school', 'planner-filter-grade', 'planner-filter-day'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && el.parentElement) el.parentElement.style.display = showNaesinOnly ? '' : 'none';
+    });
+    const downloads = document.getElementById('planner-download-actions');
+    if (downloads) downloads.style.display = showNaesinOnly ? '' : 'none';
+
+    initPlanner(mode);
+    if (mode === '내신') populateSchoolList();
 }
 
 function bindDateValidations() {
