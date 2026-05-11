@@ -2,9 +2,9 @@
 // daily-ops.js에서 추출한 출결 관리 관련 함수
 // Phase 4-5
 
-import { collection, getDocs, doc, getDoc, query, where, serverTimestamp, deleteField } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, query, where, serverTimestamp, deleteField, writeBatch } from 'firebase/firestore';
 import { db } from './firebase-config.js';
-import { auditUpdate, auditSet, auditDelete } from './audit.js';
+import { auditUpdate, auditSet, auditDelete, batchUpdate } from './audit.js';
 import { getDayName } from './src/shared/firestore-helpers.js';
 import { state, NEW_STUDENT_DAYS } from './state.js';
 import { showSaveIndicator, nowTimeStr } from './ui-utils.js';
@@ -69,17 +69,44 @@ export function toggleAttendance(studentId, displayStatus) {
     applyAttendance(studentId, displayStatus);
 }
 
+// 이전에 처리 완료(closed)된 결석을 다시 결석대장에 노출시키기 위해 status='open' + daily_records.absence_closed=false로 atomic batch update.
+// resolution/makeup_* 같은 다른 필드는 그대로 보존하여 기존 처리 이력을 잃지 않는다.
+async function reopenAbsenceRecord(studentId, absDocId, currentData, date) {
+    try {
+        const batch = writeBatch(db);
+        batchUpdate(batch, doc(db, 'absence_records', absDocId), { status: 'open' });
+        batchUpdate(batch, doc(db, 'daily_records', `${studentId}_${date}`), { absence_closed: false });
+        await batch.commit();
+
+        if (state.dailyRecords[studentId]) {
+            state.dailyRecords[studentId].absence_closed = false;
+        }
+        const idx = state.absenceRecords.findIndex(r => r.docId === absDocId);
+        if (idx >= 0) {
+            state.absenceRecords[idx].status = 'open';
+        } else {
+            state.absenceRecords.push({ docId: absDocId, ...currentData, status: 'open' });
+        }
+    } catch (err) {
+        console.error('결석대장 reopen 실패:', err);
+    }
+}
+
 export async function autoCreateAbsenceRecord(studentId, overrides, date = state.selectedDate) {
     // 결정적 문서 ID — 동일 학생+날짜 조합은 항상 같은 ID → race condition 방지
     const absDocId = `${studentId}_${date}`;
 
-    // 행정완료 마커 체크 — 이미 종료된 건은 재생성하지 않음
-    if (state.dailyRecords[studentId]?.absence_closed) return;
     if (!overrides && state.dailyRecords[studentId]?.attendance?.status !== '결석') return;
 
-    // 메모리 중복 체크
-    const exists = state.absenceRecords.some(r => r.student_id === studentId && r.absence_date === date);
-    if (exists) return;
+    // 메모리에 이미 open으로 캐시되어 있으면 추가 작업 없음. 단, absence_closed 마커가
+    // stale로 남아있으면 함께 해제해야 결석대장 노출/UI 동기화가 일치한다.
+    const memHit = state.absenceRecords.find(r => r.student_id === studentId && r.absence_date === date);
+    if (memHit) {
+        if (state.dailyRecords[studentId]?.absence_closed) {
+            await reopenAbsenceRecord(studentId, memHit.docId, memHit, date);
+        }
+        return;
+    }
 
     // Firestore 서버 측 중복 체크
     try {
@@ -87,10 +114,21 @@ export async function autoCreateAbsenceRecord(studentId, overrides, date = state
         const existDoc = await getDoc(doc(db, 'absence_records', absDocId));
         if (existDoc.exists()) {
             const data = existDoc.data();
-            if (data.status === 'open' && !state.absenceRecords.some(r => r.docId === absDocId)) {
-                state.absenceRecords.push({ docId: absDocId, ...data });
+            if (data.status === 'open') {
+                if (!state.absenceRecords.some(r => r.docId === absDocId)) {
+                    state.absenceRecords.push({ docId: absDocId, ...data });
+                }
+                if (state.dailyRecords[studentId]?.absence_closed) {
+                    await reopenAbsenceRecord(studentId, absDocId, data, date);
+                }
+                return;
             }
-            return;
+            if (data.status === 'closed') {
+                // 핵심 정책: 이미 closed된 결석이라도 사용자가 다시 결석을 체크하거나 사유를
+                // 수정하면 마지막 입력을 우선해 reopen한다. 다른 필드는 보존.
+                await reopenAbsenceRecord(studentId, absDocId, data, date);
+                return;
+            }
         }
         // 2) 기존 auto-ID 레코드 호환: 필드 기반 쿼리 폴백 (2026-03 배포, 2026-05 이후 제거 가능)
         const existQ = query(collection(db, 'absence_records'),
@@ -99,11 +137,15 @@ export async function autoCreateAbsenceRecord(studentId, overrides, date = state
             where('status', 'in', ['open', 'closed']));
         const existSnap = await getDocs(existQ);
         if (!existSnap.empty) {
-            existSnap.forEach(d => {
-                if (d.data().status === 'open' && !state.absenceRecords.some(r => r.docId === d.id)) {
-                    state.absenceRecords.push({ docId: d.id, ...d.data() });
+            for (const d of existSnap.docs) {
+                const data = d.data();
+                if (data.status === 'open' && !state.absenceRecords.some(r => r.docId === d.id)) {
+                    state.absenceRecords.push({ docId: d.id, ...data });
                 }
-            });
+                if (data.status === 'closed') {
+                    await reopenAbsenceRecord(studentId, d.id, data, date);
+                }
+            }
             return;
         }
     } catch (err) {
@@ -343,5 +385,11 @@ export function handleAttendanceChange(studentId, field, value) {
     // 목록 태그 즉시 업데이트
     if (field === 'status') {
         renderListPanel();
+    }
+
+    // 결석 상태에서 사유를 다시 입력하면 closed 결석이라도 reopen하여 결석대장에 다시 노출.
+    // autoCreateAbsenceRecord가 status === 'closed'를 감지하면 자동으로 reopen 흐름을 탄다.
+    if (field === 'reason' && attendance.status === '결석') {
+        autoCreateAbsenceRecord(studentId, null, state.selectedDate);
     }
 }
