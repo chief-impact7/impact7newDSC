@@ -12,7 +12,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { auditUpdate, auditSet } from './audit.js';
 import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
-import { renderClassDeleteCard } from './class-detail.js';
+import { renderClassDeleteCard, applyClassDetailTabMode } from './class-detail.js';
 
 // ─── State 접근자 ─────────────────────────────────────────────────────────────
 function _state() {
@@ -936,6 +936,7 @@ window.removeFromTeukang = async function(studentId, classCode) {
 function renderNaesinClassDetail(csKey) {
     const { allStudents, selectedDate, classSettings } = _state();
 
+    applyClassDetailTabMode();
     document.getElementById('detail-empty').style.display = 'none';
     document.getElementById('detail-content').style.display = '';
     window.selectedStudentId = null;

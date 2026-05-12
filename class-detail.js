@@ -164,6 +164,24 @@ export async function submitClassTempOverrideFromModal(classCode) {
     await window.createTempClassOverride(studentId, classCode, [dateVal], reason);
 }
 
+// 반 상세 패널: 출결현황/성적 탭은 학생 전용 → 반 모드에서 숨기고 daily로 강제.
+// 학생 선택 시 renderStudentDetail이 다시 노출함.
+export function applyClassDetailTabMode() {
+    const tabsEl = document.getElementById('detail-tabs');
+    if (tabsEl) {
+        tabsEl.querySelectorAll('.detail-tab').forEach(t => {
+            if (t.dataset.tab === 'report' || t.dataset.tab === 'score') t.style.display = 'none';
+            t.classList.toggle('active', t.dataset.tab === 'daily');
+        });
+    }
+    state.detailTab = 'daily';
+    document.getElementById('detail-cards').style.display = '';
+    const reportTabEl = document.getElementById('report-tab');
+    if (reportTabEl) reportTabEl.style.display = 'none';
+    const scoreTabEl = document.getElementById('score-tab');
+    if (scoreTabEl) scoreTabEl.style.display = 'none';
+}
+
 export function renderClassDetail(classCode) {
     if (!classCode) {
         document.getElementById('detail-empty').style.display = '';
@@ -182,6 +200,7 @@ export function renderClassDetail(classCode) {
     }
 
     state.selectedStudentId = null; // 학생 선택 해제
+    applyClassDetailTabMode();
 
     document.getElementById('detail-empty').style.display = 'none';
     document.getElementById('detail-content').style.display = '';
@@ -863,6 +882,44 @@ export async function deleteClass(classCode, mode, opts = {}) {
         renderStudentDetail(null);
     }
     return { affected: affected.length };
+}
+
+// 정규반(특강/자유학기/내신 제외)에 활성 학생이 0명이면 자동 삭제.
+// history_logs는 deleteClass 내부에서 기록됨. 동시 실행 방지를 위한 가드.
+let _emptyCleanupRunning = false;
+export async function cleanupEmptyRegularClasses() {
+    if (READ_ONLY || _emptyCleanupRunning) return [];
+    _emptyCleanupRunning = true;
+    try {
+        const targets = [];
+        for (const [code, cs] of Object.entries(state.classSettings)) {
+            if (!cs) continue;
+            if (cs.class_type === '특강') continue;
+            if (cs.naesin_start && cs.naesin_end) continue;
+            if (cs.free_schedule !== undefined || cs.free_start) continue;
+            const hasStudent = state.allStudents.some(s =>
+                s.status !== '퇴원' && (s.enrollments || []).some(e =>
+                    (e.class_type === '정규' || !e.class_type) && enrollmentCode(e) === code
+                )
+            );
+            if (!hasStudent) targets.push(code);
+        }
+        const deleted = [];
+        for (const code of targets) {
+            try {
+                await deleteClass(code, 'regular', { skipRender: true });
+                deleted.push(code);
+            } catch (err) {
+                console.error('빈 정규반 자동 삭제 실패:', code, err);
+            }
+        }
+        if (deleted.length > 0) {
+            console.log(`빈 정규반 자동 삭제: ${deleted.length}건 (${deleted.join(', ')})`);
+        }
+        return deleted;
+    } finally {
+        _emptyCleanupRunning = false;
+    }
 }
 
 export function renderClassDeleteCard(classCode, mode) {

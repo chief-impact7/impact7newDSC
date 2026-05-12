@@ -1267,10 +1267,11 @@ export function renderStudentDetail(studentId) {
         ${renderUnifiedMemoCard(studentId)}
     `;
 
-    // 탭 상태 복원
+    // 탭 상태 복원 — 학생 모드: 출결현황/성적 탭 노출
     const tabsEl = document.getElementById('detail-tabs');
     if (tabsEl) {
         tabsEl.querySelectorAll('.detail-tab').forEach(t => {
+            if (t.dataset.tab === 'report' || t.dataset.tab === 'score') t.style.display = '';
             t.classList.toggle('active', t.dataset.tab === state.detailTab);
         });
     }

@@ -71,7 +71,8 @@ import {
     addTestToSection, removeTestFromSection, addTestSection, removeTestSection, resetTestSections, resetTestSection,
     saveClassDefaultTime, toggleRegularClassDay, toggleClassDay, saveClassDayTime,
     saveTeukangPeriod, saveFreeSemesterPeriod, searchTeukangAddStudent, addStudentToTeukang,
-    confirmDeleteClass, deleteClass, CLASS_MODE_LABELS, getClassPeriodInfo
+    confirmDeleteClass, deleteClass, CLASS_MODE_LABELS, getClassPeriodInfo,
+    cleanupEmptyRegularClasses
 } from './class-detail.js';
 import {
     initHwManagementDeps,
@@ -2861,6 +2862,7 @@ window.refreshData = async () => {
     await loadWithdrawnStudents();
     await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadRoleMemos(), loadClassSettings(true), loadClassNextHw(state.selectedDate), loadTeachers()]);
     await syncAbsenceRecords();
+    await cleanupEmptyRegularClasses();
     renderBranchFilter();
     renderSubFilters();
     renderListPanel();
