@@ -291,12 +291,15 @@ export function loadRetakeSchedules() {
 }
 
 export function loadHwFailTasks() {
-    const q = query(collection(db, 'hw_fail_tasks'), where('status', 'in', ['pending', '완료', '기타']));
+    // '취소'도 포함: 후속대책 카드가 closed read-only로 표시해 자동 reopen을 차단(45b93b9)하려면
+    // state에 task가 남아 있어야 한다. 빠지면 빈 입력 필드로 다시 그려져 saveHwFailAction의
+    // existing 가드가 안 걸리고 같은 docId로 pending이 덮어써짐.
+    const q = query(collection(db, 'hw_fail_tasks'), where('status', 'in', ['pending', '완료', '취소', '기타']));
     return _listenCollection('hw_fail_tasks', q, null, (data) => { state.hwFailTasks = data; });
 }
 
 export function loadTestFailTasks() {
-    const q = query(collection(db, 'test_fail_tasks'), where('status', 'in', ['pending', '완료', '기타']));
+    const q = query(collection(db, 'test_fail_tasks'), where('status', 'in', ['pending', '완료', '취소', '기타']));
     return _listenCollection('test_fail_tasks', q, null, (data) => { state.testFailTasks = data; });
 }
 
