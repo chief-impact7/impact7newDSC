@@ -63,8 +63,9 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
     }
 
     // pending task가 있는 영역만 후속대책 카드에서 제외.
-    // 완료/취소/기타로 닫힌 영역은 카드를 다시 보여서 사용자가 같은 사건에 후속대책을
-    // 재입력하면 saveHwFailAction → batchSet merge로 자동 reopen된다 (absence_records와 동일 패턴).
+    // 완료/취소/기타로 닫힌 영역은 카드에 다시 노출하되, 입력 필드 대신 read-only "처리됨"
+    // 표시 + [재입력] 버튼만 보여 의도치 않은 자동 reopen을 차단한다.
+    // (사용자가 [재입력] 누른 뒤에만 reopenHwFailDomain으로 명시적 reopen.)
     const filteredDomains = failDomains.filter(domain =>
         !state.hwFailTasks.find(t => t.student_id === studentId && t.domain === domain && t.source_date === state.selectedDate && t.status === 'pending')
     );
@@ -86,6 +87,14 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
         : '2차 미통과 영역에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.';
 
     const rows = filteredDomains.map(domain => {
+        // 닫힌 task가 있으면 read-only 행 + [재입력] 버튼만 보여 자동 reopen 차단.
+        const closedTask = state.hwFailTasks.find(t =>
+            t.student_id === studentId && t.domain === domain
+            && t.source_date === state.selectedDate
+            && t.status !== 'pending' && t.status
+        );
+        if (closedTask) return _renderClosedHwFailRow(studentId, domain, closedTask);
+
         const action = hwFailAction[domain] || {};
         const type = action.type || '';
         const isVisit = type === '등원';
@@ -158,6 +167,54 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
             ${rows}
         </div>
     `;
+}
+
+// 닫힌(완료/취소/기타) hw_fail_task 영역 — read-only + [재입력] 버튼.
+function _renderClosedHwFailRow(studentId, domain, task) {
+    const detail = task.type === '등원'
+        ? `${_stripYear(task.scheduled_date || '')}${task.scheduled_time ? ' ' + formatTime12h(task.scheduled_time) : ''}`
+        : (task.alt_hw || '내용 없음');
+    return `
+        <div class="hw-fail-domain-row hw-fail-closed" data-domain="${escAttr(domain)}" style="opacity:0.75;">
+            <div class="hw-fail-domain-header">
+                <span style="font-size:12px;font-weight:600;color:var(--text-main);">${esc(domain)}</span>
+                <span style="font-size:11px;padding:1px 6px;border-radius:4px;background:var(--surface-alt);color:var(--text-sec);">처리됨 (${esc(task.status)})</span>
+                <button class="hw-fail-type-btn" style="margin-left:auto;font-size:11px;"
+                    onclick="reopenHwFailDomain('${escAttr(studentId)}', '${escAttr(domain)}')">
+                    <span class="material-symbols-outlined" style="font-size:13px;">refresh</span>재입력
+                </button>
+            </div>
+            <div style="font-size:11px;color:var(--text-sec);padding:4px 0 0 6px;">
+                ${esc(task.type)} · ${esc(detail)}
+            </div>
+        </div>
+    `;
+}
+
+// 닫힌 task를 명시적으로 다시 활성화 (사용자가 [재입력] 누른 경우).
+// saveHwFailAction의 자동 reopen이 제거되었으므로 이 경로만이 reopen의 유일한 트리거.
+export async function reopenHwFailDomain(studentId, domain) {
+    const taskDocId = `${studentId}_${domain}_${state.selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
+    const task = state.hwFailTasks.find(t => t.docId === taskDocId);
+    if (!task || task.status === 'pending') return;
+    if (!confirm(`'${domain}' 후속대책을 다시 활성화하시겠습니까?`)) return;
+    showSaveIndicator('saving');
+    try {
+        await auditUpdate(doc(db, 'hw_fail_tasks', taskDocId), {
+            status: 'pending',
+            completed_by: '',
+            completed_at: '',
+            cancelled_by: '',
+            cancelled_at: '',
+        });
+        Object.assign(task, { status: 'pending', completed_by: '', completed_at: '', cancelled_by: '', cancelled_at: '' });
+        renderStudentDetail(studentId);
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('재입력 활성화 실패:', err);
+        showSaveIndicator('error');
+    }
 }
 
 // 처리 유형 선택 (등원 / 대체숙제)
@@ -260,6 +317,11 @@ export async function saveHwFailAction(studentId, hwFailAction, onlyDomain) {
         for (const check of hwTaskChecks) {
             if (!check) continue;
             const { domain, action, taskDocId, existing } = check;
+            // 닫힌(완료/취소/기타) task는 saveHwFailAction이 건드리지 않는다.
+            // [재입력] 버튼으로만 명시적으로 reopen 가능 (reopenHwFailDomain).
+            // 방어적 가드 — UI에서도 이미 입력 필드 자체가 노출되지 않음.
+            if (existing && existing.status && existing.status !== 'pending') continue;
+
             const taskData = {
                 student_id: studentId,
                 student_name: student?.name || '',
@@ -275,14 +337,6 @@ export async function saveHwFailAction(studentId, hwFailAction, onlyDomain) {
                 created_at: existing?.created_at || new Date().toISOString(),
                 branch: branchFromStudent(student || {}),
             };
-            // 이전에 닫힌 task를 다시 활성화하는 경우(완료/취소/기타 → pending) leftover
-            // completed_*/cancelled_* 필드를 비워 reopen 상태가 깔끔하게 나타나도록 한다.
-            if (existing && existing.status && existing.status !== 'pending') {
-                taskData.completed_by = '';
-                taskData.completed_at = '';
-                taskData.cancelled_by = '';
-                taskData.cancelled_at = '';
-            }
             batchSet(hwWriteBatch, doc(db, 'hw_fail_tasks', taskDocId), taskData, { merge: true });
             hwWriteCount++;
             const idx = state.hwFailTasks.findIndex(t => t.docId === taskDocId);

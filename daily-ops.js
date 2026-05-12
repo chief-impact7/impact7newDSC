@@ -80,13 +80,15 @@ import {
     renderNextHwClassList, selectNextHwClass, openNextHwModal, saveNextHwFromModal, saveNextHwNone,
     openPersonalNextHwModal, savePersonalNextHwFromModal, savePersonalNextHwNone,
     restoreModalHandlers, refreshNextHwViews, renderNextHwClassDetail,
-    toggleHomework, oxFieldLabel, toggleHwDomainOX, applyHwDomainOX, handleHomeworkStatusChange
+    toggleHomework, oxFieldLabel, toggleHwDomainOX, applyHwDomainOX, handleHomeworkStatusChange,
+    reopenHwFailDomain
 } from './hw-management.js';
 import {
     initTestManagementDeps,
     getClassTestSections, renderTestFailActionCard,
     selectTestFailType, clearTestFailType, saveTestFailFields,
-    saveTestFailAction, completeTestFailTask, cancelTestFailTask
+    saveTestFailAction, completeTestFailTask, cancelTestFailTask,
+    reopenTestFailDomain
 } from './test-management.js';
 import {
     initAttendanceDeps,
@@ -273,6 +275,7 @@ window.saveHwFailFields = saveHwFailFields;
 window.renderPendingTasksCard = renderPendingTasksCard;
 window.completeHwFailTask = completeHwFailTask;
 window.cancelHwFailTask = cancelHwFailTask;
+window.reopenHwFailDomain = reopenHwFailDomain;
 window.renderNextHwClassList = renderNextHwClassList;
 window.selectNextHwClass = selectNextHwClass;
 window.openNextHwModal = openNextHwModal;
@@ -297,6 +300,7 @@ window.clearTestFailType = clearTestFailType;
 window.saveTestFailFields = saveTestFailFields;
 window.completeTestFailTask = completeTestFailTask;
 window.cancelTestFailTask = cancelTestFailTask;
+window.reopenTestFailDomain = reopenTestFailDomain;
 
 // attendance.js 의존성 주입
 initAttendanceDeps({ renderSubFilters, renderListPanel, renderStudentDetail, openBulkModal });

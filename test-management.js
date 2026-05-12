@@ -6,7 +6,7 @@ import { doc, writeBatch } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { auditUpdate, auditSet, batchUpdate, batchSet } from './audit.js';
 import { state } from './state.js';
-import { esc, escAttr, showSaveIndicator, oxDisplayClass } from './ui-utils.js';
+import { esc, escAttr, showSaveIndicator, oxDisplayClass, formatTime12h, _stripYear } from './ui-utils.js';
 import { makeDailyRecordId, branchFromStudent } from './student-helpers.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
@@ -72,8 +72,8 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
     }
 
     // pending task가 있는 항목만 후속대책 카드에서 제외.
-    // 완료/취소/기타로 닫힌 항목은 카드를 다시 보여 사용자가 같은 사건에 후속대책을
-    // 재입력하면 saveTestFailAction → batchSet merge로 자동 reopen된다.
+    // 완료/취소/기타로 닫힌 항목은 카드에 다시 노출하되, 입력 필드 대신 read-only "처리됨"
+    // 표시 + [재입력] 버튼만 보여 의도치 않은 자동 reopen을 차단한다.
     const filteredItems = failItems.filter(item =>
         !state.testFailTasks.find(t => t.student_id === studentId && t.domain === item && t.source_date === state.selectedDate && t.status === 'pending')
     );
@@ -95,6 +95,14 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
         : '2차 미통과 항목에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.';
 
     const rows = filteredItems.map(item => {
+        // 닫힌 task가 있으면 read-only 행 + [재입력] 버튼만 보여 자동 reopen 차단.
+        const closedTask = state.testFailTasks.find(t =>
+            t.student_id === studentId && t.domain === item
+            && t.source_date === state.selectedDate
+            && t.status !== 'pending' && t.status
+        );
+        if (closedTask) return _renderClosedTestFailRow(studentId, item, closedTask);
+
         const action = testFailAction[item] || {};
         const type = action.type || '';
         const isVisit = type === '등원';
@@ -166,6 +174,53 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
             ${rows}
         </div>
     `;
+}
+
+// 닫힌(완료/취소/기타) test_fail_task 항목 — read-only + [재입력] 버튼.
+function _renderClosedTestFailRow(studentId, item, task) {
+    const detail = task.type === '등원'
+        ? `${_stripYear(task.scheduled_date || '')}${task.scheduled_time ? ' ' + formatTime12h(task.scheduled_time) : ''}`
+        : (task.alt_hw || '내용 없음');
+    return `
+        <div class="hw-fail-domain-row hw-fail-closed" data-domain="${escAttr(item)}" style="opacity:0.75;">
+            <div class="hw-fail-domain-header">
+                <span style="font-size:12px;font-weight:600;color:var(--text-main);">${esc(item)}</span>
+                <span style="font-size:11px;padding:1px 6px;border-radius:4px;background:var(--surface-alt);color:var(--text-sec);">처리됨 (${esc(task.status)})</span>
+                <button class="hw-fail-type-btn" style="margin-left:auto;font-size:11px;"
+                    onclick="reopenTestFailDomain('${escAttr(studentId)}', '${escAttr(item)}')">
+                    <span class="material-symbols-outlined" style="font-size:13px;">refresh</span>재입력
+                </button>
+            </div>
+            <div style="font-size:11px;color:var(--text-sec);padding:4px 0 0 6px;">
+                ${esc(task.type)} · ${esc(detail)}
+            </div>
+        </div>
+    `;
+}
+
+// 닫힌 task를 명시적으로 다시 활성화 (사용자가 [재입력] 누른 경우).
+export async function reopenTestFailDomain(studentId, item) {
+    const taskDocId = `${studentId}_${item}_${state.selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
+    const task = state.testFailTasks.find(t => t.docId === taskDocId);
+    if (!task || task.status === 'pending') return;
+    if (!confirm(`'${item}' 후속대책을 다시 활성화하시겠습니까?`)) return;
+    showSaveIndicator('saving');
+    try {
+        await auditUpdate(doc(db, 'test_fail_tasks', taskDocId), {
+            status: 'pending',
+            completed_by: '',
+            completed_at: '',
+            cancelled_by: '',
+            cancelled_at: '',
+        });
+        Object.assign(task, { status: 'pending', completed_by: '', completed_at: '', cancelled_by: '', cancelled_at: '' });
+        renderStudentDetail(studentId);
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('재입력 활성화 실패:', err);
+        showSaveIndicator('error');
+    }
 }
 
 export async function selectTestFailType(studentId, item, type, btnEl) {
@@ -264,6 +319,10 @@ export async function saveTestFailAction(studentId, testFailAction, onlyDomain) 
         for (const check of testTaskChecks) {
             if (!check) continue;
             const { item, action, taskDocId, existing } = check;
+            // 닫힌(완료/취소/기타) task는 saveTestFailAction이 건드리지 않는다.
+            // [재입력] 버튼으로만 명시적 reopen 가능 (reopenTestFailDomain).
+            if (existing && existing.status && existing.status !== 'pending') continue;
+
             const taskData = {
                 student_id: studentId,
                 student_name: student?.name || '',
@@ -280,13 +339,6 @@ export async function saveTestFailAction(studentId, testFailAction, onlyDomain) 
                 created_at: existing?.created_at || new Date().toISOString(),
                 branch: branchFromStudent(student || {}),
             };
-            // 닫힌 task를 다시 활성화하는 경우 leftover completed_*/cancelled_* 정리 (hw_fail_tasks와 동일).
-            if (existing && existing.status && existing.status !== 'pending') {
-                taskData.completed_by = '';
-                taskData.completed_at = '';
-                taskData.cancelled_by = '';
-                taskData.cancelled_at = '';
-            }
             batchSet(testWriteBatch, doc(db, 'test_fail_tasks', taskDocId), taskData, { merge: true });
             testWriteCount++;
             const idx = state.testFailTasks.findIndex(t => t.docId === taskDocId);
