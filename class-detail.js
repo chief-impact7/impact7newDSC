@@ -719,8 +719,8 @@ const _MODES = {
     },
     naesin: {
         deleteClassDoc: true,
-        describe: (count) => `내신 반에 등록된 ${count}명이 영향을 받습니다.`,
-        toast: (code, count) => `내신 "${code}" 삭제 완료 (${count}명)`,
+        describe: (count) => `내신 ${count}명이 정규로 복귀합니다. 학생의 정규 등록은 보존됩니다.`,
+        toast: (code, count) => `내신 "${code}" 정리 완료 (${count}명 정규 복귀)`,
         getPeriod: (cs) => ({ start: cs?.naesin_start, end: cs?.naesin_end }),
         // 자동 유도 학생(내신 enrollment·override 없이 csKey만 매칭)도 영향 카운트에 포함하기 위한 별도 매처.
         // applyToStudent는 enrollment 변경이 있는 학생만 update 대상으로 반환하므로 카운트와 분리.
