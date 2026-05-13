@@ -388,26 +388,46 @@ function getClassMgmtCount(code) {
 // ─── Category & SubFilter ──────────────────────────────────────────────────
 
 function setCategory(category) {
-    // 소속은 글로벌 필터 — 카테고리를 바꾸지 않고 L2 토글만
+    // 소속 ↔ 반설정 트리는 상호 배타: 한쪽을 펼치면 반대쪽 트리·상태를 정리한다.
     if (category === 'branch') {
         const branchL1 = document.querySelector('.nav-l1[data-category="branch"]');
         const isExpanded = branchL1?.classList.contains('expanded');
         branchL1?.classList.toggle('expanded', !isExpanded);
+        // 반설정 트리 닫고 모드/코드 클리어
+        document.querySelector('.nav-l1[data-category="class_mgmt"]')?.classList.remove('expanded');
+        const hadClassSelection = state._classMgmtMode || state.selectedClassCode;
+        if (hadClassSelection) {
+            state._classMgmtMode = null;
+            state.selectedClassCode = null;
+            state.selectedStudentId = null;
+        }
         renderBranchFilter();
-        renderSubFilters();
-        renderListPanel();
-        return;
-    }
-
-    // 반 관리도 글로벌 필터 — 카테고리를 바꾸지 않고 반 코드 드롭다운만 토글
-    if (category === 'class_mgmt') {
-        const classL1 = document.querySelector('.nav-l1[data-category="class_mgmt"]');
-        const isExpanded = classL1?.classList.contains('expanded');
-        classL1?.classList.toggle('expanded', !isExpanded);
         renderClassCodeFilter();
         renderFilterChips();
         renderSubFilters();
         renderListPanel();
+        if (hadClassSelection) renderStudentDetail(null);
+        return;
+    }
+
+    if (category === 'class_mgmt') {
+        const classL1 = document.querySelector('.nav-l1[data-category="class_mgmt"]');
+        const isExpanded = classL1?.classList.contains('expanded');
+        classL1?.classList.toggle('expanded', !isExpanded);
+        // 소속 트리 닫고 필터 클리어 — 반설정은 모든 학생을 다룸 (소속 무관)
+        document.querySelector('.nav-l1[data-category="branch"]')?.classList.remove('expanded');
+        const hadBranchFilter = state.selectedBranch || state.selectedBranchLevel;
+        if (hadBranchFilter) {
+            state.selectedBranch = null;
+            state.selectedBranchLevel = null;
+            state.selectedStudentId = null;
+        }
+        renderBranchFilter();
+        renderClassCodeFilter();
+        renderFilterChips();
+        renderSubFilters();
+        renderListPanel();
+        if (hadBranchFilter) renderStudentDetail(null);
         return;
     }
 
@@ -1016,7 +1036,14 @@ window.bulkDeleteSelectedClasses = async function() {
 window.setClassMgmtMode = function(mode) {
     state._classMgmtMode = (state._classMgmtMode === mode) ? null : mode; // 토글
     state.selectedClassCode = null;
+    // 반설정 모드 진입 시 소속 필터 해제 (반설정은 모든 학생을 다룸)
+    if (state._classMgmtMode) {
+        state.selectedBranch = null;
+        state.selectedBranchLevel = null;
+    }
     renderClassCodeFilter();
+    renderBranchFilter();
+    renderFilterChips();
     renderStudentDetail(null);
     renderListPanel();
 };
@@ -1024,8 +1051,14 @@ window.setClassMgmtMode = function(mode) {
 function setClassCode(code) {
     state.selectedClassCode = state.selectedClassCode === code ? null : code;
     state.selectedStudentId = null; // 반 변경 시 학생 선택 해제
+    // 반설정에서 반 선택 시 소속 필터 해제 (반설정은 모든 학생을 다룸)
+    if (state.selectedClassCode) {
+        state.selectedBranch = null;
+        state.selectedBranchLevel = null;
+    }
 
     renderClassCodeFilter();
+    renderBranchFilter();
     renderFilterChips();
     renderSubFilters();
 
