@@ -76,6 +76,9 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('user-email').textContent = email.split('@')[0];
         await Promise.all([loadStudents(), loadTeachers()]);
         bindStudentEventDelegation();
+        // 학생 로드 도중 step 2 진입(정규 카드 빠르게 클릭)했을 수 있음 — 빈 데이터로 그려진
+        // 정규반 분석/학생 추가 패널을 재렌더해 채워준다.
+        if (currentStep === 2) onEnterStep2();
     } else {
         currentUser = null;
         document.getElementById('login-screen').style.display = '';
@@ -111,7 +114,18 @@ function makeBaseRow(student) {
         level: normalizeText(student.level, '학부 미지정'),
         grade: normalizeGrade(student.grade),
         phone: student.parent_phone_1 || student.student_phone || '',
+        status: student.status || '',
     };
+}
+
+function isOnLeaveStatus(status) {
+    return status === '실휴원' || status === '가휴원';
+}
+
+// 다운로드용 이름 라벨 — 휴원생은 (실휴원)/(가휴원) 접미사로 구분
+function formatPlannerStudentLabel(row) {
+    if (isOnLeaveStatus(row.status)) return `${row.name} (${row.status})`;
+    return row.name;
 }
 
 // 정규 모드: enrollment(반) 단위로 펼친 row (한 학생이 N개 반에 등록되면 N개 row)
@@ -241,12 +255,15 @@ function groupBy(rows, keyFn) {
 
 function renderPlannerGroups(grouped, { titleFn = (k) => k, metaFn }) {
     return [...grouped.entries()].map(([key, groupRows]) => {
-        const studentHtml = groupRows.map(row => `
-            <div class="planner-student">
-                <span class="planner-student-name">${esc(row.name)}</span>
+        const studentHtml = groupRows.map(row => {
+            const onLeave = isOnLeaveStatus(row.status);
+            const leaveClass = onLeave ? ' planner-student--leave' : '';
+            const leaveTag = onLeave ? `<span class="planner-leave-tag">${esc(row.status)}</span>` : '';
+            return `<div class="planner-student${leaveClass}">
+                <span class="planner-student-name">${esc(row.name)}${leaveTag}</span>
                 <span class="planner-student-meta">${esc(metaFn(row))}</span>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
         return `
             <section class="planner-group">
                 <div class="planner-group-head">
@@ -292,14 +309,33 @@ function renderPlanner() {
 window.renderPlanner = renderPlanner;
 
 /**
- * 필터된 row들을 (학부, 학교, 학년, 요일) 그룹으로 묶어서
- * 컬럼 = 그룹, 행 = [학부, 학교, 학년, 요일, 학생1, 학생2, ...] 형태의 2D 배열로 변환.
+ * 필터된 row들을 그룹별로 묶어 (컬럼=그룹, 행=학생) 2D 매트릭스로 변환.
+ * 내신: 헤더 5행(소속/학부/학교/학년/요일), 정규: 헤더 1행(반 코드).
  */
-function buildPlannerMatrix() {
-    // 내신 다운로드 전용 — 정규 모드에선 다운로드 버튼이 숨겨져 호출되지 않음.
-    const rows = getFilteredPlannerRows('내신');
+function buildPlannerMatrix(mode) {
+    const rows = getFilteredPlannerRows(mode);
     if (rows.length === 0) return null;
 
+    if (mode === '정규') {
+        const groupMap = new Map();
+        rows.forEach(r => {
+            const key = r.classCode;
+            if (!groupMap.has(key)) groupMap.set(key, { code: key, names: [] });
+            groupMap.get(key).names.push(formatPlannerStudentLabel(r));
+        });
+        const groups = [...groupMap.values()].sort((a, b) => a.code.localeCompare(b.code, 'ko'));
+        const maxNames = Math.max(...groups.map(g => g.names.length), 0);
+        const HEADER_ROWS = 1;
+        const totalRows = HEADER_ROWS + maxNames;
+        const matrix = Array.from({ length: totalRows }, () => Array(groups.length).fill(''));
+        groups.forEach((g, c) => {
+            matrix[0][c] = g.code;
+            g.names.forEach((name, i) => { matrix[HEADER_ROWS + i][c] = name; });
+        });
+        return { matrix, groupCount: groups.length, studentCount: rows.length };
+    }
+
+    // 내신
     const groupMap = new Map();
     rows.forEach(r => {
         const key = [r.branch, r.level, r.school, r.grade, r.dayKey].join('|');
@@ -313,7 +349,7 @@ function buildPlannerMatrix() {
                 names: [],
             });
         }
-        groupMap.get(key).names.push(r.name);
+        groupMap.get(key).names.push(formatPlannerStudentLabel(r));
     });
 
     const groups = [...groupMap.values()];
@@ -336,31 +372,39 @@ function buildPlannerMatrix() {
     return { matrix, groupCount: groups.length, studentCount: rows.length };
 }
 
-window.downloadNaesinPlanCsv = function () {
-    const built = buildPlannerMatrix();
+function _plannerExportLabel(mode) {
+    return mode === '내신' ? '내신반 계획' : '정규반 분석';
+}
+
+window.downloadPlanCsv = function () {
+    const mode = getCurrentPlannerMode();
+    const built = buildPlannerMatrix(mode);
     if (!built) {
-        showToast('다운로드할 재원생이 없습니다.', 'error');
+        showToast('다운로드할 학생이 없습니다.', 'error');
         return;
     }
+    const label = _plannerExportLabel(mode);
     const csv = '\uFEFF' + built.matrix.map(row => row.map(csvCell).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `내신반_계획_${todayStr()}.csv`;
+    a.download = `${label.replace(/ /g, '_')}_${todayStr()}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    showToast(`내신반 계획 CSV 다운로드 (${built.studentCount}명, ${built.groupCount}그룹)`, 'success');
+    showToast(`${label} CSV 다운로드 (${built.studentCount}명, ${built.groupCount}그룹)`, 'success');
 };
 
-window.downloadNaesinPlanXlsx = function () {
-    const built = buildPlannerMatrix();
+window.downloadPlanXlsx = function () {
+    const mode = getCurrentPlannerMode();
+    const built = buildPlannerMatrix(mode);
     if (!built) {
-        showToast('다운로드할 재원생이 없습니다.', 'error');
+        showToast('다운로드할 학생이 없습니다.', 'error');
         return;
     }
+    const label = _plannerExportLabel(mode);
     const safeMatrix = built.matrix.map(row => row.map(safeCell));
     const ws = XLSX.utils.aoa_to_sheet(safeMatrix);
     ws['!cols'] = safeMatrix[0].map((_, c) => {
@@ -368,9 +412,9 @@ window.downloadNaesinPlanXlsx = function () {
         return { wch: Math.min(Math.max(maxLen + 2, 8), 24) };
     });
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, '내신반 계획');
-    XLSX.writeFile(wb, `내신반_계획_${todayStr()}.xlsx`);
-    showToast(`내신반 계획 Excel 다운로드 (${built.studentCount}명, ${built.groupCount}그룹)`, 'success');
+    XLSX.utils.book_append_sheet(wb, ws, label);
+    XLSX.writeFile(wb, `${label.replace(/ /g, '_')}_${todayStr()}.xlsx`);
+    showToast(`${label} Excel 다운로드 (${built.studentCount}명, ${built.groupCount}그룹)`, 'success');
 };
 
 function normalizeText(value, fallback) {
@@ -603,8 +647,9 @@ function togglePlannerPanel(t) {
         const el = document.getElementById(id);
         if (el && el.parentElement) el.parentElement.style.display = showNaesinOnly ? '' : 'none';
     });
+    // 다운로드 버튼은 정규/자유학기/내신 모두에서 노출
     const downloads = document.getElementById('planner-download-actions');
-    if (downloads) downloads.style.display = showNaesinOnly ? '' : 'none';
+    if (downloads) downloads.style.display = '';
 
     initPlanner(mode);
     if (mode === '내신') populateSchoolList();
