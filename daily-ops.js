@@ -769,19 +769,45 @@ window.displayCodeFromCsKey = displayCodeFromCsKey;
 window.getNaesinStudentsByDerivedCode = getNaesinStudentsByDerivedCode;
 
 // L4(반) 리스트: 그 단지+학부에 enrollment 학생이 1명 이상 속하고, 반 schedule이 오늘 요일과 매치되는 반.
-// 분류·코드 정의는 _getAllClassCodes의 결과를 단일 소스로 재사용해 silent drift 방지.
 // 학생 출석 상태(휴원/미등원)는 무관 — 반 schedule만으로 오늘 노출 여부 결정.
+// 반 유형별 schedule 저장 위치:
+//   정규: cs.default_days (배열), 없으면 enrollment.day 합집합 fallback (renderRegularClassDayCard와 동일)
+//   자유학기: cs.free_schedule (객체) + free_start/end 기간
+//   내신: cs.schedule (객체) + naesin_start/end 기간
+//   특강: cs.schedule (객체) + special_start/end 기간 (옵션)
 function _getClassesForBranchLevel(branch, level) {
     const { regular, naesin, teukang, free } = _getAllClassCodes();
     const dayName = getDayName(state.selectedDate);
-    const hasScheduleToday = (code, useFreeSchedule = false) => {
+    const today = state.selectedDate;
+    const inPeriod = (start, end) =>
+        (!start || start <= today) && (!end || end >= today);
+
+    const hasRegularToday = (code) => {
         const cs = state.classSettings[code];
-        const sched = useFreeSchedule ? cs?.free_schedule : cs?.schedule;
-        return !!sched?.[dayName];
+        if (cs?.default_days?.length > 0) return cs.default_days.includes(dayName);
+        return state.allStudents.some(s =>
+            (s.enrollments || []).some(e =>
+                enrollmentCode(e) === code &&
+                (e.class_type || '정규') === '정규' &&
+                (e.day || []).includes(dayName)
+            )
+        );
+    };
+    const hasFreeToday = (code) => {
+        const cs = state.classSettings[code];
+        return !!cs?.free_schedule?.[dayName] && inPeriod(cs.free_start, cs.free_end);
+    };
+    const hasNaesinToday = (csKey) => {
+        const cs = state.classSettings[csKey];
+        return !!cs?.schedule?.[dayName] && inPeriod(cs.naesin_start, cs.naesin_end);
+    };
+    const hasTeukangToday = (code) => {
+        const cs = state.classSettings[code];
+        return !!cs?.schedule?.[dayName] && inPeriod(cs.special_start, cs.special_end);
     };
 
     const students = state.allStudents.filter(s =>
-        !isWithdrawnAt(s, state.selectedDate) &&
+        !isWithdrawnAt(s, today) &&
         branchFromStudent(s) === branch &&
         (s.level || '') === level
     );
@@ -789,17 +815,17 @@ function _getClassesForBranchLevel(branch, level) {
 
     const result = [];
     for (const code of regular) {
-        if (!hasScheduleToday(code)) continue;
-        const count = countBy(e => e.class_type === '정규' && enrollmentCode(e) === code);
+        if (!hasRegularToday(code)) continue;
+        const count = countBy(e => (e.class_type || '정규') === '정규' && enrollmentCode(e) === code);
         if (count > 0) result.push({ mode: 'regular', code, display: code, count });
     }
     for (const { code } of free) {
-        if (!hasScheduleToday(code, true)) continue;
+        if (!hasFreeToday(code)) continue;
         const count = countBy(e => e.class_type === '자유학기' && enrollmentCode(e) === code);
         if (count > 0) result.push({ mode: 'free', code, display: code, count });
     }
     for (const { code: csKey, displayCode } of naesin) {
-        if (!hasScheduleToday(csKey)) continue;
+        if (!hasNaesinToday(csKey)) continue;
         const count = students.filter(s => {
             const reg = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
             return reg && resolveNaesinCsKey(s, reg) === csKey;
@@ -807,7 +833,7 @@ function _getClassesForBranchLevel(branch, level) {
         if (count > 0) result.push({ mode: 'naesin', code: csKey, display: displayCode, count });
     }
     for (const code of teukang) {
-        if (!hasScheduleToday(code)) continue;
+        if (!hasTeukangToday(code)) continue;
         const count = countBy(e => e.class_type === '특강' && enrollmentCode(e) === code);
         if (count > 0) result.push({ mode: 'teukang', code, display: code, count });
     }
@@ -1462,13 +1488,19 @@ function getFilteredStudents() {
         return getNaesinStudentsByDerivedCode(state.selectedClassCode).map(({ student }) => student);
     }
 
-    // 반 설정: 정규 모드 — 등록된 모든 정규 학생 (요일 무관)
-    // 반설정의 목적은 반 멤버십 확인이므로 오늘 등원 여부와 무관하게 그 반에 등록된 모든 학생을 노출.
+    // 반 설정: 정규 모드 — 등록된 모든 정규/자유학기 학생 (요일 무관, 내신 기간 중인 학생도 포함)
+    // 반설정의 목적은 반 멤버십 확인이므로 오늘 등원 여부·내신/자유학기 기간 여부와 무관하게
+    // 정규 등록(class_number)이 살아있는 학생을 모두 노출. getActiveEnrollments는 내신/자유학기
+    // 기간 중 정규를 숨기므로 raw enrollments에서 직접 조회.
     if (state.currentCategory === 'class_mgmt') {
+        const today = state.selectedDate;
+        const validDate = (d) => d && /^\d{4}-/.test(d);
+        const isActiveRegular = (e) =>
+            (e.class_type === '정규' || e.class_type === '자유학기') &&
+            e.class_number &&
+            !(validDate(e.end_date) && e.end_date < today);
         let students = state.allStudents.filter(s =>
-            !isWithdrawnAt(s, state.selectedDate) && getActiveEnrollments(s, state.selectedDate).some(e =>
-                e.class_type === '정규' || !e.class_type
-            )
+            !isWithdrawnAt(s, today) && (s.enrollments || []).some(isActiveRegular)
         );
         // 타반수업 override-in 학생 추가 (정규 목록에 없는 학생만)
         addOverrideInStudents(students);
@@ -1480,15 +1512,15 @@ function getFilteredStudents() {
                     (s.school?.toLowerCase().includes(q)) ||
                     (s.student_phone?.includes(q)) ||
                     (s.parent_phone_1?.includes(q)) ||
-                    getActiveEnrollments(s, state.selectedDate).some(e => enrollmentCode(e).toLowerCase().includes(q)) ||
-                    getActiveEnrollments(s, state.selectedDate).some(e => { const t = state.classSettings[enrollmentCode(e)]?.teacher; return t && getTeacherName(t).toLowerCase().includes(q); });
+                    (s.enrollments || []).some(e => enrollmentCode(e).toLowerCase().includes(q)) ||
+                    (s.enrollments || []).some(e => { const t = state.classSettings[enrollmentCode(e)]?.teacher; return t && getTeacherName(t).toLowerCase().includes(q); });
             });
         }
         if (state.currentSubFilter.size > 0 && !state.currentSubFilter.has('all')) {
             students = students.filter(s => {
                 // 정규 enrollment 매칭 (요일 무관)
-                const hasRegular = getActiveEnrollments(s, state.selectedDate).some(e =>
-                    (e.class_type === '정규' || !e.class_type) && state.currentSubFilter.has(enrollmentCode(e))
+                const hasRegular = (s.enrollments || []).some(e =>
+                    isActiveRegular(e) && state.currentSubFilter.has(enrollmentCode(e))
                 );
                 // 타반수업 override-in 매칭
                 const hasOverride = state.tempClassOverrides.some(o =>
