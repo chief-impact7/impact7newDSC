@@ -618,11 +618,23 @@ function renderBranchFilter() {
         if (isBranchSelected) {
             for (const level of b.children) {
                 const levelCount = branchStudents.filter(s => (s.level || '') === level).length;
-                const levelActive = state.selectedBranchLevel === level ? 'active' : '';
+                const isLevelActive = state.selectedBranchLevel === level;
+                const levelActive = isLevelActive ? 'active' : '';
                 html += `<div class="nav-l2 nav-l3 ${levelActive}" data-filter="${b.key}_${level}" onclick="setBranchLevel('${level}')">
                     ${esc(level)}
                     ${levelCount > 0 ? `<span class="nav-l2-count">${levelCount}</span>` : ''}
                 </div>`;
+                if (isLevelActive) {
+                    for (const c of _getClassesForBranchLevel(b.key, level)) {
+                        const l4Active = state.selectedClassCode === c.code ? 'active' : '';
+                        const typeLabel = CLASS_MODE_LABELS[c.mode] || c.mode;
+                        html += `<div class="nav-l2 nav-l3 nav-l4 ${l4Active}" onclick="setBranchClass('${escAttr(c.mode)}', '${escAttr(c.code)}')">
+                            <span style="margin-left:12px;">${esc(c.display)}</span>
+                            <span style="opacity:.55;font-size:10px;margin-left:6px;">${typeLabel}</span>
+                            ${c.count > 0 ? `<span class="nav-l2-count">${c.count}</span>` : ''}
+                        </div>`;
+                    }
+                }
             }
         }
     }
@@ -755,6 +767,41 @@ window.deriveNaesinCode = deriveNaesinCode;
 window.resolveNaesinCsKey = resolveNaesinCsKey;
 window.displayCodeFromCsKey = displayCodeFromCsKey;
 window.getNaesinStudentsByDerivedCode = getNaesinStudentsByDerivedCode;
+
+// L4(반) 리스트: 그 단지+학부에 학생이 1명 이상 속한 모든 반(정규+자유학기+내신+특강).
+// 분류·코드 정의는 _getAllClassCodes의 결과를 단일 소스로 재사용해 silent drift 방지.
+function _getClassesForBranchLevel(branch, level) {
+    const { regular, naesin, teukang, free } = _getAllClassCodes();
+
+    const students = state.allStudents.filter(s =>
+        !isWithdrawnAt(s, state.selectedDate) &&
+        branchFromStudent(s) === branch &&
+        (s.level || '') === level
+    );
+    const countBy = (pred) => students.filter(s => (s.enrollments || []).some(pred)).length;
+
+    const result = [];
+    for (const code of regular) {
+        const count = countBy(e => e.class_type === '정규' && enrollmentCode(e) === code);
+        if (count > 0) result.push({ mode: 'regular', code, display: code, count });
+    }
+    for (const { code } of free) {
+        const count = countBy(e => e.class_type === '자유학기' && enrollmentCode(e) === code);
+        if (count > 0) result.push({ mode: 'free', code, display: code, count });
+    }
+    for (const { code: csKey, displayCode } of naesin) {
+        const count = students.filter(s => {
+            const reg = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
+            return reg && resolveNaesinCsKey(s, reg) === csKey;
+        }).length;
+        if (count > 0) result.push({ mode: 'naesin', code: csKey, display: displayCode, count });
+    }
+    for (const code of teukang) {
+        const count = countBy(e => e.class_type === '특강' && enrollmentCode(e) === code);
+        if (count > 0) result.push({ mode: 'teukang', code, display: code, count });
+    }
+    return result;
+}
 
 function _renderL3Chip(code, displayLabel, count, mode) {
     const isActive = state.selectedClassCode === code ? 'active' : '';
@@ -958,18 +1005,43 @@ function setBranch(branchKey) {
         state.selectedBranch = branchKey;
         state.selectedBranchLevel = null;
     }
+    // 단지 전환 시 L4 반 선택 해제
+    state._classMgmtMode = null;
+    state.selectedClassCode = null;
+    state.selectedStudentId = null;
 
     renderBranchFilter();
     renderSubFilters();
     renderListPanel();
+    renderStudentDetail(null);
 }
 
 function setBranchLevel(level) {
     state.selectedBranchLevel = state.selectedBranchLevel === level ? null : level;
+    // 학부 전환 시 이전 L4 반 선택 해제
+    state._classMgmtMode = null;
+    state.selectedClassCode = null;
+    state.selectedStudentId = null;
 
     renderBranchFilter();
     renderSubFilters();
     renderListPanel();
+    renderStudentDetail(null);
+}
+
+// L4(반) chip 클릭. 소속 트리에서 호출되며, 반 상세 편집 UI는 띄우지 않고
+// 학생 리스트만 그 반으로 필터링한다 (반 상세 가드는 renderStudentDetail에서 처리).
+function setBranchClass(mode, code) {
+    const isSame = state._classMgmtMode === mode && state.selectedClassCode === code;
+    state._classMgmtMode = isSame ? null : mode;
+    state.selectedClassCode = isSame ? null : code;
+    state.selectedStudentId = null;
+
+    renderBranchFilter();
+    renderFilterChips();
+    renderSubFilters();
+    renderListPanel();
+    renderStudentDetail(null);
 }
 
 
@@ -2193,7 +2265,10 @@ function renderListPanel() {
 
     // 반 상세 표시: 반(+소속)만 선택되고, 콘텐츠 서브필터 없을 때
     // 내신/특강/자유학기 반 설정 모드에서는 항상 반 상세 표시
-    if (((state._classMgmtMode === 'naesin' && _isNaesinClassCode(state.selectedClassCode)) ||
+    // 단, 소속 트리(branch 카테고리)에서 L4 반을 선택한 경우는 학생 리스트만 노출하고 반 상세 편집 UI는 띄우지 않음 (반설정 오접근 방지)
+    if (state.currentCategory === 'branch') {
+        // no-op: branch 카테고리에서는 반 상세를 띄우지 않음
+    } else if (((state._classMgmtMode === 'naesin' && _isNaesinClassCode(state.selectedClassCode)) ||
          state._classMgmtMode === 'teukang' ||
          state._classMgmtMode === 'free') && state.selectedClassCode && !state.selectedStudentId) {
         renderClassDetail(state.selectedClassCode);
@@ -2845,6 +2920,7 @@ if (import.meta.env?.DEV) { window._debug = { get absenceRecords() { return stat
 window.setSubFilter = setSubFilter;
 window.setBranch = setBranch;
 window.setBranchLevel = setBranchLevel;
+window.setBranchClass = setBranchClass;
 window.toggleAttendance = toggleAttendance;
 window.cycleVisitAttendance = cycleVisitAttendance;
 window.toggleHomework = toggleHomework;
