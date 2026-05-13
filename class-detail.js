@@ -4,7 +4,7 @@
 
 import { doc, getDoc, getDocFromServer, writeBatch, arrayUnion, deleteField, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase-config.js';
-import { getDayName, todayStr } from './src/shared/firestore-helpers.js';
+import { todayStr } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditDelete, batchUpdate, READ_ONLY } from './audit.js';
 import { state, DAY_ORDER } from './state.js';
 import { esc, escAttr, showSaveIndicator, showToast } from './ui-utils.js';
@@ -13,7 +13,7 @@ import { renderAddStudentCard, createStudentSearcher } from './class-student-sea
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let getOverrideStudentsForClass, getOverridingOutFromClass, getClassDomains, getClassTestSections;
-let getTeacherName, saveClassSettings, isInTeukangClass, getTeukangClassStudents;
+let getTeacherName, saveClassSettings, isInTeukangClass, getTeukangClassStudents, getRegularClassStudents;
 let renderStudentDetail, renderListPanel, _isNaesinClassCode;
 
 export function initClassDetailDeps(deps) {
@@ -25,6 +25,7 @@ export function initClassDetailDeps(deps) {
     saveClassSettings = deps.saveClassSettings;
     isInTeukangClass = deps.isInTeukangClass;
     getTeukangClassStudents = deps.getTeukangClassStudents;
+    getRegularClassStudents = deps.getRegularClassStudents;
     renderStudentDetail = deps.renderStudentDetail;
     renderListPanel = deps.renderListPanel;
     _isNaesinClassCode = deps._isNaesinClassCode;
@@ -205,7 +206,8 @@ export function renderClassDetail(classCode) {
     document.getElementById('detail-empty').style.display = 'none';
     document.getElementById('detail-content').style.display = '';
 
-    const dayName = getDayName(state.selectedDate);
+    // 반설정 학생 목록은 요일 매칭과 무관하게 그 반에 등록된 모든 멤버를 노출.
+    // 정규 분기는 getRegularClassStudents로 통일 (자유학기 기간 학생도 정규 멤버로 포함).
     let classStudents;
     if (isTeukangClass) {
         classStudents = getTeukangClassStudents(classCode);
@@ -215,10 +217,7 @@ export function renderClassDetail(classCode) {
             (s.enrollments || []).some(e => e.class_type === '자유학기' && enrollmentCode(e) === classCode)
         ).filter(s => matchesBranchFilter(s));
     } else {
-        classStudents = state.allStudents.filter(s =>
-            s.status !== '퇴원' &&
-            getActiveEnrollments(s, state.selectedDate).some(e => e.day.includes(dayName) && enrollmentCode(e) === classCode)
-        ).filter(s => matchesBranchFilter(s));
+        classStudents = getRegularClassStudents(classCode);
     }
     const domains = getClassDomains(classCode);
     const testSections = getClassTestSections(classCode);

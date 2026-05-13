@@ -239,7 +239,7 @@ window.openAbsenceRescheduleModal = openAbsenceRescheduleModal;
 window.reopenAbsenceMakeup = reopenAbsenceMakeup;
 
 // class-detail.js 의존성 주입 + window 노출
-initClassDetailDeps({ getOverrideStudentsForClass, getOverridingOutFromClass, getClassDomains, getClassTestSections, getTeacherName, saveClassSettings, isInTeukangClass, getTeukangClassStudents, renderStudentDetail, renderListPanel, _isNaesinClassCode });
+initClassDetailDeps({ getOverrideStudentsForClass, getOverridingOutFromClass, getClassDomains, getClassTestSections, getTeacherName, saveClassSettings, isInTeukangClass, getTeukangClassStudents, getRegularClassStudents, renderStudentDetail, renderListPanel, _isNaesinClassCode });
 window.renderClassDetail = renderClassDetail;
 window.openClassTempOverrideModal = openClassTempOverrideModal;
 window.filterClassOverrideStudents = filterClassOverrideStudents;
@@ -376,31 +376,13 @@ function getUniqueClassCodes() {
     return { regular: [...regularCodes].sort(), naesin: [...naesinCodes].sort() };
 }
 
-function getClassMgmtCount(filterKey) {
-    const dayName = getDayName(state.selectedDate);
-    let students = state.allStudents.filter(s =>
-        !isWithdrawnAt(s, state.selectedDate) && getActiveEnrollments(s, state.selectedDate).some(e =>
-            e.day.includes(dayName)
-        )
-    );
-    students = students.filter(s => matchesBranchFilter(s));
-    if (filterKey === 'all') {
-        // override-in 학생 중 정규 목록에 없는 학생만 추가
-        const ids = new Set(students.map(s => s.docId));
-        const extraCount = state.tempClassOverrides.filter(o => !ids.has(o.student_id)).length;
-        return students.length + extraCount;
-    }
-    const regularIds = new Set();
-    let count = students.filter(s => {
-        const match = getActiveEnrollments(s, state.selectedDate).some(e =>
-            e.day.includes(dayName) && enrollmentCode(e) === filterKey
-        );
-        if (match) regularIds.add(s.docId);
-        return match;
-    }).length;
-    // override-in 학생 수 추가 (정규 학생과 중복 제외)
-    count += state.tempClassOverrides.filter(o => o.target_class_code === filterKey && !regularIds.has(o.student_id)).length;
-    return count;
+// 반설정 정규 chip 카운트: 요일 무관, getRegularClassStudents 위임.
+// override-in 학생은 그 반 멤버에 없는 학생만 추가 카운트.
+function getClassMgmtCount(code) {
+    const members = getRegularClassStudents(code);
+    const ids = new Set(members.map(s => s.docId));
+    const extra = state.tempClassOverrides.filter(o => o.target_class_code === code && !ids.has(o.student_id)).length;
+    return members.length + extra;
 }
 
 // ─── Category & SubFilter ──────────────────────────────────────────────────
