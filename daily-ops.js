@@ -438,8 +438,8 @@ function setCategory(category) {
         state.savedSubFilters[state.currentCategory] = new Set(state.currentSubFilter);
         state.savedL2Expanded[state.currentCategory] = false; // L2는 접지만 필터는 유지
 
-        // 내신/특강 반 설정 모드 리셋 (카테고리 전환 시 필터 누출 방지)
-        if (state._classMgmtMode === 'naesin' || state._classMgmtMode === 'teukang' || state._classMgmtMode === 'free') { state._classMgmtMode = null; state.selectedClassCode = null; }
+        // 반 설정/소속 L4 모드 리셋 (콘텐츠 카테고리 전환 시 필터 누출 방지). regular 포함 — 소속 트리에서 L4를 선택한 상태로 다른 카테고리로 이동해도 자동 해제.
+        if (state._classMgmtMode) { state._classMgmtMode = null; state.selectedClassCode = null; }
 
         state.currentCategory = category;
 
@@ -953,9 +953,11 @@ function renderClassCodeFilter() {
     const icon = classL1.querySelector('.nav-l1-expand');
     if (icon) icon.textContent = isExpanded ? 'expand_less' : 'expand_more';
 
-    // branch 카테고리에서 L4 정규반을 클릭하면 _classMgmtMode='regular' + selectedClassCode가 함께 설정되는데,
-    // 이는 소속 트리의 선택이므로 '반 설정' L1을 시각적으로 활성화하지 않는다 (사용자 혼란 방지).
-    classL1.classList.toggle('has-filter', state.currentCategory === 'class_mgmt' && !!state.selectedClassCode);
+    // 소속 트리에서 L4 반을 클릭하면 selectedBranchLevel + selectedClassCode가 동시에 활성된다.
+    // 그 경우 반 설정 L1을 시각적으로 활성화하지 않아 트리 간 혼동을 방지.
+    // (setCategory는 branch/class_mgmt L1 클릭 시 카테고리를 바꾸지 않으므로 currentCategory로 구별 불가.)
+    const isL4Selection = !!(state.selectedBranchLevel && state.selectedClassCode);
+    classL1.classList.toggle('has-filter', !!state.selectedClassCode && !isL4Selection);
 }
 
 window.toggleClassDeleteMode = function() {
@@ -2331,9 +2333,12 @@ function renderListPanel() {
 
     // 반 상세 표시: 반(+소속)만 선택되고, 콘텐츠 서브필터 없을 때
     // 내신/특강/자유학기 반 설정 모드에서는 항상 반 상세 표시
-    // 단, 소속 트리(branch 카테고리)에서 L4 반을 선택한 경우는 학생 리스트만 노출하고 반 상세 편집 UI는 띄우지 않음 (반설정 오접근 방지)
-    if (state.currentCategory === 'branch') {
-        // no-op: branch 카테고리에서는 반 상세를 띄우지 않음
+    // 단, 소속 트리에서 L4 반을 선택한 경우(selectedBranchLevel + selectedClassCode 동시 활성)는
+    // 학생 리스트만 노출하고 반 상세 편집 UI는 띄우지 않음 (반설정 오접근 방지).
+    // 이전 반 상세가 잔존하지 않도록 명시적으로 빈 상태로 복원.
+    const isL4Selection = !!(state.selectedBranchLevel && state.selectedClassCode);
+    if (isL4Selection) {
+        renderStudentDetail(null);
     } else if (((state._classMgmtMode === 'naesin' && _isNaesinClassCode(state.selectedClassCode)) ||
          state._classMgmtMode === 'teukang' ||
          state._classMgmtMode === 'free') && state.selectedClassCode && !state.selectedStudentId) {
