@@ -94,6 +94,8 @@ async function loadStudents() {
         allStudents.push({ docId: d.id, ...data });
     });
     allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+    // 콘솔 디버깅용 노출 — 데이터 정합성 점검(잔존 enrollment 진단 등)에 사용
+    window.allStudents = allStudents;
 }
 
 // ─── 반 계획 패널 (정규/내신 공용) ─────────────────────────────────────────
@@ -173,9 +175,11 @@ function getStudentBranch(student) {
 
 function getPlanningEnrollments(student) {
     const today = todayStr();
+    // class_type이 명시적으로 정규/자유학기인 것만 — fallback('|| 정규') 제거.
+    // 잔존 enrollment(class_type 누락 또는 비정규 형식)가 정규로 오인되어 "반 미지정" 또는
+    // 학교+학년 형식 그룹으로 흡수되던 문제 차단 (feedback_naesin_regular_identification.md).
     return (student.enrollments || []).filter(e => {
-        const type = e.class_type || '정규';
-        if (type !== '정규' && type !== '자유학기') return false;
+        if (e.class_type !== '정규' && e.class_type !== '자유학기') return false;
         return !e.end_date || e.end_date >= today;
     });
 }
