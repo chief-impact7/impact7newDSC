@@ -72,7 +72,7 @@ import {
     saveClassDefaultTime, toggleRegularClassDay, toggleClassDay, saveClassDayTime,
     saveTeukangPeriod, saveFreeSemesterPeriod, searchTeukangAddStudent, addStudentToTeukang,
     confirmDeleteClass, deleteClass, CLASS_MODE_LABELS, getClassPeriodInfo,
-    cleanupEmptyRegularClasses
+    autoCleanupClasses
 } from './class-detail.js';
 import {
     initHwManagementDeps,
@@ -2812,6 +2812,7 @@ onAuthStateChanged(auth, async (user) => {
             await trackTeacherLogin(user);
             await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadUserRole(), loadClassSettings(), loadClassNextHw(state.selectedDate), loadTeachers()]);
             await syncAbsenceRecords();
+            await autoCleanupClasses();
             await loadRoleMemos().catch(() => {});
         } catch (err) {
             console.error('[init] 데이터 로드 중 오류:', err);
@@ -2938,7 +2939,7 @@ window.refreshData = async () => {
     await loadWithdrawnStudents();
     await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadRoleMemos(), loadClassSettings(true), loadClassNextHw(state.selectedDate), loadTeachers()]);
     await syncAbsenceRecords();
-    await cleanupEmptyRegularClasses();
+    await autoCleanupClasses();
     renderBranchFilter();
     renderSubFilters();
     renderListPanel();

@@ -884,41 +884,71 @@ export async function deleteClass(classCode, mode, opts = {}) {
     return { affected: affected.length };
 }
 
+// targets = [{mode, code}, ...]. 차례로 deleteClass 호출 + 실패 격리 + 결과 로그.
+async function _runAutoDelete(label, targets) {
+    const deleted = [];
+    for (const { mode, code } of targets) {
+        try {
+            await deleteClass(code, mode, { skipRender: true });
+            deleted.push(`[${mode}] ${code}`);
+        } catch (err) {
+            console.error(`${label} 실패:`, mode, code, err);
+        }
+    }
+    if (deleted.length > 0) {
+        console.log(`${label}: ${deleted.length}건 (${deleted.join(', ')})`);
+    }
+    return deleted;
+}
+
+// 기간 만료 반(자유학기/내신/특강) 자동 정리.
+// 학생 enrollment·class_settings 변경은 deleteClass → _MODES.applyToStudent에 위임.
+async function _cleanupExpiredClasses() {
+    const today = todayStr();
+    const targets = [];
+    for (const [code, cs] of Object.entries(state.classSettings)) {
+        if (!cs) continue;
+        if (cs.class_type === '특강' && cs.special_end && cs.special_end < today) {
+            targets.push({ mode: 'teukang', code });
+        } else if (cs.naesin_end && cs.naesin_end < today && cs.class_type !== '특강') {
+            targets.push({ mode: 'naesin', code });
+        } else if (cs.free_end && cs.free_end < today && cs.class_type !== '특강' && cs.class_type !== '내신') {
+            targets.push({ mode: 'free', code });
+        }
+    }
+    return _runAutoDelete('기간 만료 반 자동 정리', targets);
+}
+
 // 정규반(특강/자유학기/내신 제외)에 활성 학생이 0명이면 자동 삭제.
+async function _cleanupEmptyRegularClasses() {
+    const targets = [];
+    for (const [code, cs] of Object.entries(state.classSettings)) {
+        if (!cs) continue;
+        if (cs.class_type === '특강') continue;
+        if (cs.naesin_start && cs.naesin_end) continue;
+        if (cs.free_schedule !== undefined || cs.free_start) continue;
+        const hasStudent = state.allStudents.some(s =>
+            s.status !== '퇴원' && (s.enrollments || []).some(e =>
+                (e.class_type === '정규' || !e.class_type) && enrollmentCode(e) === code
+            )
+        );
+        if (!hasStudent) targets.push({ mode: 'regular', code });
+    }
+    return _runAutoDelete('빈 정규반 자동 삭제', targets);
+}
+
+// 통합 자동 정리: 기간 만료 반 → 빈 정규반 순서로 체이닝.
 // history_logs는 deleteClass 내부에서 기록됨. 동시 실행 방지를 위한 가드.
-let _emptyCleanupRunning = false;
-export async function cleanupEmptyRegularClasses() {
-    if (READ_ONLY || _emptyCleanupRunning) return [];
-    _emptyCleanupRunning = true;
+let _autoCleanupRunning = false;
+export async function autoCleanupClasses() {
+    if (READ_ONLY || _autoCleanupRunning) return { expired: [], empty: [] };
+    _autoCleanupRunning = true;
     try {
-        const targets = [];
-        for (const [code, cs] of Object.entries(state.classSettings)) {
-            if (!cs) continue;
-            if (cs.class_type === '특강') continue;
-            if (cs.naesin_start && cs.naesin_end) continue;
-            if (cs.free_schedule !== undefined || cs.free_start) continue;
-            const hasStudent = state.allStudents.some(s =>
-                s.status !== '퇴원' && (s.enrollments || []).some(e =>
-                    (e.class_type === '정규' || !e.class_type) && enrollmentCode(e) === code
-                )
-            );
-            if (!hasStudent) targets.push(code);
-        }
-        const deleted = [];
-        for (const code of targets) {
-            try {
-                await deleteClass(code, 'regular', { skipRender: true });
-                deleted.push(code);
-            } catch (err) {
-                console.error('빈 정규반 자동 삭제 실패:', code, err);
-            }
-        }
-        if (deleted.length > 0) {
-            console.log(`빈 정규반 자동 삭제: ${deleted.length}건 (${deleted.join(', ')})`);
-        }
-        return deleted;
+        const expired = await _cleanupExpiredClasses();
+        const empty = await _cleanupEmptyRegularClasses();
+        return { expired, empty };
     } finally {
-        _emptyCleanupRunning = false;
+        _autoCleanupRunning = false;
     }
 }
 
