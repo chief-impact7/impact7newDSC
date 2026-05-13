@@ -531,6 +531,15 @@ function validateForm() {
         showToast('반 이름 정보를 입력하세요.', 'error');
         return false;
     }
+    // class_type ↔ 반 코드 정합성 가드:
+    // 정규/자유학기는 레벨(level_symbol)과 반 번호(class_number)가 모두 명시되어야 한다.
+    // 한쪽만 입력된 채 등록되면 정채리 케이스처럼 "정규인데 반 미지정" placeholder가 생긴다.
+    if (wizardData.classType === '정규' || wizardData.classType === '자유학기') {
+        if (!wizardData.levelSymbol || !wizardData.classNumber) {
+            showToast(`${wizardData.classType} 반은 레벨과 반 번호를 모두 입력해야 합니다.`, 'error');
+            return false;
+        }
+    }
     if (wizardData.classType === '특강' && !wizardData.feeType) {
         showToast('유료/무료를 선택하세요.', 'error');
         return false;
@@ -1152,6 +1161,19 @@ window.submitWizard = async function () {
                 newEnrollment.class_number = d.classCode; // 반 이름 = 코드 (예: '수요특강')
                 if (d.specialStart) newEnrollment.start_date = d.specialStart;
                 if (d.specialEnd) newEnrollment.end_date = d.specialEnd;
+            }
+
+            // 안전망 가드: class_type ↔ 반 코드 정합성 (정채리 케이스 같은 빈 placeholder 차단).
+            // validateForm/buildClassCode를 우회해 여기 도달하는 경로가 생기더라도 마지막에서 throw.
+            const _hasCode = !!(newEnrollment.level_symbol || newEnrollment.class_number);
+            if ((d.classType === '정규' || d.classType === '자유학기') && (!newEnrollment.level_symbol || !newEnrollment.class_number)) {
+                throw new Error(`${d.classType} 반 등록에 level_symbol과 class_number가 모두 필요합니다.`);
+            }
+            if (d.classType === '특강' && !newEnrollment.class_number) {
+                throw new Error('특강 반 등록에 class_number(반 이름)가 필요합니다.');
+            }
+            if (d.classType === '내신' && _hasCode) {
+                throw new Error('내신 enrollment는 level_symbol/class_number를 비워야 합니다 (csKey 별도 관리).');
             }
 
             if (d.classType === '내신') {
