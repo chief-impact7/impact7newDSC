@@ -94,8 +94,6 @@ async function loadStudents() {
         allStudents.push({ docId: d.id, ...data });
     });
     allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
-    // 콘솔 디버깅용 노출 — 데이터 정합성 점검(잔존 enrollment 진단 등)에 사용
-    window.allStudents = allStudents;
 }
 
 // ─── 반 계획 패널 (정규/내신 공용) ─────────────────────────────────────────
@@ -1099,9 +1097,10 @@ window.submitWizard = async function () {
         const today = todayStr();
 
         // 내신은 정규/자유학기 enrollment 수정이 필요해 학생 doc을 먼저 읽어야 한다.
+        // 정규도 같은 학생의 옛 정규 enrollment를 자동 종료해야 하므로 미리 읽는다.
         // 직렬 await 대신 한 번에 병렬로 받아 RTT를 학생 수만큼이 아닌 1번으로 줄인다.
         const enrollmentsByDocId = new Map();
-        if (d.classType === '내신') {
+        if (d.classType === '내신' || d.classType === '정규') {
             const snaps = await Promise.all(
                 d.students.map(s => getDoc(doc(db, 'students', s.docId)))
             );
@@ -1109,6 +1108,13 @@ window.submitWizard = async function () {
                 enrollmentsByDocId.set(snap.id, snap.data()?.enrollments || []);
             });
         }
+
+        // 정규 enrollment 추가 시 옛 정규 enrollment의 자동 종료일(새 학기 start_date - 1).
+        const yesterdayOf = (dateStr) => {
+            const dt = new Date(dateStr + 'T00:00:00Z');
+            dt.setUTCDate(dt.getUTCDate() - 1);
+            return dt.toISOString().slice(0, 10);
+        };
 
         // class_settings + 학생 enrollment를 한 batch에 묶어 부분 실패 시 데이터 불일치를 방지.
         const batch = writeBatch(db);
@@ -1154,6 +1160,19 @@ window.submitWizard = async function () {
                 const updated = (enrollmentsByDocId.get(student.docId) || []).map(e =>
                     (e.class_type === '정규' || e.class_type === '자유학기')
                         ? { ...e, naesin_class_override: d.classCode }
+                        : e
+                );
+                updated.push(newEnrollment);
+                batchUpdate(batch, studentRef, { enrollments: updated });
+            } else if (d.classType === '정규') {
+                // 신학기 정규 enrollment 추가 시 옛 정규 enrollment를 강제 종료
+                // (end_date 미설정 + 같은 class_type='정규'인 항목에 end_date=새 start_date - 1 설정).
+                // 자유학기/내신은 정규의 일시 전환이라 종료하지 않는다.
+                const closeDate = yesterdayOf(newEnrollment.start_date);
+                const existing = enrollmentsByDocId.get(student.docId) || [];
+                const updated = existing.map(e =>
+                    (e.class_type === '정규' && !e.end_date)
+                        ? { ...e, end_date: closeDate }
                         : e
                 );
                 updated.push(newEnrollment);
