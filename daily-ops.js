@@ -683,6 +683,22 @@ function getFreeSemesterClassStudents(classCode) {
     });
 }
 
+// 정규 반 멤버 (요일 무관): 자유학기/내신 기간 중인 학생도 정규 멤버이므로 포함.
+// (정규 || 자유학기) + class_number 화이트리스트 (feedback_naesin_regular_identification.md).
+function getRegularClassStudents(classCode) {
+    const today = state.selectedDate;
+    const validDate = (d) => d && /^\d{4}-/.test(d);
+    return state.allStudents.filter(s => {
+        if (isWithdrawnAt(s, today)) return false;
+        if (!matchesBranchFilter(s)) return false;
+        return (s.enrollments || []).some(e => {
+            if (!((e.class_type === '정규' || e.class_type === '자유학기') && e.class_number)) return false;
+            if (validDate(e.end_date) && e.end_date < today) return false;
+            return enrollmentCode(e) === classCode;
+        });
+    });
+}
+
 function _getAllClassCodes() {
     // class_settings에 등록된 반만 사이드바에 노출 (자동 유도 가상 반 제외)
     const regularCodes = new Set();
@@ -937,7 +953,9 @@ function renderClassCodeFilter() {
     const icon = classL1.querySelector('.nav-l1-expand');
     if (icon) icon.textContent = isExpanded ? 'expand_less' : 'expand_more';
 
-    classL1.classList.toggle('has-filter', !!state.selectedClassCode);
+    // branch 카테고리에서 L4 정규반을 클릭하면 _classMgmtMode='regular' + selectedClassCode가 함께 설정되는데,
+    // 이는 소속 트리의 선택이므로 '반 설정' L1을 시각적으로 활성화하지 않는다 (사용자 혼란 방지).
+    classL1.classList.toggle('has-filter', state.currentCategory === 'class_mgmt' && !!state.selectedClassCode);
 }
 
 window.toggleClassDeleteMode = function() {
@@ -1473,6 +1491,11 @@ function getSubFilterCount(filterKey) {
 // ─── Filtering ──────────────────────────────────────────────────────────────
 
 function getFilteredStudents() {
+    // 반 설정/소속 L4: 정규 모드 + 반 선택 — 그 반에 등록된 모든 정규/자유학기 학생 (요일 무관)
+    if (state._classMgmtMode === 'regular' && state.selectedClassCode) {
+        return getRegularClassStudents(state.selectedClassCode);
+    }
+
     // 반 설정: 특강 모드 — 날짜 무관, 특강 반 전체 학생
     if (state._classMgmtMode === 'teukang' && state.selectedClassCode) {
         return getTeukangClassStudents(state.selectedClassCode);
