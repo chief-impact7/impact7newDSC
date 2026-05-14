@@ -2352,7 +2352,10 @@ function renderListPanel() {
     // 학생 리스트만 노출하고 반 상세 편집 UI는 띄우지 않음 (반설정 오접근 방지).
     // 이전 반 상세가 잔존하지 않도록 명시적으로 빈 상태로 복원.
     const isL4Selection = !!(state.selectedBranchLevel && state.selectedClassCode);
-    if (isL4Selection) {
+    if (isL4Selection && !state.selectedStudentId) {
+        // L4 + 학생 미선택: 이전 반 상세 잔재 제거. 학생 선택 중이면 onSnapshot 재발화 시
+        // 학생 상세가 사라지는 사고를 막기 위해 아래 분기들로 fall-through(naesin/teukang/free·
+        // else 모두 !state.selectedStudentId 조건이라 자동 no-op).
         renderStudentDetail(null);
     } else if (((state._classMgmtMode === 'naesin' && _isNaesinClassCode(state.selectedClassCode)) ||
          state._classMgmtMode === 'teukang' ||
