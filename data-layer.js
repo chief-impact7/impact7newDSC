@@ -247,11 +247,15 @@ export async function promoteEnrollPending() {
     }
 }
 
-// 미래 퇴원 예약 학생 중 퇴원일이 오늘 이하인 경우 Firestore status를 '퇴원'으로 업데이트
+// 미래 퇴원 예약 학생 중 퇴원일이 오늘 이하인 경우 Firestore status를 '퇴원'으로 업데이트.
+// 단 status가 '재원' 또는 '등원예정'인 학생만 대상 — 가휴원/실휴원/상담으로 명시적 전환된
+// 학생을 잔존 withdrawal_date 때문에 다시 퇴원으로 되돌리는 silent override 차단
+// (전은민 케이스: 퇴원→휴원 후 다음 로그인 시 자동 되돌림 사고).
 export async function promoteWithdrawalDate() {
     const today = todayStr();
+    const ACTIVE_FOR_PROMOTE = new Set(['재원', '등원예정']);
     const toWithdraw = state.allStudents.filter(s =>
-        s.status !== '퇴원' && s.withdrawal_date && s.withdrawal_date <= today
+        ACTIVE_FOR_PROMOTE.has(s.status) && s.withdrawal_date && s.withdrawal_date <= today
     );
     if (toWithdraw.length === 0) return;
     const batch = writeBatch(db);

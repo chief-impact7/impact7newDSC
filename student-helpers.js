@@ -8,23 +8,39 @@ import { state, LEVEL_SHORT, LEAVE_STATUSES } from './state.js';
 // status ∈ LEAVE_STATUSES 이면 휴원으로 간주하고, pause 기간이 명시되어 있으면
 // dateStr이 그 기간 내일 때만 true. pause 날짜가 누락된 휴원 상태는
 // 데이터 정합성 위반이지만 안전 쪽(휴원 중 간주)으로 처리해 출결/편성에서 숨긴다.
-// (Cloud Function finalize가 r.leave_end_date||''로 빈 값 저장을 허용하므로 예외 케이스 발생 가능)
-// scheduled_leave_status: 시작일이 미래인 휴원 요청 승인 시 예약용 (status는 '재원' 유지)
+// scheduled_leave_status: 시작일이 미래인 휴원 요청 승인 시 예약용 (status는 '재원' 유지).
+// 단, status가 비휴원 active 상태(재원/등원예정/상담)면 scheduled_leave_status 잔존을 무시해
+// status를 단일 진실로 신뢰한다 (전은민 silent override 패턴 차단).
+const NON_LEAVE_ACTIVE = new Set(['재원', '등원예정', '상담']);
+
 export function isOnLeaveAt(s, dateStr) {
-    const effectiveStatus = LEAVE_STATUSES.includes(s.status)
-        ? s.status
-        : (LEAVE_STATUSES.includes(s.scheduled_leave_status) ? s.scheduled_leave_status : null);
-    if (!effectiveStatus) return false;
-    if (s.pause_start_date && s.pause_end_date) {
-        return dateStr >= s.pause_start_date && dateStr <= s.pause_end_date;
+    if (LEAVE_STATUSES.includes(s.status)) {
+        if (s.pause_start_date && s.pause_end_date) {
+            return dateStr >= s.pause_start_date && dateStr <= s.pause_end_date;
+        }
+        return true;
     }
-    return true;
+    // status가 명시적 비휴원이면 scheduled_leave_status 잔재 무시
+    if (NON_LEAVE_ACTIVE.has(s.status)) return false;
+    // 그 외(status 누락 등)는 예약 필드로 fallback
+    if (LEAVE_STATUSES.includes(s.scheduled_leave_status)) {
+        if (s.pause_start_date && s.pause_end_date) {
+            return dateStr >= s.pause_start_date && dateStr <= s.pause_end_date;
+        }
+        return true;
+    }
+    return false;
 }
 
 // 학생이 특정 날짜에 퇴원 상태인지 판정.
-// status='퇴원' 이거나, 미래 퇴원 예약(status='재원' + withdrawal_date)이 dateStr에 도래한 경우 true.
+// status='퇴원'이면 우선. status가 명시적 active(재원/등원예정/실휴원/가휴원/상담)이면
+// withdrawal_date 잔재가 있어도 퇴원으로 간주하지 않음 — status가 단일 진실.
+// status 누락 + withdrawal_date 도래 케이스만 fallback 퇴원 판정.
+const STATUS_IMPLIES_NOT_WITHDRAWN = new Set(['재원', '등원예정', '실휴원', '가휴원', '상담']);
+
 export function isWithdrawnAt(s, dateStr) {
     if (s.status === '퇴원') return true;
+    if (STATUS_IMPLIES_NOT_WITHDRAWN.has(s.status)) return false;
     if (s.withdrawal_date) return s.withdrawal_date <= (dateStr || todayStr());
     return false;
 }
