@@ -300,10 +300,12 @@ service cloud.firestore {
       allow read: if isAuthorized();
 
       allow create, update: if isAuthorized()
+        && request.auth.token.email == email
         && hasOnlyAllowedUserSettingsFields()
         && withinFieldLimit(10);
 
-      allow delete: if isAuthorized();
+      allow delete: if isAuthorized()
+        && request.auth.token.email == email;
     }
 
     // =========================================================================
@@ -490,7 +492,7 @@ service cloud.firestore {
           'return_date',
           'previous_status', 'created_at', 'updated_by', 'updated_at',
           // Cloud Function 연동 (재등원·복귀 반 선택 + 서버사이드 finalize)
-          'target_class_code',
+          'target_class_code', 'target_semester',
           'finalized_at', 'finalize_error', 'finalize_attempts'
         ]);
       }
