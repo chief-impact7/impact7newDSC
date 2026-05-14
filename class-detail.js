@@ -918,22 +918,54 @@ async function _cleanupExpiredClasses() {
     return _runAutoDelete('기간 만료 반 자동 정리', targets);
 }
 
-// 정규반(특강/자유학기/내신 제외)에 활성 학생이 0명이면 자동 삭제.
-async function _cleanupEmptyRegularClasses() {
+// 모든 유형(정규/자유학기/내신/특강)에서 학생 0명이면 자동 삭제.
+// 유형별로 식별 기준과 deleteClass mode가 다르므로 분기 처리.
+//   - 특강: class_type='특강' + 그 코드의 특강 enrollment 가진 학생 0명
+//   - 내신: naesin_start/end 보유 + 그 csKey 매칭 학생 0명
+//   - 자유학기: free_schedule/free_start 보유 + 자유학기 enrollment 가진 학생 0명
+//                (정규 코드 공유 → 자유학기 부속 필드만 제거. 정규는 별도 분기에서 처리)
+//   - 정규: 위 어디에도 안 해당하는 class_settings + 정규 enrollment 가진 학생 0명
+async function _cleanupEmptyClasses() {
     const targets = [];
     for (const [code, cs] of Object.entries(state.classSettings)) {
         if (!cs) continue;
-        if (cs.class_type === '특강') continue;
-        if (cs.naesin_start && cs.naesin_end) continue;
-        if (cs.free_schedule !== undefined || cs.free_start) continue;
-        const hasStudent = state.allStudents.some(s =>
+
+        if (cs.class_type === '특강') {
+            const has = state.allStudents.some(s =>
+                (s.enrollments || []).some(e => e.class_type === '특강' && enrollmentCode(e) === code)
+            );
+            if (!has) targets.push({ mode: 'teukang', code });
+            continue;
+        }
+
+        if (cs.naesin_start && cs.naesin_end) {
+            const has = state.allStudents.some(s => {
+                if (s.status === '퇴원') return false;
+                const reg = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
+                return reg && resolveNaesinCsKey(s, reg) === code;
+            });
+            if (!has) targets.push({ mode: 'naesin', code });
+            continue;
+        }
+
+        if (cs.free_schedule !== undefined || cs.free_start) {
+            const hasFree = state.allStudents.some(s =>
+                (s.enrollments || []).some(e => e.class_type === '자유학기' && enrollmentCode(e) === code)
+            );
+            if (!hasFree) targets.push({ mode: 'free', code });
+            // 자유학기 부속만 제거하고 정규 코드는 보존 — 정규 학생 체크는 skip
+            continue;
+        }
+
+        // 정규: 위 분기에 안 걸린 class_settings
+        const hasReg = state.allStudents.some(s =>
             s.status !== '퇴원' && (s.enrollments || []).some(e =>
                 (e.class_type === '정규' || !e.class_type) && enrollmentCode(e) === code
             )
         );
-        if (!hasStudent) targets.push({ mode: 'regular', code });
+        if (!hasReg) targets.push({ mode: 'regular', code });
     }
-    return _runAutoDelete('빈 정규반 자동 삭제', targets);
+    return _runAutoDelete('빈 반 자동 삭제', targets);
 }
 
 // 통합 자동 정리: 기간 만료 반 → 빈 정규반 순서로 체이닝.
@@ -944,7 +976,7 @@ export async function autoCleanupClasses() {
     _autoCleanupRunning = true;
     try {
         const expired = await _cleanupExpiredClasses();
-        const empty = await _cleanupEmptyRegularClasses();
+        const empty = await _cleanupEmptyClasses();
         return { expired, empty };
     } finally {
         _autoCleanupRunning = false;
