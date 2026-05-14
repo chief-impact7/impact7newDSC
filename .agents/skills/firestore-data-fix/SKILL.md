@@ -122,13 +122,17 @@ if (DRY) {
 }
 
 // atomic batch: 학생 + history_logs 동시 기록
+// before/after는 impact7DB의 학생 상세 "수업이력" 탭에 그대로 노출되므로
+// JSON 통째로 박지 말고 사람이 한 줄로 읽을 수 있는 텍스트로 적는다.
+//   예) before: '수업: HX102(진행중), HX104(진행중)'
+//       after : 'HX102 end_date=2026-05-11 설정 [stale-regular-cleanup]'
 const batch = db.batch();
 batch.update(ref, update);
 batch.set(db.collection('history_logs').doc(), {
     doc_id: STUDENT_ID,
     change_type: 'RESTORE',
-    before: JSON.stringify({ /* 주요 필드만 */ }),
-    after: JSON.stringify({ /* 주요 필드만 */ }),
+    before: '수업: 변경 전 코드/기간 한 줄 요약',
+    after: '무엇을 왜 바꿨는지 [reason]',
     google_login_id: 'one-off-restore-script',
     timestamp: FieldValue.serverTimestamp(),
 });
@@ -141,6 +145,7 @@ console.log('\n✓ 복구 완료.');
 - `FieldValue.delete()`로 명시적 필드 삭제
 - `FieldValue.serverTimestamp()`로 audit 타임스탬프
 - `history_logs`에 `RESTORE` change_type 기록 (복구 추적용)
+- `history_logs.before/after`는 **사람이 읽는 한 줄 텍스트**로 적는다. JSON 통째 금지 — impact7DB 수업이력 탭이 그대로 보여줘 노이즈가 된다.
 - batch로 atomic 처리
 
 ### Phase 4: Dry-run 실행
@@ -164,7 +169,7 @@ node scripts/oneoff/restore-{target}.mjs
 1. **Idempotent**: 같은 스크립트를 두 번 실행해도 상태가 같아야 함 (이미 복구된 문서에 재실행 시 no-op 또는 안전한 업데이트만)
 2. **Atomic**: 학생 문서 + history_logs를 batch로 묶어 부분 실패 방지
 3. **Auditable**: `history_logs`에 `RESTORE` change_type + 실행자(`one-off-restore-script`) 기록
-4. **Reversible**: before 상태를 history_logs에 JSON으로 남겨 필요 시 역복구 가능
+4. **Reversible**: before/after에 무엇이 어떻게 바뀌었는지 한 줄로 요약(원본 raw 데이터가 필요하면 별도 백업 또는 git에 보존)
 5. **Scoped**: 한 스크립트는 한 도메인(학생 1명 또는 소수)만 다룸. 대량 마이그레이션은 별도 도구.
 
 ## 파일 위치
