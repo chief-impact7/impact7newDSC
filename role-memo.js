@@ -569,7 +569,7 @@ export function renderUnifiedMemoCard(studentId) {
 async function saveStudentMemoArray(studentId, memos) {
     try {
         await auditUpdate(doc(db, 'students', studentId), { memo: memos });
-        const s = state.allStudents.find(s => s.docId === studentId);
+        const s = findStudent(studentId);
         if (s) s.memo = memos;
         showSaveIndicator('saved');
         renderStudentDetail(studentId);
@@ -586,7 +586,7 @@ export async function addStudentMemo(studentId) {
     const input = document.getElementById(`detail-memo-input-${studentId}`);
     if (!input || !input.value.trim()) return;
     _addMemoLock = true;
-    const student = state.allStudents.find(s => s.docId === studentId);
+    const student = findStudent(studentId);
     if (!student) { _addMemoLock = false; return; }
     const memos = normalizeStudentMemos(student);
     memos.push({ text: input.value.trim(), pinned: false, date: state.selectedDate, created_at: todayStr(), created_by: state.currentUser?.email || '' });
@@ -596,7 +596,7 @@ export async function addStudentMemo(studentId) {
 
 export async function deleteStudentMemo(studentId, idx) {
     if (!confirm('이 메모를 삭제하시겠습니까?')) return;
-    const student = state.allStudents.find(s => s.docId === studentId);
+    const student = findStudent(studentId);
     if (!student) return;
     const memos = normalizeStudentMemos(student);
     if (idx < 0 || idx >= memos.length) return;
@@ -605,7 +605,7 @@ export async function deleteStudentMemo(studentId, idx) {
 }
 
 export async function toggleStudentMemoPin(studentId, idx) {
-    const student = state.allStudents.find(s => s.docId === studentId);
+    const student = findStudent(studentId);
     if (!student) return;
     const memos = normalizeStudentMemos(student);
     if (idx < 0 || idx >= memos.length) return;
