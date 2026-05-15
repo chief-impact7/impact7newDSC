@@ -37,6 +37,7 @@ import {
 } from './absence-records.js';
 import { renderLeaveRequestCard, renderReturnConsultCard } from './leave-request.js';
 import { renderUnifiedMemoCard } from './role-memo.js';
+import { loadClassHistoryCard } from './class-history.js';
 // 비활성 학생(퇴원·종강·상담 등) 식별용 — 출결현황 탭 라벨을 "수업이력"으로 동적 전환.
 const _DETAIL_ACTIVE_STATES = new Set(['재원', '등원예정', '실휴원', '가휴원']);
 const _isInactiveDetailStudent = (s) => !_DETAIL_ACTIVE_STATES.has(s?.status || '');
@@ -392,8 +393,22 @@ export function switchDetailTab(tab) {
     document.getElementById('score-tab').style.display = tab === 'score' ? '' : 'none';
     if (tab === 'score') loadScoreCard();
     if (tab === 'report') {
+        if (state.selectedStudentId) _loadReportOrHistoryCard(state.selectedStudentId);
+    }
+}
+
+// 비활성 학생: 출결현황 대신 수업이력(history_logs 7카테고리) 로드.
+// 활성 학생: 기존 출결현황 로드 (날짜 범위 입력 유지).
+function _loadReportOrHistoryCard(studentId) {
+    const student = findStudent(studentId);
+    const dateRangeEl = document.querySelector('#report-tab .report-date-range');
+    if (student && _isInactiveDetailStudent(student)) {
+        if (dateRangeEl) dateRangeEl.style.display = 'none';
+        loadClassHistoryCard(studentId);
+    } else {
+        if (dateRangeEl) dateRangeEl.style.display = '';
         _ensureReportInputDefaults();
-        if (state.selectedStudentId) loadReportCard();
+        loadReportCard();
     }
 }
 
@@ -869,10 +884,9 @@ export function renderStudentDetail(studentId) {
     }
     _lastRenderedStudentId = studentId;
 
-    // 학생 전환 + 출결 탭 활성 시 자동 재조회 (입력 기간은 유지)
+    // 학생 전환 + 출결/수업이력 탭 활성 시 자동 재조회 (활성=출결, 비활성=수업이력)
     if (studentChanged && studentId && state.detailTab === 'report') {
-        _ensureReportInputDefaults();
-        loadReportCard();
+        _loadReportOrHistoryCard(studentId);
     }
 
     if (!studentId) {
