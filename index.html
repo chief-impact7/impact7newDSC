@@ -219,12 +219,17 @@
                             <div class="profile-tags" id="profile-tags"></div>
                             <div class="profile-stay-stats" id="profile-stay-stats"></div>
                         </div>
-                        <button class="action-chip-btn" id="diagnostic-btn" style="display:none" title="진단평가 입력 (자동채움)" aria-label="진단평가 입력">
-                            <span class="material-symbols-outlined">person_add</span>
-                            <span>진단평가</span>
-                        </button>
                         <button class="icon-btn detail-close-btn" id="detail-close-btn" onclick="closeDetail()" title="닫기" aria-label="상세 패널 닫기">
                             <span class="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
+
+                    <!-- 비활성 학생 액션 바 (퇴원·종강·상담 시에만 노출) -->
+                    <div id="inactive-action-bar" class="inactive-action-bar" style="display:none">
+                        <span class="inactive-action-hint">재등록이 필요하면 →</span>
+                        <button class="action-chip-btn" id="diagnostic-btn" title="진단평가 입력 (자동채움)" aria-label="진단평가 입력">
+                            <span class="material-symbols-outlined">person_add</span>
+                            <span>진단평가</span>
                         </button>
                     </div>
 

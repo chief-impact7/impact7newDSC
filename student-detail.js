@@ -962,14 +962,15 @@ export function renderStudentDetail(studentId) {
         ${siblingHtml}
     `;
 
-    // 비활성 학생일 때만 진단평가 입력 버튼 노출 (자동채움된 모달 열기).
+    // 비활성 학생일 때만 진단평가 입력 액션 바 노출 (자동채움된 모달 열기).
+    const inactiveBar = document.getElementById('inactive-action-bar');
     const diagBtn = document.getElementById('diagnostic-btn');
-    if (diagBtn) {
+    if (inactiveBar && diagBtn) {
         if (_isInactiveDetailStudent(student)) {
-            diagBtn.style.display = '';
+            inactiveBar.style.display = '';
             diagBtn.onclick = () => window.openContactAsTemp(studentId);
         } else {
-            diagBtn.style.display = 'none';
+            inactiveBar.style.display = 'none';
             diagBtn.onclick = null;
         }
     }

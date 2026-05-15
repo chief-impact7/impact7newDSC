@@ -3788,3 +3788,31 @@ textarea.field-input {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
+
+/* 비활성 학생(퇴원/종강/상담) 액션 바 — 헤더 폭 잠식 없이 재등록 진입점 강조 */
+.inactive-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--primary-light);
+  border-bottom: 1px solid var(--border);
+}
+.inactive-action-hint {
+  font-size: 12px;
+  color: var(--text-sec);
+  flex: 1;
+  min-width: 0;
+}
+
+/* 헤더 텍스트 줄바꿈 억제 — 좁은 패널 폭에서도 한 줄 유지 */
+#detail-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.profile-tags .tag-status {
+  white-space: nowrap;
+}
