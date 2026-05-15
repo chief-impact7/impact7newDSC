@@ -962,6 +962,18 @@ export function renderStudentDetail(studentId) {
         ${siblingHtml}
     `;
 
+    // 비활성 학생일 때만 진단평가 입력 버튼 노출 (자동채움된 모달 열기).
+    const diagBtn = document.getElementById('diagnostic-btn');
+    if (diagBtn) {
+        if (_isInactiveDetailStudent(student)) {
+            diagBtn.style.display = '';
+            diagBtn.onclick = () => window.openContactAsTemp(studentId);
+        } else {
+            diagBtn.style.display = 'none';
+            diagBtn.onclick = null;
+        }
+    }
+
     // 재원현황 (프로필 내 표시)
     const stayStatsEl = document.getElementById('profile-stay-stats');
     if (stayStatsEl) stayStatsEl.innerHTML = buildStayStatsHtml(student);

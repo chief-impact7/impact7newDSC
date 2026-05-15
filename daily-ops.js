@@ -316,6 +316,8 @@ function selectStudent(id) {
     renderListPanel();
     renderStudentDetail(id);
 }
+// 비원생 검색 결과 등 외부 모듈에서도 학생 선택 가능하도록 노출.
+window.selectStudent = selectStudent;
 initBulkModeDeps({ renderSubFilters, renderListPanel, renderStudentDetail, applyAttendance, applyHwDomainOX, isAttendedStatus, oxFieldLabel, selectStudent });
 
 // scheduled-visits.js 의존성 주입

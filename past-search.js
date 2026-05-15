@@ -52,7 +52,8 @@ export function _renderPastContacts(pastContactResults, container) {
         const phone = c.parent_phone_1 || c.student_phone || '';
         const last4 = phone.replace(/\D/g, '').slice(-4);
         const sub = [studentShortLabel(c), last4 ? `☎${last4}` : ''].filter(Boolean).join(' · ');
-        return `<div class="list-item contact-item" style="cursor:pointer" onclick="window.openContactAsTemp('${escAttr(c.id)}')">
+        // 비원생 클릭 시 학생 상세 뷰로 진입. 진단평가 입력은 상세 헤더의 person_add 버튼에서 처리.
+        return `<div class="list-item contact-item" style="cursor:pointer" onclick="window.selectStudent('${escAttr(c.id)}')">
             <div class="item-info">
                 <span class="item-title">${esc(c.name || '—')} <span class="tag-past">비원생</span></span>
                 <span class="item-desc">${esc(sub || '—')}</span>
