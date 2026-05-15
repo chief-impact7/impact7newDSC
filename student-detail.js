@@ -37,7 +37,9 @@ import {
 } from './absence-records.js';
 import { renderLeaveRequestCard, renderReturnConsultCard } from './leave-request.js';
 import { renderUnifiedMemoCard } from './role-memo.js';
-import { isPastViewStudent, renderPastHistory } from './past-history.js';
+// 비활성 학생(퇴원·종강·상담 등) 식별용 — 출결현황 탭 라벨을 "수업이력"으로 동적 전환.
+const _DETAIL_ACTIVE_STATES = new Set(['재원', '등원예정', '실휴원', '가휴원']);
+const _isInactiveDetailStudent = (s) => !_DETAIL_ACTIVE_STATES.has(s?.status || '');
 
 // ─── Injection slots (daily-ops.js → initStudentDetailDeps) ─────────────────
 let renderSubFilters, renderListPanel, _isNaesinClassCode;
@@ -964,15 +966,6 @@ export function renderStudentDetail(studentId) {
     const stayStatsEl = document.getElementById('profile-stay-stats');
     if (stayStatsEl) stayStatsEl.innerHTML = buildStayStatsHtml(student);
 
-    // ─── 비활성 학생 분기: 과거이력 뷰로 우측 패널 교체 ────────────────────
-    // 활성('재원','등원예정','실휴원','가휴원')이 아니면 일일현황/출결/성적 탭 대신
-    // 과거이력 뷰를 렌더하고 종료한다.
-    if (isPastViewStudent(student)) {
-        renderPastHistory(studentId);
-        document.getElementById('detail-panel').classList.add('mobile-visible');
-        return;
-    }
-
     // 카드들 렌더링
     const cardsContainer = document.getElementById('detail-cards');
     const studentHwTasks = state.hwFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
@@ -1277,12 +1270,15 @@ export function renderStudentDetail(studentId) {
         ${renderUnifiedMemoCard(studentId)}
     `;
 
-    // 탭 상태 복원 — 학생 모드: 출결현황/성적 탭 노출
+    // 탭 상태 복원 — 학생 모드: 출결현황/성적 탭 노출.
+    // 비활성 학생(퇴원/종강/상담 등)은 출결 의미가 약하므로 라벨을 "수업이력"으로 전환.
     const tabsEl = document.getElementById('detail-tabs');
     if (tabsEl) {
-        tabsEl.style.display = ''; // 과거이력 뷰에서 숨겼던 경우 복원
+        tabsEl.style.display = '';
+        const reportLabel = _isInactiveDetailStudent(student) ? '수업이력' : '출결현황';
         tabsEl.querySelectorAll('.detail-tab').forEach(t => {
             if (t.dataset.tab === 'report' || t.dataset.tab === 'score') t.style.display = '';
+            if (t.dataset.tab === 'report') t.textContent = reportLabel;
             t.classList.toggle('active', t.dataset.tab === state.detailTab);
         });
     }
