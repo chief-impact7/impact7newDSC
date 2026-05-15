@@ -3646,3 +3646,116 @@ textarea.field-input {
 .naesin-clinic-status { padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
 .clinic-pending { background: #fef3c7; color: #92400e; }
 .clinic-done { background: #dcfce7; color: #166534; }
+
+/* ===== Past History (이전 학원생활) ===== */
+.past-history {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 0 16px;
+}
+.ph-header {
+  background: var(--surface-container);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+.ph-header-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 12px;
+}
+.ph-section {
+  background: var(--surface-container);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 3px 9px rgba(0,0,0,0.10);
+}
+.ph-section-title {
+  margin: 0 0 10px;
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: 0.02em;
+}
+.ph-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ph-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ph-card-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ph-code {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+}
+.ph-chip {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.ph-chip-type {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+.ph-card-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.ph-meta {
+  font-size: 12px;
+  color: var(--text-sec);
+}
+.ph-meta b {
+  color: var(--text);
+  font-weight: 600;
+}
+.ph-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+}
+.ph-card-note {
+  font-size: 12px;
+  color: var(--text);
+  background: #fffdf6;
+  border: 1px dashed #f1d99a;
+  border-radius: 6px;
+  padding: 6px 8px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+.ph-empty {
+  font-size: 13px;
+  color: var(--text-sec);
+  text-align: center;
+  padding: 10px 0;
+}
