@@ -1511,23 +1511,32 @@ function getSubFilterCount(filterKey) {
 
 function getFilteredStudents() {
     // 반 설정/소속 L4: 정규 모드 + 반 선택 — 그 반에 등록된 모든 정규/자유학기 학생 (요일 무관)
+    // + 오늘 그 반으로 들어온 타반수업 학생도 포함 (a101 김여원이 a103에서 수업하면 a103 화면에서도 보이도록)
     if (state._classMgmtMode === 'regular' && state.selectedClassCode) {
-        return getRegularClassStudents(state.selectedClassCode);
+        const students = getRegularClassStudents(state.selectedClassCode);
+        addOverrideInStudents(students, state.selectedClassCode);
+        return students;
     }
 
-    // 반 설정: 특강 모드 — 날짜 무관, 특강 반 전체 학생
+    // 반 설정: 특강 모드 — 날짜 무관, 특강 반 전체 학생 + 오늘 그 반으로 들어온 타반수업 학생
     if (state._classMgmtMode === 'teukang' && state.selectedClassCode) {
-        return getTeukangClassStudents(state.selectedClassCode);
+        const students = getTeukangClassStudents(state.selectedClassCode);
+        addOverrideInStudents(students, state.selectedClassCode);
+        return students;
     }
 
-    // 반 설정: 자유학기 모드 — 날짜 무관, 자유학기 enrollment 가진 학생
+    // 반 설정: 자유학기 모드 — 날짜 무관, 자유학기 enrollment 가진 학생 + 오늘 그 반으로 들어온 타반수업 학생
     if (state._classMgmtMode === 'free' && state.selectedClassCode) {
-        return getFreeSemesterClassStudents(state.selectedClassCode);
+        const students = getFreeSemesterClassStudents(state.selectedClassCode);
+        addOverrideInStudents(students, state.selectedClassCode);
+        return students;
     }
 
-    // 반 설정: 내신 반코드 선택 시 (글로벌 필터이므로 state.currentCategory 무관)
+    // 반 설정: 내신 반코드 선택 시 (글로벌 필터이므로 state.currentCategory 무관) + 오늘 그 반으로 들어온 타반수업 학생
     if (state._classMgmtMode === 'naesin' && state.selectedClassCode && _isNaesinClassCode(state.selectedClassCode)) {
-        return getNaesinStudentsByDerivedCode(state.selectedClassCode).map(({ student }) => student);
+        const students = getNaesinStudentsByDerivedCode(state.selectedClassCode).map(({ student }) => student);
+        addOverrideInStudents(students, state.selectedClassCode);
+        return students;
     }
 
     // 반 설정: 정규 모드 — 등록된 모든 정규/자유학기 학생 (요일 무관, 내신 기간 중인 학생도 포함)
