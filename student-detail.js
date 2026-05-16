@@ -16,7 +16,7 @@ import {
 import {
     enrollmentCode, findStudent,
     branchFromStudent, makeDailyRecordId,
-    getActiveEnrollments, resolveNaesinCsKey
+    getActiveEnrollments, getStudentStartTime, resolveNaesinCsKey
 } from './student-helpers.js';
 import {
     parseDateKST, todayStr, getDayName
@@ -1347,12 +1347,38 @@ export function renderClinicInputs(studentId, extraVisit, isReadonly) {
     </div>`;
 }
 
+function getClinicTimeConflict(studentId, extraVisit) {
+    if (!extraVisit.date || !extraVisit.time) return null;
+    const student = findStudent(studentId);
+    if (!student) return null;
+    const dayName = getDayName(extraVisit.date);
+    const enroll = getActiveEnrollments(student, extraVisit.date).find(e =>
+        (e.day || []).includes(dayName) && getStudentStartTime(e, dayName) === extraVisit.time
+    );
+    if (!enroll) return null;
+    const labels = {
+        '내신': '내신',
+        '특강': '특강',
+        '자유학기': '자유학기',
+    };
+    const label = labels[enroll.class_type] || '정규';
+    return `${label} 등원 ${formatTime12h(extraVisit.time)}`;
+}
+
 export async function saveExtraVisit(studentId, field, value) {
     // 날짜가 입력되면 pending 해제
     if (field === 'date' && value) state._pendingClinicStudentId = null;
     const rec = state.dailyRecords[studentId] || {};
     const extraVisit = { ...(rec.extra_visit || {}) };
     extraVisit[field] = value;
+    const conflict = getClinicTimeConflict(studentId, extraVisit);
+    if ((field === 'date' || field === 'time') && conflict) {
+        const ok = confirm(`${conflict}과 클리닉 시간이 같습니다. 그래도 클리닉을 저장할까요?`);
+        if (!ok) {
+            renderStudentDetail(studentId);
+            return;
+        }
+    }
 
     // 로컬 캐시 업데이트
     if (!state.dailyRecords[studentId]) {

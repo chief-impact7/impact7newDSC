@@ -87,14 +87,48 @@ function regularEnrollment(enrollments) {
     return enrollments.find(e => REGULAR_CLASS_TYPES.has(e.class_type) && e.class_number);
 }
 
+function resolveNaesinKey(student, enrollment) {
+    if (!enrollment) return '';
+    if (typeof enrollment.naesin_class_override === 'string') {
+        return enrollment.naesin_class_override;
+    }
+    return buildNaesinKey(student, enrollment);
+}
+
 function hasExplicitNaesin(enrollments, date) {
     return enrollments.some(e => e.class_type === '내신' && (!validDate(e.start_date) || e.start_date <= date));
 }
 
 function hasAutoNaesin(student, enrollment, date, classSettings) {
-    const key = enrollment ? buildNaesinKey(student, enrollment) : '';
+    const key = resolveNaesinKey(student, enrollment);
     const cs = key ? classSettings[key] : null;
     return !!(cs?.naesin_start && cs?.naesin_end && cs.naesin_start <= date && cs.naesin_end >= date);
+}
+
+function virtualNaesinEnrollment(student, enrollment, date, classSettings) {
+    const key = resolveNaesinKey(student, enrollment);
+    const cs = key ? classSettings[key] : null;
+    if (!cs?.naesin_start || !cs?.naesin_end || cs.naesin_start > date || cs.naesin_end < date) return null;
+    return {
+        class_type: '내신',
+        level_symbol: '',
+        class_number: key,
+        day: Object.keys(cs.schedule || {}),
+        schedule: cs.schedule || {},
+    };
+}
+
+function virtualFreeEnrollment(enrollment, date, classSettings) {
+    const code = classCode(enrollment);
+    const cs = code ? classSettings[code] : null;
+    if (!cs?.free_start || !cs?.free_end || cs.free_start > date || cs.free_end < date) return null;
+    return {
+        class_type: '자유학기',
+        level_symbol: enrollment?.level_symbol || '',
+        class_number: enrollment?.class_number || '',
+        day: Object.keys(cs.free_schedule || {}),
+        schedule: cs.free_schedule || {},
+    };
 }
 
 function activeEnrollments(student, date, classSettings) {
@@ -102,8 +136,20 @@ function activeEnrollments(student, date, classSettings) {
     if (!current.length) return [];
 
     const regular = regularEnrollment(current);
-    if (hasExplicitNaesin(current, date) || hasAutoNaesin(student, regular, date, classSettings)) {
-        return current.filter(e => (e.class_type || '정규') !== '정규');
+    const virtualNaesin = virtualNaesinEnrollment(student, regular, date, classSettings);
+    if (hasExplicitNaesin(current, date) || virtualNaesin) {
+        const nonRegular = current.filter(e => (e.class_type || '정규') !== '정규');
+        return virtualNaesin ? [virtualNaesin, ...nonRegular] : nonRegular;
+    }
+
+    const virtualFree = virtualFreeEnrollment(regular, date, classSettings);
+    if (virtualFree) {
+        const code = classCode(virtualFree);
+        return [
+            virtualFree,
+            ...current.filter(e => !['정규', '자유학기'].includes(e.class_type || '정규') || classCode(e) !== code)
+                .filter(e => e !== virtualFree),
+        ];
     }
 
     const activeFreeCodes = new Set(current
@@ -247,7 +293,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, date }) {
             || studentHwTasks.some(t => t.type === '등원' && t.scheduled_date === date)
             || studentTestTasks.some(t => t.type === '등원' && t.scheduled_date === date)
             || studentAbsences.some(a => a.resolution === '보충' && a.makeup_date === date && a.status === 'open');
-        if (!todayEnrolls.length && !hasVisitTask && !records.has(id)) return;
+        if (!todayEnrolls.length && !hasVisitTask) return;
 
         const naesin = isNaesinActive(student, date, classSettings);
         const free = isFreeActive(student, date, classSettings);
@@ -260,7 +306,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, date }) {
 
         const primaryEnroll = todayEnrolls[0] || enrolls[0] || {};
         const code = groupKey === 'naesin'
-            ? (buildNaesinKey(student, primaryEnroll) || classCode(primaryEnroll) || '내신')
+            ? (classCode(primaryEnroll) || resolveNaesinKey(student, regularEnrollment(currentEnrollments(student, date))) || '내신')
             : (classCode(primaryEnroll) || (groupKey === 'irregular' ? '비정규' : '미지정'));
         if (classFilter && code !== classFilter && groupKey !== 'diagnostic') return;
 

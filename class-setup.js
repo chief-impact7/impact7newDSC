@@ -1105,11 +1105,11 @@ window.submitWizard = async function () {
         // 3. 학생별 enrollment 추가 (batch + arrayUnion으로 경합 방지)
         const today = todayStr();
 
-        // 내신은 정규/자유학기 enrollment 수정이 필요해 학생 doc을 먼저 읽어야 한다.
+        // 내신/자유학기는 정규 enrollment 기준 임시 전환이므로 학생 doc을 먼저 읽는다.
         // 정규도 같은 학생의 옛 정규 enrollment를 자동 종료해야 하므로 미리 읽는다.
         // 직렬 await 대신 한 번에 병렬로 받아 RTT를 학생 수만큼이 아닌 1번으로 줄인다.
         const enrollmentsByDocId = new Map();
-        if (d.classType === '내신' || d.classType === '정규') {
+        if (d.classType === '내신' || d.classType === '자유학기' || d.classType === '정규') {
             const snaps = await Promise.all(
                 d.students.map(s => getDoc(doc(db, 'students', s.docId)))
             );
@@ -1179,13 +1179,22 @@ window.submitWizard = async function () {
             if (d.classType === '내신') {
                 // 정규/자유학기 enrollment에 naesin_class_override 박아 명시 매핑.
                 // arrayUnion으로는 기존 element 수정 불가 → 전체 enrollments 다시 쓰기.
-                const updated = (enrollmentsByDocId.get(student.docId) || []).map(e =>
+                const existing = enrollmentsByDocId.get(student.docId) || [];
+                const hasRegular = existing.some(e => e.class_type === '정규' || e.class_type === '자유학기');
+                if (!hasRegular) throw new Error(`${student.name} 학생은 정규/자유학기 등록이 없어 내신반에 추가할 수 없습니다.`);
+                const updated = existing.map(e =>
                     (e.class_type === '정규' || e.class_type === '자유학기')
                         ? { ...e, naesin_class_override: d.classCode }
                         : e
                 );
-                updated.push(newEnrollment);
                 batchUpdate(batch, studentRef, { enrollments: updated });
+            } else if (d.classType === '자유학기') {
+                const existing = enrollmentsByDocId.get(student.docId) || [];
+                const hasRegular = existing.some(e =>
+                    (e.class_type === '정규' || e.class_type === '자유학기') &&
+                    `${e.level_symbol || ''}${e.class_number || ''}` === d.classCode
+                );
+                if (!hasRegular) throw new Error(`${student.name} 학생은 ${d.classCode} 정규반 등록이 없어 자유학기반에 추가할 수 없습니다.`);
             } else if (d.classType === '정규') {
                 // 신학기 정규 enrollment 추가 시 옛 정규 enrollment를 강제 종료
                 // (end_date 미설정 + 같은 class_type='정규'인 항목에 end_date=새 start_date - 1 설정).
