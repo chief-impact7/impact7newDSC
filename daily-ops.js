@@ -2765,6 +2765,14 @@ async function saveStudentScheduledTime(studentId, classCode, time) {
 // ─── Enrollment 편집 ─────────────────────────────────────────────────────────
 let editingEnrollment = { studentId: null, enrollIdx: 0 };
 
+function hasActiveCodedEnrollment(enrollments, date = todayStr()) {
+    return (enrollments || []).some(e => {
+        const code = enrollmentCode(e);
+        if (!code) return false;
+        return !e.end_date || e.end_date >= date;
+    });
+}
+
 function openEnrollmentModal(studentId, enrollIdx) {
     const student = findStudent(studentId);
     if (!student) return;
@@ -2841,6 +2849,10 @@ async function saveEnrollment() {
     else delete updated.end_date;
 
     enrollments[enrollIdx] = updated;
+    if (['재원', '등원예정'].includes(student.status) && !hasActiveCodedEnrollment(enrollments)) {
+        alert('재원/등원예정 학생은 활성 반이 최소 1개 필요합니다. 퇴원 처리나 휴퇴원요청서 없이 모든 반을 종료할 수 없습니다.');
+        return;
+    }
 
     showSaveIndicator('saving');
     try {
