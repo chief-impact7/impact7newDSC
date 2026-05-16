@@ -66,6 +66,13 @@ body {
     font-family: inherit;
 }
 .dash-login-btn:hover { background: var(--bg); }
+.dash-login-error {
+    margin-top: 14px;
+    color: var(--danger);
+    font-size: 13px;
+    line-height: 1.45;
+    max-width: 320px;
+}
 
 .dash-loading {
     display: flex;
@@ -408,6 +415,337 @@ body {
 }
 .dash-table tr:last-child td { border-bottom: none; }
 
+/* ─── 일일 상황판 ─── */
+.daily-log-page {
+    --daily-cream: #f2f0eb;
+    --daily-ceramic: #edebe9;
+    --daily-green: #006241;
+    --daily-green-accent: #00754a;
+    --daily-green-dark: #1e3932;
+    --daily-green-light: #d4e9e2;
+    --daily-gold-light: #faf6ee;
+    --daily-gold: #cba258;
+    --daily-text: rgba(0, 0, 0, .87);
+    --daily-muted: rgba(0, 0, 0, .58);
+    --daily-border: rgba(0, 0, 0, .12);
+    --daily-shadow: 0 0 .5px rgba(0, 0, 0, .14), 0 1px 1px rgba(0, 0, 0, .24);
+    background: var(--daily-cream);
+    padding: 18px 24px 28px;
+    letter-spacing: -0.01em;
+}
+
+.daily-log-summary {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.daily-log-metric,
+.daily-log-main-card,
+.daily-log-side-card {
+    background: var(--surface);
+    border-radius: 12px;
+    box-shadow: var(--daily-shadow);
+    overflow: hidden;
+}
+
+.daily-log-metric {
+    min-height: 92px;
+    padding: 15px 16px;
+}
+
+.daily-log-metric-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--daily-muted);
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+
+.daily-log-metric-label .material-symbols-outlined {
+    color: var(--daily-green);
+    font-size: 19px;
+}
+
+.daily-log-metric-value {
+    color: var(--daily-text);
+    font-size: 30px;
+    line-height: 1;
+    font-weight: 800;
+}
+
+.daily-log-metric-note {
+    color: var(--daily-muted);
+    font-size: 12px;
+    margin-top: 9px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.daily-log-work-area {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 14px;
+    align-items: start;
+}
+
+.daily-log-main-head,
+.daily-log-side-head {
+    min-height: 52px;
+    background: var(--daily-green-dark);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0 18px;
+}
+
+.daily-log-main-head > div,
+.daily-log-side-head > div {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 800;
+}
+
+.daily-log-main-head > span,
+.daily-log-side-head > span {
+    color: rgba(255, 255, 255, .72);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.daily-log-accordion {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+    background: var(--daily-ceramic);
+}
+
+.daily-log-details {
+    background: var(--surface);
+    border-radius: 12px;
+    box-shadow: var(--daily-shadow);
+    overflow: hidden;
+}
+
+.daily-log-details > summary {
+    min-height: 58px;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 0 16px;
+    cursor: pointer;
+    list-style: none;
+}
+
+.daily-log-details > summary::-webkit-details-marker { display: none; }
+
+.daily-log-chev {
+    color: var(--daily-green-accent);
+    transition: transform .15s ease;
+}
+
+.daily-log-details[open] .daily-log-chev { transform: rotate(90deg); }
+
+.daily-log-group-title {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+}
+
+.daily-log-group-title strong {
+    color: var(--daily-green);
+    font-size: 17px;
+    white-space: nowrap;
+}
+
+.daily-log-group-title span {
+    color: var(--daily-muted);
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.daily-log-counts,
+.daily-log-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.daily-log-counts {
+    justify-content: flex-end;
+}
+
+.daily-log-class-block {
+    border-top: 1px solid var(--daily-border);
+}
+
+.daily-log-class-head {
+    min-height: 42px;
+    background: var(--daily-gold-light);
+    border-bottom: 1px solid var(--daily-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0 14px;
+}
+
+.daily-log-class-head strong {
+    color: var(--daily-green-dark);
+    font-size: 14px;
+}
+
+.daily-log-class-head span {
+    color: var(--daily-muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.daily-log-table-wrap {
+    overflow: auto;
+    max-height: 500px;
+}
+
+.daily-log-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 13px;
+}
+
+.daily-log-table th,
+.daily-log-table td {
+    border-bottom: 1px solid var(--daily-border);
+    padding: 10px 11px;
+    text-align: left;
+    vertical-align: top;
+}
+
+.daily-log-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--daily-green-light);
+    color: var(--daily-green-dark);
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.daily-log-table tbody tr:last-child td { border-bottom: 0; }
+.daily-log-table tbody tr:hover { background: rgba(212, 233, 226, .22); }
+
+.daily-log-student {
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.daily-log-sub {
+    display: block;
+    color: var(--daily-muted);
+    font-size: 12px;
+    font-weight: 500;
+    margin-top: 2px;
+}
+
+.daily-log-pill,
+.daily-log-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 50px;
+    white-space: nowrap;
+}
+
+.daily-log-pill {
+    min-height: 24px;
+    padding: 2px 9px;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.daily-log-pill.ok { background: var(--daily-green-light); color: var(--daily-green); }
+.daily-log-pill.bad { background: #f8dfdc; color: var(--danger); }
+.daily-log-pill.warn { background: #fff0cf; color: #b46a00; }
+.daily-log-pill.info { background: #e5f3ee; color: var(--daily-green-accent); }
+.daily-log-pill.gold { background: var(--daily-gold-light); color: #775315; }
+.daily-log-pill.dark { background: var(--daily-green-dark); color: #fff; }
+
+.daily-log-chip {
+    border: 1px solid rgba(0, 0, 0, .1);
+    background: #f9f9f9;
+    padding: 3px 8px;
+    color: rgba(0, 0, 0, .74);
+    font-size: 12px;
+}
+
+.daily-log-chip.issue {
+    color: var(--danger);
+    font-weight: 800;
+}
+
+.daily-log-empty,
+.daily-log-empty-inline {
+    color: var(--text-third);
+    font-size: 13px;
+}
+
+.daily-log-empty {
+    padding: 18px;
+    text-align: center;
+}
+
+.daily-log-side-stack {
+    display: grid;
+    gap: 14px;
+}
+
+.daily-log-side-list {
+    display: grid;
+    padding: 8px 16px 16px;
+}
+
+.daily-log-side-item {
+    border-bottom: 1px solid var(--daily-border);
+    padding: 10px 0;
+    display: grid;
+    gap: 5px;
+}
+
+.daily-log-side-item:last-child { border-bottom: 0; }
+
+.daily-log-side-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 13px;
+}
+
+.daily-log-side-top strong { white-space: nowrap; }
+
+.daily-log-side-top span {
+    color: var(--daily-muted);
+    text-align: right;
+}
+
+.daily-log-side-note {
+    color: var(--daily-muted);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
 /* OX 배지 */
 .ox-badge {
     display: inline-block;
@@ -518,6 +856,29 @@ body {
     .dash-donut-wrap {
         width: 100px;
         height: 100px;
+    }
+    .daily-log-page {
+        padding: 12px;
+    }
+    .daily-log-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .daily-log-work-area {
+        grid-template-columns: 1fr;
+    }
+    .daily-log-details > summary {
+        grid-template-columns: 28px minmax(0, 1fr);
+    }
+    .daily-log-counts {
+        grid-column: 2;
+        justify-content: flex-start;
+    }
+    .daily-log-group-title {
+        display: block;
+    }
+    .daily-log-group-title span {
+        display: block;
+        margin-top: 2px;
     }
 }
 

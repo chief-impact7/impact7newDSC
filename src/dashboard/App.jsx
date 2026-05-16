@@ -12,6 +12,7 @@ import TestSummary from './components/TestSummary.jsx';
 import RetestSummary from './components/RetestSummary.jsx';
 import ScheduleSummary from './components/ScheduleSummary.jsx';
 import PostponedTasks from './components/PostponedTasks.jsx';
+import DailyLogBoard from './components/DailyLogBoard.jsx';
 
 // 이번 주 월요일~일요일 구하기
 function getWeekRange(dateStr) {
@@ -43,13 +44,14 @@ function SkeletonCard() {
 export default function App() {
     const [user, setUser] = useState(null);
     const [authLoading, setAuthLoading] = useState(true);
-    const [rangeType, setRangeType] = useState('week'); // 'day' | 'week' | 'custom'
+    const [rangeType, setRangeType] = useState('day'); // 'day' | 'week' | 'custom'
     const [baseDate, setBaseDate] = useState(todayStr());
     const [customStart, setCustomStart] = useState(todayStr());
     const [customEnd, setCustomEnd] = useState(todayStr());
     const [branchFilter, setBranchFilter] = useState('');
     const [classFilter, setClassFilter] = useState('');
     const [semesterSettings, setSemesterSettings] = useState({});
+    const [loginError, setLoginError] = useState('');
 
     // 학기 설정 로드 (1회)
     useEffect(() => {
@@ -63,10 +65,11 @@ export default function App() {
                 const email = u.email || '';
                 const allowed = email.endsWith('@gw.impact7.kr') || email.endsWith('@impact7.kr');
                 if (!u.emailVerified || !allowed) {
-                    alert('허용되지 않은 계정입니다.');
-                    logout();
+                    alert('허용되지 않은 계정입니다.\n학원 계정(@gw.impact7.kr 또는 @impact7.kr)으로 다시 로그인해주세요.');
+                    logout().catch(err => console.error('[dashboard logout]', err));
                     setUser(null);
                 } else {
+                    setLoginError('');
                     setUser(u);
                 }
             } else {
@@ -91,7 +94,7 @@ export default function App() {
 
     // 데이터 로드
     const { students, loading: studentsLoading, error } = useStudents(user);
-    const { checks, postponed, loading: dataLoading, error: dashError } = useDashboardData(user, startDate, endDate);
+    const { checks, postponed, dailyLog, loading: dataLoading, error: dashError } = useDashboardData(user, startDate, endDate);
 
     // 선택 날짜 기준 학기 감지
     const currentSemesters = useMemo(() =>
@@ -102,13 +105,20 @@ export default function App() {
     const classList = useMemo(() => {
         const set = new Set();
         students.forEach(s => {
+            if (branchFilter && branchFromStudent(s) !== branchFilter) return;
             (s.enrollments || []).forEach(e => {
                 const code = enrollmentCode(e);
                 if (code) set.add(code);
             });
         });
         return [...set].sort();
-    }, [students]);
+    }, [students, branchFilter]);
+
+    useEffect(() => {
+        if (classFilter && !classList.includes(classFilter)) {
+            setClassFilter('');
+        }
+    }, [classFilter, classList]);
 
     // 필터 적용된 checks
     const filteredChecks = useMemo(() => {
@@ -133,6 +143,23 @@ export default function App() {
         });
     }, [postponed, branchFilter, classFilter, students]);
 
+    const handleDashboardLogin = async () => {
+        setLoginError('');
+        try {
+            await signInWithGoogle();
+        } catch (err) {
+            const messages = {
+                'auth/popup-blocked': '팝업이 차단되었습니다. 브라우저에서 팝업을 허용해주세요.',
+                'auth/popup-closed-by-user': '로그인 팝업이 닫혔습니다. 다시 시도해주세요.',
+                'auth/cancelled-popup-request': '이미 로그인 팝업이 열려 있습니다.',
+                'auth/unauthorized-domain': '현재 접속 주소가 Firebase 로그인 허용 도메인에 없습니다. 로컬에서는 http://localhost:5174/dashboard.html 로 접속해주세요.',
+            };
+            const message = messages[err?.code] || `로그인 실패: ${err?.code || err?.message || err}`;
+            setLoginError(message);
+            alert(message);
+        }
+    };
+
     // ─── 로그인 화면 ───
     if (authLoading) {
         return <div className="dash-loading">로딩 중...</div>;
@@ -143,10 +170,11 @@ export default function App() {
             <div className="dash-login">
                 <div className="dash-login-card">
                     <h1>Impact7 DSC</h1>
-                    <p>대시보드</p>
-                    <button className="dash-login-btn" onClick={() => signInWithGoogle()}>
+                    <p>로그북</p>
+                    <button className="dash-login-btn" onClick={handleDashboardLogin}>
                         Google 로그인
                     </button>
+                    {loginError && <p className="dash-login-error">{loginError}</p>}
                 </div>
             </div>
         );
@@ -182,7 +210,7 @@ export default function App() {
             <header className="dash-header">
                 <div className="dash-header-left">
                     <h1 className="dash-title">Impact7 DSC</h1>
-                    <span className="dash-subtitle">대시보드</span>
+                    <span className="dash-subtitle">로그북</span>
                     <a href="/" className="dash-link">입력 페이지</a>
                 </div>
                 <div className="dash-header-right">
@@ -283,43 +311,62 @@ export default function App() {
                 {loading && <span className="dash-loading-indicator">로딩 중...</span>}
             </div>
 
-            {/* 대시보드 카드 그리드 */}
-            <div className="dash-grid">
-                {loading ? (
-                    <>
+            {rangeType === 'day' ? (
+                loading ? (
+                    <div className="dash-grid">
                         <SkeletonCard />
                         <SkeletonCard />
                         <SkeletonCard />
-                        <SkeletonCard />
-                        <SkeletonCard />
-                        <SkeletonCard />
-                    </>
+                    </div>
                 ) : (
-                    <>
-                        <ErrorBoundary>
-                            <OverviewCard checks={filteredChecks} students={students} />
-                        </ErrorBoundary>
-                        <ErrorBoundary>
-                            <AttendanceSummary checks={filteredChecks} startDate={startDate} endDate={endDate} />
-                        </ErrorBoundary>
-                        <ErrorBoundary>
-                            <HomeworkSummary checks={filteredChecks} />
-                        </ErrorBoundary>
-                        <ErrorBoundary>
-                            <TestSummary checks={filteredChecks} />
-                        </ErrorBoundary>
-                        <ErrorBoundary>
-                            <RetestSummary checks={filteredChecks} />
-                        </ErrorBoundary>
-                        <ErrorBoundary>
-                            <ScheduleSummary checks={filteredChecks} />
-                        </ErrorBoundary>
-                        <ErrorBoundary>
-                            <PostponedTasks tasks={filteredPostponed} />
-                        </ErrorBoundary>
-                    </>
-                )}
-            </div>
+                    <ErrorBoundary>
+                        <DailyLogBoard
+                            students={students}
+                            dailyLog={dailyLog}
+                            branchFilter={branchFilter}
+                            classFilter={classFilter}
+                            date={baseDate}
+                        />
+                    </ErrorBoundary>
+                )
+            ) : (
+                <div className="dash-grid">
+                    {loading ? (
+                        <>
+                            <SkeletonCard />
+                            <SkeletonCard />
+                            <SkeletonCard />
+                            <SkeletonCard />
+                            <SkeletonCard />
+                            <SkeletonCard />
+                        </>
+                    ) : (
+                        <>
+                            <ErrorBoundary>
+                                <OverviewCard checks={filteredChecks} students={students} />
+                            </ErrorBoundary>
+                            <ErrorBoundary>
+                                <AttendanceSummary checks={filteredChecks} startDate={startDate} endDate={endDate} />
+                            </ErrorBoundary>
+                            <ErrorBoundary>
+                                <HomeworkSummary checks={filteredChecks} />
+                            </ErrorBoundary>
+                            <ErrorBoundary>
+                                <TestSummary checks={filteredChecks} />
+                            </ErrorBoundary>
+                            <ErrorBoundary>
+                                <RetestSummary checks={filteredChecks} />
+                            </ErrorBoundary>
+                            <ErrorBoundary>
+                                <ScheduleSummary checks={filteredChecks} />
+                            </ErrorBoundary>
+                            <ErrorBoundary>
+                                <PostponedTasks tasks={filteredPostponed} />
+                            </ErrorBoundary>
+                        </>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

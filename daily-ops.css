@@ -142,6 +142,20 @@ body {
   white-space: nowrap;
 }
 
+.app-bar-link {
+  color: var(--primary);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  border-left: 1px solid var(--border);
+  padding-left: 10px;
+  white-space: nowrap;
+}
+
+.app-bar-link:hover {
+  text-decoration: underline;
+}
+
 .app-bar-center {
   flex: 1;
   display: flex;

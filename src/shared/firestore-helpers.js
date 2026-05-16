@@ -129,6 +129,107 @@ export async function fetchPostponedTasksRange(startDate, endDate) {
     return list;
 }
 
+export async function fetchClassSettingsMap() {
+    const snap = await getDocs(collection(db, 'class_settings'));
+    const map = {};
+    snap.forEach(docSnap => {
+        map[docSnap.id] = docSnap.data();
+    });
+    return map;
+}
+
+export async function fetchDailyRecordsForDate(date) {
+    const q = query(
+        collection(db, 'daily_records'),
+        where('date', '==', date)
+    );
+    const snap = await getDocs(q);
+    const list = [];
+    snap.forEach(docSnap => {
+        list.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    return list;
+}
+
+export async function fetchTempAttendancesForDate(date) {
+    const q = query(
+        collection(db, 'temp_attendance'),
+        where('temp_date', '==', date)
+    );
+    const snap = await getDocs(q);
+    const list = [];
+    snap.forEach(docSnap => {
+        list.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    return list;
+}
+
+async function fetchScheduledTaskRows(collectionName, date) {
+    const scheduledQ = query(
+        collection(db, collectionName),
+        where('scheduled_date', '==', date)
+    );
+    const sourceQ = query(
+        collection(db, collectionName),
+        where('source_date', '==', date)
+    );
+    const [scheduledSnap, sourceSnap] = await Promise.all([
+        getDocs(scheduledQ),
+        getDocs(sourceQ),
+    ]);
+    const map = new Map();
+    const add = (docSnap) => map.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+    scheduledSnap.forEach(add);
+    sourceSnap.forEach(add);
+    return [...map.values()];
+}
+
+export async function fetchAbsenceRecordsForDailyLog(date) {
+    const absenceQ = query(
+        collection(db, 'absence_records'),
+        where('absence_date', '==', date)
+    );
+    const makeupQ = query(
+        collection(db, 'absence_records'),
+        where('makeup_date', '==', date)
+    );
+    const [absenceSnap, makeupSnap] = await Promise.all([
+        getDocs(absenceQ),
+        getDocs(makeupQ),
+    ]);
+    const map = new Map();
+    const add = (docSnap) => map.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+    absenceSnap.forEach(add);
+    makeupSnap.forEach(add);
+    return [...map.values()];
+}
+
+export async function fetchDashboardDailyLogData(date) {
+    const [
+        dailyRecords,
+        tempAttendances,
+        hwFailTasks,
+        testFailTasks,
+        absenceRecords,
+        classSettings,
+    ] = await Promise.all([
+        fetchDailyRecordsForDate(date),
+        fetchTempAttendancesForDate(date),
+        fetchScheduledTaskRows('hw_fail_tasks', date),
+        fetchScheduledTaskRows('test_fail_tasks', date),
+        fetchAbsenceRecordsForDailyLog(date),
+        fetchClassSettingsMap(),
+    ]);
+    return {
+        dailyRecords,
+        tempAttendances,
+        hwFailTasks,
+        testFailTasks,
+        absenceRecords,
+        classSettings,
+    };
+}
+
 // ─── 유틸 ───
 
 function normalizeDays(day) {
