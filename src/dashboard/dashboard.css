@@ -450,6 +450,20 @@ body {
     overflow: hidden;
 }
 
+.daily-log-main-card {
+    background: #ffffff;
+}
+
+.daily-log-side-card.absent {
+    order: 1;
+    background: #fff7f6;
+}
+
+.daily-log-side-card.late {
+    order: 2;
+    background: #fff9ea;
+}
+
 .daily-log-metric {
     min-height: 92px;
     padding: 15px 16px;
@@ -505,15 +519,15 @@ body {
 }
 
 .daily-log-main-head {
-    background: var(--daily-green-dark);
+    background: #006241;
 }
 
 .daily-log-side-head.absent {
-    background: var(--danger);
+    background: #c82014;
 }
 
 .daily-log-side-head.late {
-    background: #b46a00;
+    background: #c27a00;
 }
 
 .daily-log-main-head > div,
@@ -537,7 +551,7 @@ body {
     display: grid;
     gap: 12px;
     padding: 14px;
-    background: var(--daily-ceramic);
+    background: #f4efe7;
 }
 
 .daily-log-details {
@@ -726,6 +740,7 @@ body {
 .daily-log-side-list {
     display: grid;
     padding: 8px 16px 16px;
+    background: inherit;
 }
 
 .daily-log-side-item {

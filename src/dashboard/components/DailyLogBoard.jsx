@@ -477,7 +477,7 @@ function AccordionGroup({ groupKey, rows, children, open = false }) {
 
 function SideList({ title, icon, rows, type }) {
     return (
-        <div className="daily-log-side-card">
+        <div className={`daily-log-side-card ${type}`}>
             <div className={`daily-log-side-head ${type}`}>
                 <div>
                     <span className="material-symbols-outlined">{icon}</span>
