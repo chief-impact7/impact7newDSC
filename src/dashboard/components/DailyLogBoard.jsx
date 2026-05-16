@@ -32,7 +32,20 @@ const normalizedDays = (day) => {
 };
 const validDate = (value) => value && /^\d{4}-/.test(value);
 const text = (value) => (value == null ? '' : String(value).trim());
-const fmtTime = (value) => text(value) || '-';
+const fmtDate = (value) => {
+    const raw = text(value);
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return match ? `${match[1].slice(2)}-${match[2]}-${match[3]}` : raw;
+};
+const fmtTime = (value) => {
+    const raw = text(value);
+    const match = raw.match(/^(\d{1,2}):(\d{2})/);
+    if (!match) return raw || '-';
+    const hour = Number(match[1]);
+    const displayHour = hour % 12 || 12;
+    return `${displayHour}:${match[2]}`;
+};
+const fmtDateTime = (date, time) => [fmtDate(date), time ? fmtTime(time) : ''].filter(Boolean).join(' ');
 
 function getBranch(student) {
     if (student?.branch) return student.branch;
@@ -150,7 +163,7 @@ function actionChips(map) {
     return Object.entries(map || {})
         .filter(([, action]) => action?.type)
         .map(([key, action]) => {
-            const dateTime = [action.scheduled_date, action.scheduled_time].filter(Boolean).join(' ');
+            const dateTime = fmtDateTime(action.scheduled_date, action.scheduled_time);
             return {
                 label: `${key} ${action.type}${dateTime ? ` ${dateTime}` : ''}`,
                 issue: action.type === '등원',
@@ -162,8 +175,8 @@ function taskChips(tasks, label, date) {
     return tasks.map(task => {
         const key = task.domain || task.item || task.content || '';
         const when = task.scheduled_date === date
-            ? [task.scheduled_date, task.scheduled_time].filter(Boolean).join(' ')
-            : task.source_date || '';
+            ? fmtDateTime(task.scheduled_date, task.scheduled_time)
+            : fmtDate(task.source_date);
         return {
             label: `${label}${key ? ` ${key}` : ''}${when ? ` ${when}` : ''}`,
             issue: task.status === 'pending' || task.status === '예정',
@@ -203,7 +216,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, date }) {
                 meta: [studentShortLabel(item), item.branch].filter(Boolean).join(' · '),
                 time: item.temp_time || '',
                 attendance: item.visit_status === '완료' ? '완료' : '예정',
-                attendanceMeta: item.temp_date || date,
+                attendanceMeta: fmtDate(item.temp_date || date),
                 homework: [{ label: '진단평가', issue: false }],
                 tests: [],
                 notes: item.memo || '',
@@ -277,8 +290,8 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, date }) {
         ].filter(Boolean).join(' / ');
         const next = [
             nextHomeworkText(rec),
-            rec.departure?.status ? `귀가: ${rec.departure.status}${rec.departure.time ? ` ${rec.departure.time}` : ''}` : '',
-            rec.extra_visit?.date === date ? `비정규: ${rec.extra_visit.reason || '클리닉'} ${rec.extra_visit.time || ''}` : '',
+            rec.departure?.status ? `귀가: ${rec.departure.status}${rec.departure.time ? ` ${fmtTime(rec.departure.time)}` : ''}` : '',
+            rec.extra_visit?.date === date ? `비정규: ${rec.extra_visit.reason || '클리닉'} ${fmtTime(rec.extra_visit.time)}` : '',
         ].filter(Boolean).join(' / ');
 
         const row = {
@@ -287,7 +300,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, date }) {
             meta: [studentShortLabel(student), code, getBranch(student)].filter(Boolean).join(' · '),
             time: startTime(primaryEnroll, dayName, classSettings) || rec.extra_visit?.time || '',
             attendance: attStatus,
-            attendanceMeta: attendance.time || rec.arrival_time || '',
+            attendanceMeta: fmtTime(attendance.time || rec.arrival_time || ''),
             homework: chips,
             tests,
             notes,
@@ -529,7 +542,7 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                             <span className="material-symbols-outlined">view_list</span>
                             학생별 일일 로그
                         </div>
-                        <span>{date} ({getDayName(date)})</span>
+                        <span>{fmtDate(date)} ({getDayName(date)})</span>
                     </div>
                     <div className="daily-log-accordion">
                         <AccordionGroup groupKey="diagnostic" rows={data.groups.diagnostic} open />
