@@ -478,7 +478,7 @@ function AccordionGroup({ groupKey, rows, children, open = false }) {
 function SideList({ title, icon, rows, type }) {
     return (
         <div className="daily-log-side-card">
-            <div className="daily-log-side-head">
+            <div className={`daily-log-side-head ${type}`}>
                 <div>
                     <span className="material-symbols-outlined">{icon}</span>
                     {title}
@@ -547,8 +547,8 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                 </div>
 
                 <aside className="daily-log-side-stack">
-                    <SideList title="지각 명단" icon="schedule" rows={data.lateRows} type="late" />
                     <SideList title="결석 명단" icon="person_off" rows={data.absentRows} type="absent" />
+                    <SideList title="지각 명단" icon="schedule" rows={data.lateRows} type="late" />
                 </aside>
             </div>
         </div>

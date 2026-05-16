@@ -496,13 +496,24 @@ body {
 .daily-log-main-head,
 .daily-log-side-head {
     min-height: 52px;
-    background: var(--daily-green-dark);
     color: #fff;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
     padding: 0 18px;
+}
+
+.daily-log-main-head {
+    background: var(--daily-green-dark);
+}
+
+.daily-log-side-head.absent {
+    background: var(--danger);
+}
+
+.daily-log-side-head.late {
+    background: #b46a00;
 }
 
 .daily-log-main-head > div,
