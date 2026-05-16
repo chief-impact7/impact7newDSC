@@ -619,7 +619,7 @@ body {
 
 .daily-log-class-head {
     min-height: 42px;
-    background: var(--daily-gold-light);
+    background: var(--daily-green-light);
     border-bottom: 1px solid var(--daily-border);
     display: flex;
     align-items: center;
@@ -663,7 +663,7 @@ body {
     position: sticky;
     top: 0;
     z-index: 1;
-    background: var(--daily-green-light);
+    background: var(--daily-gold-light);
     color: var(--daily-green-dark);
     font-size: 12px;
     font-weight: 800;

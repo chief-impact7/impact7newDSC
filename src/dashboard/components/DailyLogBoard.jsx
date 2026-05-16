@@ -15,14 +15,6 @@ const GROUP_LABELS = {
     free: '자유학기',
     special: '특강',
 };
-const GROUP_DESCRIPTIONS = {
-    diagnostic: '진단평가 때문에 등원하는 학생만 분리 표시',
-    regular: '항상 표시, 반별로 묶어서 확인',
-    irregular: '보강/클리닉/미통과 등 비정규 등원',
-    naesin: '내신 기간 학생',
-    free: '자유학기 수업 학생',
-    special: '특강 학생',
-};
 
 const classCode = (enrollment) => `${enrollment?.level_symbol || ''}${enrollment?.class_number || ''}`;
 const normalizedDays = (day) => {
@@ -436,7 +428,7 @@ function SummaryCard({ icon, label, value, note }) {
                 {label}
             </div>
             <div className="daily-log-metric-value">{value}</div>
-            <div className="daily-log-metric-note">{note}</div>
+            {note && <div className="daily-log-metric-note">{note}</div>}
         </div>
     );
 }
@@ -520,7 +512,6 @@ function AccordionGroup({ groupKey, rows, children, open = false }) {
                 <span className="material-symbols-outlined daily-log-chev">chevron_right</span>
                 <div className="daily-log-group-title">
                     <strong>{GROUP_LABELS[groupKey]}</strong>
-                    <span>{GROUP_DESCRIPTIONS[groupKey]}</span>
                 </div>
                 <div className="daily-log-counts">
                     <span className="daily-log-pill info">{rows.length}명</span>
@@ -574,7 +565,7 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
         <div className="daily-log-page">
             <div className="daily-log-summary">
                 <SummaryCard icon="groups" label="전체 예정" value={data.summary.total} note={`정규 ${data.summary.regular} / 비정규 ${data.summary.irregular} / 내신 ${data.summary.naesin} / 자유학기 ${data.summary.free} / 특강 ${data.summary.special}`} />
-                <SummaryCard icon="science" label="진단평가" value={data.summary.diagnostic} note="있을 때만 최상단 표시" />
+                <SummaryCard icon="science" label="진단평가" value={data.summary.diagnostic} />
                 <SummaryCard icon="how_to_reg" label="출석" value={data.summary.attended} note="출석/지각/조퇴 포함" />
                 <SummaryCard icon="schedule" label="지각" value={data.summary.late} note="우측 명단 표시" />
                 <SummaryCard icon="person_off" label="결석" value={data.summary.absent} note="결석대장/사유 함께 표시" />
