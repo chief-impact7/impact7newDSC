@@ -746,19 +746,20 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/contractSigningTokens/$(request.resource.data.signingTokenId)).data.contractId == contractId
           && get(/databases/$(database)/documents/contractSigningTokens/$(request.resource.data.signingTokenId)).data.status == 'pending'
           && get(/databases/$(database)/documents/contractSigningTokens/$(request.resource.data.signingTokenId)).data.expiresAt > request.time;
-        // signed→signed: 급여통보서 서명 (salaryNotificationToken 검증, status 불변)
-        allow update: if resource.data.status == 'signed'
-          && request.resource.data.status == 'signed'
+        // signed/salary_sent→자기자신: 급여통보서 서명 (salaryNotificationToken 검증, status 불변)
+        // status는 director가 'salary_sent'로 바꾼 뒤 강사가 서명하므로 두 상태 모두 허용
+        allow update: if resource.data.status in ['signed', 'salary_sent']
+          && request.resource.data.status == resource.data.status
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['salaryNotification', 'updatedAt', 'salaryPdfUrl', 'salaryTokenId'])
           && 'salaryTokenId' in request.resource.data
           && get(/databases/$(database)/documents/salaryNotificationTokens/$(request.resource.data.salaryTokenId)).data.contractId == contractId
           && get(/databases/$(database)/documents/salaryNotificationTokens/$(request.resource.data.salaryTokenId)).data.status == 'pending'
           && get(/databases/$(database)/documents/salaryNotificationTokens/$(request.resource.data.salaryTokenId)).data.expiresAt > request.time;
-        // signed→signed: signedPdfUrl 재업로드 수리 (서명 후 PDF 업로드 실패 복구용)
+        // signed/salary_sent→자기자신: signedPdfUrl 재업로드 수리 (서명 후 PDF 업로드 실패 복구용)
         // 기존 signingToken이 같은 contractId를 가리키고 유효기간 내이면 허용. signature·status는 불변.
-        allow update: if resource.data.status == 'signed'
-          && request.resource.data.status == 'signed'
+        allow update: if resource.data.status in ['signed', 'salary_sent']
+          && request.resource.data.status == resource.data.status
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['signedPdfUrl', 'updatedAt'])
           && 'signingTokenId' in resource.data
@@ -884,18 +885,18 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/employeeContractSigningTokens/$(request.resource.data.signingTokenId)).data.contractId == contractId
           && get(/databases/$(database)/documents/employeeContractSigningTokens/$(request.resource.data.signingTokenId)).data.status == 'pending'
           && get(/databases/$(database)/documents/employeeContractSigningTokens/$(request.resource.data.signingTokenId)).data.expiresAt > request.time;
-        // signed→signed: 급여통보서 서명 (salaryNotificationToken 검증, status 불변)
-        allow update: if resource.data.status == 'signed'
-          && request.resource.data.status == 'signed'
+        // signed/salary_sent→자기자신: 급여통보서 서명 (salaryNotificationToken 검증, status 불변)
+        allow update: if resource.data.status in ['signed', 'salary_sent']
+          && request.resource.data.status == resource.data.status
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['salaryNotification', 'updatedAt', 'salaryPdfUrl', 'salaryTokenId'])
           && 'salaryTokenId' in request.resource.data
           && get(/databases/$(database)/documents/salaryNotificationTokens/$(request.resource.data.salaryTokenId)).data.contractId == contractId
           && get(/databases/$(database)/documents/salaryNotificationTokens/$(request.resource.data.salaryTokenId)).data.status == 'pending'
           && get(/databases/$(database)/documents/salaryNotificationTokens/$(request.resource.data.salaryTokenId)).data.expiresAt > request.time;
-        // signed→signed: signedPdfUrl 재업로드 수리 (서명 후 PDF 업로드 실패 복구용)
-        allow update: if resource.data.status == 'signed'
-          && request.resource.data.status == 'signed'
+        // signed/salary_sent→자기자신: signedPdfUrl 재업로드 수리 (서명 후 PDF 업로드 실패 복구용)
+        allow update: if resource.data.status in ['signed', 'salary_sent']
+          && request.resource.data.status == resource.data.status
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['signedPdfUrl', 'updatedAt'])
           && 'signingTokenId' in resource.data
