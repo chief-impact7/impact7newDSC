@@ -1016,6 +1016,45 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // [공통] 상담 데이터
+    // =========================================================================
+    match /consultations/{cid} {
+      allow read: if isAuthorized();
+
+      allow create: if isAuthorized()
+        && request.resource.data.teacher_id == request.auth.uid
+        && request.resource.data.ai_processed == false
+        && request.resource.data.keys().hasAll(['student_id', 'teacher_id', 'date', 'consultation_type', 'text', 'ai_processed', 'created_at', 'updated_at']);
+
+      // 본인 작성 + 24h 이내 update만. ai_processed/ai_processed_at은 admin SDK만 변경 가능
+      allow update: if isAuthorized()
+        && resource.data.teacher_id == request.auth.uid
+        && resource.data.created_at > request.time - duration.value(24, 'h')
+        && !(request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['ai_processed', 'ai_processed_at', 'teacher_id', 'created_at']));
+
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // [공통] 상담 AI 산출물 (서버 전용 쓰기, 클라이언트 읽기만)
+    // =========================================================================
+    match /consultation_summaries/{studentId} {
+      allow read: if isAuthorized();
+      allow write: if false;
+    }
+
+    match /consultation_briefings/{studentId} {
+      allow read: if isAuthorized();
+      allow write: if false;
+    }
+
+    match /consultation_trends/{periodKey} {
+      allow read: if isAuthorized();
+      allow write: if false;
+    }
+
+    // =========================================================================
     // 기본 거부: 위에 매칭되지 않는 모든 경로 차단
     // =========================================================================
     match /{document=**} {
