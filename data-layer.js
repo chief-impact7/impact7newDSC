@@ -44,12 +44,19 @@ export function getClassDomains(classCode) {
 // ─── Teachers (선생님 목록) ─────────────────────────────────────────────────
 
 export async function loadTeachers() {
-    const oneWeekAgo = Timestamp.fromDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
-    const q = query(collection(db, 'teachers'), where('last_login', '>=', oneWeekAgo));
-    const snap = await getDocs(q);
-    state.teachersList = [];
-    snap.forEach(d => state.teachersList.push({ email: d.id, ...d.data() }));
-    state.teachersList.sort((a, b) => (a.display_name || a.email).localeCompare(b.display_name || b.email, 'ko'));
+    // 최근 30일 내 로그인 선생님만 (옛 7일은 휴가·잠깐 안 쓴 멤버까지 누락되어 너무 좁음).
+    // 콘솔 로그로 다음 빈 드롭다운 사고 발생 시 원인 추적 가능하도록.
+    try {
+        const cutoff = Timestamp.fromDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+        const q = query(collection(db, 'teachers'), where('last_login', '>=', cutoff));
+        const snap = await getDocs(q);
+        state.teachersList = [];
+        snap.forEach(d => state.teachersList.push({ email: d.id, ...d.data() }));
+        state.teachersList.sort((a, b) => (a.display_name || a.email).localeCompare(b.display_name || b.email, 'ko'));
+        console.log(`[loadTeachers] ${state.teachersList.length}명 (30일 내)`);
+    } catch (err) {
+        console.error('[loadTeachers] 실패:', err);
+    }
 }
 
 export async function trackTeacherLogin(user) {
@@ -68,7 +75,10 @@ export async function trackTeacherLogin(user) {
 
 export function getTeacherName(email) {
     if (!email) return '';
-    return email.split('@')[0];
+    // teachers/{email}.display_name 단일 진실 원천 사용 (예: "Aaron Baek").
+    // 데이터 깨진 케이스(display_name 누락) 안전망으로만 email 앞부분 fallback.
+    const t = state.teachersList?.find(x => x.email === email);
+    return t?.display_name || email.split('@')[0];
 }
 
 // ─── Class Next Homework (반별 다음숙제) ────────────────────────────────────
