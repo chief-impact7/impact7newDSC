@@ -4,7 +4,7 @@
 
 import {
     collection, getDocs, doc, getDoc,
-    query, where, serverTimestamp, writeBatch, Timestamp,
+    query, where, orderBy, limit, serverTimestamp, writeBatch, Timestamp,
     onSnapshot
 } from 'firebase/firestore';
 import { db } from './firebase-config.js';
@@ -795,4 +795,42 @@ let loadRoleMemos, syncAbsenceRecords;
 export function initDataLayerDeps2(deps) {
     loadRoleMemos = deps.loadRoleMemos;
     syncAbsenceRecords = deps.syncAbsenceRecords;
+}
+
+// =========================================================================
+// 상담 데이터 헬퍼 (consultation-card.js 가 사용)
+// =========================================================================
+export async function addConsultation(data) {
+  // data: { student_id, student_name, teacher_id, teacher_name, date, consultation_type, text }
+  const payload = {
+    ...data,
+    ai_processed: false,
+    ai_processed_at: null,
+    created_at: serverTimestamp(),
+    updated_at: serverTimestamp(),
+  };
+  // consultation_id 필드는 저장하지 않음 — doc.id가 곧 consultation_id (spec 4.1)
+  const ref = await auditAdd(collection(db, 'consultations'), payload);
+  return ref?.id;
+}
+
+export async function getStudentSummary(studentId) {
+  const snap = await getDoc(doc(db, 'consultation_summaries', studentId));
+  return snap.exists() ? snap.data() : null;
+}
+
+export async function getStudentBriefing(studentId) {
+  const snap = await getDoc(doc(db, 'consultation_briefings', studentId));
+  return snap.exists() ? snap.data() : null;
+}
+
+export async function listStudentConsultations(studentId, limitCount = 10) {
+  const q = query(
+    collection(db, 'consultations'),
+    where('student_id', '==', studentId),
+    orderBy('date', 'desc'),
+    limit(limitCount)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
