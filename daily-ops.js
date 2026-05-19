@@ -2155,7 +2155,9 @@ function renderListPanel() {
         const todayEnroll = getActiveEnrollments(s, state.selectedDate).find(e => e.day.includes(dayName));
         if (!isLeave) {
             const arrivalTime = rec?.arrival_time;
-            let scheduledTime = getStudentStartTime(todayEnroll);
+            // dayName 전달 — 합성 내신/자유학기 enrollment의 schedule 객체에서 요일별 시간 조회 가능해야 함.
+            // 누락 시 fallback이 hw_fail/test_fail 보충 시간(17:30 등)을 가장 이른 시간으로 끌어와 정규 등원시간을 덮음.
+            let scheduledTime = getStudentStartTime(todayEnroll, dayName);
             if (!scheduledTime) {
                 // 비정규(오늘 enrollment 없음) — hw_fail/test_fail/extra_visit의 가장 이른 scheduled_time 사용
                 const eff = getEffectiveAttendanceTime(s, state.selectedDate, dayName);

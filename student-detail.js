@@ -998,8 +998,10 @@ export function renderStudentDetail(studentId) {
     const studentHwTasks = state.hwFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
     const studentTestTasks = state.testFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
 
-    // 등원 일정 카드 — 요일 + 시간 표시 (휴원 학생 미표시)
-    const semesterEnrollments = student.enrollments;
+    // 등원 일정 카드 — 활성 enrollment만 표시 (휴원 학생 미표시)
+    // 내신/자유학기 기간 중에는 그쪽으로 합성된 enrollment만 노출 (정규 자동 숨김)
+    // 합성 enrollment의 schedule 객체에서 요일별 시간을 읽음
+    const semesterEnrollments = getActiveEnrollments(student, state.selectedDate);
     const dayNameForDetail = getDayName(state.selectedDate);
     const arrivalTimeHtml = (isLeaveStudent || isWithdrawn) ? '' : semesterEnrollments.length > 0 ? `
         <div class="detail-card">
@@ -1008,14 +1010,17 @@ export function renderStudentDetail(studentId) {
                 등원 일정
             </div>
             ${semesterEnrollments.map(e => {
-                const idx = student.enrollments.indexOf(e);
+                const idx = student.enrollments.indexOf(e);   // 합성 enrollment는 -1 → edit 버튼 숨김
                 const code = enrollmentCode(e);
                 const ct = e.class_type || '정규';
                 const days = (e.day || []).join('·');
                 const classDefault = state.classSettings[code]?.default_time || '';
                 const individual = e.start_time || e.time || '';
+                // 합성 내신/자유학기 enrollment는 schedule 객체에 요일별 시간이 있음
+                const scheduleTimes = e.schedule && typeof e.schedule === 'object' ? Object.values(e.schedule).filter(Boolean) : [];
+                const scheduleTime = scheduleTimes[0] || '';
                 const isDefault = !individual || individual === classDefault;
-                const displayTime = isDefault ? classDefault : individual;
+                const displayTime = isDefault ? (classDefault || scheduleTime) : individual;
                 const isToday = (e.day || []).includes(dayNameForDetail);
                 const periodStr = ct !== '정규' && e.end_date ? ` ~${e.end_date.slice(5)}` : '';
                 return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;${isToday ? 'font-weight:600;' : 'opacity:0.7;'}">
@@ -1025,7 +1030,7 @@ export function renderStudentDetail(studentId) {
                     <span style="font-size:13px;">${displayTime ? esc(formatTime12h(displayTime)) : '-'}</span>
                     ${periodStr ? `<span style="font-size:10px;color:var(--text-sec);">${esc(periodStr)}</span>` : ''}
                     ${isToday ? '<span style="font-size:10px;color:var(--primary);font-weight:600;">오늘</span>' : ''}
-                    <span class="material-symbols-outlined" style="font-size:14px;color:var(--text-sec);cursor:pointer;margin-left:auto;" onclick="openEnrollmentModal('${escAttr(studentId)}', ${idx})">edit</span>
+                    ${idx >= 0 ? `<span class="material-symbols-outlined" style="font-size:14px;color:var(--text-sec);cursor:pointer;margin-left:auto;" onclick="openEnrollmentModal('${escAttr(studentId)}', ${idx})">edit</span>` : ''}
                 </div>`;
             }).join('')}
         </div>
