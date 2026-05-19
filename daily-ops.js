@@ -3256,7 +3256,7 @@ window._esc = esc;
 window._escAttr = escAttr;
 window._formatTime12h = formatTime12h;
 window.getTeacherName = getTeacherName;
-Object.defineProperty(window, 'state.teachersList', { get() { return state.teachersList; }, configurable: true });
+Object.defineProperty(window, 'teachersList', { get() { return state.teachersList; }, configurable: true });
 
 // ─── 일회성 마이그레이션: class_type='내신' enrollment → 정규 변환 ─────────────
 // 사용법 (브라우저 콘솔):

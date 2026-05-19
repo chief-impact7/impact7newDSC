@@ -966,7 +966,7 @@ function renderNaesinClassDetail(csKey) {
     const teachersList = window.teachersList || [];
     const currentTeacher = cs.teacher || '';
     const teacherOptions = teachersList.map(t => {
-        const name = t.email.split('@')[0];
+        const name = window.getTeacherName?.(t.email) || t.email.split('@')[0];
         return `<option value="${_escAttr(t.email)}" ${t.email === currentTeacher ? 'selected' : ''}>${_esc(name)}</option>`;
     }).join('');
 

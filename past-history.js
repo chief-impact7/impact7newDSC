@@ -6,7 +6,7 @@
 // 데이터 출처:
 //   • 과거 수업/반 이력 → student.enrollments[] + history_logs ("종강 처리: code (정규)" 텍스트 파싱)
 //   • 휴원/퇴원 사이클 → leave_requests (사이클 단위로 묶음)
-//   • 담당 선생 → class_settings[code].teacher → state.teachersList의 display_name
+//   • 담당 선생 → class_settings[code].teacher → 이메일 @ 앞부분
 //
 // AGENTS.md 규칙 1·3 준수: 새 기능은 별도 모듈, 공유 상태는 state.js 통해.
 
@@ -31,9 +31,6 @@ export function isPastViewStudent(student) {
 // ─── 담당 선생 lookup ──────────────────────────────────────────────────────
 function _teacherDisplayName(email) {
     if (!email) return '';
-    const t = state.teachersList?.find(x => x.email === email);
-    if (t?.display_name) return t.display_name;
-    // fallback: 이메일에서 @ 앞부분
     return email.split('@')[0] || '';
 }
 

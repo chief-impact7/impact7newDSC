@@ -46,8 +46,7 @@ export function getScheduledVisits() {
     const callerName = (emailOrId) => {
         if (!emailOrId) return '';
         const id = emailOrId.split('@')[0];
-        const teacher = state.teachersList.find(tc => tc.email === emailOrId || tc.email.split('@')[0] === id);
-        const name = teacher?.display_name || id;
+        const name = id;
         if (KOREAN_CHAR_RE.test(name)) return name.length >= 2 ? name.slice(1) : name;
         return name.split(' ')[0];
     };

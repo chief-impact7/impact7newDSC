@@ -477,7 +477,7 @@ async function loadTeachers() {
     teachersList = [];
     snap.forEach(d => teachersList.push({ email: d.id, ...d.data() }));
     teachersList.sort((a, b) =>
-        (a.display_name || a.email).localeCompare(b.display_name || b.email, 'ko')
+        a.email.split('@')[0].localeCompare(b.email.split('@')[0], 'ko')
     );
     // 선생님 드롭다운 채우기
     const sel = document.getElementById('input-teacher');
