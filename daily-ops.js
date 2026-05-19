@@ -2782,8 +2782,17 @@ function openEnrollmentModal(studentId, enrollIdx) {
     const student = findStudent(studentId);
     if (!student) return;
 
-    editingEnrollment = { studentId, enrollIdx };
     const enroll = student.enrollments[enrollIdx] || {};
+
+    // 가드: 이 모달은 정규/특강만 편집 가능 (select 옵션이 둘뿐).
+    // 내신/자유학기 enrollment를 열면 class_type이 '정규'로 silent 변경되는 회로가 있어 차단.
+    // 반편성도우미를 사용하도록 안내.
+    if (enroll.class_type === '내신' || enroll.class_type === '자유학기') {
+        alert(`${enroll.class_type} enrollment는 이 모달로 편집할 수 없습니다.\n반편성도우미에서 편집하세요. (정규/특강만 이 모달로 편집 가능)`);
+        return;
+    }
+
+    editingEnrollment = { studentId, enrollIdx };
 
     document.getElementById('enroll-student-name').textContent = student.name || '';
     document.getElementById('enroll-level').value = enroll.level_symbol || '';

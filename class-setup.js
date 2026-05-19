@@ -1076,7 +1076,15 @@ window.submitWizard = async function () {
         // 1. 기존 class_settings에 같은 코드가 있는지 확인
         const existingDoc = await getDoc(doc(db, 'class_settings', d.classCode));
         if (existingDoc.exists()) {
-            const ok = confirm(`"${d.classCode}" 반이 이미 존재합니다. 설정을 덮어쓰시겠습니까?`);
+            // 내신 기간 변경 시 학생 enrollment.end_date 자동 sync 안내
+            // (Cloud Function onClassSettingsNaesinPeriodChanged가 처리하지만 사용자에게 명시 인지시킴)
+            const ex = existingDoc.data();
+            let periodNote = '';
+            if (d.classType === '내신' && ex.class_type === '내신' &&
+                (ex.naesin_start !== d.naesinStart || ex.naesin_end !== d.naesinEnd)) {
+                periodNote = `\n\n⚠️ 내신 기간이 [${ex.naesin_start || '?'} ~ ${ex.naesin_end || '?'}] → [${d.naesinStart} ~ ${d.naesinEnd}]로 변경됩니다.\n이 반에 매핑된 학생들의 내신 enrollment.end_date도 자동 sync됩니다 (Cloud Function).`;
+            }
+            const ok = confirm(`"${d.classCode}" 반이 이미 존재합니다. 설정을 덮어쓰시겠습니까?${periodNote}`);
             if (!ok) { btn.disabled = false; btn.textContent = '반 생성'; return; }
         }
 
