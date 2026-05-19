@@ -342,11 +342,13 @@ export function doesStatusMatchFilter(firestoreStatus, filterSet) {
 }
 
 export function isNewStudent(student, todayDate) {
-    return (student.enrollments || []).some(e => {
-        if (!e.start_date) return false;
-        const diff = (todayDate - new Date(e.start_date)) / (1000 * 60 * 60 * 24);
-        return diff >= 0 && diff <= NEW_STUDENT_DAYS;
-    });
+    const firstStartDate = (student.enrollments || [])
+        .filter(e => e.start_date && enrollmentCode(e))
+        .map(e => e.start_date)
+        .sort()[0];
+    if (!firstStartDate) return false;
+    const diff = (todayDate - new Date(firstStartDate)) / (1000 * 60 * 60 * 24);
+    return diff >= 0 && diff <= NEW_STUDENT_DAYS;
 }
 
 export function isAttendedStatus(status) {

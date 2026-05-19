@@ -2769,7 +2769,10 @@ function hasActiveCodedEnrollment(enrollments, date = todayStr()) {
     return (enrollments || []).some(e => {
         const code = enrollmentCode(e);
         if (!code) return false;
-        return !e.end_date || e.end_date >= date;
+        if (!e.end_date || e.end_date >= date) return true;
+        const naesinKey = e.naesin_class_override;
+        const cs = naesinKey ? state.classSettings[naesinKey] : null;
+        return !!(cs?.naesin_start && cs?.naesin_end && cs.naesin_start <= date && cs.naesin_end >= date);
     });
 }
 
