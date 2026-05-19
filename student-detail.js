@@ -16,7 +16,8 @@ import {
 import {
     enrollmentCode, findStudent,
     branchFromStudent, makeDailyRecordId,
-    getActiveEnrollments, getStudentStartTime, resolveNaesinCsKey
+    getActiveEnrollments, getStudentStartTime, resolveNaesinCsKey,
+    allClassCodes
 } from './student-helpers.js';
 import {
     parseDateKST, todayStr, getDayName
@@ -402,8 +403,19 @@ export function switchDetailTab(tab) {
                 getStudent: (id) => state.allStudents.find(s => s.docId === id),
                 getCurrentTeacher: () => ({
                     id: state.currentUser?.uid ?? '',
-                    name: (state.currentUser?.email || '').split('@')[0],
+                    name: getTeacherName(state.currentUser?.email ?? ''),
                 }),
+                getAssignedTeachers: (id) => {
+                    const student = state.allStudents.find(s => s.docId === id);
+                    if (!student) return [];
+                    const emails = new Set();
+                    for (const code of allClassCodes(student)) {
+                        const cs = state.classSettings?.[code];
+                        if (cs?.teacher) emails.add(cs.teacher);
+                        if (cs?.sub_teacher) emails.add(cs.sub_teacher);
+                    }
+                    return [...emails].map(e => getTeacherName(e)).filter(Boolean);
+                },
                 toast: (msg) => showToast(msg),
                 readonly: window.READ_ONLY === true,
             });
@@ -892,6 +904,8 @@ function renderTempClassOverrideCard(studentId) {
 }
 
 export function renderStudentDetail(studentId) {
+    // detail 영역이 DOM에 미렌더 상태면 (학생 detail 미열림 + realtime refresh 등) skip — null 안전망
+    if (!document.getElementById('profile-avatar')) return;
     const studentChanged = studentId !== _lastRenderedStudentId;
     // 다른 학생으로 이동할 때 pending 클리닉 플래그 해제
     if (studentChanged) {

@@ -26,9 +26,15 @@ function renderInputForm(studentId, readonly) {
   const today = new Date().toISOString().slice(0, 10);
   const typeOpts = TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
   const dis = readonly ? 'disabled' : '';
+  const teacher = _deps.getCurrentTeacher?.() || { name: '?' };
+  const assigned = _deps.getAssignedTeachers?.(studentId) || [];
   return `
     <div class="card consultation-input ${readonly ? 'readonly' : ''}">
       <h4>이번 상담 입력</h4>
+      <div class="row consult-meta">
+        <span class="hint">입력자: <strong>${escapeHtml(teacher.name)}</strong></span>
+        ${assigned.length ? `<span class="hint">담당: ${escapeHtml(assigned.join(', '))}</span>` : ''}
+      </div>
       <div class="row">
         <label>상담일 <input type="date" id="consult-date" value="${today}" ${dis}></label>
         <label>유형 <select id="consult-type" ${dis}>${typeOpts}</select></label>
