@@ -49,32 +49,38 @@ const branchFromStudent = (s) =>
     s.branch || (s.enrollments?.[0] ? branchFromClassNumber(s.enrollments[0].class_number) : '');
 
 // 활성 enrollment만 반환. 내신/자유학기가 활성 기간이면 정규를 숨김.
+// start_date 미래·end_date 과거 enrollment 제외 (등원예정 학생의 미래 등원일 누출 차단)
 function getActiveEnrollments(s, dateStr) {
     const enrollments = s.enrollments || [];
     if (enrollments.length === 0) return [];
     const today = dateStr || todayStr();
     const validDate = (d) => d && /^\d{4}-/.test(d);
-    const hasActiveNaesin = enrollments.some(e =>
+    const current = enrollments.filter(e => {
+        if (validDate(e.start_date) && e.start_date > today) return false;
+        if (validDate(e.end_date) && e.end_date < today) return false;
+        return true;
+    });
+    const hasActiveNaesin = current.some(e =>
         e.class_type === '내신' &&
         validDate(e.start_date) && e.start_date <= today &&
         validDate(e.end_date) && e.end_date >= today
     );
     if (hasActiveNaesin) {
-        return enrollments.filter(e => e.class_type !== '정규');
+        return current.filter(e => e.class_type !== '정규');
     }
     // 자유학기가 활성 기간이면 같은 반코드의 정규 숨김
-    const activeFreeEnrolls = enrollments.filter(e =>
+    const activeFreeEnrolls = current.filter(e =>
         e.class_type === '자유학기' &&
         validDate(e.start_date) && e.start_date <= today &&
         (!validDate(e.end_date) || e.end_date >= today)
     );
     if (activeFreeEnrolls.length > 0) {
         const freeCodes = new Set(activeFreeEnrolls.map(enrollmentCode));
-        return enrollments.filter(e =>
+        return current.filter(e =>
             e.class_type !== '정규' || !freeCodes.has(enrollmentCode(e))
         );
     }
-    return enrollments;
+    return current;
 }
 
 // 기존 flat 필드 → enrollments 배열 자동 변환

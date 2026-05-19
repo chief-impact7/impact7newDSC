@@ -146,6 +146,7 @@ export function displayCodeFromCsKey(csKey, branch) {
 }
 
 // 활성 enrollment만 반환.
+// - start_date가 미래인 enrollment 제외 (등원예정 학생의 미래 등원일 회로 차단)
 // - end_date가 지난 enrollment(내신/특강)은 제외
 // - 내신이 활성 기간이면 정규를 숨김 (내신 종료 후 정규 복귀)
 export function getActiveEnrollments(s, dateStr) {
@@ -154,10 +155,13 @@ export function getActiveEnrollments(s, dateStr) {
     const today = dateStr || todayStr();
     const validDate = (d) => d && /^\d{4}-/.test(d);
 
-    // 1) end_date가 지난 enrollment 제외 (정규는 end_date 없으므로 항상 유지)
+    // 1) start_date가 미래 또는 end_date가 과거인 enrollment 제외
+    //    - 정규는 end_date 없으면 유지
+    //    - start_date 없는 옛 데이터는 유지 (호환성)
     const current = enrollments.filter(e => {
-        if (!validDate(e.end_date)) return true; // end_date 없으면 유지
-        return e.end_date >= today;
+        if (validDate(e.start_date) && e.start_date > today) return false; // 아직 시작 안 함
+        if (validDate(e.end_date) && e.end_date < today) return false;     // 이미 종료
+        return true;
     });
 
     // 2) 내신이 활성 기간이면 정규를 숨김
