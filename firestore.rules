@@ -653,7 +653,7 @@ service cloud.firestore {
     // =========================================================================
     // [Director] Salary Notification Tokens (급여 통보서)
     // =========================================================================
-    match /salaryNotificationTokens/{tokenId} {
+    match /salaryAgreementTokens/{tokenId} {
       allow read, write: if isDirector() || isStaff();
 
       // 비인증 사용자: 토큰 검증(read) + 서명 완료(update)만 허용
@@ -735,7 +735,7 @@ service cloud.firestore {
           (isStaff() && resource.data.assignedTo == request.auth.uid);
         allow write: if isDirector();
 
-        // 비인증: 토큰 기반 계약서 읽기 + 서명/급여통보/PDF URL 업데이트
+        // 비인증: 토큰 기반 계약서 읽기 + 서명/급여약정/PDF URL 업데이트
         allow get: if true;
         // ready→signed: 계약서 서명 (contractSigningToken 검증)
         allow update: if resource.data.status == 'ready'
@@ -746,19 +746,19 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/contractSigningTokens/$(request.resource.data.signingTokenId)).data.contractId == contractId
           && get(/databases/$(database)/documents/contractSigningTokens/$(request.resource.data.signingTokenId)).data.status == 'pending'
           && get(/databases/$(database)/documents/contractSigningTokens/$(request.resource.data.signingTokenId)).data.expiresAt > request.time;
-        // signed/salary_sent→자기자신: 급여통보서 서명 (salaryNotificationToken 검증, status 불변)
-        // status는 director가 'salary_sent'로 바꾼 뒤 강사가 서명하므로 두 상태 모두 허용
-        allow update: if resource.data.status in ['signed', 'salary_sent']
+        // signed/salary_agreement_sent→자기자신: 급여약정서 서명 (salaryAgreementToken 검증, status 불변)
+        // status는 director가 'salary_agreement_sent'로 바꾼 뒤 강사가 서명하므로 두 상태 모두 허용
+        allow update: if resource.data.status in ['signed', 'salary_agreement_sent']
           && request.resource.data.status == resource.data.status
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['salaryNotification', 'updatedAt', 'salaryPdfUrl', 'salaryTokenId'])
-          && 'salaryTokenId' in request.resource.data
-          && get(/databases/$(database)/documents/salaryNotificationTokens/$(request.resource.data.salaryTokenId)).data.contractId == contractId
-          && get(/databases/$(database)/documents/salaryNotificationTokens/$(request.resource.data.salaryTokenId)).data.status == 'pending'
-          && get(/databases/$(database)/documents/salaryNotificationTokens/$(request.resource.data.salaryTokenId)).data.expiresAt > request.time;
-        // signed/salary_sent→자기자신: signedPdfUrl 재업로드 수리 (서명 후 PDF 업로드 실패 복구용)
+            .hasOnly(['salaryAgreement', 'updatedAt', 'salaryPdfUrl', 'agreementTokenId'])
+          && 'agreementTokenId' in request.resource.data
+          && get(/databases/$(database)/documents/salaryAgreementTokens/$(request.resource.data.agreementTokenId)).data.contractId == contractId
+          && get(/databases/$(database)/documents/salaryAgreementTokens/$(request.resource.data.agreementTokenId)).data.status == 'pending'
+          && get(/databases/$(database)/documents/salaryAgreementTokens/$(request.resource.data.agreementTokenId)).data.expiresAt > request.time;
+        // signed/salary_agreement_sent→자기자신: signedPdfUrl 재업로드 수리 (서명 후 PDF 업로드 실패 복구용)
         // 기존 signingToken이 같은 contractId를 가리키고 유효기간 내이면 허용. signature·status는 불변.
-        allow update: if resource.data.status in ['signed', 'salary_sent']
+        allow update: if resource.data.status in ['signed', 'salary_agreement_sent']
           && request.resource.data.status == resource.data.status
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['signedPdfUrl', 'updatedAt'])
@@ -885,17 +885,17 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/employeeContractSigningTokens/$(request.resource.data.signingTokenId)).data.contractId == contractId
           && get(/databases/$(database)/documents/employeeContractSigningTokens/$(request.resource.data.signingTokenId)).data.status == 'pending'
           && get(/databases/$(database)/documents/employeeContractSigningTokens/$(request.resource.data.signingTokenId)).data.expiresAt > request.time;
-        // signed/salary_sent→자기자신: 급여통보서 서명 (salaryNotificationToken 검증, status 불변)
-        allow update: if resource.data.status in ['signed', 'salary_sent']
+        // signed/salary_agreement_sent→자기자신: 급여약정서 서명 (salaryAgreementToken 검증, status 불변)
+        allow update: if resource.data.status in ['signed', 'salary_agreement_sent']
           && request.resource.data.status == resource.data.status
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['salaryNotification', 'updatedAt', 'salaryPdfUrl', 'salaryTokenId'])
-          && 'salaryTokenId' in request.resource.data
-          && get(/databases/$(database)/documents/salaryNotificationTokens/$(request.resource.data.salaryTokenId)).data.contractId == contractId
-          && get(/databases/$(database)/documents/salaryNotificationTokens/$(request.resource.data.salaryTokenId)).data.status == 'pending'
-          && get(/databases/$(database)/documents/salaryNotificationTokens/$(request.resource.data.salaryTokenId)).data.expiresAt > request.time;
-        // signed/salary_sent→자기자신: signedPdfUrl 재업로드 수리 (서명 후 PDF 업로드 실패 복구용)
-        allow update: if resource.data.status in ['signed', 'salary_sent']
+            .hasOnly(['salaryAgreement', 'updatedAt', 'salaryPdfUrl', 'agreementTokenId'])
+          && 'agreementTokenId' in request.resource.data
+          && get(/databases/$(database)/documents/salaryAgreementTokens/$(request.resource.data.agreementTokenId)).data.contractId == contractId
+          && get(/databases/$(database)/documents/salaryAgreementTokens/$(request.resource.data.agreementTokenId)).data.status == 'pending'
+          && get(/databases/$(database)/documents/salaryAgreementTokens/$(request.resource.data.agreementTokenId)).data.expiresAt > request.time;
+        // signed/salary_agreement_sent→자기자신: signedPdfUrl 재업로드 수리 (서명 후 PDF 업로드 실패 복구용)
+        allow update: if resource.data.status in ['signed', 'salary_agreement_sent']
           && request.resource.data.status == resource.data.status
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['signedPdfUrl', 'updatedAt'])
