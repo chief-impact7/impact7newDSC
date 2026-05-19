@@ -23,3 +23,6 @@
 - [project_code_quality_hardening_2026-05-06.md](project_code_quality_hardening_2026-05-06.md) — production Firestore 안전성 보강: READ-ONLY 로컬 오염 방지, 반 삭제 로그/rules 정합성, 결석대장 race 완화, 자동 정리 명시 실행화, Firebase AI 분리
 - [feedback_student_short_label.md](feedback_student_short_label.md) — 학생 표시는 항상 `studentShortLabel` 축약 형태("양정중2") 사용, 학교/학년 풀어쓰기 금지 (모든 화면 공통)
 - [project_auto_cleanup_teukang_pending.md](project_auto_cleanup_teukang_pending.md) — 특강 만료 자동 처리(status='퇴원' 등) 운영 첫 발화 시 검증 대기 (f0617a8)
+- [feedback_enrollment_integrity_guards.md](feedback_enrollment_integrity_guards.md) — enrollment class_type×코드 정합성 가드는 모든 저장 경로(반편성도우미·DB 모달·DSC 모달·CSV import)에서 강제 (2026-05 263건 사고 재발 방지)
+- [reference_cs_naesin_period_sync.md](reference_cs_naesin_period_sync.md) — Cloud Function `onClassSettingsNaesinPeriodChanged` 가 cs.naesin_end 변경 시 학생 enrollment.end_date 자동 sync (7303749)
+- [feedback_outlier_detection_pattern.md](feedback_outlier_detection_pattern.md) — "한 명만 이상함" 보고 시 같은 csKey·반 멤버 dump해서 형식 불일치 outlier 검출하는 패턴
