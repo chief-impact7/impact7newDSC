@@ -3,7 +3,7 @@
 
 import { state, LEAVE_STATUSES } from './state.js';
 import { getDayName } from './src/shared/firestore-helpers.js';
-import { signInWithGoogle, getGoogleAccessToken } from './auth.js';
+import { getGoogleAccessToken, ensureGoogleAccessToken } from './auth.js';
 import { formatTime12h, showSaveIndicator } from './ui-utils.js';
 import {
     getActiveEnrollments, matchesBranchFilter, enrollmentCode,
@@ -58,14 +58,10 @@ function pickDriveFolder() {
 }
 
 export async function exportDailyReport() {
-    let token = getGoogleAccessToken();
+    const token = await ensureGoogleAccessToken();
     if (!token) {
-        if (!confirm('구글 드라이브 접근 토큰이 만료되었습니다.\n다시 로그인하시겠습니까?')) return;
-        try {
-            await signInWithGoogle();
-            token = getGoogleAccessToken();
-        } catch { return; }
-        if (!token) { alert('로그인에 실패했습니다. 다시 시도해주세요.'); return; }
+        alert('구글 드라이브 접근 토큰을 발급받지 못했습니다.\n로그아웃 후 다시 로그인해주세요.');
+        return;
     }
 
     const dayName = getDayName(state.selectedDate);
