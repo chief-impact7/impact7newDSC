@@ -11,7 +11,7 @@ import { db } from './firebase-config.js';
 import { state, LEAVE_STATUSES, LEVEL_SHORT } from './state.js';
 import {
     esc, escAttr, formatTime12h, oxDisplayClass,
-    nowTimeStr, showSaveIndicator
+    nowTimeStr, showSaveIndicator, showToast
 } from './ui-utils.js';
 import {
     enrollmentCode, findStudent,
@@ -391,9 +391,24 @@ export function switchDetailTab(tab) {
     document.getElementById('detail-cards').style.display = tab === 'daily' ? '' : 'none';
     document.getElementById('report-tab').style.display = tab === 'report' ? '' : 'none';
     document.getElementById('score-tab').style.display = tab === 'score' ? '' : 'none';
+    document.getElementById('consultation-tab').style.display = tab === 'consultation' ? '' : 'none';
     if (tab === 'score') loadScoreCard();
     if (tab === 'report') {
         if (state.selectedStudentId) _loadReportOrHistoryCard(state.selectedStudentId);
+    }
+    if (tab === 'consultation') {
+        import('./consultation-card.js').then(({ renderConsultationTab, initConsultationCardDeps }) => {
+            initConsultationCardDeps({
+                getStudent: (id) => state.allStudents.find(s => s.docId === id),
+                getCurrentTeacher: () => ({
+                    id: state.currentUser?.uid ?? '',
+                    name: (state.currentUser?.email || '').split('@')[0],
+                }),
+                toast: (msg) => showToast(msg),
+                readonly: window.READ_ONLY === true,
+            });
+            renderConsultationTab(state.selectedStudentId);
+        });
     }
 }
 
