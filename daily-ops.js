@@ -2820,6 +2820,23 @@ async function saveEnrollment() {
         selectedDays.push(btn.dataset.day);
     });
 
+    // 정합성 가드: 반편성도우미(class-setup.js) 규칙과 동일.
+    // 잘못 저장하면 getActiveEnrollments가 분류 못해 내신 override 등이 깨짐(96건 사고 재발 방지).
+    if (classType === '내신') {
+        alert('내신 enrollment는 이 모달로 직접 추가/편집할 수 없습니다.\n반편성도우미를 사용하세요. 내신은 정규의 일시 override 형태로 csKey 별도 관리됩니다.');
+        return;
+    }
+    if ((classType === '정규' || classType === '자유학기') && (!levelSymbol || !classNumber)) {
+        alert(`${classType}는 레벨기호와 반넘버를 모두 입력해야 합니다. (예: HA101)`);
+        return;
+    }
+    if (classType === '특강' && !classNumber) {
+        alert('특강은 반넘버(반 이름)를 입력해야 합니다.');
+        return;
+    }
+    if (selectedDays.length === 0) { alert('수업 요일을 1개 이상 선택하세요.'); return; }
+    if (!startDate) { alert('시작일을 입력하세요.'); return; }
+
     // enrollments 배열 업데이트
     const enrollments = [...student.enrollments];
     const newCode = `${levelSymbol}${classNumber}`;
