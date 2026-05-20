@@ -84,6 +84,20 @@ function renderBriefingCard(briefing) {
   `;
 }
 
+function getSearchEls() {
+  return {
+    startEl: document.getElementById('consult-search-start'),
+    endEl: document.getElementById('consult-search-end'),
+    kwEl: document.getElementById('consult-search-kw'),
+    hintEl: document.getElementById('consult-search-hint'),
+  };
+}
+
+function replaceHistoryCard(consultations) {
+  const slot = document.querySelector('.consultation-history');
+  if (slot) slot.outerHTML = renderHistoryCard(consultations);
+}
+
 function renderSearchBar(studentId) {
   return `
     <div class="card consultation-search">
@@ -154,10 +168,7 @@ export async function renderConsultationTab(studentId) {
 }
 
 window.onSearchConsultations = async function (studentId) {
-  const startEl = document.getElementById('consult-search-start');
-  const endEl = document.getElementById('consult-search-end');
-  const kwEl = document.getElementById('consult-search-kw');
-  const hintEl = document.getElementById('consult-search-hint');
+  const { startEl, endEl, kwEl, hintEl } = getSearchEls();
   const startDate = startEl.value || null;
   const endDate = endEl.value || null;
   const keyword = kwEl.value || '';
@@ -169,8 +180,7 @@ window.onSearchConsultations = async function (studentId) {
   try {
     const raw = await searchStudentConsultations(studentId, { startDate, endDate });
     const filtered = filterConsultationsByKeyword(raw, keyword);
-    const slot = document.querySelector('.consultation-history');
-    if (slot) slot.outerHTML = renderHistoryCard(filtered);
+    replaceHistoryCard(filtered);
     if (hintEl) {
       hintEl.textContent = (!startDate && !endDate)
         ? `최근 ${DEFAULT_HISTORY_LIMIT}건 범위에서 검색됨`
@@ -183,17 +193,13 @@ window.onSearchConsultations = async function (studentId) {
 };
 
 window.onResetConsultationSearch = async function (studentId) {
-  const startEl = document.getElementById('consult-search-start');
-  const endEl = document.getElementById('consult-search-end');
-  const kwEl = document.getElementById('consult-search-kw');
-  const hintEl = document.getElementById('consult-search-hint');
+  const { startEl, endEl, kwEl, hintEl } = getSearchEls();
   if (startEl) startEl.value = '';
   if (endEl) endEl.value = '';
   if (kwEl) kwEl.value = '';
   if (hintEl) hintEl.textContent = '';
   const history = await listStudentConsultations(studentId, DEFAULT_HISTORY_LIMIT);
-  const slot = document.querySelector('.consultation-history');
-  if (slot) slot.outerHTML = renderHistoryCard(history);
+  replaceHistoryCard(history);
 };
 
 window.onSaveConsultation = async function (studentId) {
@@ -227,7 +233,7 @@ window.onSaveConsultation = async function (studentId) {
     textEl.value = '';
     // 이력만 재페치
     const history = await listStudentConsultations(studentId, DEFAULT_HISTORY_LIMIT);
-    document.querySelector('.consultation-history').outerHTML = renderHistoryCard(history);
+    replaceHistoryCard(history);
   } catch (err) {
     console.error('[consultation] save failed:', err);
     _deps.toast?.(`저장 실패: ${err.message}`, 'error');
