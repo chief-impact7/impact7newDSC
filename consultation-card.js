@@ -6,7 +6,9 @@ import {
   getStudentSummary,
   getStudentBriefing,
   listStudentConsultations,
+  searchStudentConsultations,
 } from './data-layer.js';
+import { filterConsultationsByKeyword, DEFAULT_HISTORY_LIMIT } from './consultation-filter.js';
 
 let _deps = {};
 export function initConsultationCardDeps(deps) {
@@ -82,6 +84,37 @@ function renderBriefingCard(briefing) {
   `;
 }
 
+function getSearchEls() {
+  return {
+    startEl: document.getElementById('consult-search-start'),
+    endEl: document.getElementById('consult-search-end'),
+    kwEl: document.getElementById('consult-search-kw'),
+    hintEl: document.getElementById('consult-search-hint'),
+  };
+}
+
+function replaceHistoryCard(consultations) {
+  const slot = document.querySelector('.consultation-history');
+  if (slot) slot.outerHTML = renderHistoryCard(consultations);
+}
+
+function renderSearchBar(studentId) {
+  return `
+    <div class="card consultation-search">
+      <div class="row">
+        <label>시작일 <input type="date" id="consult-search-start"></label>
+        <label>종료일 <input type="date" id="consult-search-end"></label>
+      </div>
+      <div class="row">
+        <input type="text" id="consult-search-kw" placeholder="키워드 (메모·유형·강사명)">
+        <button id="consult-search-btn" onclick="onSearchConsultations('${escapeHtml(studentId)}')">검색</button>
+        <button id="consult-search-reset" onclick="onResetConsultationSearch('${escapeHtml(studentId)}')">초기화</button>
+      </div>
+      <span class="hint" id="consult-search-hint"></span>
+    </div>
+  `;
+}
+
 function renderHistoryCard(consultations) {
   if (!consultations.length) {
     return `<div class="card consultation-history"><h4>상담 이력</h4><em>없음</em></div>`;
@@ -110,6 +143,7 @@ export async function renderConsultationTab(studentId) {
     ${renderInputForm(studentId, readonly)}
     <div id="consult-summary-slot"><em>요약 로딩 중…</em></div>
     <div id="consult-briefing-slot"><em>브리핑 로딩 중…</em></div>
+    ${renderSearchBar(studentId)}
     <div id="consult-history-slot"><em>이력 로딩 중…</em></div>
   `;
 
@@ -117,7 +151,7 @@ export async function renderConsultationTab(studentId) {
   const [summary, briefing, history] = await Promise.allSettled([
     getStudentSummary(studentId),
     getStudentBriefing(studentId),
-    listStudentConsultations(studentId, 10),
+    listStudentConsultations(studentId, DEFAULT_HISTORY_LIMIT),
   ]);
 
   document.getElementById('consult-summary-slot').outerHTML = summary.status === 'fulfilled'
@@ -132,6 +166,41 @@ export async function renderConsultationTab(studentId) {
     ? renderHistoryCard(history.value)
     : `<div class="card"><h4>상담 이력</h4><em>로드 실패</em></div>`;
 }
+
+window.onSearchConsultations = async function (studentId) {
+  const { startEl, endEl, kwEl, hintEl } = getSearchEls();
+  const startDate = startEl.value || null;
+  const endDate = endEl.value || null;
+  const keyword = kwEl.value || '';
+
+  if (startDate && endDate && startDate > endDate) {
+    _deps.toast?.('시작일이 종료일보다 늦습니다', 'warn');
+    return;
+  }
+  try {
+    const raw = await searchStudentConsultations(studentId, { startDate, endDate });
+    const filtered = filterConsultationsByKeyword(raw, keyword);
+    replaceHistoryCard(filtered);
+    if (hintEl) {
+      hintEl.textContent = (!startDate && !endDate)
+        ? `최근 ${DEFAULT_HISTORY_LIMIT}건 범위에서 검색됨`
+        : `${filtered.length}건 검색됨`;
+    }
+  } catch (err) {
+    console.error('[consultation] search failed:', err);
+    _deps.toast?.(`검색 실패: ${err.message}`, 'error');
+  }
+};
+
+window.onResetConsultationSearch = async function (studentId) {
+  const { startEl, endEl, kwEl, hintEl } = getSearchEls();
+  if (startEl) startEl.value = '';
+  if (endEl) endEl.value = '';
+  if (kwEl) kwEl.value = '';
+  if (hintEl) hintEl.textContent = '';
+  const history = await listStudentConsultations(studentId, DEFAULT_HISTORY_LIMIT);
+  replaceHistoryCard(history);
+};
 
 window.onSaveConsultation = async function (studentId) {
   const dateEl = document.getElementById('consult-date');
@@ -163,8 +232,8 @@ window.onSaveConsultation = async function (studentId) {
     _deps.toast?.('상담 저장됨', 'success');
     textEl.value = '';
     // 이력만 재페치
-    const history = await listStudentConsultations(studentId, 10);
-    document.querySelector('.consultation-history').outerHTML = renderHistoryCard(history);
+    const history = await listStudentConsultations(studentId, DEFAULT_HISTORY_LIMIT);
+    replaceHistoryCard(history);
   } catch (err) {
     console.error('[consultation] save failed:', err);
     _deps.toast?.(`저장 실패: ${err.message}`, 'error');
