@@ -13,6 +13,7 @@ import { parseDateKST, toDateStrKST, todayStr, getDayName } from './src/shared/f
 import { state, DEFAULT_DOMAINS } from './state.js';
 import { showSaveIndicator } from './ui-utils.js';
 import { normalizeDays, enrollmentCode, branchFromStudent, makeDailyRecordId, getActiveEnrollments } from './student-helpers.js';
+import { DEFAULT_HISTORY_LIMIT } from './consultation-filter.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderSubFilters, renderListPanel, renderStudentDetail, renderClassDetail,
@@ -836,6 +837,21 @@ export async function listStudentConsultations(studentId, limitCount = 10) {
     orderBy('date', 'desc'),
     limit(limitCount)
   );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+// 하이브리드: 기간 지정 시 Firestore date 범위 쿼리, 미지정 시 최근 N건(listStudentConsultations 재사용).
+// 키워드 필터는 호출측(consultation-card)에서 filterConsultationsByKeyword로 처리.
+export async function searchStudentConsultations(studentId, { startDate, endDate, limitCount = DEFAULT_HISTORY_LIMIT } = {}) {
+  const hasRange = Boolean(startDate || endDate);
+  if (!hasRange) {
+    return listStudentConsultations(studentId, limitCount);
+  }
+  const clauses = [where('student_id', '==', studentId)];
+  if (startDate) clauses.push(where('date', '>=', startDate));
+  if (endDate)   clauses.push(where('date', '<=', endDate));
+  const q = query(collection(db, 'consultations'), ...clauses, orderBy('date', 'desc'));
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
