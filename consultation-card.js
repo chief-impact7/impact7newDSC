@@ -170,7 +170,9 @@ function renderConsultationHeader() {
 
 export async function renderConsultationTab(studentId) {
   window.__consultStudentId = studentId;
-  const container = document.getElementById('detail-content');
+  // #consultation-tab만 채운다. (#detail-content 전체를 덮으면 탭 바·다른 탭 div가
+  // 사라져 switchDetailTab이 깨지고 닫기/탭전환이 TypeError로 실패한다)
+  const container = document.getElementById('consultation-tab');
   if (!container) return;
   container.innerHTML = `
     ${renderConsultationHeader()}
