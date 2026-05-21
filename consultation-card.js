@@ -44,25 +44,48 @@ function renderInputForm(studentId, readonly) {
   return `
     <div class="card consultation-input ${readonly ? 'readonly' : ''}">
       <h4>이번 상담 입력</h4>
-      <div class="consult-meta-grid">
-        <label>상담일 <input type="date" id="consult-date" value="${today}" onchange="onConsultDateChange('${escapeHtml(studentId)}')" ${dis}></label>
-        <span class="consult-meta-field">입력일 <strong>저장 시 자동</strong></span>
-        <span class="consult-meta-field">반명 <strong id="consult-class-name">${escapeHtml(className || '-')}</strong></span>
-        <span class="consult-meta-field">학생명 <strong>${escapeHtml(student.name || '-')}</strong></span>
+      <div class="consult-form-grid">
+        <div class="consult-field">
+          <label for="consult-date">상담일</label>
+          <input type="date" id="consult-date" value="${today}" onchange="onConsultDateChange('${escapeHtml(studentId)}')" ${dis}>
+        </div>
+        <div class="consult-field">
+          <span class="consult-field-label">입력일</span>
+          <span class="consult-field-value muted">저장 시 자동 기록</span>
+        </div>
+        <div class="consult-field">
+          <span class="consult-field-label">반명</span>
+          <span class="consult-field-value" id="consult-class-name">${escapeHtml(className || '-')}</span>
+        </div>
+        <div class="consult-field">
+          <span class="consult-field-label">학생명</span>
+          <span class="consult-field-value">${escapeHtml(student.name || '-')}</span>
+        </div>
+        <div class="consult-field consult-field-wide">
+          <span class="consult-field-label">대상</span>
+          <div class="consult-radio-group">${targetRadios}</div>
+        </div>
+        <div class="consult-field">
+          <label for="consult-method">형태</label>
+          <select id="consult-method" ${dis}>${methodOpts}</select>
+        </div>
+        <div class="consult-field">
+          <label for="consult-type">유형</label>
+          <select id="consult-type" ${dis}>${typeOpts}</select>
+        </div>
+        <div class="consult-field">
+          <span class="consult-field-label">입력자</span>
+          <span class="consult-field-value muted">${escapeHtml(teacher.name || '-')}</span>
+        </div>
       </div>
-      <div class="consult-row">
-        <span class="consult-label">대상</span> ${targetRadios}
-        ${teacher.name ? `<span class="hint">입력자: ${escapeHtml(teacher.name)}</span>` : ''}
+      <div class="consult-field consult-field-wide">
+        <label for="consult-text">상담 메모</label>
+        <textarea id="consult-text" class="consult-textarea" placeholder="상담 내용을 자유롭게 입력하세요" ${dis}></textarea>
       </div>
-      <div class="consult-row">
-        <label>형태 <select id="consult-method" ${dis}>${methodOpts}</select></label>
-        <label>유형 <select id="consult-type" ${dis}>${typeOpts}</select></label>
-      </div>
-      <textarea id="consult-text" rows="6" placeholder="상담 메모를 자유롭게 입력하세요" ${dis}></textarea>
-      <div class="consult-row consult-actions">
+      <div class="consult-actions">
+        ${readonly ? '<span class="hint">READ-ONLY 모드</span>' : ''}
         <button id="consult-save-btn" class="consult-save"
           onclick="onSaveConsultation('${escapeHtml(studentId)}')" ${dis}>저장</button>
-        ${readonly ? '<span class="hint">READ-ONLY 모드</span>' : ''}
       </div>
     </div>
   `;
