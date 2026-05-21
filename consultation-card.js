@@ -299,7 +299,12 @@ window.onResetConsultationSearch = async function (studentId) {
   if (endEl) endEl.value = end;
   if (kwEl) kwEl.value = '';
   if (hintEl) hintEl.textContent = '';
-  await loadAndRenderHistory(studentId, { startDate: start, endDate: end, keyword: '' });
+  try {
+    await loadAndRenderHistory(studentId, { startDate: start, endDate: end, keyword: '' });
+  } catch (err) {
+    console.error('[consultation] reset failed:', err);
+    _deps.toast?.(`초기화 실패: ${err.message}`, 'error');
+  }
 };
 
 window.onTogglePin = async function (studentId, cid) {
