@@ -259,8 +259,19 @@ hw_fail_tasks/{studentId}_{domain}_{sourceDate}
 - [ ] 새 Firestore 필드 추가 시 → 이 문서의 데이터 구조도 업데이트했는가?
 - [ ] CSS 클래스명 변경 시 → `app.js`에서 참조하는 곳도 바꿨는가?
 - [ ] 새 함수 추가 시 → `window.*`로 노출이 필요한가? (onclick 등에서 호출하는 경우)
+- [ ] `saveClassSettings()`로 새 필드 저장 시 → `firestore.rules`의 `hasOnlyAllowedClassSettingsFields()`에도 추가했는가? (**짝 규칙**)
+- [ ] 동적 키(`[varName]`) 패턴으로 저장 시 → `scripts/check-class-settings-fields.mjs`의 `KNOWN_DYNAMIC_FIELDS`에도 추가했는가?
 
-### 7.4 금지사항
+### 7.4 불변 조건 (코드 리팩토링 시 절대 깨지면 안 됨)
+
+**소속 트리 반코드 수집** (`_getAllClassCodes()` in `daily-ops.js`):
+- 정규 반코드는 반드시 **`class_settings` + `enrollment` 양쪽**에서 수집해야 한다
+- `class_settings` 문서가 없는 반도 enrollment에 학생이 있으면 소속 트리에 표시되어야 한다
+- class_settings 기반만으로 수집하면 Firestore에 문서가 없는 정규 반이 사라진다
+
+**위반 사례 (2026-05-13, beec082)**: `_getAllClassCodes()`를 class_settings 기반으로 재작성하면서 enrollment fallback을 제거 → 소속 트리에서 모든 정규 반명이 사라짐
+
+### 7.5 금지사항
 - `.env` 파일을 직접 수정하거나 값을 노출하지 않는다
 - `node_modules/`, `dist/` 내부 파일 수정 금지
 - Firestore 보안 규칙을 코드에서 우회하는 로직 금지

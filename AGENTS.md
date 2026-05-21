@@ -45,7 +45,18 @@
 ```bash
 npm run dev          # 개발 서버 (port 5174)
 npm run build        # 빌드
+bash scripts/install-hooks.sh   # 새 클론 후 1회 — pre-push hook 설치
+node scripts/check-class-settings-fields.mjs  # class_settings 필드 동기화 수동 검증
 ```
+
+## 안전망: class_settings 필드 동기화
+
+`saveClassSettings()`로 새 필드를 저장할 때 **반드시** 두 곳을 함께 수정한다:
+1. `firestore.rules` → `hasOnlyAllowedClassSettingsFields()` 허용 목록에 필드 추가
+2. 동적 키(`[varName]` 패턴)라면 `scripts/check-class-settings-fields.mjs`의 `KNOWN_DYNAMIC_FIELDS`에도 추가
+
+pre-push hook이 이 규칙을 자동 강제한다 (누락 시 push 차단).
+hook이 없다면 `bash scripts/install-hooks.sh`로 설치한다.
 
 ## Dev 안전장치 (production DB 격리)
 

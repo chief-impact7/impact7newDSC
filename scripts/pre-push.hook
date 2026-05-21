@@ -1,0 +1,9 @@
+#!/bin/sh
+# class_settings 필드 동기화 검증
+# saveClassSettings()로 저장하는 필드가 firestore.rules에도 있는지 확인
+node scripts/check-class-settings-fields.mjs
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "Push 차단: firestore.rules 업데이트 후 다시 push하세요."
+    exit 1
+fi
