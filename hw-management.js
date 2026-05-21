@@ -62,27 +62,14 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
         `;
     }
 
-    // 완료/취소된 task 영역만 필터링 — pending task 영역은 수정/취소가 가능하도록 계속 표시
-    const filteredDomains = failDomains.filter(domain => {
-        const closedTask = state.hwFailTasks.find(t =>
+    // 처리 필요한 영역 수 (타이틀 카운트용): 닫힌 task 영역 제외
+    const activeDomainCount = failDomains.filter(domain =>
+        !state.hwFailTasks.find(t =>
             t.student_id === studentId && t.domain === domain
             && t.source_date === state.selectedDate
             && t.status && t.status !== 'pending'
-        );
-        return !closedTask;
-    });
-
-    if (filteredDomains.length === 0) {
-        return `
-            <div class="detail-card hw-fail-card">
-                <div class="detail-card-title">
-                    <span class="material-symbols-outlined" style="color:var(--success);font-size:18px;">task_alt</span>
-                    ${titleLabel}
-                </div>
-                <div class="detail-card-empty" style="color:var(--text-sec);">모두 처리됨</div>
-            </div>
-        `;
-    }
+        )
+    ).length;
 
     const descLabel = is1stOnly
         ? '1차 미통과 영역에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.'
@@ -170,7 +157,7 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
                 ${is1stOnly ? '후속대책' : '숙제 미통과'} (${failDomains.length}개 영역)
             </div>
             <div class="hw-fail-desc" style="font-size:12px;color:var(--text-sec);margin-bottom:10px;">
-                ${descLabel}
+                ${activeDomainCount === 0 ? '모두 처리됨 — 재입력 버튼으로 다시 활성화할 수 있습니다.' : descLabel}
             </div>
             ${rows}
         </div>

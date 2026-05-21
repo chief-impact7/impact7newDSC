@@ -71,27 +71,14 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
         `;
     }
 
-    // 완료/취소된 task 항목만 필터링 — pending task 항목은 수정/취소가 가능하도록 계속 표시
-    const filteredItems = failItems.filter(item => {
-        const closedTask = state.testFailTasks.find(t =>
+    // 처리 필요한 항목 수 (타이틀 카운트용): 닫힌 task 항목 제외
+    const activeItemCount = failItems.filter(item =>
+        !state.testFailTasks.find(t =>
             t.student_id === studentId && t.domain === item
             && t.source_date === state.selectedDate
             && t.status && t.status !== 'pending'
-        );
-        return !closedTask;
-    });
-
-    if (filteredItems.length === 0) {
-        return `
-            <div class="detail-card hw-fail-card">
-                <div class="detail-card-title">
-                    <span class="material-symbols-outlined" style="color:var(--success);font-size:18px;">task_alt</span>
-                    ${titleLabel}
-                </div>
-                <div class="detail-card-empty" style="color:var(--text-sec);">모두 처리됨</div>
-            </div>
-        `;
-    }
+        )
+    ).length;
 
     const descLabel = is1stOnly
         ? '1차 미통과 항목에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.'
@@ -178,7 +165,7 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
                 ${is1stOnly ? '후속대책' : '테스트 미통과'} (${failItems.length}개)
             </div>
             <div class="hw-fail-desc" style="font-size:12px;color:var(--text-sec);margin-bottom:10px;">
-                ${descLabel}
+                ${activeItemCount === 0 ? '모두 처리됨 — 재입력 버튼으로 다시 활성화할 수 있습니다.' : descLabel}
             </div>
             ${rows}
         </div>
