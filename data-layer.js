@@ -830,6 +830,19 @@ export async function getStudentBriefing(studentId) {
   return snap.exists() ? snap.data() : null;
 }
 
+// 최신 기간의 입력 가이드 (consultation_trends.input_guide). 없으면 [].
+export async function getLatestInputGuide() {
+  try {
+    const q = query(collection(db, 'consultation_trends'), orderBy('period', 'desc'), limit(1));
+    const snap = await getDocs(q);
+    if (snap.empty) return [];
+    return snap.docs[0].data().input_guide ?? [];
+  } catch (err) {
+    console.error('[consultation] getLatestInputGuide failed:', err);
+    return [];
+  }
+}
+
 export async function listStudentConsultations(studentId, limitCount = 10) {
   const q = query(
     collection(db, 'consultations'),
