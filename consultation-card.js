@@ -33,7 +33,6 @@ const METHODS = ['전화', '문자', '대면', '기타'];
 function renderInputForm(studentId, readonly) {
   const today = new Date().toISOString().slice(0, 10);
   const dis = readonly ? 'disabled' : '';
-  const teacher = _deps.getCurrentTeacher?.() || { name: '?' };
   const student = _deps.getStudent?.(studentId) || {};
   const className = activeClassCodes(student, today).join(', ');
   const typeOpts = TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
@@ -45,36 +44,32 @@ function renderInputForm(studentId, readonly) {
     <div class="card consultation-input ${readonly ? 'readonly' : ''}">
       <h4>이번 상담 입력</h4>
       <div class="consult-form-grid">
-        <div class="consult-field">
-          <label for="consult-date">상담일</label>
-          <input type="date" id="consult-date" value="${today}" onchange="onConsultDateChange('${escapeHtml(studentId)}')" ${dis}>
+        <div class="consult-row">
+          <div class="consult-field consult-field-inline">
+            <span class="consult-field-label">반명</span>
+            <span class="consult-field-value" id="consult-class-name">${escapeHtml(className || '-')}</span>
+          </div>
+          <div class="consult-field consult-field-inline">
+            <span class="consult-field-label">대상</span>
+            <div class="consult-radio-group">${targetRadios}</div>
+          </div>
         </div>
-        <div class="consult-field consult-field-inline">
-          <span class="consult-field-label">입력일</span>
-          <span class="consult-field-value muted">저장 시 자동</span>
-        </div>
-        <div class="consult-field consult-field-inline">
-          <span class="consult-field-label">반명</span>
-          <span class="consult-field-value" id="consult-class-name">${escapeHtml(className || '-')}</span>
-        </div>
-        <div class="consult-field consult-field-inline">
-          <span class="consult-field-label">입력자</span>
-          <span class="consult-field-value muted">${escapeHtml(teacher.name || '-')}</span>
-        </div>
-        <div class="consult-field consult-field-inline consult-field-wide">
-          <span class="consult-field-label">대상</span>
-          <div class="consult-radio-group">${targetRadios}</div>
-        </div>
-        <div class="consult-field">
-          <label for="consult-method">형태</label>
-          <select id="consult-method" ${dis}>${methodOpts}</select>
-        </div>
-        <div class="consult-field">
-          <label for="consult-type">유형</label>
-          <select id="consult-type" ${dis}>${typeOpts}</select>
+        <div class="consult-row">
+          <div class="consult-field">
+            <label for="consult-date">상담일</label>
+            <input type="date" id="consult-date" value="${today}" onchange="onConsultDateChange('${escapeHtml(studentId)}')" ${dis}>
+          </div>
+          <div class="consult-field">
+            <label for="consult-method">형태</label>
+            <select id="consult-method" ${dis}>${methodOpts}</select>
+          </div>
+          <div class="consult-field">
+            <label for="consult-type">유형</label>
+            <select id="consult-type" ${dis}>${typeOpts}</select>
+          </div>
         </div>
       </div>
-      <div class="consult-field consult-field-wide">
+      <div class="consult-field">
         <label for="consult-text">상담 메모</label>
         <textarea id="consult-text" class="consult-textarea" placeholder="상담 내용을 자유롭게 입력하세요" ${dis}></textarea>
       </div>
