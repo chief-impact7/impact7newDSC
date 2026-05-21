@@ -71,12 +71,15 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
         `;
     }
 
-    // pending task가 있는 항목만 후속대책 카드에서 제외.
-    // 완료/취소/기타로 닫힌 항목은 카드에 다시 노출하되, 입력 필드 대신 read-only "처리됨"
-    // 표시 + [재입력] 버튼만 보여 의도치 않은 자동 reopen을 차단한다.
-    const filteredItems = failItems.filter(item =>
-        !state.testFailTasks.find(t => t.student_id === studentId && t.domain === item && t.source_date === state.selectedDate && t.status === 'pending')
-    );
+    // 완료/취소된 task 항목만 필터링 — pending task 항목은 수정/취소가 가능하도록 계속 표시
+    const filteredItems = failItems.filter(item => {
+        const closedTask = state.testFailTasks.find(t =>
+            t.student_id === studentId && t.domain === item
+            && t.source_date === state.selectedDate
+            && t.status && t.status !== 'pending'
+        );
+        return !closedTask;
+    });
 
     if (filteredItems.length === 0) {
         return `
@@ -94,14 +97,19 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
         ? '1차 미통과 항목에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.'
         : '2차 미통과 항목에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.';
 
-    const rows = filteredItems.map(item => {
-        // 닫힌 task가 있으면 read-only 행 + [재입력] 버튼만 보여 자동 reopen 차단.
+    // failItems 전체 렌더링: 닫힌 task → read-only, 나머지(pending 포함) → 수정 가능 form
+    const rows = failItems.map(item => {
         const closedTask = state.testFailTasks.find(t =>
             t.student_id === studentId && t.domain === item
             && t.source_date === state.selectedDate
             && t.status !== 'pending' && t.status
         );
         if (closedTask) return _renderClosedTestFailRow(studentId, item, closedTask);
+
+        const hasPendingTask = !!state.testFailTasks.find(t =>
+            t.student_id === studentId && t.domain === item
+            && t.source_date === state.selectedDate && t.status === 'pending'
+        );
 
         const action = testFailAction[item] || {};
         const type = action.type || '';
@@ -115,6 +123,7 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
                 <div class="hw-fail-domain-header">
                     <span style="font-size:12px;font-weight:600;color:var(--text-main);">${esc(item)}</span>
                     <span class="hw-fail-ox-badge ${oxDisplayClass(badgeVal)}">${esc(badgeVal || '—')}</span>
+                    ${hasPendingTask ? `<span style="font-size:10px;color:var(--primary);padding:1px 5px;border-radius:4px;border:1px solid var(--primary);margin-right:auto;">저장됨·수정가능</span>` : ''}
                     <div class="hw-fail-type-btns">
                         <button class="hw-fail-type-btn ${isVisit ? 'active' : ''}"
                             onclick="selectTestFailType('${escAttr(studentId)}', '${escapedItem}', '등원', this)">
@@ -125,7 +134,7 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
                             <span class="material-symbols-outlined" style="font-size:13px;">edit_note</span>대체숙제
                         </button>
                         ${type ? `<button class="hw-fail-type-btn hw-fail-clear-btn"
-                            onclick="clearTestFailType('${escAttr(studentId)}', '${escapedItem}')">취소</button>` : ''}
+                            onclick="clearTestFailType('${escAttr(studentId)}', '${escapedItem}')">${hasPendingTask ? '삭제' : '취소'}</button>` : ''}
                     </div>
                 </div>
                 ${isVisit ? `
@@ -166,7 +175,7 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
         <div class="detail-card hw-fail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--danger);font-size:18px;">quiz</span>
-                ${is1stOnly ? '후속대책' : '테스트 미통과'} (${filteredItems.length}개)
+                ${is1stOnly ? '후속대책' : '테스트 미통과'} (${failItems.length}개)
             </div>
             <div class="hw-fail-desc" style="font-size:12px;color:var(--text-sec);margin-bottom:10px;">
                 ${descLabel}
