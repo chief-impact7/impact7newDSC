@@ -113,6 +113,11 @@ function replaceHistoryCard(consultations) {
   if (slot) slot.outerHTML = renderHistoryCard(consultations);
 }
 
+function replaceSlot(slotId, html) {
+  const slot = document.getElementById(slotId);
+  if (slot) slot.outerHTML = html;
+}
+
 function renderSearchBar(studentId) {
   return `
     <div class="card consultation-search">
@@ -193,8 +198,7 @@ async function renderInputTab(studentId) {
     ${renderInputForm(studentId, readonly)}
   `;
   const briefing = await getStudentBriefing(studentId).catch(() => null);
-  const slot = document.getElementById('consult-briefing-slot');
-  if (slot) slot.outerHTML = renderBriefingCard(briefing);
+  replaceSlot('consult-briefing-slot', renderBriefingCard(briefing));
 }
 
 async function renderSearchTab(studentId) {
@@ -209,18 +213,12 @@ async function renderSearchTab(studentId) {
     getStudentSummary(studentId),
     listStudentConsultations(studentId, DEFAULT_HISTORY_LIMIT),
   ]);
-  const sumSlot = document.getElementById('consult-summary-slot');
-  if (sumSlot) {
-    sumSlot.outerHTML = summary.status === 'fulfilled'
-      ? renderSummaryCard(summary.value)
-      : `<div class="card consultation-summary"><h4>AI 누적 요약</h4><em>로드 실패</em></div>`;
-  }
-  const histSlot = document.getElementById('consult-history-slot');
-  if (histSlot) {
-    histSlot.outerHTML = history.status === 'fulfilled'
-      ? renderHistoryCard(history.value)
-      : `<div class="card consultation-history"><h4>상담 이력</h4><em>로드 실패</em></div>`;
-  }
+  replaceSlot('consult-summary-slot', summary.status === 'fulfilled'
+    ? renderSummaryCard(summary.value)
+    : `<div class="card consultation-summary"><h4>AI 누적 요약</h4><em>로드 실패</em></div>`);
+  replaceSlot('consult-history-slot', history.status === 'fulfilled'
+    ? renderHistoryCard(history.value)
+    : `<div class="card consultation-history"><h4>상담 이력</h4><em>로드 실패</em></div>`);
 }
 
 window.onSearchConsultations = async function (studentId) {
