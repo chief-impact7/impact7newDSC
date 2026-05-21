@@ -985,6 +985,10 @@ async function _cleanupEmptyClasses() {
 let _autoCleanupRunning = false;
 export async function autoCleanupClasses() {
     if (READ_ONLY || _autoCleanupRunning) return { expired: [], empty: [] };
+    if (!state.allStudents?.length) {
+        console.warn('[autoCleanup] 학생 데이터 미로드 — 자동 정리 건너뜀');
+        return { expired: [], empty: [] };
+    }
     _autoCleanupRunning = true;
     try {
         const expired = await _cleanupExpiredClasses();
