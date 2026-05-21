@@ -5,14 +5,13 @@ import {
   addConsultation,
   getStudentSummary,
   getStudentBriefing,
-  listStudentConsultations,
   searchStudentConsultations,
   listStudentPins,
   pinConsultation,
   unpinConsultation,
 } from './data-layer.js';
 import {
-  filterConsultationsByKeyword, DEFAULT_HISTORY_LIMIT,
+  filterConsultationsByKeyword,
   defaultSearchRange, consultationTitleFallback, sortConsultationsForHistory,
 } from './consultation-filter.js';
 import { buildConsultationPayload } from './consultation-payload.js';
@@ -129,9 +128,20 @@ function getSearchEls() {
   };
 }
 
-function replaceHistoryCard(consultations) {
+function replaceHistoryCard(consultations, pinnedIds = [], studentId = '') {
   const slot = document.querySelector('.consultation-history');
-  if (slot) slot.outerHTML = renderHistoryCard(consultations);
+  if (slot) slot.outerHTML = renderHistoryCard(consultations, pinnedIds, studentId);
+}
+
+// 기간 조회 + pin 로드 → 키워드 필터 → pin 먼저·최근순 정렬 → 이력 카드 교체.
+async function loadAndRenderHistory(studentId, { startDate, endDate, keyword = '' }) {
+  const [raw, pinnedIds] = await Promise.all([
+    searchStudentConsultations(studentId, { startDate, endDate }),
+    listStudentPins(studentId).catch(() => []),
+  ]);
+  const filtered = filterConsultationsByKeyword(raw, keyword);
+  const sorted = sortConsultationsForHistory(filtered, pinnedIds);
+  replaceHistoryCard(sorted, pinnedIds, studentId);
 }
 
 function replaceSlot(slotId, html) {
@@ -140,11 +150,12 @@ function replaceSlot(slotId, html) {
 }
 
 function renderSearchBar(studentId) {
+  const { start, end } = defaultSearchRange();
   return `
     <div class="card consultation-search">
       <div class="row consult-search-dates">
-        <label>시작일 <input type="date" id="consult-search-start"></label>
-        <label>종료일 <input type="date" id="consult-search-end"></label>
+        <label>시작일 <input type="date" id="consult-search-start" value="${start}"></label>
+        <label>종료일 <input type="date" id="consult-search-end" value="${end}"></label>
       </div>
       <div class="row">
         <input type="text" id="consult-search-kw" placeholder="키워드 (메모·유형·강사명)">
@@ -156,22 +167,28 @@ function renderSearchBar(studentId) {
   `;
 }
 
-function renderHistoryCard(consultations) {
+function renderHistoryCard(consultations, pinnedIds = [], studentId = '') {
   if (!consultations.length) {
-    return `<div class="card consultation-history"><h4>상담 이력</h4><em>없음</em></div>`;
+    return `<div class="card consultation-history"><h4>상담 이력</h4><em>최근 3개월 내역 없음</em></div>`;
   }
-  const rows = consultations.map(c => `
-    <details>
+  const pinned = new Set(pinnedIds);
+  const rows = consultations.map(c => {
+    const isPinned = pinned.has(c.id);
+    const title = escapeHtml(c.title || consultationTitleFallback(c.text));
+    const badge = escapeHtml([c.consultation_type, c.method, c.target].filter(Boolean).join('·'));
+    return `
+    <details class="consult-hist-item${isPinned ? ' pinned' : ''}">
       <summary>
+        <button class="pin-toggle${isPinned ? ' active' : ''}" title="${isPinned ? '고정 해제' : '상단 고정'}"
+          onclick="event.preventDefault(); event.stopPropagation(); onTogglePin('${escapeHtml(studentId)}','${escapeHtml(c.id)}')">📌</button>
         <strong>${escapeHtml(c.date)}</strong>
-        <span class="type-badge">${escapeHtml([c.consultation_type, c.method, c.target].filter(Boolean).join('·'))}</span>
-        (${escapeHtml(c.teacher_name)})
-        <span class="ellipsis">${escapeHtml((c.text || '').slice(0, 40))}…</span>
+        <span class="type-badge">${badge}</span>
+        <span class="hist-title">${title}</span>
       </summary>
       <pre class="consultation-text">${escapeHtml(c.text)}</pre>
-    </details>
-  `).join('');
-  return `<div class="card consultation-history"><h4>상담 이력 (최근 ${consultations.length}건)</h4>${rows}</div>`;
+    </details>`;
+  }).join('');
+  return `<div class="card consultation-history"><h4>상담 이력 (최근 3개월 · ${consultations.length}건)</h4>${rows}</div>`;
 }
 
 function renderConsultationHeader() {
@@ -238,16 +255,22 @@ async function renderSearchTab(studentId) {
     ${renderSearchBar(studentId)}
     <div id="consult-history-slot"><em>이력 로딩 중…</em></div>
   `;
-  const [summary, history] = await Promise.allSettled([
+  const { start, end } = defaultSearchRange();
+  const [summary, history, pins] = await Promise.allSettled([
     getStudentSummary(studentId),
-    listStudentConsultations(studentId, DEFAULT_HISTORY_LIMIT),
+    searchStudentConsultations(studentId, { startDate: start, endDate: end }),
+    listStudentPins(studentId),
   ]);
   replaceSlot('consult-summary-slot', summary.status === 'fulfilled'
     ? renderSummaryCard(summary.value)
     : `<div class="card consultation-summary"><h4>AI 누적 요약</h4><em>로드 실패</em></div>`);
-  replaceSlot('consult-history-slot', history.status === 'fulfilled'
-    ? renderHistoryCard(history.value)
-    : `<div class="card consultation-history"><h4>상담 이력</h4><em>로드 실패</em></div>`);
+  if (history.status === 'fulfilled') {
+    const pinnedIds = pins.status === 'fulfilled' ? pins.value : [];
+    const sorted = sortConsultationsForHistory(history.value, pinnedIds);
+    replaceSlot('consult-history-slot', renderHistoryCard(sorted, pinnedIds, studentId));
+  } else {
+    replaceSlot('consult-history-slot', `<div class="card consultation-history"><h4>상담 이력</h4><em>로드 실패</em></div>`);
+  }
 }
 
 window.onSearchConsultations = async function (studentId) {
@@ -261,14 +284,8 @@ window.onSearchConsultations = async function (studentId) {
     return;
   }
   try {
-    const raw = await searchStudentConsultations(studentId, { startDate, endDate });
-    const filtered = filterConsultationsByKeyword(raw, keyword);
-    replaceHistoryCard(filtered);
-    if (hintEl) {
-      hintEl.textContent = (!startDate && !endDate)
-        ? `최근 ${DEFAULT_HISTORY_LIMIT}건 범위에서 검색됨`
-        : `${filtered.length}건 검색됨`;
-    }
+    await loadAndRenderHistory(studentId, { startDate, endDate, keyword });
+    if (hintEl) hintEl.textContent = '검색 완료';
   } catch (err) {
     console.error('[consultation] search failed:', err);
     _deps.toast?.(`검색 실패: ${err.message}`, 'error');
@@ -277,12 +294,32 @@ window.onSearchConsultations = async function (studentId) {
 
 window.onResetConsultationSearch = async function (studentId) {
   const { startEl, endEl, kwEl, hintEl } = getSearchEls();
-  if (startEl) startEl.value = '';
-  if (endEl) endEl.value = '';
+  const { start, end } = defaultSearchRange();
+  if (startEl) startEl.value = start;
+  if (endEl) endEl.value = end;
   if (kwEl) kwEl.value = '';
   if (hintEl) hintEl.textContent = '';
-  const history = await listStudentConsultations(studentId, DEFAULT_HISTORY_LIMIT);
-  replaceHistoryCard(history);
+  await loadAndRenderHistory(studentId, { startDate: start, endDate: end, keyword: '' });
+};
+
+window.onTogglePin = async function (studentId, cid) {
+  if (_deps.readonly === true) { _deps.toast?.('읽기 전용 모드', 'warn'); return; }
+  const teacher = _deps.getCurrentTeacher?.();
+  if (!teacher) { _deps.toast?.('강사 정보 로드 실패', 'error'); return; }
+  try {
+    const pinnedIds = await listStudentPins(studentId);
+    if (pinnedIds.includes(cid)) await unpinConsultation(cid);
+    else await pinConsultation(cid, studentId, teacher.id);
+    const { startEl, endEl, kwEl } = getSearchEls();
+    await loadAndRenderHistory(studentId, {
+      startDate: startEl?.value || null,
+      endDate: endEl?.value || null,
+      keyword: kwEl?.value || '',
+    });
+  } catch (err) {
+    console.error('[consultation] pin toggle failed:', err);
+    _deps.toast?.(`고정 변경 실패: ${err.message}`, 'error');
+  }
 };
 
 window.onSaveConsultation = async function (studentId) {
