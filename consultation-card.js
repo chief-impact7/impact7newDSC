@@ -9,8 +9,11 @@ import {
   searchStudentConsultations,
 } from './data-layer.js';
 import { filterConsultationsByKeyword, DEFAULT_HISTORY_LIMIT } from './consultation-filter.js';
+import { buildConsultationPayload } from './consultation-payload.js';
+import { activeClassCodes } from './student-helpers.js';
 
 let _deps = {};
+let _activeSubtab = 'input';  // 'input' | 'search'
 export function initConsultationCardDeps(deps) {
   // deps: { getStudent(id) → {name, ...}, getCurrentTeacher() → {id, name}, toast(msg, type), readonly: bool }
   _deps = deps;
@@ -133,38 +136,79 @@ function renderHistoryCard(consultations) {
   return `<div class="card consultation-history"><h4>상담 이력 (최근 ${consultations.length}건)</h4>${rows}</div>`;
 }
 
+function renderConsultationHeader() {
+  return `
+    <div class="consultation-header">
+      <h3>🗨 상담</h3>
+      <button class="consultation-close" onclick="switchDetailTab('daily')">× 닫기</button>
+    </div>
+    <div class="consultation-subtabs">
+      <button class="consultation-subtab ${_activeSubtab === 'input' ? 'active' : ''}"
+        onclick="onConsultationSubtab('input')">입력</button>
+      <button class="consultation-subtab ${_activeSubtab === 'search' ? 'active' : ''}"
+        onclick="onConsultationSubtab('search')">조회</button>
+    </div>
+  `;
+}
+
 export async function renderConsultationTab(studentId) {
+  window.__consultStudentId = studentId;
   const container = document.getElementById('detail-content');
   if (!container) return;
-
-  // 1차 렌더 (입력 폼은 즉시, 나머지는 로딩 중 표시)
-  const readonly = _deps.readonly === true;
   container.innerHTML = `
-    ${renderInputForm(studentId, readonly)}
-    <div id="consult-summary-slot"><em>요약 로딩 중…</em></div>
+    ${renderConsultationHeader()}
+    <div id="consult-subtab-body"><em>로딩 중…</em></div>
+  `;
+  if (_activeSubtab === 'input') {
+    await renderInputTab(studentId);
+  } else {
+    await renderSearchTab(studentId);
+  }
+}
+
+window.onConsultationSubtab = function (tab) {
+  _activeSubtab = tab;
+  const studentId = window.__consultStudentId;
+  if (studentId) renderConsultationTab(studentId);  // 헤더가 active 상태를 다시 그림
+};
+
+async function renderInputTab(studentId) {
+  const body = document.getElementById('consult-subtab-body');
+  if (!body) return;
+  const readonly = _deps.readonly === true;
+  body.innerHTML = `
     <div id="consult-briefing-slot"><em>브리핑 로딩 중…</em></div>
+    ${renderInputForm(studentId, readonly)}
+  `;
+  const briefing = await getStudentBriefing(studentId).catch(() => null);
+  const slot = document.getElementById('consult-briefing-slot');
+  if (slot) slot.outerHTML = renderBriefingCard(briefing);
+}
+
+async function renderSearchTab(studentId) {
+  const body = document.getElementById('consult-subtab-body');
+  if (!body) return;
+  body.innerHTML = `
+    <div id="consult-summary-slot"><em>요약 로딩 중…</em></div>
     ${renderSearchBar(studentId)}
     <div id="consult-history-slot"><em>이력 로딩 중…</em></div>
   `;
-
-  // 병렬 페치
-  const [summary, briefing, history] = await Promise.allSettled([
+  const [summary, history] = await Promise.allSettled([
     getStudentSummary(studentId),
-    getStudentBriefing(studentId),
     listStudentConsultations(studentId, DEFAULT_HISTORY_LIMIT),
   ]);
-
-  document.getElementById('consult-summary-slot').outerHTML = summary.status === 'fulfilled'
-    ? renderSummaryCard(summary.value)
-    : `<div class="card"><h4>AI 누적 요약</h4><em>로드 실패: ${escapeHtml(summary.reason?.message || '')}</em></div>`;
-
-  document.getElementById('consult-briefing-slot').outerHTML = briefing.status === 'fulfilled'
-    ? renderBriefingCard(briefing.value)
-    : `<div class="card"><h4>다음 상담 브리핑</h4><em>로드 실패</em></div>`;
-
-  document.getElementById('consult-history-slot').outerHTML = history.status === 'fulfilled'
-    ? renderHistoryCard(history.value)
-    : `<div class="card"><h4>상담 이력</h4><em>로드 실패</em></div>`;
+  const sumSlot = document.getElementById('consult-summary-slot');
+  if (sumSlot) {
+    sumSlot.outerHTML = summary.status === 'fulfilled'
+      ? renderSummaryCard(summary.value)
+      : `<div class="card consultation-summary"><h4>AI 누적 요약</h4><em>로드 실패</em></div>`;
+  }
+  const histSlot = document.getElementById('consult-history-slot');
+  if (histSlot) {
+    histSlot.outerHTML = history.status === 'fulfilled'
+      ? renderHistoryCard(history.value)
+      : `<div class="card consultation-history"><h4>상담 이력</h4><em>로드 실패</em></div>`;
+  }
 }
 
 window.onSearchConsultations = async function (studentId) {
