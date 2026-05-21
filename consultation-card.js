@@ -7,6 +7,7 @@ import {
   getStudentBriefing,
   listStudentConsultations,
   searchStudentConsultations,
+  getLatestInputGuide,
 } from './data-layer.js';
 import { filterConsultationsByKeyword, DEFAULT_HISTORY_LIMIT } from './consultation-filter.js';
 import { buildConsultationPayload } from './consultation-payload.js';
@@ -29,6 +30,17 @@ function escapeHtml(s) {
 
 const TARGETS = ['학생', '학부모'];
 const METHODS = ['전화', '문자', '대면', '기타'];
+
+function renderInputGuideCard(guides) {
+  if (!guides || !guides.length) return '';
+  const items = guides.map(g => `<li>${escapeHtml(g)}</li>`).join('');
+  return `
+    <details class="card consultation-guide">
+      <summary>📋 입력 안내 (${guides.length})</summary>
+      <ul class="consult-guide-list">${items}</ul>
+    </details>
+  `;
+}
 
 function renderInputForm(studentId, readonly) {
   const today = new Date().toISOString().slice(0, 10);
@@ -221,10 +233,15 @@ async function renderInputTab(studentId) {
   if (!body) return;
   const readonly = _deps.readonly === true;
   body.innerHTML = `
+    <div id="consult-guide-slot"></div>
     <div id="consult-briefing-slot"><em>브리핑 로딩 중…</em></div>
     ${renderInputForm(studentId, readonly)}
   `;
-  const briefing = await getStudentBriefing(studentId).catch(() => null);
+  const [guides, briefing] = await Promise.all([
+    getLatestInputGuide().catch(() => []),
+    getStudentBriefing(studentId).catch(() => null),
+  ]);
+  replaceSlot('consult-guide-slot', renderInputGuideCard(guides));
   replaceSlot('consult-briefing-slot', renderBriefingCard(briefing));
 }
 
