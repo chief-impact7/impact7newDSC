@@ -49,19 +49,23 @@ function renderInputForm(studentId, readonly) {
           <label for="consult-date">상담일</label>
           <input type="date" id="consult-date" value="${today}" onchange="onConsultDateChange('${escapeHtml(studentId)}')" ${dis}>
         </div>
-        <div class="consult-field">
+        <div class="consult-field consult-field-inline">
           <span class="consult-field-label">입력일</span>
-          <span class="consult-field-value muted">저장 시 자동 기록</span>
+          <span class="consult-field-value muted">저장 시 자동</span>
         </div>
-        <div class="consult-field">
+        <div class="consult-field consult-field-inline">
           <span class="consult-field-label">반명</span>
           <span class="consult-field-value" id="consult-class-name">${escapeHtml(className || '-')}</span>
         </div>
-        <div class="consult-field">
+        <div class="consult-field consult-field-inline">
           <span class="consult-field-label">학생명</span>
           <span class="consult-field-value">${escapeHtml(student.name || '-')}</span>
         </div>
-        <div class="consult-field consult-field-wide">
+        <div class="consult-field consult-field-inline">
+          <span class="consult-field-label">입력자</span>
+          <span class="consult-field-value muted">${escapeHtml(teacher.name || '-')}</span>
+        </div>
+        <div class="consult-field consult-field-inline consult-field-wide">
           <span class="consult-field-label">대상</span>
           <div class="consult-radio-group">${targetRadios}</div>
         </div>
@@ -72,10 +76,6 @@ function renderInputForm(studentId, readonly) {
         <div class="consult-field">
           <label for="consult-type">유형</label>
           <select id="consult-type" ${dis}>${typeOpts}</select>
-        </div>
-        <div class="consult-field">
-          <span class="consult-field-label">입력자</span>
-          <span class="consult-field-value muted">${escapeHtml(teacher.name || '-')}</span>
         </div>
       </div>
       <div class="consult-field consult-field-wide">
@@ -144,7 +144,7 @@ function replaceSlot(slotId, html) {
 function renderSearchBar(studentId) {
   return `
     <div class="card consultation-search">
-      <div class="row">
+      <div class="row consult-search-dates">
         <label>시작일 <input type="date" id="consult-search-start"></label>
         <label>종료일 <input type="date" id="consult-search-end"></label>
       </div>
@@ -180,7 +180,6 @@ function renderConsultationHeader() {
   return `
     <div class="consultation-header">
       <h3>🗨 상담</h3>
-      <button class="consultation-close" onclick="switchDetailTab('daily')">× 닫기</button>
     </div>
     <div class="consultation-subtabs">
       <button class="consultation-subtab ${_activeSubtab === 'input' ? 'active' : ''}"
