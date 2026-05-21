@@ -138,7 +138,7 @@ function renderHistoryCard(consultations) {
     <details>
       <summary>
         <strong>${escapeHtml(c.date)}</strong>
-        <span class="type-badge">${escapeHtml(c.consultation_type)}</span>
+        <span class="type-badge">${escapeHtml([c.consultation_type, c.method, c.target].filter(Boolean).join('·'))}</span>
         (${escapeHtml(c.teacher_name)})
         <span class="ellipsis">${escapeHtml((c.text || '').slice(0, 40))}…</span>
       </summary>
