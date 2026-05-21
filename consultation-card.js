@@ -1,5 +1,5 @@
 // 학생 상세의 [상담] 탭 렌더링 + 입력 저장 + 조회.
-// data-layer.js 의 헬퍼 4개를 활용.
+// data-layer.js 의 상담 헬퍼를 활용.
 
 import {
   addConsultation,
@@ -7,9 +7,16 @@ import {
   getStudentBriefing,
   listStudentConsultations,
   searchStudentConsultations,
+  listStudentPins,
+  pinConsultation,
+  unpinConsultation,
 } from './data-layer.js';
-import { filterConsultationsByKeyword, DEFAULT_HISTORY_LIMIT } from './consultation-filter.js';
+import {
+  filterConsultationsByKeyword, DEFAULT_HISTORY_LIMIT,
+  defaultSearchRange, consultationTitleFallback, sortConsultationsForHistory,
+} from './consultation-filter.js';
 import { buildConsultationPayload } from './consultation-payload.js';
+import { generateConsultationTitle } from './consultation-ai.js';
 import { activeClassCodes } from './student-helpers.js';
 
 let _deps = {};
@@ -298,6 +305,7 @@ window.onSaveConsultation = async function (studentId) {
   btn.disabled = true;
   btn.textContent = '저장 중...';
   try {
+    const title = await generateConsultationTitle(textEl.value);
     const payload = buildConsultationPayload({
       studentId,
       studentName: student.name,
@@ -309,6 +317,7 @@ window.onSaveConsultation = async function (studentId) {
       method: methodEl.value,
       consultationType: typeEl.value,
       text: textEl.value,
+      title,
     });
     await addConsultation(payload);
     _deps.toast?.('상담 저장됨', 'success');
