@@ -27,29 +27,41 @@ function escapeHtml(s) {
   }[c]));
 }
 
+const TARGETS = ['학생', '학부모'];
+const METHODS = ['전화', '문자', '대면', '기타'];
+
 function renderInputForm(studentId, readonly) {
   const today = new Date().toISOString().slice(0, 10);
-  const typeOpts = TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
   const dis = readonly ? 'disabled' : '';
   const teacher = _deps.getCurrentTeacher?.() || { name: '?' };
-  const assigned = _deps.getAssignedTeachers?.(studentId) || [];
+  const student = _deps.getStudent?.(studentId) || {};
+  const className = activeClassCodes(student, today).join(', ');
+  const typeOpts = TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
+  const methodOpts = METHODS.map(m => `<option value="${m}">${m}</option>`).join('');
+  const targetRadios = TARGETS.map((t, i) =>
+    `<label class="consult-radio"><input type="radio" name="consult-target" value="${t}" ${i === 0 ? 'checked' : ''} ${dis}> ${t}</label>`
+  ).join('');
   return `
     <div class="card consultation-input ${readonly ? 'readonly' : ''}">
       <h4>이번 상담 입력</h4>
-      <div class="row consult-meta">
-        <span class="hint">입력자: <strong>${escapeHtml(teacher.name)}</strong></span>
-        ${assigned.length ? `<span class="hint">담당: ${escapeHtml(assigned.join(', '))}</span>` : ''}
-      </div>
-      <div class="row">
+      <div class="consult-meta-grid">
         <label>상담일 <input type="date" id="consult-date" value="${today}" ${dis}></label>
+        <span class="consult-meta-field">입력일 <strong>저장 시 자동</strong></span>
+        <span class="consult-meta-field">반명 <strong>${escapeHtml(className || '-')}</strong></span>
+        <span class="consult-meta-field">학생명 <strong>${escapeHtml(student.name || '-')}</strong></span>
+      </div>
+      <div class="consult-row">
+        <span class="consult-label">대상</span> ${targetRadios}
+        ${teacher.name ? `<span class="hint">입력자: ${escapeHtml(teacher.name)}</span>` : ''}
+      </div>
+      <div class="consult-row">
+        <label>형태 <select id="consult-method" ${dis}>${methodOpts}</select></label>
         <label>유형 <select id="consult-type" ${dis}>${typeOpts}</select></label>
       </div>
-      <textarea id="consult-text" rows="6" placeholder="상담 메모를 자유롭게 입력하세요"
-        ${dis}></textarea>
-      <div class="row">
-        <button id="consult-save-btn"
-          onclick="onSaveConsultation('${escapeHtml(studentId)}')"
-          ${dis}>저장</button>
+      <textarea id="consult-text" rows="6" placeholder="상담 메모를 자유롭게 입력하세요" ${dis}></textarea>
+      <div class="consult-row consult-actions">
+        <button id="consult-save-btn" class="consult-save"
+          onclick="onSaveConsultation('${escapeHtml(studentId)}')" ${dis}>저장</button>
         ${readonly ? '<span class="hint">READ-ONLY 모드</span>' : ''}
       </div>
     </div>
@@ -248,9 +260,11 @@ window.onResetConsultationSearch = async function (studentId) {
 
 window.onSaveConsultation = async function (studentId) {
   const dateEl = document.getElementById('consult-date');
+  const methodEl = document.getElementById('consult-method');
   const typeEl = document.getElementById('consult-type');
   const textEl = document.getElementById('consult-text');
   const btn = document.getElementById('consult-save-btn');
+  const targetEl = document.querySelector('input[name="consult-target"]:checked');
   if (!dateEl.value || !textEl.value.trim()) {
     _deps.toast?.('상담일과 메모를 입력하세요', 'warn');
     return;
@@ -264,20 +278,21 @@ window.onSaveConsultation = async function (studentId) {
   btn.disabled = true;
   btn.textContent = '저장 중...';
   try {
-    await addConsultation({
-      student_id: studentId,
-      student_name: student.name,
-      teacher_id: teacher.id,
-      teacher_name: teacher.name,
+    const payload = buildConsultationPayload({
+      studentId,
+      studentName: student.name,
+      className: activeClassCodes(student, dateEl.value).join(', '),
+      teacherId: teacher.id,
+      teacherName: teacher.name,
       date: dateEl.value,
-      consultation_type: typeEl.value,
-      text: textEl.value.trim(),
+      target: targetEl?.value || '학생',
+      method: methodEl.value,
+      consultationType: typeEl.value,
+      text: textEl.value,
     });
+    await addConsultation(payload);
     _deps.toast?.('상담 저장됨', 'success');
     textEl.value = '';
-    // 이력만 재페치
-    const history = await listStudentConsultations(studentId, DEFAULT_HISTORY_LIMIT);
-    replaceHistoryCard(history);
   } catch (err) {
     console.error('[consultation] save failed:', err);
     _deps.toast?.(`저장 실패: ${err.message}`, 'error');
