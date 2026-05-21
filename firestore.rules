@@ -343,7 +343,8 @@ service cloud.firestore {
           'naesin_start', 'naesin_end', 'schedule',
           'free_schedule', 'free_start', 'free_end',
           'special_start', 'special_end',
-          'class_type', 'fee_type', 'updated_at', 'updated_by'
+          'class_type', 'fee_type', 'updated_at', 'updated_by',
+          'default_days'
         ]);
       }
 

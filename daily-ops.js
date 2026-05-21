@@ -706,7 +706,6 @@ function getRegularClassStudents(classCode) {
 }
 
 function _getAllClassCodes() {
-    // class_settings에 등록된 반만 사이드바에 노출 (자동 유도 가상 반 제외)
     const regularCodes = new Set();
     const freeCounts = new Map();
     const naesinCounts = new Map();
@@ -728,6 +727,16 @@ function _getAllClassCodes() {
             freeCounts.set(code, 0);
         }
         regularCodes.add(code);
+    });
+
+    // class_settings 문서 없는 정규 반 → enrollment fallback (반설정 미등록 반도 소속 트리 노출)
+    state.allStudents.forEach(s => {
+        if (isWithdrawnAt(s, state.selectedDate)) return;
+        (s.enrollments || []).forEach(e => {
+            if ((e.class_type || '정규') !== '정규') return;
+            const code = enrollmentCode(e);
+            if (code && !state.classSettings[code]) regularCodes.add(code);
+        });
     });
 
     // 2. 학생 enrollment로 카운트 (등록된 반에 한해)
