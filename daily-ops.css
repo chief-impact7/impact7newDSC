@@ -3908,12 +3908,13 @@ textarea.field-input {
   padding-bottom: 8px; border-bottom: 1px solid var(--border, #e7e3db);
 }
 
-/* 입력폼: 라벨(위) + 컨트롤(아래) 일관 필드 그리드 */
+/* 입력폼: 라벨(위) + 컨트롤(아래) 일관 필드. 행 단위 가로 배치 */
 .consult-form-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; margin-bottom: 16px;
+  display: flex; flex-direction: column; gap: 14px; margin-bottom: 16px;
 }
+.consult-row { display: flex; gap: 18px; align-items: flex-end; }
+.consult-row > .consult-field { flex: 1; }
 .consult-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.consult-field-wide { grid-column: 1 / -1; }
 /* 표시 전용 필드: 라벨 옆에 값 (가로) — 공간 절약 */
 .consult-field-inline { flex-direction: row; align-items: baseline; gap: 8px; }
 .consult-field-inline > .consult-field-label { flex-shrink: 0; white-space: nowrap; }
