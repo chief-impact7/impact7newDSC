@@ -37,3 +37,13 @@ test('className 비어도 키는 존재 (빈 문자열)', () => {
   const p = buildConsultationPayload({ ...base, className: '' });
   assert.equal(p.class_name, '');
 });
+
+test('title 필드 포함', () => {
+  const p = buildConsultationPayload({ ...base, title: '정기 상담 요약' });
+  assert.equal(p.title, '정기 상담 요약');
+});
+
+test('title 없으면 빈 문자열', () => {
+  const p = buildConsultationPayload(base);
+  assert.equal(p.title, '');
+});
