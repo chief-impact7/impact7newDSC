@@ -3887,3 +3887,108 @@ textarea.field-input {
   min-width: 32px;
   padding-top: 1px;
 }
+
+/* ── 상담 탭 redesign ─────────────────────────────── */
+.consultation-subtabs {
+  display: flex; gap: 4px; border-bottom: 1px solid var(--border, #e7e3db);
+  padding: 4px 4px 0;
+}
+.consultation-subtab {
+  background: transparent; border: none; padding: 8px 20px; cursor: pointer;
+  font-size: .9rem; color: rgba(0,0,0,.58); border-bottom: 2px solid transparent;
+}
+.consultation-subtab.active { color: var(--primary, #00754A); border-bottom-color: var(--primary, #00754A); font-weight: 600; }
+.consultation-input, .consultation-history, .consultation-summary, .consultation-briefing, .consultation-search {
+  border: 1px solid var(--border, #e7e3db); border-radius: 12px; padding: 18px 18px;
+  margin: 14px 0; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 0 0 1px rgba(0,0,0,.02);
+}
+.consultation-input h4, .consultation-history h4, .consultation-summary h4,
+.consultation-briefing h4, .consultation-search h4 {
+  margin: 0 0 14px; font-size: .98rem; color: var(--primary, #00754A);
+  padding-bottom: 8px; border-bottom: 1px solid var(--border, #e7e3db);
+}
+
+/* 입력폼: 라벨(위) + 컨트롤(아래) 일관 필드 그리드 */
+.consult-form-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; margin-bottom: 16px;
+}
+.consult-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.consult-field-wide { grid-column: 1 / -1; }
+/* 표시 전용 필드: 라벨 옆에 값 (가로) — 공간 절약 */
+.consult-field-inline { flex-direction: row; align-items: baseline; gap: 8px; }
+.consult-field-inline > .consult-field-label { flex-shrink: 0; white-space: nowrap; }
+.consult-field-inline .consult-radio-group { height: auto; }
+.consult-field > label, .consult-field-label {
+  font-size: .76rem; font-weight: 600; color: rgba(0,0,0,.5); letter-spacing: .01em;
+}
+.consult-field-value { font-size: .92rem; color: rgba(0,0,0,.87); line-height: 1.6; }
+.consult-field-value.muted { color: rgba(0,0,0,.5); }
+.consult-field input[type="date"], .consult-field select {
+  height: 38px; border: 1px solid var(--border, #e7e3db); border-radius: 8px;
+  padding: 0 10px; font-size: .9rem; background: #fff; color: rgba(0,0,0,.87);
+  font-family: inherit;
+}
+.consult-field input[type="date"]:focus, .consult-field select:focus,
+.consult-textarea:focus {
+  outline: none; border-color: var(--primary, #00754A);
+  box-shadow: 0 0 0 3px rgba(0,117,74,.12);
+}
+.consult-radio-group { display: flex; gap: 18px; align-items: center; height: 38px; }
+.consult-radio { font-size: .9rem; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+.consult-radio input { accent-color: var(--primary, #00754A); }
+.consult-textarea {
+  width: 100%; box-sizing: border-box; border: 1px solid var(--border, #e7e3db);
+  border-radius: 8px; padding: 10px 12px; font-size: .92rem; min-height: 120px;
+  resize: vertical; font-family: inherit; line-height: 1.6; margin-top: 5px;
+}
+.consult-actions {
+  display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 14px;
+}
+.consult-save {
+  background: var(--primary, #00754A); color: #fff; border: none;
+  border-radius: 50px; padding: 9px 32px; cursor: pointer; font-size: .92rem; font-weight: 600;
+}
+.consult-save:hover { background: #006241; }
+.consult-save:active { transform: scale(.97); }
+.consult-save:disabled { opacity: .5; cursor: default; }
+.type-badge {
+  display: inline-block; background: var(--primary-light, #d4e9e2); color: #1E3932;
+  border-radius: 50px; padding: 2px 10px; font-size: .76rem; margin: 0 4px; font-weight: 500;
+}
+
+/* 조회 탭 검색 바 */
+.consultation-search .row {
+  display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap;
+}
+/* 시작일·종료일 한 줄 고정 */
+.consultation-search .consult-search-dates { flex-wrap: nowrap; }
+.consultation-search .consult-search-dates label { flex: 1; min-width: 0; }
+.consultation-search .consult-search-dates input[type="date"] { flex: 1; min-width: 0; width: 100%; }
+.consultation-search label { font-size: .82rem; color: rgba(0,0,0,.6); display: inline-flex; align-items: center; gap: 6px; }
+.consultation-search input[type="date"], .consultation-search input[type="text"] {
+  height: 36px; border: 1px solid var(--border, #e7e3db); border-radius: 8px;
+  padding: 0 10px; font-size: .9rem; font-family: inherit; background: #fff;
+}
+.consultation-search input[type="text"] { flex: 1; min-width: 150px; }
+.consultation-search input:focus {
+  outline: none; border-color: var(--primary, #00754A); box-shadow: 0 0 0 3px rgba(0,117,74,.12);
+}
+.consultation-search button {
+  height: 36px; border-radius: 8px; border: 1px solid var(--border, #e7e3db);
+  background: #fff; padding: 0 16px; cursor: pointer; font-size: .88rem; color: rgba(0,0,0,.75);
+}
+.consultation-search #consult-search-btn {
+  background: var(--primary, #00754A); color: #fff; border-color: var(--primary, #00754A); font-weight: 600;
+}
+.consultation-search #consult-search-btn:active, .consultation-search #consult-search-reset:active { transform: scale(.97); }
+.consultation-search .hint { display: block; font-size: .8rem; color: rgba(0,0,0,.5); margin-top: 2px; }
+
+/* 이력 카드 */
+.consultation-history details { border-bottom: 1px solid var(--border, #e7e3db); padding: 8px 0; }
+.consultation-history details:last-child { border-bottom: none; }
+.consultation-history summary { cursor: pointer; font-size: .9rem; line-height: 1.7; }
+.consultation-history .ellipsis { color: rgba(0,0,0,.55); }
+.consultation-history .consultation-text {
+  white-space: pre-wrap; background: var(--surface, #f2f0eb); border-radius: 8px;
+  padding: 10px 12px; margin: 8px 0 4px; font-size: .88rem; font-family: inherit; line-height: 1.6;
+}
