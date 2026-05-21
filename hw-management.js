@@ -50,8 +50,8 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
             return false;
         });
 
-    const titleLabel = is1stOnly ? '후속대책' : '2차 숙제 처리';
-    const passLabel = is1stOnly ? '1차 모두 통과!' : '2차 모두 통과!';
+    const titleLabel = is1stOnly ? '숙제 1차 미통과' : '숙제 2차 미통과';
+    const passLabel = is1stOnly ? '숙제 1차 모두 통과!' : '숙제 2차 모두 통과!';
 
     if (failDomains.length === 0) {
         return `
@@ -88,8 +88,8 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
     }
 
     const descLabel = is1stOnly
-        ? '1차 미통과 영역에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.'
-        : '2차 미통과 영역에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.';
+        ? '숙제 1차 미통과 영역에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.'
+        : '숙제 2차 미통과 영역에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.';
 
     const rows = filteredDomains.map(domain => {
         const closedTask = state.hwFailTasks.find(t =>
@@ -169,7 +169,7 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
         <div class="detail-card hw-fail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--danger);font-size:18px;">assignment_late</span>
-                ${is1stOnly ? '후속대책' : '숙제 미통과'} (${filteredDomains.length}개 영역)
+                ${titleLabel} (${filteredDomains.length}개 영역)
             </div>
             <div class="hw-fail-desc" style="font-size:12px;color:var(--text-sec);margin-bottom:10px;">
                 ${descLabel}

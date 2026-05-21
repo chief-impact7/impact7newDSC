@@ -59,8 +59,8 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
             return false;
         });
 
-    const titleLabel = is1stOnly ? '후속대책' : '2차 테스트 처리';
-    const passLabel = is1stOnly ? '1차 모두 통과!' : '2차 모두 통과!';
+    const titleLabel = is1stOnly ? '테스트 1차 미통과' : '테스트 2차 미통과';
+    const passLabel = is1stOnly ? '테스트 1차 모두 통과!' : '테스트 2차 모두 통과!';
 
     if (failItems.length === 0) {
         return `
@@ -97,8 +97,8 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
     }
 
     const descLabel = is1stOnly
-        ? '1차 미통과 항목에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.'
-        : '2차 미통과 항목에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.';
+        ? '테스트 1차 미통과 항목에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.'
+        : '테스트 2차 미통과 항목에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.';
 
     const rows = filteredItems.map(item => {
         const closedTask = state.testFailTasks.find(t =>
@@ -177,7 +177,7 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
         <div class="detail-card hw-fail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--danger);font-size:18px;">quiz</span>
-                ${is1stOnly ? '후속대책' : '테스트 미통과'} (${filteredItems.length}개)
+                ${titleLabel} (${filteredItems.length}개)
             </div>
             <div class="hw-fail-desc" style="font-size:12px;color:var(--text-sec);margin-bottom:10px;">
                 ${descLabel}
