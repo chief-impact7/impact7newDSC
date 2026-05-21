@@ -1055,6 +1055,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // 상담 고정(pin) — 24h window 없는 별도 컬렉션 (consultations는 안 건드림)
+    match /consultation_pins/{cid} {
+      allow read: if isAuthorized();
+      allow create, update: if isAuthorized()
+        && request.resource.data.teacher_id == request.auth.uid;
+      allow delete: if isAuthorized()
+        && resource.data.teacher_id == request.auth.uid;
+    }
+
     // =========================================================================
     // 기본 거부: 위에 매칭되지 않는 모든 경로 차단
     // =========================================================================

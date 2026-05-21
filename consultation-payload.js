@@ -4,7 +4,7 @@
 export function buildConsultationPayload({
   studentId, studentName, className,
   teacherId, teacherName,
-  date, target, method, consultationType, text,
+  date, target, method, consultationType, text, title,
 }) {
   return {
     student_id: studentId,
@@ -17,5 +17,6 @@ export function buildConsultationPayload({
     method,
     consultation_type: consultationType,
     text: (text || '').trim(),
+    title: title || '',
   };
 }
