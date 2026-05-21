@@ -3,6 +3,7 @@
 
 import {
   addConsultation,
+  updateConsultationTitle,
   getStudentSummary,
   getStudentBriefing,
   searchStudentConsultations,
@@ -327,6 +328,18 @@ window.onTogglePin = async function (studentId, cid) {
   }
 };
 
+// 저장 후 백그라운드로 AI 제목 생성 → fallback과 다르면 문서 업데이트. (저장 속도와 분리)
+async function refineConsultationTitle(cid, memo) {
+  try {
+    const title = await generateConsultationTitle(memo);
+    if (title && title !== consultationTitleFallback(memo)) {
+      await updateConsultationTitle(cid, title);
+    }
+  } catch (err) {
+    console.error('[consultation] 제목 백그라운드 갱신 실패:', err);
+  }
+}
+
 window.onSaveConsultation = async function (studentId) {
   const dateEl = document.getElementById('consult-date');
   const methodEl = document.getElementById('consult-method');
@@ -347,7 +360,7 @@ window.onSaveConsultation = async function (studentId) {
   btn.disabled = true;
   btn.textContent = '저장 중...';
   try {
-    const title = await generateConsultationTitle(textEl.value);
+    const memo = textEl.value;
     const payload = buildConsultationPayload({
       studentId,
       studentName: student.name,
@@ -358,12 +371,13 @@ window.onSaveConsultation = async function (studentId) {
       target: targetEl?.value || '학생',
       method: methodEl.value,
       consultationType: typeEl.value,
-      text: textEl.value,
-      title,
+      text: memo,
+      title: consultationTitleFallback(memo),
     });
-    await addConsultation(payload);
+    const cid = await addConsultation(payload);
     _deps.toast?.('상담 저장됨', 'success');
     textEl.value = '';
+    if (cid) refineConsultationTitle(cid, memo);  // 백그라운드 AI 제목 (await 안 함 → 저장 즉시)
   } catch (err) {
     console.error('[consultation] save failed:', err);
     _deps.toast?.(`저장 실패: ${err.message}`, 'error');
