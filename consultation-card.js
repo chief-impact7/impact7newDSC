@@ -58,10 +58,6 @@ function renderInputForm(studentId, readonly) {
           <span class="consult-field-value" id="consult-class-name">${escapeHtml(className || '-')}</span>
         </div>
         <div class="consult-field consult-field-inline">
-          <span class="consult-field-label">학생명</span>
-          <span class="consult-field-value">${escapeHtml(student.name || '-')}</span>
-        </div>
-        <div class="consult-field consult-field-inline">
           <span class="consult-field-label">입력자</span>
           <span class="consult-field-value muted">${escapeHtml(teacher.name || '-')}</span>
         </div>
@@ -177,10 +173,8 @@ function renderHistoryCard(consultations) {
 }
 
 function renderConsultationHeader() {
+  // 다른 탭과 통일: 별도 "상담" 헤더 바 없이 서브탭부터 바로 (탭 바에 이미 '상담' 표시됨)
   return `
-    <div class="consultation-header">
-      <h3>🗨 상담</h3>
-    </div>
     <div class="consultation-subtabs">
       <button class="consultation-subtab ${_activeSubtab === 'input' ? 'active' : ''}"
         onclick="onConsultationSubtab('input')">입력</button>

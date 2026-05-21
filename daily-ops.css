@@ -3889,20 +3889,9 @@ textarea.field-input {
 }
 
 /* ── 상담 탭 redesign ─────────────────────────────── */
-.consultation-header {
-  display: flex; align-items: center; justify-content: space-between;
-  background: #1E3932; color: #fff;
-  padding: 10px 16px; border-radius: 12px 12px 0 0;
-}
-.consultation-header h3 { margin: 0; font-size: 1.05rem; }
-.consultation-close {
-  background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.4);
-  border-radius: 50px; padding: 4px 14px; cursor: pointer; font-size: .85rem;
-}
-.consultation-close:hover { background: rgba(255,255,255,.12); }
 .consultation-subtabs {
   display: flex; gap: 4px; border-bottom: 1px solid var(--border, #e7e3db);
-  background: var(--surface, #f2f0eb); padding: 6px 8px 0;
+  padding: 4px 4px 0;
 }
 .consultation-subtab {
   background: transparent; border: none; padding: 8px 20px; cursor: pointer;
