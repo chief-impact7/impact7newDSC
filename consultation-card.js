@@ -45,9 +45,9 @@ function renderInputForm(studentId, readonly) {
     <div class="card consultation-input ${readonly ? 'readonly' : ''}">
       <h4>이번 상담 입력</h4>
       <div class="consult-meta-grid">
-        <label>상담일 <input type="date" id="consult-date" value="${today}" ${dis}></label>
+        <label>상담일 <input type="date" id="consult-date" value="${today}" onchange="onConsultDateChange('${escapeHtml(studentId)}')" ${dis}></label>
         <span class="consult-meta-field">입력일 <strong>저장 시 자동</strong></span>
-        <span class="consult-meta-field">반명 <strong>${escapeHtml(className || '-')}</strong></span>
+        <span class="consult-meta-field">반명 <strong id="consult-class-name">${escapeHtml(className || '-')}</strong></span>
         <span class="consult-meta-field">학생명 <strong>${escapeHtml(student.name || '-')}</strong></span>
       </div>
       <div class="consult-row">
@@ -187,6 +187,15 @@ window.onConsultationSubtab = function (tab) {
   _activeSubtab = tab;
   const studentId = window.__consultStudentId;
   if (studentId) renderConsultationTab(studentId);  // 헤더가 active 상태를 다시 그림
+};
+
+// 상담일 변경 시 반명을 상담일 기준으로 갱신 (저장 로직과 일치). textContent라 XSS 안전.
+window.onConsultDateChange = function (studentId) {
+  const dateEl = document.getElementById('consult-date');
+  const nameEl = document.getElementById('consult-class-name');
+  if (!dateEl || !nameEl) return;
+  const student = _deps.getStudent?.(studentId) || {};
+  nameEl.textContent = activeClassCodes(student, dateEl.value).join(', ') || '-';
 };
 
 async function renderInputTab(studentId) {
