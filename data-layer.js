@@ -820,6 +820,11 @@ export async function addConsultation(data) {
   return ref?.id;
 }
 
+// 제목만 갱신 (백그라운드 AI 제목용). update rule: 본인 + 24h 이내 + title은 허용 키.
+export async function updateConsultationTitle(cid, title) {
+  await auditUpdate(doc(db, 'consultations', cid), { title });
+}
+
 export async function getStudentSummary(studentId) {
   const snap = await getDoc(doc(db, 'consultation_summaries', studentId));
   return snap.exists() ? snap.data() : null;
