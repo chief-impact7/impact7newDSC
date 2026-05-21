@@ -8,7 +8,7 @@ import {
     onSnapshot
 } from 'firebase/firestore';
 import { db } from './firebase-config.js';
-import { auditUpdate, auditSet, auditAdd, batchUpdate, batchSet, READ_ONLY } from './audit.js';
+import { auditUpdate, auditSet, auditAdd, auditDelete, batchUpdate, batchSet, READ_ONLY } from './audit.js';
 import { parseDateKST, toDateStrKST, todayStr, getDayName } from './src/shared/firestore-helpers.js';
 import { state, DEFAULT_DOMAINS } from './state.js';
 import { showSaveIndicator } from './ui-utils.js';
@@ -854,4 +854,24 @@ export async function searchStudentConsultations(studentId, { startDate, endDate
   const q = query(collection(db, 'consultations'), ...clauses, orderBy('date', 'desc'));
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+// ─── 상담 고정(pin): consultation_pins/{cid} (doc id = consultation id) ───
+export async function listStudentPins(studentId) {
+  const q = query(collection(db, 'consultation_pins'), where('student_id', '==', studentId));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => d.id);
+}
+
+export async function pinConsultation(cid, studentId, teacherId) {
+  await auditSet(doc(db, 'consultation_pins', cid), {
+    consultation_id: cid,
+    student_id: studentId,
+    teacher_id: teacherId,
+    pinned_at: serverTimestamp(),
+  });
+}
+
+export async function unpinConsultation(cid) {
+  await auditDelete(doc(db, 'consultation_pins', cid));
 }
