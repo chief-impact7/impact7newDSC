@@ -1064,6 +1064,16 @@ service cloud.firestore {
         && resource.data.teacher_id == request.auth.uid;
     }
 
+    // 공유 백엔드 로그 — 서버(Functions Admin SDK)만, 클라 접근 금지
+    match /notification_logs/{logId} {
+      allow read, write: if false;
+    }
+
+    // 결제 기록 — 서버(Functions Admin SDK)만, 멱등키=docId
+    match /payment_records/{key} {
+      allow read, write: if false;
+    }
+
     // =========================================================================
     // 기본 거부: 위에 매칭되지 않는 모든 경로 차단
     // =========================================================================
