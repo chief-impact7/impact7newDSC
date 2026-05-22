@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 
 const firebaseConfig = {
     apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
@@ -30,6 +31,8 @@ export { app };
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+// 공유 LLM 게이트웨이(llmGenerate)가 배포된 리전.
+export const functions = getFunctions(app, 'asia-northeast3');
 
 // Emulator 모드: VITE_USE_EMULATOR=true일 때 Firestore + Auth를 로컬 emulator에 연결.
 // 별도 터미널에서 `firebase emulators:start --only firestore,auth` 먼저 실행해야 함.
@@ -37,5 +40,6 @@ export const db = getFirestore(app);
 if (import.meta.env.DEV && import.meta.env.VITE_USE_EMULATOR === 'true') {
     connectFirestoreEmulator(db, 'localhost', 8080);
     connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
+    connectFunctionsEmulator(functions, 'localhost', 5001);
     console.warn('%c🔧 EMULATOR MODE — Firestore/Auth localhost:8080/9099 사용', 'background:#dbeafe;color:#1e3a8a;font-size:13px;font-weight:700;padding:4px 8px;border-radius:4px;');
 }
