@@ -1605,6 +1605,7 @@ function getFilteredStudents() {
     let students;
     if (state.searchQuery) {
         students = state.allStudents.filter(s =>
+            !PAST_STUDENT_STATUSES.has(s.status) &&
             (s.enrollments || []).some(e => !(validDateStr(e.end_date) && e.end_date < today))
         );
     } else {

@@ -36,9 +36,13 @@ export async function cycleTempArrival(docId) {
     const next = cycle[nextIdx];
     showSaveIndicator('saving');
     try {
-        const update = next ? { temp_arrival: next } : { temp_arrival: deleteField() };
+        const visitStatus = next === '등원' ? '완료' : 'pending';
+        const update = next
+            ? { temp_arrival: next, visit_status: visitStatus }
+            : { temp_arrival: deleteField(), visit_status: 'pending' };
         await auditUpdate(doc(db, 'temp_attendance', docId), update);
         ta.temp_arrival = next || undefined;
+        ta.visit_status = visitStatus;
         state._scheduledVisitsCache = null;
         renderSubFilters();
         renderListPanel();

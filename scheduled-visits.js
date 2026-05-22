@@ -81,9 +81,9 @@ export async function resetScheduledVisit(source, docId, studentId) {
     showSaveIndicator('saving');
     try {
         if (source === 'temp') {
-            await auditUpdate(doc(db, 'temp_attendance', docId), { visit_status: 'pending', completed_by: deleteField(), completed_at: deleteField() });
+            await auditUpdate(doc(db, 'temp_attendance', docId), { visit_status: 'pending', temp_arrival: deleteField(), completed_by: deleteField(), completed_at: deleteField() });
             const ta = state.tempAttendances.find(t => t.docId === docId);
-            if (ta) { ta.visit_status = 'pending'; delete ta.completed_by; delete ta.completed_at; }
+            if (ta) { ta.visit_status = 'pending'; delete ta.temp_arrival; delete ta.completed_by; delete ta.completed_at; }
         } else if (source === 'hw_fail') {
             await auditUpdate(doc(db, 'hw_fail_tasks', docId), {
                 status: 'pending',
@@ -283,10 +283,10 @@ export async function saveDiagnosticReschedule() {
             temp_date: newDate,
             temp_time: newTime || '',
             visit_status: 'pending',
-            arrival_status: ''
+            temp_arrival: deleteField(),
         });
         const ta = state.tempAttendances.find(t => t.docId === _diagnosticActionDocId);
-        if (ta) Object.assign(ta, { temp_date: newDate, temp_time: newTime || '', visit_status: 'pending', arrival_status: '' });
+        if (ta) { Object.assign(ta, { temp_date: newDate, temp_time: newTime || '', visit_status: 'pending' }); delete ta.temp_arrival; }
         _closeDiagnosticModal();
         showSaveIndicator('saved');
     } catch (err) {
