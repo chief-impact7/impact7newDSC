@@ -467,7 +467,7 @@ export async function loadReportCard() {
         const snap = await getDocs(q);
         const records = [];
         snap.forEach(d => records.push(d.data()));
-        records.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+        records.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
         renderReportCard(records);
     } catch (err) {
