@@ -12,8 +12,12 @@ async function _withRetry(prompt, maxRetries = 3) {
     try {
       return await geminiModel.generateContent(prompt);
     } catch (err) {
-      const is429 = err?.message?.includes('429') || err?.message?.includes('Resource exhausted');
-      if (!is429 || attempt === maxRetries - 1) throw err;
+      const isRetriable =
+        err?.code === 'functions/resource-exhausted' ||
+        err?.code === 'functions/unavailable' ||
+        err?.message?.includes('429') ||
+        err?.message?.includes('Resource exhausted');
+      if (!isRetriable || attempt === maxRetries - 1) throw err;
       const delay = Math.pow(2, attempt + 1) * 1000;
       console.warn(`Gemini 429 → ${delay / 1000}초 후 재시도 (${attempt + 1}/${maxRetries})`);
       await new Promise(r => setTimeout(r, delay));
