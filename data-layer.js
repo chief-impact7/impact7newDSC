@@ -257,6 +257,24 @@ export async function promoteEnrollPending() {
 // 단 status가 '재원' 또는 '등원예정'인 학생만 대상 — 가휴원/실휴원/상담으로 명시적 전환된
 // 학생을 잔존 withdrawal_date 때문에 다시 퇴원으로 되돌리는 silent override 차단
 // (전은민 케이스: 퇴원→휴원 후 다음 로그인 시 자동 되돌림 사고).
+export async function cancelStudentPendingTasks(studentId) {
+    const pendingHw   = state.hwFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
+    const pendingTest = state.testFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
+    const openAbsence = state.absenceRecords.filter(r =>
+        r.student_id === studentId && r.status === 'open' && (!r.resolution || r.resolution === 'pending')
+    );
+    if (!pendingHw.length && !pendingTest.length && !openAbsence.length) return;
+    const cancelBatch = writeBatch(db);
+    for (const t of pendingHw)   batchUpdate(cancelBatch, doc(db, 'hw_fail_tasks',   t.docId), { status: '취소' });
+    for (const t of pendingTest) batchUpdate(cancelBatch, doc(db, 'test_fail_tasks',  t.docId), { status: '취소' });
+    for (const r of openAbsence) batchUpdate(cancelBatch, doc(db, 'absence_records',  r.docId), { status: 'closed' });
+    await cancelBatch.commit();
+    pendingHw.forEach(t => { t.status = '취소'; });
+    pendingTest.forEach(t => { t.status = '취소'; });
+    openAbsence.forEach(r => { r.status = 'closed'; });
+    console.log(`[cancelStudentPendingTasks] ${studentId}: hw=${pendingHw.length}, test=${pendingTest.length}, absence=${openAbsence.length}건 취소/종결`);
+}
+
 export async function promoteWithdrawalDate() {
     const today = todayStr();
     const ACTIVE_FOR_PROMOTE = new Set(['재원', '등원예정']);
@@ -276,6 +294,7 @@ export async function promoteWithdrawalDate() {
         state.allStudents = state.allStudents.filter(s => !toWithdrawSet.has(s));
         state.withdrawnStudents.push(...toWithdraw);
         console.log(`[promoteWithdrawalDate] ${toWithdraw.length}명 재원→퇴원 전환:`, toWithdraw.map(s => s.name));
+        await Promise.all(toWithdraw.map(s => cancelStudentPendingTasks(s.docId)));
     } catch (err) {
         console.error('[promoteWithdrawalDate] 전환 실패:', err);
     }

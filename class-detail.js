@@ -10,6 +10,7 @@ import { state, DAY_ORDER } from './state.js';
 import { esc, escAttr, showSaveIndicator, showToast } from './ui-utils.js';
 import { matchesBranchFilter, enrollmentCode, getActiveEnrollments, resolveNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
+import { cancelStudentPendingTasks } from './data-layer.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let getOverrideStudentsForClass, getOverridingOutFromClass, getClassDomains, getClassTestSections;
@@ -852,6 +853,8 @@ export async function deleteClass(classCode, mode, opts = {}) {
 
     if (!READ_ONLY) {
         studentUpdates.forEach(({ student, update }) => Object.assign(student, update));
+        const newlyWithdrawn = studentUpdates.filter(({ update }) => update.status === '퇴원');
+        Promise.all(newlyWithdrawn.map(({ student }) => cancelStudentPendingTasks(student.docId)));
     }
 
     try {

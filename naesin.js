@@ -13,6 +13,7 @@ import { auditUpdate, auditSet } from './audit.js';
 import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 import { renderClassDeleteCard, applyClassDetailTabMode } from './class-detail.js';
+import { cancelStudentPendingTasks } from './data-layer.js';
 
 // ─── State 접근자 ─────────────────────────────────────────────────────────────
 function _state() {
@@ -918,6 +919,7 @@ window.removeFromTeukang = async function(studentId, classCode) {
         student.enrollments = enrollments;
         if (!hasTeukang && student.status2 === '특강') student.status2 = '';
         if (updateData.status) student.status = updateData.status;
+        if (updateData.status === '퇴원') cancelStudentPendingTasks(studentId);
         window.showSaveIndicator?.('saved');
     } catch (err) {
         console.error('[removeFromTeukang] 저장 실패:', err);

@@ -73,11 +73,14 @@ export function getScheduledVisits() {
 
     // 학생 이름 조회용 Map (동명이인 구분을 위해 실시간 이름 사용)
     const studentNameMap = new Map(state.allStudents.map(s => [s.docId, s.name]));
+    // 퇴원 학생 ID Set — 데이터 정리 전 잔존 task가 표시되지 않도록 안전망 필터용
+    const withdrawnIds = new Set(state.withdrawnStudents.map(s => s.docId));
 
     // 2) 숙제미통과 등원 (state.hwFailTasks)
     const today = todayStr();
     const isToday = state.selectedDate === today;
     for (const t of state.hwFailTasks) {
+        if (withdrawnIds.has(t.student_id)) continue;
         if (t.type !== '등원' || (t.status !== 'pending' && t.status !== '완료' && t.status !== '기타')) continue;
         // 해당 날짜 task이거나, 오늘 볼 때 지연된(overdue) pending task 포함
         const isScheduledToday = t.scheduled_date === state.selectedDate;
@@ -106,6 +109,7 @@ export function getScheduledVisits() {
 
     // 3) 테스트미통과 등원 (state.testFailTasks)
     for (const t of state.testFailTasks) {
+        if (withdrawnIds.has(t.student_id)) continue;
         if (t.type !== '등원' || (t.status !== 'pending' && t.status !== '완료' && t.status !== '기타')) continue;
         const isScheduledToday = t.scheduled_date === state.selectedDate;
         const isOverdue = isToday && t.status === 'pending' && t.scheduled_date && t.scheduled_date < today;
