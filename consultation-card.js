@@ -248,6 +248,13 @@ function renderSearchBar(studentId) {
   `;
 }
 
+// "2026-03-21" → "26-3-21" (yy-m-d)
+function formatHistDate(dateStr) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr ?? ''));
+  if (!m) return dateStr ?? '';
+  return `${m[1].slice(2)}-${Number(m[2])}-${Number(m[3])}`;
+}
+
 function renderHistoryCard(consultations, pinnedIds = [], studentId = '') {
   if (!consultations.length) {
     return `<div class="card consultation-history"><h4>상담 이력</h4><em>기간 내역 없음</em></div>`;
@@ -262,7 +269,7 @@ function renderHistoryCard(consultations, pinnedIds = [], studentId = '') {
       <summary>
         <button class="pin-toggle${isPinned ? ' active' : ''}" title="${isPinned ? '고정 해제' : '상단 고정'}"
           onclick="event.preventDefault(); event.stopPropagation(); onTogglePin('${escapeHtml(studentId)}','${escapeHtml(c.id)}')">📌</button>
-        <strong>${escapeHtml(c.date)}</strong>
+        <strong>${escapeHtml(formatHistDate(c.date))}</strong>
         <span class="type-badge">${badge}</span>
         <span class="hist-title">${title}</span>
       </summary>
