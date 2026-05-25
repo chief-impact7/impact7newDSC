@@ -132,7 +132,7 @@ function renderAiAction(studentId, artifact) {
 function renderSummaryCard(summary, studentId = '') {
   const meta = summary ? `priority: <strong>${escapeHtml(summary.priority || '-')}</strong> · 상담 ${summary.consultation_count ?? 0}건` : '';
   return `
-    <div class="card consultation-summary">
+    <div id="consult-summary-slot" class="card consultation-summary">
       <div class="consult-card-head">
         <h4>AI 누적 요약 ${meta ? `<small>(${meta})</small>` : ''}</h4>
         ${renderAiAction(studentId, summary)}
@@ -146,7 +146,7 @@ function renderBriefingCard(briefing, studentId = '') {
   const next = briefing?.next_consultation_scheduled
     ? `다음 예정: ${escapeHtml(briefing.next_consultation_scheduled)}` : '';
   return `
-    <div class="card consultation-briefing">
+    <div id="consult-briefing-slot" class="card consultation-briefing">
       <div class="consult-card-head">
         <h4>다음 상담 브리핑 ${next ? `<small>(${next})</small>` : ''}</h4>
         ${renderAiAction(studentId, briefing)}
