@@ -369,7 +369,6 @@ window.onGenerateConsultationAi = async function (studentId) {
   try {
     const result = await generateStudentConsultationAi(studentId);
     _deps.toast?.(`AI 생성 완료 (${result?.source_consultation_count ?? 0}건 반영)`, 'success');
-    await refreshArtifacts();
   } catch (err) {
     console.error('[consultation] AI generation failed:', err);
     _deps.toast?.(`AI 생성 실패: ${err.message}`, 'error');
