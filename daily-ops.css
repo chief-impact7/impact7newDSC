@@ -4011,13 +4011,13 @@ textarea.field-input {
 .consult-form-grid {
   display: flex; flex-direction: column; gap: 14px; margin-bottom: 16px;
 }
-.consult-row { display: flex; gap: 18px; align-items: flex-end; }
+.consult-row { display: flex; gap: 18px; align-items: baseline; }
 .consult-row > .consult-field { flex: 1; }
 .consult-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 /* 표시 전용 필드: 라벨 옆에 값 (가로) — 공간 절약 */
 .consult-field-inline { flex-direction: row; align-items: baseline; gap: 8px; }
 .consult-field-inline > .consult-field-label { flex-shrink: 0; white-space: nowrap; }
-.consult-field-inline .consult-radio-group { height: auto; }
+.consult-field-inline .consult-radio-group { height: auto; min-height: 0; }
 .consult-field > label, .consult-field-label {
   font-size: .76rem; font-weight: 600; color: rgba(0,0,0,.5); letter-spacing: .01em;
 }
