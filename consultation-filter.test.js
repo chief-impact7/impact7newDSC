@@ -46,14 +46,19 @@ test('DEFAULT_HISTORY_LIMIT은 20', () => {
   assert.equal(DEFAULT_HISTORY_LIMIT, 20);
 });
 
-test('defaultSearchRange: 오늘과 3개월 전 (UTC)', () => {
+test('defaultSearchRange: 기본은 오늘과 6개월 전 (UTC)', () => {
   const r = defaultSearchRange(new Date('2026-05-21T00:00:00Z'));
-  assert.deepEqual(r, { start: '2026-02-21', end: '2026-05-21' });
+  assert.deepEqual(r, { start: '2025-11-21', end: '2026-05-21' });
 });
 
 test('defaultSearchRange: 연도 롤오버', () => {
   const r = defaultSearchRange(new Date('2026-01-15T00:00:00Z'));
-  assert.deepEqual(r, { start: '2025-10-15', end: '2026-01-15' });
+  assert.deepEqual(r, { start: '2025-07-15', end: '2026-01-15' });
+});
+
+test('defaultSearchRange: 개월 수 지정', () => {
+  const r = defaultSearchRange(new Date('2026-05-21T00:00:00Z'), 12);
+  assert.deepEqual(r, { start: '2025-05-21', end: '2026-05-21' });
 });
 
 test('consultationTitleFallback: 앞 20자, trim', () => {

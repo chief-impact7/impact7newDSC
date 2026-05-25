@@ -18,6 +18,7 @@ import {
 import { buildConsultationPayload } from './consultation-payload.js';
 import { generateConsultationTitle } from './consultation-ai.js';
 import { activeClassCodes } from './student-helpers.js';
+import { PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 
 let _deps = {};
 let _activeSubtab = 'input';  // 'input' | 'search'
@@ -150,8 +151,14 @@ function replaceSlot(slotId, html) {
   if (slot) slot.outerHTML = html;
 }
 
+function defaultSearchRangeForStudent(studentId) {
+  const student = _deps.getStudent?.(studentId);
+  const monthsBack = PAST_STUDENT_STATUSES.has(student?.status || '') ? 12 : 6;
+  return defaultSearchRange(new Date(), monthsBack);
+}
+
 function renderSearchBar(studentId) {
-  const { start, end } = defaultSearchRange();
+  const { start, end } = defaultSearchRangeForStudent(studentId);
   return `
     <div class="card consultation-search">
       <div class="row consult-search-dates">
@@ -170,7 +177,7 @@ function renderSearchBar(studentId) {
 
 function renderHistoryCard(consultations, pinnedIds = [], studentId = '') {
   if (!consultations.length) {
-    return `<div class="card consultation-history"><h4>상담 이력</h4><em>최근 3개월 내역 없음</em></div>`;
+    return `<div class="card consultation-history"><h4>상담 이력</h4><em>기간 내역 없음</em></div>`;
   }
   const pinned = new Set(pinnedIds);
   const rows = consultations.map(c => {
@@ -189,7 +196,7 @@ function renderHistoryCard(consultations, pinnedIds = [], studentId = '') {
       <pre class="consultation-text">${escapeHtml(c.text)}</pre>
     </details>`;
   }).join('');
-  return `<div class="card consultation-history"><h4>상담 이력 (최근 3개월 · ${consultations.length}건)</h4>${rows}</div>`;
+  return `<div class="card consultation-history"><h4>상담 이력 (${consultations.length}건)</h4>${rows}</div>`;
 }
 
 function renderConsultationHeader() {
@@ -256,7 +263,7 @@ async function renderSearchTab(studentId) {
     ${renderSearchBar(studentId)}
     <div id="consult-history-slot"><em>이력 로딩 중…</em></div>
   `;
-  const { start, end } = defaultSearchRange();
+  const { start, end } = defaultSearchRangeForStudent(studentId);
   const [summary, history, pins] = await Promise.allSettled([
     getStudentSummary(studentId),
     searchStudentConsultations(studentId, { startDate: start, endDate: end }),
@@ -295,7 +302,7 @@ window.onSearchConsultations = async function (studentId) {
 
 window.onResetConsultationSearch = async function (studentId) {
   const { startEl, endEl, kwEl, hintEl } = getSearchEls();
-  const { start, end } = defaultSearchRange();
+  const { start, end } = defaultSearchRangeForStudent(studentId);
   if (startEl) startEl.value = start;
   if (endEl) endEl.value = end;
   if (kwEl) kwEl.value = '';

@@ -12,13 +12,19 @@ import { esc, escAttr } from './ui-utils.js';
 export async function _searchContactsDSC(term) {
     if (!term || term.length < 2) return [];
     const currentIds = new Set(state.allStudents.map(s => s.docId));
+    const pastIds = new Set(state.withdrawnStudents.map(s => s.docId));
     const results = [];
     const seenIds = new Set();
     const addIfPast = (d) => {
         if (currentIds.has(d.id) || seenIds.has(d.id)) return;
         const data = d.data();
         if (!PAST_STUDENT_STATUSES.has(data.status)) return;
-        results.push({ id: d.id, ...data });
+        const student = { ...data, id: d.id, docId: d.id, enrollments: data.enrollments || [] };
+        results.push(student);
+        if (!pastIds.has(d.id)) {
+            state.withdrawnStudents.push(student);
+            pastIds.add(d.id);
+        }
         seenIds.add(d.id);
     };
     try {

@@ -153,7 +153,6 @@ import {
     confirmDeparture, saveExtraVisit, addExtraVisit, clearExtraVisit,
     getStudentChecklistStatus
 } from './student-detail.js';
-
 // 디버그용 전역 노출 (DEV 환경에서만)
 if (import.meta.env?.DEV) {
     window._debug = { get allStudents() { return state.allStudents; }, get dailyRecords() { return state.dailyRecords; }, get hwFailTasks() { return state.hwFailTasks; }, get testFailTasks() { return state.testFailTasks; } };

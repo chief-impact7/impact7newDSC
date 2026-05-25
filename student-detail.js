@@ -400,13 +400,13 @@ export function switchDetailTab(tab) {
     if (tab === 'consultation') {
         import('./consultation-card.js').then(({ renderConsultationTab, initConsultationCardDeps }) => {
             initConsultationCardDeps({
-                getStudent: (id) => state.allStudents.find(s => s.docId === id),
+                getStudent: (id) => findStudent(id),
                 getCurrentTeacher: () => ({
                     id: state.currentUser?.uid ?? '',
                     name: getTeacherName(state.currentUser?.email ?? ''),
                 }),
                 getAssignedTeachers: (id) => {
-                    const student = state.allStudents.find(s => s.docId === id);
+                    const student = findStudent(id);
                     if (!student) return [];
                     const emails = new Set();
                     for (const code of allClassCodes(student)) {
@@ -1031,8 +1031,9 @@ export function renderStudentDetail(studentId) {
     // 내신/자유학기 기간 중에는 그쪽으로 합성된 enrollment만 노출 (정규 자동 숨김)
     // 합성 enrollment의 schedule 객체에서 요일별 시간을 읽음
     // 단, 등원예정 학생은 미래 start_date enrollment도 보여줘야 함 (예: 5/19에 6/2 첫등원 예정인 학생)
+    const enrollments = student.enrollments || [];
     const semesterEnrollments = student.status === '등원예정'
-        ? student.enrollments
+        ? enrollments
         : getActiveEnrollments(student, state.selectedDate);
     const dayNameForDetail = getDayName(state.selectedDate);
     const arrivalTimeHtml = (isLeaveStudent || isWithdrawn) ? '' : semesterEnrollments.length > 0 ? `
@@ -1042,7 +1043,7 @@ export function renderStudentDetail(studentId) {
                 등원 일정
             </div>
             ${semesterEnrollments.map(e => {
-                const idx = student.enrollments.indexOf(e);   // 합성 enrollment는 -1 → edit 버튼 숨김
+                const idx = enrollments.indexOf(e);   // 합성 enrollment는 -1 → edit 버튼 숨김
                 const code = enrollmentCode(e);
                 const ct = e.class_type || '정규';
                 const days = (e.day || []).join('·');
@@ -1182,8 +1183,8 @@ export function renderStudentDetail(studentId) {
 
     // 다음숙제 카드 (반별 내용 표시 + 개인별 오버라이드 편집)
     const dayName2 = getDayName(state.selectedDate);
-    const studentClasses = student.enrollments
-        .filter(e => e.day.includes(dayName2))
+    const studentClasses = enrollments
+        .filter(e => (e.day || []).includes(dayName2))
         .map(e => enrollmentCode(e))
         .filter(Boolean);
     const uniqueClasses = [...new Set(studentClasses)];
@@ -1249,7 +1250,7 @@ export function renderStudentDetail(studentId) {
         const wdReason = wdLeaveReq?.reason || '';
         const wdReqBy = wdLeaveReq ? getTeacherName(wdLeaveReq.requested_by) : '';
         const wdAppBy = wdLeaveReq ? getTeacherName(wdLeaveReq.approved_by) : '';
-        const enrollInfo = student.enrollments.map((e, idx) => {
+        const enrollInfo = enrollments.map((e, idx) => {
             const code = enrollmentCode(e);
             const days = (e.day || []).join('·');
             const ct = e.class_type || '정규';

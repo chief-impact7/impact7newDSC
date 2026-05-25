@@ -13,11 +13,11 @@ export function filterConsultationsByKeyword(list, keyword) {
   );
 }
 
-// 조회 기본 기간: 오늘(end) ~ 3개월 전(start), ISO YYYY-MM-DD. UTC 기준(결정적).
-export function defaultSearchRange(now = new Date()) {
+// 조회 기본 기간: 오늘(end) ~ N개월 전(start), ISO YYYY-MM-DD. UTC 기준(결정적).
+export function defaultSearchRange(now = new Date(), monthsBack = 6) {
   const end = now.toISOString().slice(0, 10);
   const start = new Date(Date.UTC(
-    now.getUTCFullYear(), now.getUTCMonth() - 3, now.getUTCDate()
+    now.getUTCFullYear(), now.getUTCMonth() - monthsBack, now.getUTCDate()
   )).toISOString().slice(0, 10);
   return { start, end };
 }
