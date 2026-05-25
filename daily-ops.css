@@ -3839,60 +3839,42 @@ textarea.field-input {
 }
 
 /* ===== 수업이력 카드 (비활성 학생 전용 — class-history.js) ===== */
+/* 비원생 수업이력 — DB(impact7DB) 수업이력 탭과 동일한 표시 (변경 시 양쪽 동기화) */
 .class-history-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 16px;
+  padding: 4px 16px 12px;
 }
 .history-item {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.history-item-header {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
 }
 .history-badge {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 2px 10px;
   border-radius: 100px;
   letter-spacing: 0.3px;
   flex-shrink: 0;
 }
-.badge-enroll { background: var(--primary-light); color: var(--primary); }
-.badge-update { background: #fff4d6; color: #8a5a00; }
+.badge-enroll { background: var(--primary-light); color: #006241; }
+.badge-update { background: var(--primary-light); color: var(--primary); }
 .badge-withdraw { background: #fce8e6; color: #c5221f; }
-.history-date {
+.history-change {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.history-meta {
+  flex-shrink: 0;
   font-size: 12px;
   color: var(--text-sec);
-}
-.history-author {
-  margin-left: auto;
-  font-size: 11px;
-  color: #999;
   white-space: nowrap;
-}
-.history-row {
-  display: flex;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text-main);
-  line-height: 1.4;
-}
-.history-field-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-sec);
-  min-width: 32px;
-  padding-top: 1px;
 }
 
 /* ── 상담 탭 redesign ─────────────────────────────── */
