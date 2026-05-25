@@ -24,6 +24,7 @@ import { PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 let _deps = {};
 let _activeSubtab = 'input';  // 'input' | 'search'
 let _generatingAiFor = null;
+const _aiCollapsed = { summary: false, briefing: false };
 export function initConsultationCardDeps(deps) {
   // deps: { getStudent(id) → {name, ...}, getCurrentTeacher() → {id, name}, toast(msg, type), readonly: bool }
   _deps = deps;
@@ -129,15 +130,28 @@ function renderAiAction(studentId, artifact) {
   `;
 }
 
+function renderAiCollapseButton(kind) {
+  const collapsed = _aiCollapsed[kind] === true;
+  return `
+    <button class="consult-collapse-btn" onclick="onToggleConsultationAiCard('${kind}')" title="${collapsed ? '펼치기' : '접기'}">
+      <span class="material-symbols-outlined">${collapsed ? 'expand_more' : 'expand_less'}</span>
+    </button>
+  `;
+}
+
 function renderSummaryCard(summary, studentId = '') {
   const meta = summary ? `priority: <strong>${escapeHtml(summary.priority || '-')}</strong> · 상담 ${summary.consultation_count ?? 0}건` : '';
+  const collapsed = _aiCollapsed.summary === true;
   return `
-    <div id="consult-summary-slot" class="card consultation-summary">
+    <div id="consult-summary-slot" class="card consultation-summary ${collapsed ? 'collapsed' : ''}">
       <div class="consult-card-head">
         <h4>AI 누적 요약 ${meta ? `<small>(${meta})</small>` : ''}</h4>
-        ${renderAiAction(studentId, summary)}
+        <div class="consult-head-actions">
+          ${renderAiAction(studentId, summary)}
+          ${renderAiCollapseButton('summary')}
+        </div>
       </div>
-      <div class="markdown">${renderMarkdown(summary?.summary_markdown)}</div>
+      ${collapsed ? '' : `<div class="markdown consult-ai-body">${renderMarkdown(summary?.summary_markdown)}</div>`}
     </div>
   `;
 }
@@ -145,13 +159,17 @@ function renderSummaryCard(summary, studentId = '') {
 function renderBriefingCard(briefing, studentId = '') {
   const next = briefing?.next_consultation_scheduled
     ? `다음 예정: ${escapeHtml(briefing.next_consultation_scheduled)}` : '';
+  const collapsed = _aiCollapsed.briefing === true;
   return `
-    <div id="consult-briefing-slot" class="card consultation-briefing">
+    <div id="consult-briefing-slot" class="card consultation-briefing ${collapsed ? 'collapsed' : ''}">
       <div class="consult-card-head">
         <h4>다음 상담 브리핑 ${next ? `<small>(${next})</small>` : ''}</h4>
-        ${renderAiAction(studentId, briefing)}
+        <div class="consult-head-actions">
+          ${renderAiAction(studentId, briefing)}
+          ${renderAiCollapseButton('briefing')}
+        </div>
       </div>
-      <div class="markdown">${renderMarkdown(briefing?.briefing_markdown)}</div>
+      ${collapsed ? '' : `<div class="markdown consult-ai-body">${renderMarkdown(briefing?.briefing_markdown)}</div>`}
     </div>
   `;
 }
@@ -376,6 +394,13 @@ window.onGenerateConsultationAi = async function (studentId) {
     _generatingAiFor = null;
     await refreshArtifacts();
   }
+};
+
+window.onToggleConsultationAiCard = function (kind) {
+  if (!Object.prototype.hasOwnProperty.call(_aiCollapsed, kind)) return;
+  _aiCollapsed[kind] = !_aiCollapsed[kind];
+  const studentId = window.__consultStudentId;
+  if (studentId) renderConsultationTab(studentId);
 };
 
 window.onTogglePin = async function (studentId, cid) {
