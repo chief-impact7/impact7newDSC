@@ -6,6 +6,7 @@ import {
   updateConsultationTitle,
   getStudentSummary,
   getStudentBriefing,
+  generateStudentConsultationAi,
   searchStudentConsultations,
   listStudentPins,
   pinConsultation,
@@ -22,6 +23,7 @@ import { PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 
 let _deps = {};
 let _activeSubtab = 'input';  // 'input' | 'search'
+let _generatingAiFor = null;
 export function initConsultationCardDeps(deps) {
   // deps: { getStudent(id) → {name, ...}, getCurrentTeacher() → {id, name}, toast(msg, type), readonly: bool }
   _deps = deps;
@@ -92,7 +94,7 @@ function renderInputForm(studentId, readonly) {
 
 function renderMarkdown(md) {
   // 단순 변환: 줄바꿈 → <br>, ##/### → h*. 본격 마크다운 처리는 v2.
-  if (!md) return '<em>아직 AI 분석 전 (다음 파이프라인 실행 후 표시됨)</em>';
+  if (!md) return '<em>아직 AI 분석 전</em>';
   return escapeHtml(md)
     .replace(/^### (.+)$/gm, '<h5>$1</h5>')
     .replace(/^## (.+)$/gm, '<h4>$1</h4>')
@@ -100,22 +102,55 @@ function renderMarkdown(md) {
     .replace(/\n/g, '<br>');
 }
 
-function renderSummaryCard(summary) {
+function formatGeneratedAt(value) {
+  const date = value?.toDate ? value.toDate() : value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('ko-KR', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function renderAiAction(studentId, artifact) {
+  const generating = _generatingAiFor === studentId;
+  const label = artifact ? 'AI 갱신' : 'AI 생성';
+  const generatedAt = formatGeneratedAt(artifact?.generated_at);
+  const latest = artifact?.latest_consultation_date ? `최근 상담 ${escapeHtml(artifact.latest_consultation_date)}` : '';
+  const meta = [generatedAt ? `마지막 생성 ${escapeHtml(generatedAt)}` : '', latest].filter(Boolean).join(' · ');
+  return `
+    <div class="consult-ai-action">
+      <span class="hint">${meta}</span>
+      <button class="consult-ai-btn" onclick="onGenerateConsultationAi('${escapeHtml(studentId)}')" ${generating ? 'disabled' : ''}>
+        ${generating ? '생성 중...' : label}
+      </button>
+    </div>
+  `;
+}
+
+function renderSummaryCard(summary, studentId = '') {
   const meta = summary ? `priority: <strong>${escapeHtml(summary.priority || '-')}</strong> · 상담 ${summary.consultation_count ?? 0}건` : '';
   return `
     <div class="card consultation-summary">
-      <h4>AI 누적 요약 ${meta ? `<small>(${meta})</small>` : ''}</h4>
+      <div class="consult-card-head">
+        <h4>AI 누적 요약 ${meta ? `<small>(${meta})</small>` : ''}</h4>
+        ${renderAiAction(studentId, summary)}
+      </div>
       <div class="markdown">${renderMarkdown(summary?.summary_markdown)}</div>
     </div>
   `;
 }
 
-function renderBriefingCard(briefing) {
+function renderBriefingCard(briefing, studentId = '') {
   const next = briefing?.next_consultation_scheduled
     ? `다음 예정: ${escapeHtml(briefing.next_consultation_scheduled)}` : '';
   return `
     <div class="card consultation-briefing">
-      <h4>다음 상담 브리핑 ${next ? `<small>(${next})</small>` : ''}</h4>
+      <div class="consult-card-head">
+        <h4>다음 상담 브리핑 ${next ? `<small>(${next})</small>` : ''}</h4>
+        ${renderAiAction(studentId, briefing)}
+      </div>
       <div class="markdown">${renderMarkdown(briefing?.briefing_markdown)}</div>
     </div>
   `;
@@ -252,7 +287,7 @@ async function renderInputTab(studentId) {
     ${renderInputForm(studentId, readonly)}
   `;
   const briefing = await getStudentBriefing(studentId).catch(() => null);
-  replaceSlot('consult-briefing-slot', renderBriefingCard(briefing));
+  replaceSlot('consult-briefing-slot', renderBriefingCard(briefing, studentId));
 }
 
 async function renderSearchTab(studentId) {
@@ -270,7 +305,7 @@ async function renderSearchTab(studentId) {
     listStudentPins(studentId),
   ]);
   replaceSlot('consult-summary-slot', summary.status === 'fulfilled'
-    ? renderSummaryCard(summary.value)
+    ? renderSummaryCard(summary.value, studentId)
     : `<div class="card consultation-summary"><h4>AI 누적 요약</h4><em>로드 실패</em></div>`);
   if (history.status === 'fulfilled') {
     const pinnedIds = pins.status === 'fulfilled' ? pins.value : [];
@@ -312,6 +347,35 @@ window.onResetConsultationSearch = async function (studentId) {
   } catch (err) {
     console.error('[consultation] reset failed:', err);
     _deps.toast?.(`초기화 실패: ${err.message}`, 'error');
+  }
+};
+
+window.onGenerateConsultationAi = async function (studentId) {
+  if (_generatingAiFor) return;
+  _generatingAiFor = studentId;
+  const refreshArtifacts = async () => {
+    const [summary, briefing] = await Promise.all([
+      getStudentSummary(studentId).catch(() => null),
+      getStudentBriefing(studentId).catch(() => null),
+    ]);
+    if (document.getElementById('consult-summary-slot')) {
+      replaceSlot('consult-summary-slot', renderSummaryCard(summary, studentId));
+    }
+    if (document.getElementById('consult-briefing-slot')) {
+      replaceSlot('consult-briefing-slot', renderBriefingCard(briefing, studentId));
+    }
+  };
+  await refreshArtifacts();
+  try {
+    const result = await generateStudentConsultationAi(studentId);
+    _deps.toast?.(`AI 생성 완료 (${result?.source_consultation_count ?? 0}건 반영)`, 'success');
+    await refreshArtifacts();
+  } catch (err) {
+    console.error('[consultation] AI generation failed:', err);
+    _deps.toast?.(`AI 생성 실패: ${err.message}`, 'error');
+  } finally {
+    _generatingAiFor = null;
+    await refreshArtifacts();
   }
 };
 

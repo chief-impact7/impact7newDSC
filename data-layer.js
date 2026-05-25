@@ -7,7 +7,8 @@ import {
     query, where, orderBy, limit, serverTimestamp, writeBatch, Timestamp,
     onSnapshot
 } from 'firebase/firestore';
-import { db } from './firebase-config.js';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from './firebase-config.js';
 import { auditUpdate, auditSet, auditAdd, auditDelete, batchUpdate, batchSet, READ_ONLY } from './audit.js';
 import { parseDateKST, toDateStrKST, todayStr, getDayName } from './src/shared/firestore-helpers.js';
 import { state, DEFAULT_DOMAINS } from './state.js';
@@ -852,6 +853,12 @@ export async function getStudentSummary(studentId) {
 export async function getStudentBriefing(studentId) {
   const snap = await getDoc(doc(db, 'consultation_briefings', studentId));
   return snap.exists() ? snap.data() : null;
+}
+
+export async function generateStudentConsultationAi(studentId) {
+  const callable = httpsCallable(functions, 'generateStudentConsultationAi');
+  const res = await callable({ studentId });
+  return res.data;
 }
 
 export async function listStudentConsultations(studentId, limitCount = 10) {

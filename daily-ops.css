@@ -3907,6 +3907,45 @@ textarea.field-input {
   margin: 0 0 14px; font-size: .98rem; color: var(--primary, #00754A);
   padding-bottom: 8px; border-bottom: 1px solid var(--border, #e7e3db);
 }
+.consult-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border, #e7e3db);
+}
+.consult-card-head h4 {
+  margin: 0;
+  border-bottom: none;
+}
+.consult-ai-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  padding-bottom: 8px;
+}
+.consult-ai-action .hint {
+  font-size: .75rem;
+  color: rgba(0,0,0,.5);
+}
+.consult-ai-btn {
+  border: 1px solid var(--primary, #00754A);
+  border-radius: 8px;
+  background: var(--primary, #00754A);
+  color: #fff;
+  padding: 6px 10px;
+  font-size: .82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.consult-ai-btn:disabled {
+  opacity: .65;
+  cursor: wait;
+}
 
 /* 입력폼: 라벨(위) + 컨트롤(아래) 일관 필드. 행 단위 가로 배치 */
 .consult-form-grid {
