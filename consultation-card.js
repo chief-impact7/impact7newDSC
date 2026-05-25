@@ -97,6 +97,8 @@ function renderMarkdown(md) {
   // 단순 변환: 줄바꿈 → <br>, ##/### → h*. 본격 마크다운 처리는 v2.
   if (!md) return '<em>아직 AI 분석 전</em>';
   return escapeHtml(md)
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/\n\n(?=(?:[-*]|\d+\.|\*\*))/g, '\n')
     .replace(/^### (.+)$/gm, '<h5>$1</h5>')
     .replace(/^## (.+)$/gm, '<h4>$1</h4>')
     .replace(/^# (.+)$/gm, '<h3>$1</h3>')
@@ -133,7 +135,7 @@ function renderAiAction(studentId, artifact) {
 function renderAiCollapseButton(kind) {
   const collapsed = _aiCollapsed[kind] === true;
   return `
-    <button class="consult-collapse-btn" onclick="onToggleConsultationAiCard('${kind}')" title="${collapsed ? '펼치기' : '접기'}">
+    <button class="consult-collapse-btn" onclick="onToggleConsultationAiCard('${kind}')" title="${collapsed ? '펼치기' : '접기'}" aria-label="${collapsed ? '펼치기' : '접기'}">
       <span class="material-symbols-outlined">${collapsed ? 'expand_more' : 'expand_less'}</span>
     </button>
   `;
@@ -146,7 +148,7 @@ function renderSummaryCard(summary, studentId = '') {
     <div id="consult-summary-slot" class="card consultation-summary ${collapsed ? 'collapsed' : ''}">
       <div class="consult-card-head">
         <h4>AI 누적 요약 ${meta ? `<small>(${meta})</small>` : ''}</h4>
-        <div class="consult-head-actions">
+        <div class="consult-head-actions consult-head-actions-summary">
           ${renderAiAction(studentId, summary)}
           ${renderAiCollapseButton('summary')}
         </div>
@@ -164,7 +166,7 @@ function renderBriefingCard(briefing, studentId = '') {
     <div id="consult-briefing-slot" class="card consultation-briefing ${collapsed ? 'collapsed' : ''}">
       <div class="consult-card-head">
         <h4>다음 상담 브리핑 ${next ? `<small>(${next})</small>` : ''}</h4>
-        <div class="consult-head-actions">
+        <div class="consult-head-actions consult-head-actions-briefing">
           ${renderAiAction(studentId, briefing)}
           ${renderAiCollapseButton('briefing')}
         </div>

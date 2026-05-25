@@ -3906,8 +3906,8 @@ textarea.field-input {
 }
 .consultation-subtab.active { color: var(--primary, #00754A); border-bottom-color: var(--primary, #00754A); font-weight: 600; }
 .consultation-input, .consultation-history, .consultation-summary, .consultation-briefing, .consultation-search {
-  border: 1px solid var(--border, #e7e3db); border-radius: 12px; padding: 12px 14px;
-  margin: 10px 0; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 0 0 1px rgba(0,0,0,.02);
+  border: 1px solid var(--border, #e7e3db); border-radius: 12px; padding: 10px 12px;
+  margin: 8px 0; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 0 0 1px rgba(0,0,0,.02);
 }
 .consultation-input h4, .consultation-history h4, .consultation-summary h4,
 .consultation-briefing h4, .consultation-search h4 {
@@ -3916,10 +3916,10 @@ textarea.field-input {
 }
 .consult-card-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   border-bottom: 1px solid var(--border, #e7e3db);
 }
 .consult-card-head h4 {
@@ -3929,13 +3929,13 @@ textarea.field-input {
 .consult-head-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   padding-bottom: 6px;
 }
 .consult-ai-action {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -3959,8 +3959,8 @@ textarea.field-input {
   cursor: wait;
 }
 .consult-collapse-btn {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border: 1px solid var(--border, #e7e3db);
   border-radius: 8px;
   background: #fff;
@@ -3982,22 +3982,25 @@ textarea.field-input {
   max-height: 46vh;
   overflow-y: auto;
   padding-right: 4px;
-  line-height: 1.45;
+  line-height: 1.35;
 }
 .consult-ai-body h3,
 .consult-ai-body h4,
 .consult-ai-body h5 {
-  margin: 10px 0 6px;
+  margin: 6px 0 3px;
   padding: 0;
   border-bottom: none;
   color: var(--text-main);
-  font-size: .95rem;
-  line-height: 1.35;
+  font-size: .92rem;
+  line-height: 1.25;
 }
 .consult-ai-body h3:first-child,
 .consult-ai-body h4:first-child,
 .consult-ai-body h5:first-child {
   margin-top: 0;
+}
+.consult-ai-body br {
+  line-height: 1.2;
 }
 
 /* 입력폼: 라벨(위) + 컨트롤(아래) 일관 필드. 행 단위 가로 배치 */
