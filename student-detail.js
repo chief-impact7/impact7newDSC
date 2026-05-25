@@ -424,7 +424,7 @@ export function switchDetailTab(tab) {
     }
 }
 
-// 비활성 학생: 출결현황 대신 수업이력(history_logs 7카테고리) 로드.
+// 비활성 학생: 출결현황 대신 수업이력(history_logs, DB와 동일한 7종 분류) 로드.
 // 활성 학생: 기존 출결현황 로드 (날짜 범위 입력 유지).
 function _loadReportOrHistoryCard(studentId) {
     const student = findStudent(studentId);
