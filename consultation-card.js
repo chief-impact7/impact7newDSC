@@ -18,7 +18,7 @@ import {
 } from './consultation-filter.js';
 import { buildConsultationPayload } from './consultation-payload.js';
 import { generateConsultationTitle } from './consultation-ai.js';
-import { activeClassCodes } from './student-helpers.js';
+import { enrollmentCode } from './student-helpers.js';
 import { PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 
 let _deps = {};
@@ -41,11 +41,29 @@ function escapeHtml(s) {
 const TARGETS = ['학생', '학부모'];
 const METHODS = ['전화', '문자', '대면', '기타'];
 
+// 상담 반명: 내신은 정규의 일시적 오버라이드일 뿐이므로 무시하고,
+// 상담일 기준 활성인 정규·특강 등 원본 반코드를 그대로 노출한다.
+// (getActiveEnrollments는 내신 활성 시 정규를 내신으로 치환해 코드가 비어버릴 수 있음)
+function consultClassCodes(student, dateStr) {
+  const today = dateStr || new Date().toISOString().slice(0, 10);
+  const validDate = (d) => d && /^\d{4}-/.test(d);
+  const codes = (student?.enrollments || [])
+    .filter(e => {
+      if (e.class_type === '내신') return false;
+      if (validDate(e.start_date) && e.start_date > today) return false;
+      if (validDate(e.end_date) && e.end_date < today) return false;
+      return true;
+    })
+    .map(e => enrollmentCode(e))
+    .filter(Boolean);
+  return [...new Set(codes)];
+}
+
 function renderInputForm(studentId, readonly) {
   const today = new Date().toISOString().slice(0, 10);
   const dis = readonly ? 'disabled' : '';
   const student = _deps.getStudent?.(studentId) || {};
-  const className = activeClassCodes(student, today).join(', ');
+  const className = consultClassCodes(student, today).join(', ');
   const typeOpts = TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
   const methodOpts = METHODS.map(m => `<option value="${m}">${m}</option>`).join('');
   const targetRadios = TARGETS.map((t, i) =>
@@ -148,12 +166,12 @@ function renderSummaryCard(summary, studentId = '') {
     <div id="consult-summary-slot" class="card consultation-summary ${collapsed ? 'collapsed' : ''}">
       <div class="consult-card-head">
         <h4>AI 누적 요약 ${meta ? `<small>(${meta})</small>` : ''}</h4>
-        <div class="consult-head-actions consult-head-actions-summary">
-          ${renderAiAction(studentId, summary)}
-          ${renderAiCollapseButton('summary')}
-        </div>
+        ${renderAiCollapseButton('summary')}
       </div>
-      ${collapsed ? '' : `<div class="markdown consult-ai-body">${renderMarkdown(summary?.summary_markdown)}</div>`}
+      ${collapsed ? '' : `
+        ${renderAiAction(studentId, summary)}
+        <div class="markdown consult-ai-body">${renderMarkdown(summary?.summary_markdown)}</div>
+      `}
     </div>
   `;
 }
@@ -166,12 +184,12 @@ function renderBriefingCard(briefing, studentId = '') {
     <div id="consult-briefing-slot" class="card consultation-briefing ${collapsed ? 'collapsed' : ''}">
       <div class="consult-card-head">
         <h4>다음 상담 브리핑 ${next ? `<small>(${next})</small>` : ''}</h4>
-        <div class="consult-head-actions consult-head-actions-briefing">
-          ${renderAiAction(studentId, briefing)}
-          ${renderAiCollapseButton('briefing')}
-        </div>
+        ${renderAiCollapseButton('briefing')}
       </div>
-      ${collapsed ? '' : `<div class="markdown consult-ai-body">${renderMarkdown(briefing?.briefing_markdown)}</div>`}
+      ${collapsed ? '' : `
+        ${renderAiAction(studentId, briefing)}
+        <div class="markdown consult-ai-body">${renderMarkdown(briefing?.briefing_markdown)}</div>
+      `}
     </div>
   `;
 }
@@ -295,7 +313,7 @@ window.onConsultDateChange = function (studentId) {
   const nameEl = document.getElementById('consult-class-name');
   if (!dateEl || !nameEl) return;
   const student = _deps.getStudent?.(studentId) || {};
-  nameEl.textContent = activeClassCodes(student, dateEl.value).join(', ') || '-';
+  nameEl.textContent = consultClassCodes(student, dateEl.value).join(', ') || '-';
 };
 
 async function renderInputTab(studentId) {
@@ -461,7 +479,7 @@ window.onSaveConsultation = async function (studentId) {
     const payload = buildConsultationPayload({
       studentId,
       studentName: student.name,
-      className: activeClassCodes(student, dateEl.value).join(', '),
+      className: consultClassCodes(student, dateEl.value).join(', '),
       teacherId: teacher.id,
       teacherName: teacher.name,
       date: dateEl.value,
