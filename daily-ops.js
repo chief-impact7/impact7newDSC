@@ -383,7 +383,7 @@ function getUniqueClassCodes() {
 // 반설정 정규 chip 카운트: 요일 무관, getRegularClassStudents 위임.
 // override-in 학생은 그 반 멤버에 없는 학생만 추가 카운트.
 function getClassMgmtCount(code) {
-    const members = getRegularClassStudents(code);
+    const members = getRegularClassStudents(code, true); // 반설정 멤버 카운트 — 등원예정 포함
     const ids = new Set(members.map(s => s.docId));
     const extra = state.tempClassOverrides.filter(o => o.target_class_code === code && !ids.has(o.student_id)).length;
     return members.length + extra;
@@ -445,7 +445,7 @@ function setCategory(category) {
         state.savedL2Expanded[state.currentCategory] = false; // L2는 접지만 필터는 유지
 
         // 반 설정/소속 L4 모드 리셋 (콘텐츠 카테고리 전환 시 필터 누출 방지). regular 포함 — 소속 트리에서 L4를 선택한 상태로 다른 카테고리로 이동해도 자동 해제.
-        if (state._classMgmtMode) { state._classMgmtMode = null; state.selectedClassCode = null; }
+        if (state._classMgmtMode) { state._classMgmtMode = null; state.selectedClassCode = null; state._classFilterSource = null; }
 
         state.currentCategory = category;
 
@@ -693,7 +693,7 @@ function getFreeSemesterClassStudents(classCode) {
 
 // 정규 반 멤버 (요일 무관): 자유학기/내신 기간 중인 학생도 정규 멤버이므로 포함.
 // (정규 || 자유학기) + class_number 화이트리스트 (feedback_naesin_regular_identification.md).
-function getRegularClassStudents(classCode) {
+function getRegularClassStudents(classCode, includePending = false) {
     const today = state.selectedDate;
     const validDate = (d) => d && /^\d{4}-/.test(d);
     return state.allStudents.filter(s => {
@@ -702,7 +702,8 @@ function getRegularClassStudents(classCode) {
         return (s.enrollments || []).some(e => {
             if (!((e.class_type === '정규' || e.class_type === '자유학기') && e.class_number)) return false;
             if (validDate(e.end_date) && e.end_date < today) return false;
-            if (validDate(e.start_date) && e.start_date > today) return false; // 아직 시작 안 함(등원예정) — 출결 미노출
+            // 등원예정(start_date 미래)은 출결에선 제외, 반 설정(includePending)에선 포함
+            if (!includePending && validDate(e.start_date) && e.start_date > today) return false;
             return enrollmentCode(e) === classCode;
         });
     });
@@ -1053,6 +1054,7 @@ window.bulkDeleteSelectedClasses = async function() {
 
 window.setClassMgmtMode = function(mode) {
     state._classMgmtMode = (state._classMgmtMode === mode) ? null : mode; // 토글
+    state._classFilterSource = state._classMgmtMode ? 'classmgmt' : null; // 반설정 트리 = 반 관리 맥락 (등원예정 포함)
     state.selectedClassCode = null;
     // 반설정 모드 진입 시 소속 필터 해제 (반설정은 모든 학생을 다룸)
     if (state._classMgmtMode) {
@@ -1068,6 +1070,7 @@ window.setClassMgmtMode = function(mode) {
 
 function setClassCode(code) {
     state.selectedClassCode = state.selectedClassCode === code ? null : code;
+    state._classFilterSource = 'classmgmt'; // 반설정 트리 = 반 관리 맥락 (등원예정 포함)
     state.selectedStudentId = null; // 반 변경 시 학생 선택 해제
     // 반설정에서 반 선택 시 소속 필터 해제 (반설정은 모든 학생을 다룸)
     if (state.selectedClassCode) {
@@ -1125,6 +1128,7 @@ function setBranchClass(mode, code) {
     const isSame = state._classMgmtMode === mode && state.selectedClassCode === code;
     state._classMgmtMode = isSame ? null : mode;
     state.selectedClassCode = isSame ? null : code;
+    state._classFilterSource = isSame ? null : 'branch'; // 소속 트리 = 출결 맥락 (등원예정 제외)
     state.selectedStudentId = null;
 
     renderBranchFilter();
@@ -1529,7 +1533,8 @@ function getFilteredStudents() {
     // 반 설정/소속 L4: 정규 모드 + 반 선택 — 그 반에 등록된 모든 정규/자유학기 학생 (요일 무관)
     // + 오늘 그 반으로 들어온 타반수업 학생도 포함 (a101 김여원이 a103에서 수업하면 a103 화면에서도 보이도록)
     if (state._classMgmtMode === 'regular' && state.selectedClassCode) {
-        const students = getRegularClassStudents(state.selectedClassCode);
+        // 반설정 트리에서 선택 시 등원예정 멤버 포함, 소속 트리(출결)에서 선택 시 제외
+        const students = getRegularClassStudents(state.selectedClassCode, state._classFilterSource === 'classmgmt');
         addOverrideInStudents(students, state.selectedClassCode);
         return students;
     }
