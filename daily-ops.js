@@ -1606,9 +1606,14 @@ function getFilteredStudents() {
     const validDateStr = (d) => d && /^\d{4}-/.test(d);
     let students;
     if (state.searchQuery) {
+        // 시작 전(start_date 미래)·만료(end_date 과거) enrollment만 가진 학생은 출결에서 제외.
+        // 등원예정(미래 첫등원) 학생이 검색 시 "다른 요일"로 누출되던 버그 방지 — 등원일 도래 후 노출.
         students = state.allStudents.filter(s =>
             !PAST_STUDENT_STATUSES.has(s.status) &&
-            (s.enrollments || []).some(e => !(validDateStr(e.end_date) && e.end_date < today))
+            (s.enrollments || []).some(e =>
+                !(validDateStr(e.start_date) && e.start_date > today) &&
+                !(validDateStr(e.end_date) && e.end_date < today)
+            )
         );
     } else {
         students = state.allStudents.filter(s => {

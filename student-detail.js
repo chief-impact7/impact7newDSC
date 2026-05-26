@@ -986,6 +986,10 @@ export function renderStudentDetail(studentId) {
         const pauseEnd = student.pause_end_date || '';
         const period = pauseStart && pauseEnd ? ` (${pauseStart} ~ ${pauseEnd})` : pauseStart ? ` (${pauseStart} ~)` : '';
         tagText = `${student.status}${period}`;
+    } else if (student.status === '등원예정') {
+        // 등원예정 학생은 첫등원 전이므로 class_type(정규/내신) 대신 상태만 표시
+        tagClass = 'tag-pending';
+        tagText = '등원예정';
     } else {
         const isNaesinActive = _isNaesinActiveAt(student, state.selectedDate);
         const displayStatus = attStatus === '미확인' ? (isNaesinActive ? '내신' : '정규') : attStatus;
@@ -1054,7 +1058,9 @@ export function renderStudentDetail(studentId) {
                 const scheduleTime = scheduleTimes[0] || '';
                 const isDefault = !individual || individual === classDefault;
                 const displayTime = isDefault ? (classDefault || scheduleTime) : individual;
-                const isToday = (e.day || []).includes(dayNameForDetail);
+                // 시작 전(start_date 미래) enrollment는 요일이 맞아도 "오늘"로 표시하지 않음
+                const notStarted = /^\d{4}-/.test(e.start_date || '') && e.start_date > state.selectedDate;
+                const isToday = !notStarted && (e.day || []).includes(dayNameForDetail);
                 const periodStr = ct !== '정규' && e.end_date ? ` ~${e.end_date.slice(5)}` : '';
                 return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;${isToday ? 'font-weight:600;' : 'opacity:0.7;'}">
                     <span style="font-size:13px;min-width:40px;">${esc(code)}</span>
