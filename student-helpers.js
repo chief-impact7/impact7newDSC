@@ -1,7 +1,7 @@
 // ─── Student Helpers ───────────────────────────────────────────────────────
 // daily-ops.js에서 추출한 학생 관련 유틸리티 함수들
 
-import { todayStr } from './src/shared/firestore-helpers.js';
+import { todayStr, parseDateKST } from './src/shared/firestore-helpers.js';
 import { state, LEVEL_SHORT, LEAVE_STATUSES } from './state.js';
 
 // 학생이 특정 날짜에 휴원 중인지 판정.
@@ -30,6 +30,26 @@ export function isOnLeaveAt(s, dateStr) {
         return true;
     }
     return false;
+}
+
+// 휴원 기간 만료 판정 (실제 오늘 KST 기준).
+// status가 휴원(가휴원/실휴원)인데 pause_end_date가 지났으면 true.
+// → 자동 복귀는 위험하므로 status를 바꾸지 않고, 출결 화면에서 경고만 띄워
+//   담당자가 직접 복귀(상태 변경) 처리하도록 유도한다.
+// dateStr 인자는 사용하지 않는다 — 휴원 만료는 "현재" 상태 속성이므로
+// state.selectedDate가 아니라 항상 실제 오늘(todayStr) 기준으로 판정한다.
+export function isPauseExpired(s) {
+    if (!s || !LEAVE_STATUSES.includes(s.status)) return false;
+    if (!s.pause_end_date) return false;
+    return s.pause_end_date < todayStr();
+}
+
+// 휴원 만료일로부터 경과 일수 (≥1). 만료 아니면 0.
+export function pauseExpiredDays(s) {
+    if (!isPauseExpired(s)) return 0;
+    const end = parseDateKST(s.pause_end_date);
+    const today = parseDateKST(todayStr());
+    return Math.max(1, Math.round((today - end) / 86400000));
 }
 
 // 학생이 특정 날짜에 퇴원 상태인지 판정.

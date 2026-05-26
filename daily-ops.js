@@ -25,7 +25,7 @@ import {
     normalizeDays, branchFromStudent, matchesBranchFilter,
     enrollmentCode, allClassCodes, activeClassCodes, _enrollCodeList,
     deriveNaesinCode, resolveNaesinCsKey, displayCodeFromCsKey, getActiveEnrollments, getStudentStartTime, isOnLeaveAt, isWithdrawnAt,
-    isNaesinActiveToday, isFreeSemesterActiveToday,
+    isNaesinActiveToday, isFreeSemesterActiveToday, isPauseExpired, pauseExpiredDays,
     makeDailyRecordId, findStudent, buildSiblingMap
 } from './student-helpers.js';
 import {
@@ -97,6 +97,7 @@ import {
     autoCreateAbsenceRecord, autoRemoveAbsenceRecord, syncAbsenceRecords,
     applyAttendance, doesStatusMatchFilter, isNewStudent, isAttendedStatus,
     checkCanEditGrading, _isVisitAttended, handleAttendanceChange,
+    confirmPauseExpiredOrAbort,
     DEFAULT_ATTENDANCE_LABELS
 } from './attendance.js';
 import {
@@ -311,6 +312,8 @@ initDataLayerDeps2({ loadRoleMemos, syncAbsenceRecords });
 
 // bulk-mode.js 의존성 주입
 function selectStudent(id) {
+    // 출결 화면에서 휴원 만료 학생을 선택하면 복귀 처리 안내 confirm. 취소 시 선택 중단.
+    if (state.currentCategory === 'attendance' && id && !confirmPauseExpiredOrAbort(id)) return;
     state.selectedStudentId = id;
     renderListPanel();
     renderStudentDetail(id);
@@ -2250,6 +2253,11 @@ function renderListPanel() {
             }
         }
 
+        // 휴원 만료 경고 뱃지 (실제 오늘 기준) — status 자동 전환 금지, 담당자 복귀 처리 유도
+        const pauseExpiredBadge = isPauseExpired(s)
+            ? `<span class="tag tag-pause-expired" title="휴원 기간이 만료됐습니다. 복귀 처리(상태 변경)가 필요합니다.">⚠ 휴원만료 (~${esc(s.pause_end_date)}, ${pauseExpiredDays(s)}일 경과) · 복귀처리 필요</span>`
+            : '';
+
         // 신규 학생 뱃지 (enrollment start_date가 14일 이내)
         const newBadge = isNewStudent(s, todayDate) ? '<span class="tag tag-new">N</span>' : '';
 
@@ -2277,7 +2285,7 @@ function renderListPanel() {
         return `<div class="list-item ${isActive}${state.bulkMode ? ' bulk-mode' : ''}${state.selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}" onclick="handleListItemClick(event, '${escAttr(s.docId)}')">
             <input type="checkbox" class="list-item-checkbox" ${state.selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">
             <div class="item-info">
-                <span class="item-title">${esc(s.name)}${newBadge}${naesinBadge}${leaveBadge}${lrPendingTags}${siblingIcon}${hwFailIconHtml}${overrideBadge}${overrideInBadge} ${teacherBadge}</span>
+                <span class="item-title">${esc(s.name)}${newBadge}${naesinBadge}${leaveBadge}${pauseExpiredBadge}${lrPendingTags}${siblingIcon}${hwFailIconHtml}${overrideBadge}${overrideInBadge} ${teacherBadge}</span>
                 <span class="item-desc">${esc(code)}${studentShortLabel(s) ? ' · ' + esc(studentShortLabel(s)) : ''}</span>
             </div>
             ${timeHtml}

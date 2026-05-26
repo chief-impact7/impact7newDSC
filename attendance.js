@@ -8,12 +8,34 @@ import { auditUpdate, auditSet, auditDelete, batchUpdate } from './audit.js';
 import { getDayName } from './src/shared/firestore-helpers.js';
 import { state, NEW_STUDENT_DAYS } from './state.js';
 import { showSaveIndicator, nowTimeStr } from './ui-utils.js';
-import { enrollmentCode, branchFromStudent } from './student-helpers.js';
+import { enrollmentCode, branchFromStudent, isPauseExpired, pauseExpiredDays, findStudent } from './student-helpers.js';
 import { saveImmediately, saveDailyRecord } from './data-layer.js';
 
 // 토글 UI의 "기본" 라벨 집합 — 이 라벨들을 클릭하면 attendance.status는 '미확인'으로 리셋.
 // 오늘 수업 유형/비정규 여부에 따라 첫 버튼 라벨이 동적으로 바뀌지만, 의미는 모두 동일("아직 미확인").
 export const DEFAULT_ATTENDANCE_LABELS = new Set(['정규', '특강', '내신', '자유', '비정규']);
+
+// ─── 휴원 만료 경고 (status 자동 전환 금지, 경고만) ──────────────────────────
+// 휴원(가휴원/실휴원)인데 pause_end_date가 지난 학생을 출결 마킹/선택할 때 confirm을 띄워
+// 담당자가 직접 복귀 처리(상태 변경)를 하도록 유도한다. 매번 뜨면 거슬리므로
+// 세션 내 학생당 1회만 노출(확인하면 그 학생은 스킵).
+const _pauseExpiredConfirmed = new Set();
+
+// 만료 휴원 학생이면 confirm을 띄우고, 사용자가 취소하면 false(작업 중단) 반환.
+// 만료가 아니거나 이미 세션 내 확인했으면 true(진행).
+export function confirmPauseExpiredOrAbort(studentId) {
+    if (_pauseExpiredConfirmed.has(studentId)) return true;
+    const s = findStudent(studentId);
+    if (!s || !isPauseExpired(s)) return true;
+    const days = pauseExpiredDays(s);
+    const ok = window.confirm(
+        `${s.name} 학생은 휴원 기간(${s.pause_end_date})이 만료됐습니다 (${days}일 경과).\n` +
+        `복귀 처리(상태 변경)를 먼저 해주세요.\n` +
+        `그대로 진행하시겠습니까?`
+    );
+    if (ok) _pauseExpiredConfirmed.add(studentId);
+    return ok;
+}
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderSubFilters, renderListPanel, renderStudentDetail, openBulkModal;
@@ -54,6 +76,7 @@ export async function cycleTempArrival(docId) {
 }
 
 export function cycleVisitAttendance(studentId) {
+    if (!confirmPauseExpiredOrAbort(studentId)) return;
     const cycle = ['등원전', '출석', '지각', '결석'];
     const rec = state.dailyRecords[studentId] || {};
     const attStatus = rec?.attendance?.status || '미확인';
@@ -70,6 +93,7 @@ export function toggleAttendance(studentId, displayStatus) {
         openBulkModal('attendance');
         return;
     }
+    if (!confirmPauseExpiredOrAbort(studentId)) return;
     applyAttendance(studentId, displayStatus);
 }
 
