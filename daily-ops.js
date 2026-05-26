@@ -702,6 +702,7 @@ function getRegularClassStudents(classCode) {
         return (s.enrollments || []).some(e => {
             if (!((e.class_type === '정규' || e.class_type === '자유학기') && e.class_number)) return false;
             if (validDate(e.end_date) && e.end_date < today) return false;
+            if (validDate(e.start_date) && e.start_date > today) return false; // 아직 시작 안 함(등원예정) — 출결 미노출
             return enrollmentCode(e) === classCode;
         });
     });
