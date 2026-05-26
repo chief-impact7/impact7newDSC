@@ -29,7 +29,8 @@ export function formatTime12h(time24) {
     const [h, m] = time24.split(':');
     const hour = parseInt(h);
     const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-    return `${h12}:${m}`;
+    const ampm = hour < 12 ? '오전' : '오후';
+    return `${ampm} ${h12}:${m}`;
 }
 
 export function nowTimeStr() {
