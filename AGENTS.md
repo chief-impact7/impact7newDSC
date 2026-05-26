@@ -155,6 +155,11 @@ hook이 없다면 `bash scripts/install-hooks.sh`로 설치한다.
 |------|----------|------|------|
 | 2026-04-22 | 초기 구성 | skills/firestore-data-fix/SKILL.md | 유시우 복구(check-yoosiwoo.mjs + restore-yoosiwoo.mjs) 패턴을 체계화. 1인 개발자가 프로덕션 데이터를 수정할 때 실수 없이 진행하도록 dry-run + history_logs + batch atomic 규율을 스킬로 명문화 |
 
+## 크로스앱 조율
+
+크로스앱·공유 컬렉션 변경은 impact7DB의 `impact7-orchestrator` 하네스에서 조율한다.
+→ 크로스앱 작업은 impact7DB에서 시작 권장.
+
 ## 메모리 (계정 공유)
 
 1인 개발. 여러 Claude 계정을 번갈아 사용하지만 동일 사용자.
