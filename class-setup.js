@@ -1,6 +1,6 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import {
-    collection, getDocs, doc, getDoc, writeBatch, arrayUnion
+    collection, getDocs, doc, getDoc, writeBatch, arrayUnion, serverTimestamp
 } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import { auth, db } from './firebase-config.js';
@@ -860,6 +860,9 @@ function _doSearchStudents(q) {
             if (!isSpecial) {
                 if (!ACTIVE_STUDENT_STATUSES.has(s.status)) return false;
                 if (LEAVE_STATUSES.includes(s.status)) return false;
+                // 반배정(enrollment ≥1) 안 된 학생(상담생 등) 제외 — 첫 반배정은 DB에서 (수업이력 로그 남기기 위함)
+                const hasClass = (s.enrollments || []).some(e => e && (e.level_symbol || e.class_number));
+                if (!hasClass) return false;
             }
             const name = (s.name || '').toLowerCase();
             const schoolTerms = schoolSearchTerms(s).map(t => t.toLowerCase());
@@ -1136,6 +1139,20 @@ window.submitWizard = async function () {
         // class_settings + 학생 enrollment를 한 batch에 묶어 부분 실패 시 데이터 불일치를 방지.
         const batch = writeBatch(db);
         batchSet(batch, doc(db, 'class_settings', d.classCode), classSettingsData, { merge: true });
+
+        // 반편성 마법사 수업이력 로그 — DB의 UPDATE 로그와 동일 필드/형식으로 기록.
+        // 공유 분류기(@impact7/shared)가 before/after를 파싱해 전반/수업추가로 분류한다.
+        const _logActor = currentUser?.email || auth.currentUser?.email || 'unknown';
+        const _pushFormationLog = (b, docId, before, after) => {
+            batchSet(b, doc(collection(db, 'history_logs')), {
+                doc_id: docId,
+                change_type: 'UPDATE',
+                before,
+                after,
+                google_login_id: _logActor,
+                timestamp: serverTimestamp(),
+            });
+        };
         for (const student of d.students) {
             const studentRef = doc(db, 'students', student.docId);
 
@@ -1196,6 +1213,7 @@ window.submitWizard = async function () {
                         : e
                 );
                 batchUpdate(batch, studentRef, { enrollments: updated });
+                _pushFormationLog(batch, student.docId, '—', `추가: ${d.classCode} (내신) 누적`);
             } else if (d.classType === '자유학기') {
                 const existing = enrollmentsByDocId.get(student.docId) || [];
                 const hasRegular = existing.some(e =>
@@ -1209,6 +1227,8 @@ window.submitWizard = async function () {
                 // 자유학기/내신은 정규의 일시 전환이라 종료하지 않는다.
                 const closeDate = yesterdayOf(newEnrollment.start_date);
                 const existing = enrollmentsByDocId.get(student.docId) || [];
+                const oldReg = existing.find(e => e.class_type === '정규' && !e.end_date);
+                const oldCode = oldReg ? `${oldReg.level_symbol || ''}${oldReg.class_number || ''}` : '';
                 const updated = existing.map(e =>
                     (e.class_type === '정규' && !e.end_date)
                         ? { ...e, end_date: closeDate }
@@ -1216,10 +1236,21 @@ window.submitWizard = async function () {
                 );
                 updated.push(newEnrollment);
                 batchUpdate(batch, studentRef, { enrollments: updated });
+                // 수업이력 로그 — DB와 동일 형식으로 공유 분류기가 전반/수업추가로 인식
+                const newCode = d.classCode;
+                if (oldCode && oldCode !== newCode) {
+                    _pushFormationLog(batch, student.docId,
+                        `상태:${student.status || ''}, 반:${oldCode}`,
+                        `상태:${student.status || ''}, 반:${newCode}`);
+                } else if (!oldCode) {
+                    _pushFormationLog(batch, student.docId, '—',
+                        `추가: ${newCode} (정규), 총 ${updated.length}개 누적`);
+                }
             } else {
                 batchUpdate(batch, studentRef, {
                     enrollments: arrayUnion(newEnrollment),
                 });
+                _pushFormationLog(batch, student.docId, '—', `추가: ${d.classCode} (특강) 누적`);
             }
         }
         await batch.commit();
