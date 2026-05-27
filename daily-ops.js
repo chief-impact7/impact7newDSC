@@ -120,7 +120,7 @@ import {
     initDataLayerDeps, initDataLayerDeps2,
     loadClassSettings, getClassDomains, loadTeachers, trackTeacherLogin, getTeacherName,
     loadClassNextHw, saveClassNextHw, getNextHwStatus, getStudentDomains, getStudentTestItems,
-    saveClassSettings, loadStudents, promoteEnrollPending, promoteWithdrawalDate,
+    saveClassSettings, loadStudents, promoteEnrollPending, backfillStudentNumbers, promoteWithdrawalDate,
     loadDailyRecords, loadRetakeSchedules, loadHwFailTasks, loadTestFailTasks,
     loadTempAttendances, loadTempClassOverrides,
     getStudentOverrides, getOverrideStudentsForClass, getOverridingOutFromClass, addOverrideInStudents,
@@ -2998,6 +2998,7 @@ onAuthStateChanged(auth, async (user) => {
         try {
             await loadStudents();
             await promoteEnrollPending();
+            await backfillStudentNumbers();
             await promoteWithdrawalDate();
             await loadWithdrawnStudents();
             buildSiblingMap();
@@ -3127,6 +3128,7 @@ window.refreshData = async () => {
     showSaveIndicator('saving');
     await loadStudents();
     await promoteEnrollPending();
+    await backfillStudentNumbers();
     await promoteWithdrawalDate();
     await loadWithdrawnStudents();
     await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadRoleMemos(), loadClassSettings(true), loadClassNextHw(state.selectedDate), loadTeachers()]);

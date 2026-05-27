@@ -970,6 +970,11 @@ export function renderStudentDetail(studentId) {
     // 프로필
     document.getElementById('profile-avatar').textContent = (student.name || '?')[0];
     document.getElementById('detail-name').textContent = student.name || '';
+    const snEl = document.getElementById('profile-student-number');
+    if (snEl) {
+        snEl.textContent = student.studentNumber ? `#${student.studentNumber}` : '';
+        snEl.style.display = student.studentNumber ? '' : 'none';
+    }
 
     // 연락처 표시 (이름 옆, 학생/학부모 각 줄)
     const phonesEl = document.getElementById('profile-phones');

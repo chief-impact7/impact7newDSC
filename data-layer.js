@@ -16,6 +16,8 @@ import { showSaveIndicator } from './ui-utils.js';
 import { normalizeDays, enrollmentCode, branchFromStudent, makeDailyRecordId, getActiveEnrollments } from './student-helpers.js';
 import { DEFAULT_HISTORY_LIMIT } from './consultation-filter.js';
 import { createPromoteEnrollPending } from '@impact7/shared/promote-enroll';
+import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
+import { deriveStudentNumber } from '@impact7/shared/student-number';
 
 const _promoteEnrollPending = createPromoteEnrollPending(
     { db, writeBatch, doc, collection, serverTimestamp },
@@ -251,6 +253,31 @@ export async function promoteEnrollPending() {
             console.log(`[promoteEnrollPending] ${promoted.length}명 등원예정→재원 전환:`, promoted.map(s => s.name));
     } catch (err) {
         console.error('[promoteEnrollPending] 전환 실패:', err);
+    }
+}
+
+export async function backfillStudentNumbers() {
+    if (READ_ONLY) return;
+    const targets = state.allStudents.filter(s => ENROLLABLE_STATUSES.has(s.status) && !s.studentNumber);
+    if (targets.length === 0) return;
+    const batch = writeBatch(db);
+    const pending = [];
+    for (const s of targets) {
+        const { studentNumber, source } = deriveStudentNumber(s);
+        if (!studentNumber) continue;
+        batchUpdate(batch, doc(db, 'students', s.docId), { studentNumber, studentNumberSource: source, studentNumberIssuedAt: serverTimestamp() });
+        pending.push({ s, studentNumber, source });
+    }
+    if (pending.length === 0) return;
+    try {
+        await batch.commit();
+        for (const { s, studentNumber, source } of pending) {
+            s.studentNumber = studentNumber;
+            s.studentNumberSource = source;
+        }
+        console.log(`[backfillStudentNumbers] ${pending.length}명 학생번호 발급`);
+    } catch (err) {
+        console.error('[backfillStudentNumbers] 실패:', err);
     }
 }
 
