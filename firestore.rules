@@ -78,16 +78,24 @@ service cloud.firestore {
       // DB/DSC: 읽기+쓰기, Director: 읽기만
       allow read: if isAuthorized();
 
+      // enrollment↔status 정합성: enrollment 보유 시 재원 계열 status만 (상담/퇴원/종강+enrollment 차단)
+      function enrollmentStatusConsistent() {
+        return request.resource.data.get('enrollments', []).size() == 0
+          || request.resource.data.get('status', '') in ['재원', '등원예정', '실휴원', '가휴원'];
+      }
+
       allow create: if isAuthorized()
         && hasRequiredStudentFields()
         && hasOnlyAllowedStudentFields()
-        && withinFieldLimit(30);
+        && withinFieldLimit(30)
+        && enrollmentStatusConsistent();
 
       allow update: if isAuthorized()
         && hasRequiredStudentFields()
         && hasOnlyAllowedStudentFields()
         && withinFieldLimit(30)
-        && (!resource.data.keys().hasAny(['status']) || request.resource.data.keys().hasAny(['status']));
+        && (!resource.data.keys().hasAny(['status']) || request.resource.data.keys().hasAny(['status']))
+        && enrollmentStatusConsistent();
 
       allow delete: if false;  // 삭제 차단 — soft-delete(status='퇴원')로 대체
 
