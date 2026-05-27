@@ -94,6 +94,8 @@ function normalizeEnrollments(s) {
         levelSymbol = '';
     }
     const day = normalizeDays(s.day);
+    // 레거시 반배정 정보가 전혀 없으면(상담생 등 enrollments=[]) 합성하지 않는다 — class_type '정규' 둔갑 방지
+    if (!levelSymbol && !classNumber && !s.class_type && !day.length) return [];
     const ct = s.class_type || '정규';
     const e = { class_type: ct, level_symbol: levelSymbol, class_number: classNumber, day, start_date: s.start_date || '' };
     if (ct === '특강') e.end_date = s.special_end_date || '';

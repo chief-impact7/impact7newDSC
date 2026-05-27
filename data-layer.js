@@ -206,11 +206,13 @@ export async function loadStudents() {
                 classNumber = levelSymbol;
                 levelSymbol = '';
             }
-            data.enrollments = [{
+            const day = normalizeDays(data.day);
+            // 레거시 반배정 정보가 전혀 없으면(상담생 등) 합성하지 않는다 — class_type '정규' 둔갑 방지
+            data.enrollments = (!levelSymbol && !classNumber && !data.class_type && !day.length) ? [] : [{
                 class_type: data.class_type || '정규',
                 level_symbol: levelSymbol,
                 class_number: classNumber,
-                day: normalizeDays(data.day),
+                day,
                 start_date: data.start_date || ''
             }];
         } else {
