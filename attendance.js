@@ -130,7 +130,7 @@ export async function autoCreateAbsenceRecord(studentId, overrides, date = state
     // stale로 남아있으면 함께 해제해야 결석대장 노출/UI 동기화가 일치한다.
     const memHit = state.absenceRecords.find(r => r.student_id === studentId && r.absence_date === date);
     if (memHit) {
-        if (state.dailyRecords[studentId]?.absence_closed) {
+        if (state.dailyRecords[studentId]?.absence_closed && memHit.status === 'closed') {
             await reopenAbsenceRecord(studentId, memHit.docId, memHit, date);
         }
         return;
@@ -142,11 +142,11 @@ export async function autoCreateAbsenceRecord(studentId, overrides, date = state
         const existDoc = await getDoc(doc(db, 'absence_records', absDocId));
         if (existDoc.exists()) {
             const data = existDoc.data();
-            if (data.status === 'open') {
+            if (data.status === 'open' || data.status === 'done') {
                 if (!state.absenceRecords.some(r => r.docId === absDocId)) {
                     state.absenceRecords.push({ docId: absDocId, ...data });
                 }
-                if (state.dailyRecords[studentId]?.absence_closed) {
+                if (state.dailyRecords[studentId]?.absence_closed && data.status === 'open') {
                     await reopenAbsenceRecord(studentId, absDocId, data, date);
                 }
                 return;
@@ -162,12 +162,12 @@ export async function autoCreateAbsenceRecord(studentId, overrides, date = state
         const existQ = query(collection(db, 'absence_records'),
             where('student_id', '==', studentId),
             where('absence_date', '==', date),
-            where('status', 'in', ['open', 'closed']));
+            where('status', 'in', ['open', 'done', 'closed']));
         const existSnap = await getDocs(existQ);
         if (!existSnap.empty) {
             for (const d of existSnap.docs) {
                 const data = d.data();
-                if (data.status === 'open' && !state.absenceRecords.some(r => r.docId === d.id)) {
+                if ((data.status === 'open' || data.status === 'done') && !state.absenceRecords.some(r => r.docId === d.id)) {
                     state.absenceRecords.push({ docId: d.id, ...data });
                 }
                 if (data.status === 'closed') {

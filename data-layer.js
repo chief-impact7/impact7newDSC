@@ -264,7 +264,7 @@ export async function cancelStudentPendingTasks(studentId) {
     const pendingHw   = state.hwFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
     const pendingTest = state.testFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
     const openAbsence = state.absenceRecords.filter(r =>
-        r.student_id === studentId && r.status === 'open' && (!r.resolution || r.resolution === 'pending')
+        r.student_id === studentId && (r.status === 'open' || r.status === 'done') && (!r.resolution || r.resolution === 'pending')
     );
     if (!pendingHw.length && !pendingTest.length && !openAbsence.length) return;
     const cancelBatch = writeBatch(db);
@@ -435,7 +435,7 @@ export async function cancelTempClassOverride(docId, studentId) {
 }
 
 export function loadAbsenceRecords() {
-    const q = query(collection(db, 'absence_records'), where('status', '==', 'open'));
+    const q = query(collection(db, 'absence_records'), where('status', 'in', ['open', 'done']));
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 90);
     const cutoffStr = cutoff.toISOString().slice(0, 10);
@@ -562,7 +562,7 @@ export async function syncTaskStudentNames() {
 
 export async function autoCloseOldRecords() {
     // 결석대장: 1개월 경과 → 행정완료
-    const oldAbsences = state.absenceRecords.filter(r => _isOlderThan(r.created_at, { months: 1 }));
+    const oldAbsences = state.absenceRecords.filter(r => r.status === 'open' && _isOlderThan(r.created_at, { months: 1 }));
     for (const r of oldAbsences) {
         try {
             await auditUpdate(doc(db, 'absence_records', r.docId), {

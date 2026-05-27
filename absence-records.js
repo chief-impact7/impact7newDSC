@@ -245,10 +245,12 @@ export async function completeAbsenceMakeup(docId, studentId) {
     showSaveIndicator('saving');
     try {
         await auditUpdate(doc(db, 'absence_records', docId), {
+            status: 'done',
             makeup_status: '완료',
             makeup_completed_by: state.currentUser?.email || '',
             makeup_completed_at: serverTimestamp()
         });
+        r.status = 'done';
         r.makeup_status = '완료';
         r.makeup_completed_by = state.currentUser?.email || '';
         r.makeup_completed_at = new Date();
@@ -268,8 +270,10 @@ export async function markAbsenceNoShow(docId, studentId) {
     showSaveIndicator('saving');
     try {
         await auditUpdate(doc(db, 'absence_records', docId), {
+            status: 'done',
             makeup_status: '미등원'
         });
+        r.status = 'done';
         r.makeup_status = '미등원';
         state._scheduledVisitsCache = null;
         renderStudentDetail(studentId);
@@ -342,12 +346,14 @@ export async function reopenAbsenceMakeup(docId, studentId) {
     showSaveIndicator('saving');
     try {
         await auditUpdate(doc(db, 'absence_records', docId), {
+            status: 'open',
             makeup_status: 'pending',
             makeup_date: '',
             makeup_time: '',
             makeup_completed_by: '',
             makeup_completed_at: ''
         });
+        r.status = 'open';
         r.makeup_status = 'pending';
         r.makeup_date = '';
         r.makeup_time = '';

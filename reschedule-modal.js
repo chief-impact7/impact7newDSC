@@ -92,11 +92,13 @@ export async function saveReschedule() {
         showSaveIndicator('saving');
         try {
             await auditUpdate(doc(db, 'absence_records', docId), {
+                status: 'open',
                 makeup_date: newDate,
                 makeup_time: newTime || '',
                 makeup_status: 'pending',
                 reschedule_history: arrayUnion(entry)
             });
+            r.status = 'open';
             r.makeup_date = newDate;
             r.makeup_time = newTime || '';
             r.makeup_status = 'pending';

@@ -159,7 +159,7 @@ export function getScheduledVisits() {
 
     // 5) 결석보충 (state.absenceRecords) — 등원예정은 정규 쪽으로 이동
     for (const r of state.absenceRecords) {
-        if (r.resolution !== '보충' || r.makeup_date !== state.selectedDate || r.status !== 'open') continue;
+        if (r.resolution !== '보충' || r.makeup_date !== state.selectedDate || r.status === 'closed' || r.makeup_status === '미등원') continue;
         visits.push({
             id: `absence_makeup_${r.docId}`,
             source: 'absence_makeup',

@@ -284,7 +284,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, date }) {
         const hasVisitTask = hasExtraVisit
             || studentHwTasks.some(t => t.type === '등원' && t.scheduled_date === date)
             || studentTestTasks.some(t => t.type === '등원' && t.scheduled_date === date)
-            || studentAbsences.some(a => a.resolution === '보충' && a.makeup_date === date && a.status === 'open');
+            || studentAbsences.some(a => a.resolution === '보충' && a.makeup_date === date && a.status !== 'closed' && a.makeup_status !== '미등원');
         if (!todayEnrolls.length && !hasVisitTask) return;
 
         const naesin = isNaesinActive(student, date, classSettings);
