@@ -242,10 +242,11 @@ export async function loadStudents() {
 }
 
 export async function promoteEnrollPending() {
+    if (READ_ONLY) return;
     const today = todayStr();
     try {
         const promoted = await _promoteEnrollPending(state.allStudents, today);
-        if (!READ_ONLY) promoted.forEach(s => { s.status = '재원'; });
+        promoted.forEach(s => { s.status = '재원'; });
         if (promoted.length > 0)
             console.log(`[promoteEnrollPending] ${promoted.length}명 등원예정→재원 전환:`, promoted.map(s => s.name));
     } catch (err) {
