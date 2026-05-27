@@ -15,6 +15,12 @@ import { state, DEFAULT_DOMAINS } from './state.js';
 import { showSaveIndicator } from './ui-utils.js';
 import { normalizeDays, enrollmentCode, branchFromStudent, makeDailyRecordId, getActiveEnrollments } from './student-helpers.js';
 import { DEFAULT_HISTORY_LIMIT } from './consultation-filter.js';
+import { createPromoteEnrollPending } from '@impact7/shared/promote-enroll';
+
+const _promoteEnrollPending = createPromoteEnrollPending(
+    { db, writeBatch, doc, collection, serverTimestamp },
+    { idField: 'docId', batchUpdate }
+);
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderSubFilters, renderListPanel, renderStudentDetail, renderClassDetail,
@@ -237,20 +243,11 @@ export async function loadStudents() {
 
 export async function promoteEnrollPending() {
     const today = todayStr();
-    const pending = state.allStudents.filter(s =>
-        s.status === '등원예정' &&
-        (s.enrollments || []).some(e => e.start_date && e.start_date <= today)
-    );
-    if (pending.length === 0) return;
-    const batch = writeBatch(db);
-    for (const s of pending) {
-        batchUpdate(batch, doc(db, 'students', s.docId), { status: '재원' });
-    }
     try {
-        await batch.commit();
-        if (READ_ONLY) return;
-        pending.forEach(s => { s.status = '재원'; });
-        console.log(`[promoteEnrollPending] ${pending.length}명 등원예정→재원 전환:`, pending.map(s => s.name));
+        const promoted = await _promoteEnrollPending(state.allStudents, today);
+        if (!READ_ONLY) promoted.forEach(s => { s.status = '재원'; });
+        if (promoted.length > 0)
+            console.log(`[promoteEnrollPending] ${promoted.length}명 등원예정→재원 전환:`, promoted.map(s => s.name));
     } catch (err) {
         console.error('[promoteEnrollPending] 전환 실패:', err);
     }
