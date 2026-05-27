@@ -1615,8 +1615,10 @@ function getFilteredStudents() {
         // 검색은 모든 현재학기 학생을 찾을 수 있어야 함 (등원예정 포함).
         // 평소 출결 목록(비검색)은 아래 getActiveEnrollments가 미래 시작일을 제외하므로
         // 등원예정 학생은 출결엔 안 뜨고 검색으로만 노출된다.
+        // 재원생만 (상담생은 비원생 섹션에서 _renderPastContacts로 표시)
         students = state.allStudents.filter(s =>
             !PAST_STUDENT_STATUSES.has(s.status) &&
+            s.status !== '상담' &&
             (s.enrollments || []).some(e => !(validDateStr(e.end_date) && e.end_date < today))
         );
     } else {
@@ -1873,14 +1875,24 @@ function renderListPanel() {
     // 필터 칩 렌더링
     renderFilterChips();
 
-    // 비원생 비동기 검색 (Firestore prefix 쿼리)
-    let pastContactResults = [];
+    // 비원생 섹션 = 상담생(allStudents, 동기) + 퇴원/종강(Firestore, 비동기)
+    let consultMatchCount = 0;
     if (state.searchQuery && state.searchQuery.trim().length >= 2) {
+        const q = state.searchQuery.trim().toLowerCase();
+        const consultStudents = state.allStudents
+            .filter(s => s.status === '상담' && (
+                s.name?.toLowerCase().includes(q) ||
+                s.school?.toLowerCase().includes(q) ||
+                s.student_phone?.includes(q) ||
+                s.parent_phone_1?.includes(q)
+            ))
+            .map(s => ({ ...s, id: s.docId }));
+        consultMatchCount = consultStudents.length;
         const searchId = ++state._contactSearchId;
         _searchContactsDSC(state.searchQuery.trim()).then(results => {
-            if (searchId !== state._contactSearchId || results.length === 0) return;
-            pastContactResults = results;
-            _renderPastContacts(results, container);
+            if (searchId !== state._contactSearchId) return;
+            const nonStudents = [...consultStudents, ...results];
+            if (nonStudents.length > 0) _renderPastContacts(nonStudents, container);
         });
     }
 
@@ -1902,7 +1914,7 @@ function renderListPanel() {
         ? getEnrollPendingVisits().length : 0;
     countEl.textContent = `${students.length + enrollPendingCount}명`;
 
-    if (students.length === 0 && pastContactResults.length === 0 && enrollPendingCount === 0) {
+    if (students.length === 0 && consultMatchCount === 0 && enrollPendingCount === 0) {
         container.innerHTML = `<div class="empty-state">
             <span class="material-symbols-outlined">person_search</span>
             <p>해당하는 학생이 없습니다</p>
@@ -2841,6 +2853,12 @@ async function saveEnrollment() {
     const { studentId, enrollIdx } = editingEnrollment;
     const student = findStudent(studentId);
     if (!student) return;
+
+    // 재원생만 반배정 가능 — 상담/퇴원/종강은 차단 (enrollment-status 정합성)
+    if (!new Set(['재원', '등원예정', '실휴원', '가휴원']).has(student.status)) {
+        alert('재원생만 반을 추가/편집할 수 있습니다.\n상담·퇴원·종강 학생은 먼저 재원 상태로 전환하세요.');
+        return;
+    }
 
     const levelSymbol = document.getElementById('enroll-level').value.trim();
     const classNumber = document.getElementById('enroll-class-num').value.trim();

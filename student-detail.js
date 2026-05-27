@@ -1348,7 +1348,7 @@ export function renderStudentDetail(studentId) {
         tabsEl.style.display = '';
         const reportLabel = _isInactiveDetailStudent(student) ? '수업이력' : '출결현황';
         tabsEl.querySelectorAll('.detail-tab').forEach(t => {
-            if (t.dataset.tab === 'report' || t.dataset.tab === 'score') t.style.display = '';
+            if (t.dataset.tab === 'report' || t.dataset.tab === 'score' || t.dataset.tab === 'consultation') t.style.display = '';
             if (t.dataset.tab === 'report') t.textContent = reportLabel;
             t.classList.toggle('active', t.dataset.tab === state.detailTab);
         });

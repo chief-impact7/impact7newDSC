@@ -172,7 +172,7 @@ export function applyClassDetailTabMode() {
     const tabsEl = document.getElementById('detail-tabs');
     if (tabsEl) {
         tabsEl.querySelectorAll('.detail-tab').forEach(t => {
-            if (t.dataset.tab === 'report' || t.dataset.tab === 'score') t.style.display = 'none';
+            if (t.dataset.tab === 'report' || t.dataset.tab === 'score' || t.dataset.tab === 'consultation') t.style.display = 'none';
             t.classList.toggle('active', t.dataset.tab === 'daily');
         });
     }

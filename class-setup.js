@@ -1153,7 +1153,14 @@ window.submitWizard = async function () {
                 timestamp: serverTimestamp(),
             });
         };
+        const ENROLLABLE_STATUSES = new Set(['재원', '등원예정', '실휴원', '가휴원']);
+        const _rejectedStudents = [];
         for (const student of d.students) {
+            // 재원생만 반배정 가능 — 상담/퇴원/종강은 제외 (enrollment-status 정합성)
+            if (!ENROLLABLE_STATUSES.has(student.status)) {
+                _rejectedStudents.push(student.name || student.docId);
+                continue;
+            }
             const studentRef = doc(db, 'students', student.docId);
 
             // 특강 수강생은 모두 status2: '특강' 설정
@@ -1253,9 +1260,12 @@ window.submitWizard = async function () {
                 _pushFormationLog(batch, student.docId, '—', `추가: ${d.classCode} (특강) 누적`);
             }
         }
+        if (_rejectedStudents.length) {
+            alert(`재원생만 반에 추가할 수 있습니다. 다음 학생은 제외되었습니다:\n${_rejectedStudents.join(', ')}\n(상담·퇴원·종강 학생은 먼저 재원 상태로 전환하세요)`);
+        }
         await batch.commit();
 
-        showToast(`"${d.classCode}" 반이 생성되었습니다! (${d.students.length}명)`, 'success');
+        showToast(`"${d.classCode}" 반이 생성되었습니다! (${d.students.length - _rejectedStudents.length}명)`, 'success');
 
         // 3초 후 DSC 홈으로 이동
         setTimeout(() => { window.location.href = '/'; }, 2000);
