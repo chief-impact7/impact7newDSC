@@ -7,6 +7,7 @@ import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
 import { initHelpGuide } from './help-guide.js';
 import { toDateStrKST, parseDateKST, todayStr, getDayName, studentShortLabel, ACTIVE_STUDENT_STATUSES, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
+import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { auditUpdate, auditSet } from './audit.js';
 import {
     state,
@@ -2855,7 +2856,7 @@ async function saveEnrollment() {
     if (!student) return;
 
     // 재원생만 반배정 가능 — 상담/퇴원/종강은 차단 (enrollment-status 정합성)
-    if (!new Set(['재원', '등원예정', '실휴원', '가휴원']).has(student.status)) {
+    if (!isEnrollableStatus(student.status)) {
         alert('재원생만 반을 추가/편집할 수 있습니다.\n상담·퇴원·종강 학생은 먼저 재원 상태로 전환하세요.');
         return;
     }

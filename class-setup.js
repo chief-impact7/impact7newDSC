@@ -4,6 +4,7 @@ import {
 } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import { auth, db } from './firebase-config.js';
+import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { signInWithGoogle, logout } from './auth.js';
 import { todayStr, studentShortLabel, ACTIVE_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { LEAVE_STATUSES, LEVEL_SHORT } from './state.js';
@@ -1153,11 +1154,10 @@ window.submitWizard = async function () {
                 timestamp: serverTimestamp(),
             });
         };
-        const ENROLLABLE_STATUSES = new Set(['재원', '등원예정', '실휴원', '가휴원']);
         const _rejectedStudents = [];
         for (const student of d.students) {
             // 재원생만 반배정 가능 — 상담/퇴원/종강은 제외 (enrollment-status 정합성)
-            if (!ENROLLABLE_STATUSES.has(student.status)) {
+            if (!isEnrollableStatus(student.status)) {
                 _rejectedStudents.push(student.name || student.docId);
                 continue;
             }
