@@ -1007,6 +1007,18 @@ body {
   50% { opacity: 0.5; }
 }
 
+/* 마스터 status tone 배지 (@impact7/shared STATUS_TONE) — hex는 impact7DB와 동일 SSoT.
+   헤더에서 .tag 스케일 위에 색만 입혀 출결 배지와 나란히 병기. */
+.tag-master-status {
+  font-weight: 600;
+}
+.tone-active     { background: var(--primary-light); color: var(--success); }  /* #d4e9e2 / #006241 */
+.tone-scheduled  { background: var(--primary-light); color: var(--primary); }  /* #d4e9e2 / #00754A */
+.tone-paused     { background: #fef7e0; color: #b06000; }
+.tone-consult    { background: #ede7f6; color: #5e35b1; }
+.tone-ended-hard { background: #fce8e6; color: #c5221f; }
+.tone-ended-soft { background: #eceff1; color: #546e7a; }
+
 .tag-past {
   background: #9e9e9e;
   color: #fff;

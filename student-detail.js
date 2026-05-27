@@ -8,11 +8,11 @@ import {
     query, where, deleteField
 } from 'firebase/firestore';
 import { db } from './firebase-config.js';
-import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
+import { isEnrollableStatus, STATUS_TONE } from '@impact7/shared/enrollment-status';
 import { state, LEAVE_STATUSES, LEVEL_SHORT } from './state.js';
 import {
     esc, escAttr, formatTime12h, oxDisplayClass,
-    nowTimeStr, showSaveIndicator, showToast
+    nowTimeStr, showSaveIndicator, showToast, _stripYear
 } from './ui-utils.js';
 import {
     enrollmentCode, findStudent,
@@ -43,6 +43,12 @@ import { loadClassHistoryCard } from './class-history.js';
 // 비활성 학생(퇴원·종강·상담 등) 식별용 — 출결현황 탭 라벨을 "수업이력"으로 동적 전환.
 const _DETAIL_ACTIVE_STATES = new Set(['재원', '등원예정', '실휴원', '가휴원']);
 const _isInactiveDetailStudent = (s) => !_DETAIL_ACTIVE_STATES.has(s?.status || '');
+
+// 마스터 status → tone 배지 HTML (@impact7/shared STATUS_TONE 기반, DB와 동일 tone SSoT).
+// 헤더에 출결 배지와 나란히 병기. status 없으면 빈 문자열.
+const statusToneClass = (status) => STATUS_TONE[status] ? 'tone-' + STATUS_TONE[status] : '';
+const statusToneBadgeHtml = (status) =>
+    status ? `<span class="tag tag-master-status ${statusToneClass(status)}">${esc(status)}</span>` : '';
 
 // ─── Injection slots (daily-ops.js → initStudentDetailDeps) ─────────────────
 let renderSubFilters, renderListPanel, _isNaesinClassCode;
@@ -976,25 +982,32 @@ export function renderStudentDetail(studentId) {
     // 퇴원 학생: leave_request 한 번만 조회 (프로필 태그 + 퇴원 정보 카드에서 공유)
     const wdLeaveReq = isWithdrawn ? state.leaveRequests.find(lr => lr.student_id === studentId && lr.status === 'approved' &&
         (lr.request_type === '퇴원요청' || lr.request_type === '휴원→퇴원')) : null;
+    // 마스터 status는 tone 배지가 전담. 비활성 분기의 tag-status 배지는 status 단어 없이
+    // 보조정보(기간/날짜)만 남긴다 (재원 활성 분기는 출결/수업 표시 — 현행 유지).
     let tagClass, tagText;
     if (isWithdrawn) {
         tagClass = '';
-        const wdDate = wdLeaveReq?.withdrawal_date || '';
-        tagText = `퇴원${wdDate ? ` (${wdDate})` : ''}`;
+        // 퇴원: 퇴원 날짜만 (없으면 배지 미렌더)
+        tagText = _stripYear(wdLeaveReq?.withdrawal_date || '');
     } else if (isLeaveStudent) {
         tagClass = 'tag-leave';
+        // 휴원: 휴원 기간만 (종료일 강조 ~MM-DD, 종료일 없으면 MM-DD~)
         const pauseStart = student.pause_start_date || '';
         const pauseEnd = student.pause_end_date || '';
-        const period = pauseStart && pauseEnd ? ` (${pauseStart} ~ ${pauseEnd})` : pauseStart ? ` (${pauseStart} ~)` : '';
-        tagText = `${student.status}${period}`;
+        tagText = pauseEnd ? `~${_stripYear(pauseEnd)}` : pauseStart ? `${_stripYear(pauseStart)}~` : '';
     } else if (student.status === '등원예정') {
-        // 등원예정 학생은 첫등원 전이므로 class_type(정규/내신) 대신 상태만 표시
+        // 등원예정: 가장 이른 미래 start_date(등원예정일)만 (없으면 배지 미렌더)
         tagClass = 'tag-pending';
-        tagText = '등원예정';
+        const today = state.selectedDate || todayStr();
+        const futureStarts = (student.enrollments || [])
+            .map(e => e.start_date)
+            .filter(d => /^\d{4}-/.test(d || '') && d > today);
+        const firstStart = futureStarts.length ? futureStarts.sort()[0] : '';
+        tagText = firstStart ? _stripYear(firstStart) : '';
     } else if (!isEnrollableStatus(student.status)) {
-        // 비재원(상담/종강 등)은 반배정이 없으므로 class_type 대신 상태 표시 (정규 둔갑 방지)
+        // 비재원(상담/종강): status는 tone 배지가 전담 — 보조 배지 미렌더
         tagClass = 'tag-pending';
-        tagText = student.status;
+        tagText = '';
     } else {
         const isNaesinActive = _isNaesinActiveAt(student, state.selectedDate);
         const displayStatus = attStatus === '미확인' ? (isNaesinActive ? '내신' : '정규') : attStatus;
@@ -1009,8 +1022,15 @@ export function renderStudentDetail(studentId) {
     const siblingNames = hasSibling ? [...new Set([...state.siblingMap[studentId]].map(sid => state.allStudents.find(x => x.docId === sid)?.name).filter(Boolean))].join(', ') : '';
     const siblingHtml = hasSibling ? `<span class="tag tag-sibling"><span class="material-symbols-outlined" style="font-size:13px;">group</span> ${esc(siblingNames)}</span>` : '';
 
+    // 마스터 status tone 배지를 맨 앞에 병기. 보조 배지(tag-status)는 tagText 있을 때만 렌더.
+    const masterStatusHtml = statusToneBadgeHtml(student.status || '');
+    const auxBadgeHtml = tagText
+        ? `<span class="tag tag-status ${tagClass}" ${isWithdrawn ? 'style="background:#dc2626;color:#fff;"' : ''}>${esc(tagText)}</span>`
+        : '';
+
     document.getElementById('profile-tags').innerHTML = `
-        <span class="tag tag-status ${tagClass}" ${isWithdrawn ? 'style="background:#dc2626;color:#fff;"' : ''}>${esc(tagText)}</span>
+        ${masterStatusHtml}
+        ${auxBadgeHtml}
         ${siblingHtml}
     `;
 
