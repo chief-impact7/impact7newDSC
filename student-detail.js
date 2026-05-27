@@ -8,6 +8,7 @@ import {
     query, where, deleteField
 } from 'firebase/firestore';
 import { db } from './firebase-config.js';
+import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { state, LEAVE_STATUSES, LEVEL_SHORT } from './state.js';
 import {
     esc, escAttr, formatTime12h, oxDisplayClass,
@@ -990,6 +991,10 @@ export function renderStudentDetail(studentId) {
         // 등원예정 학생은 첫등원 전이므로 class_type(정규/내신) 대신 상태만 표시
         tagClass = 'tag-pending';
         tagText = '등원예정';
+    } else if (!isEnrollableStatus(student.status)) {
+        // 비재원(상담/종강 등)은 반배정이 없으므로 class_type 대신 상태 표시 (정규 둔갑 방지)
+        tagClass = 'tag-pending';
+        tagText = student.status;
     } else {
         const isNaesinActive = _isNaesinActiveAt(student, state.selectedDate);
         const displayStatus = attStatus === '미확인' ? (isNaesinActive ? '내신' : '정규') : attStatus;
