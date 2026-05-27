@@ -389,12 +389,14 @@ function buildSummary(groups) {
         sum + row.homework.filter(c => c.issue).length + row.tests.filter(c => c.issue).length,
     0);
     const regular = Object.values(groups.regular || {}).flat().length;
+    const total = rows.length;
     return {
-        total: rows.length,
+        total,
         diagnostic: groups.diagnostic.length,
         attended,
         late,
         absent,
+        pending: total - attended - absent,
         issues,
         regular,
         irregular: groups.irregular.length,
@@ -569,6 +571,7 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                 <SummaryCard icon="how_to_reg" label="출석" value={data.summary.attended} note="출석/지각/조퇴 포함" />
                 <SummaryCard icon="schedule" label="지각" value={data.summary.late} note="우측 명단 표시" />
                 <SummaryCard icon="person_off" label="결석" value={data.summary.absent} note="결석대장/사유 함께 표시" />
+                <SummaryCard icon="pending_actions" label="미입력" value={data.summary.pending} note="출결 미기록 학생" />
                 <SummaryCard icon="assignment_late" label="학습 이슈" value={data.summary.issues} note="숙제/테스트/후속조치" />
             </div>
 
