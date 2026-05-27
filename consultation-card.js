@@ -248,11 +248,11 @@ function renderSearchBar(studentId) {
   `;
 }
 
-// "2026-03-21" → "26-3-21" (yy-m-d)
+// "2026-03-21" → "26-03-21" (yy-mm-dd)
 function formatHistDate(dateStr) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr ?? ''));
   if (!m) return dateStr ?? '';
-  return `${m[1].slice(2)}-${Number(m[2])}-${Number(m[3])}`;
+  return `${m[1].slice(2)}-${m[2]}-${m[3]}`;
 }
 
 function renderHistoryCard(consultations, pinnedIds = [], studentId = '') {
@@ -262,8 +262,12 @@ function renderHistoryCard(consultations, pinnedIds = [], studentId = '') {
   const pinned = new Set(pinnedIds);
   const rows = consultations.map(c => {
     const isPinned = pinned.has(c.id);
-    const title = escapeHtml(c.title || consultationTitleFallback(c.text));
-    const badge = escapeHtml([c.consultation_type, c.method, c.target].filter(Boolean).join('·'));
+    const name = c.student_name || '';
+    let rawTitle = c.title || consultationTitleFallback(c.text);
+    // 학생 이름은 패널 헤더에 이미 있으므로 제목 앞 이름 중복 제거
+    if (name && rawTitle.startsWith(name)) rawTitle = rawTitle.slice(name.length).trim();
+    const title = escapeHtml(rawTitle);
+    const badge = escapeHtml([...new Set([c.consultation_type, c.method, c.target].filter(Boolean))].join('·'));
     return `
     <details class="consult-hist-item${isPinned ? ' pinned' : ''}">
       <summary>
