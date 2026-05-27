@@ -336,6 +336,7 @@ async function renderInputTab(studentId) {
     ${renderInputForm(studentId, readonly)}
   `;
   const briefing = await getStudentBriefing(studentId).catch(() => null);
+  if (window.__consultStudentId !== studentId) return;
   replaceSlot('consult-briefing-slot', renderBriefingCard(briefing, studentId));
 }
 
@@ -353,6 +354,7 @@ async function renderSearchTab(studentId) {
     searchStudentConsultations(studentId, { startDate: start, endDate: end }),
     listStudentPins(studentId),
   ]);
+  if (window.__consultStudentId !== studentId) return;
   replaceSlot('consult-summary-slot', summary.status === 'fulfilled'
     ? renderSummaryCard(summary.value, studentId)
     : `<div class="card consultation-summary"><h4>AI 누적 요약</h4><em>로드 실패</em></div>`);

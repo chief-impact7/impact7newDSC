@@ -61,6 +61,7 @@ export function initStudentDetailDeps(deps) {
 
 // ─── Module-local state ─────────────────────────────────────────────────────
 let _lastRenderedStudentId = null;
+let _renderConsultationFn = null;
 
 // ─── Checklist & Departure ──────────────────────────────────────────────────
 
@@ -405,6 +406,10 @@ export function switchDetailTab(tab) {
         if (state.selectedStudentId) _loadReportOrHistoryCard(state.selectedStudentId);
     }
     if (tab === 'consultation') {
+        if (_renderConsultationFn) {
+            _renderConsultationFn(state.selectedStudentId);
+            return;
+        }
         import('./consultation-card.js').then(({ renderConsultationTab, initConsultationCardDeps }) => {
             initConsultationCardDeps({
                 getStudent: (id) => findStudent(id),
@@ -426,6 +431,7 @@ export function switchDetailTab(tab) {
                 toast: (msg) => showToast(msg),
                 readonly: window.READ_ONLY === true,
             });
+            _renderConsultationFn = renderConsultationTab;
             renderConsultationTab(state.selectedStudentId);
         });
     }
@@ -1385,6 +1391,13 @@ export function renderStudentDetail(studentId) {
     if (scoreTabEl) {
         scoreTabEl.style.display = state.detailTab === 'score' ? '' : 'none';
         if (state.detailTab === 'score') loadScoreCard();
+    }
+    const consultTabEl = document.getElementById('consultation-tab');
+    if (consultTabEl) {
+        consultTabEl.style.display = state.detailTab === 'consultation' ? '' : 'none';
+        if (studentChanged && studentId && state.detailTab === 'consultation' && _renderConsultationFn) {
+            _renderConsultationFn(studentId);
+        }
     }
 
     // 결석대장 카드 expanded 상태 복원
