@@ -540,7 +540,9 @@ service cloud.firestore {
           'created_at', 'created_by',
           'completed_by', 'completed_at',
           'updated_by', 'updated_at', 'edit_history',
-          'arrival_status', 'cancel_reason'
+          'arrival_status', 'cancel_reason',
+          // 진단평가신청서(diagnostic_application) 동기화 경로가 부여하는 메타 필드
+          'source', 'source_application_id', 'student_id'
         ])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -552,7 +554,7 @@ service cloud.firestore {
         && request.resource.data.level.size() > 0
         && request.resource.data.grade is string
         && request.resource.data.grade.size() > 0
-        && withinFieldLimit(20);
+        && withinFieldLimit(25);
 
       allow delete: if isAuthorized();
     }
