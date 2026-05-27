@@ -478,7 +478,7 @@ service cloud.firestore {
       allow create, update: if isAuthorized()
         && hasOnlyAllowedAbsenceFields()
         && request.resource.data.status is string
-        && request.resource.data.status in ['open', 'closed']
+        && request.resource.data.status in ['open', 'done', 'closed']
         && withinFieldLimit(25);
 
       allow delete: if isAuthorized();
