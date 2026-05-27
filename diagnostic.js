@@ -28,6 +28,16 @@ export function renderTempAttendanceDetail(docId) {
     document.getElementById('detail-empty').style.display = 'none';
     document.getElementById('detail-content').style.display = '';
 
+    // 진단평가는 탭이 없다. 직전 학생 상세(renderStudentDetail)가 켜놓은 탭 바·탭
+    // 콘텐츠가 남지 않도록 리셋하고 카드 영역만 노출한다.
+    const tabsEl = document.getElementById('detail-tabs');
+    if (tabsEl) tabsEl.style.display = 'none';
+    document.getElementById('detail-cards').style.display = '';
+    ['report-tab', 'score-tab', 'consultation-tab'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+
     // 프로필 헤더
     document.getElementById('profile-avatar').textContent = (ta.name || '?')[0];
     document.getElementById('detail-name').textContent = ta.name || '';
