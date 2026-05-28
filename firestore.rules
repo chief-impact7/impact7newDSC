@@ -366,6 +366,27 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // [DSC] 강사 배정 변경 이력 (append-only — 강사 재등원율 등 분석용, 도입 이후만 누적)
+    // class_settings.teacher는 현재값만 보존하므로, 변경 시점을 별도 기록한다.
+    // =========================================================================
+    match /class_teacher_history/{docId} {
+      allow read: if isAuthorized();
+
+      allow create: if isAuthorized()
+        && request.resource.data.keys().hasOnly([
+          'class_code', 'class_type', 'branch',
+          'teacher', 'sub_teacher', 'prev_teacher', 'prev_sub_teacher',
+          'changed_at', 'changed_by'
+        ])
+        && request.resource.data.class_code is string
+        && request.resource.data.class_code.size() > 0
+        && request.resource.data.changed_by is string
+        && request.resource.data.changed_by.size() > 0;
+
+      allow update, delete: if false;
+    }
+
+    // =========================================================================
     // [DSC] Class Next Homework (반별 다음숙제)
     // =========================================================================
     match /class_next_hw/{docId} {

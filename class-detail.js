@@ -11,6 +11,7 @@ import { esc, escAttr, showSaveIndicator, showToast } from './ui-utils.js';
 import { matchesBranchFilter, enrollmentCode, getActiveEnrollments, resolveNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 import { cancelStudentPendingTasks } from './data-layer.js';
+import { recordTeacherChange } from './teacher-history.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let getOverrideStudentsForClass, getOverridingOutFromClass, getClassDomains, getClassTestSections;
@@ -1171,10 +1172,21 @@ export async function addStudentToTeukang(classCode, studentId) {
 export async function saveTeacherAssign(classCode) {
     const teacher = document.getElementById('teacher-select')?.value || '';
     const subTeacher = document.getElementById('sub-teacher-select')?.value || '';
+    const prev = state.classSettings[classCode] || {};
+    const prevTeacher = prev.teacher || '';
+    const prevSubTeacher = prev.sub_teacher || '';
     try {
         showSaveIndicator('saving');
         await saveClassSettings(classCode, { teacher, sub_teacher: subTeacher });
         showSaveIndicator('saved');
+        await recordTeacherChange(classCode, {
+            class_type: prev.class_type || '',
+            branch: prev.branch || '',
+            teacher,
+            sub_teacher: subTeacher,
+            prev_teacher: prevTeacher,
+            prev_sub_teacher: prevSubTeacher,
+        });
     } catch (err) {
         console.error('담당 저장 실패:', err);
         showSaveIndicator('error');

@@ -11,6 +11,7 @@ import { LEAVE_STATUSES, LEVEL_SHORT } from './state.js';
 import { buildNaesinCsKey } from './student-helpers.js';
 import { schoolSearchTerms } from './school-normalizer.js';
 import { batchSet, batchUpdate } from './audit.js';
+import { recordTeacherChange } from './teacher-history.js';
 
 const CLASS_TYPE_LABELS = {
     '정규': '정규반',
@@ -1264,6 +1265,18 @@ window.submitWizard = async function () {
             alert(`재원생만 반에 추가할 수 있습니다. 다음 학생은 제외되었습니다:\n${_rejectedStudents.join(', ')}\n(상담·퇴원·종강 학생은 먼저 재원 상태로 전환하세요)`);
         }
         await batch.commit();
+
+        // 반 생성 시 첫 강사 배정을 이력에 기록 (prev=''=신규). class_settings 저장(commit) 성공 후.
+        if (d.teacher) {
+            await recordTeacherChange(d.classCode, {
+                class_type: d.classType || '',
+                branch: d.classType === '내신' ? (d.naesinBranch || '') : '',
+                teacher: d.teacher,
+                sub_teacher: '',
+                prev_teacher: '',
+                prev_sub_teacher: '',
+            });
+        }
 
         showToast(`"${d.classCode}" 반이 생성되었습니다! (${d.students.length - _rejectedStudents.length}명)`, 'success');
 

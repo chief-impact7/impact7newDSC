@@ -14,6 +14,7 @@ import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt } from './student-h
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 import { renderClassDeleteCard, applyClassDetailTabMode } from './class-detail.js';
 import { cancelStudentPendingTasks } from './data-layer.js';
+import { recordTeacherChange } from './teacher-history.js';
 
 // ─── State 접근자 ─────────────────────────────────────────────────────────────
 function _state() {
@@ -1049,12 +1050,22 @@ function renderNaesinClassDetail(csKey) {
 // 내신 반 설정 저장 핸들러
 window.saveNaesinClassTeacher = async function(csKey, teacher) {
     window.showSaveIndicator?.('saving');
+    const { classSettings } = _state();
+    const prevTeacher = classSettings[csKey]?.teacher || '';
+    const branch = classSettings[csKey]?.branch || '';
     try {
         await auditSet(doc(db, 'class_settings', csKey), { teacher }, { merge: true });
-        const { classSettings } = _state();
         if (!classSettings[csKey]) classSettings[csKey] = {};
         classSettings[csKey].teacher = teacher;
         window.showSaveIndicator?.('saved');
+        await recordTeacherChange(csKey, {
+            class_type: '내신',
+            branch,
+            teacher,
+            sub_teacher: '',
+            prev_teacher: prevTeacher,
+            prev_sub_teacher: '',
+        });
     } catch (err) {
         console.error('담당 저장 실패:', err);
         window.showSaveIndicator?.('error');
