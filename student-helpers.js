@@ -3,6 +3,7 @@
 
 import { todayStr, parseDateKST } from './src/shared/firestore-helpers.js';
 import { state, LEVEL_SHORT, LEAVE_STATUSES } from './state.js';
+import { applyNaesinFreeDerivation } from '@impact7/shared/enrollment-derivation';
 
 // 학생이 특정 날짜에 휴원 중인지 판정.
 // status ∈ LEAVE_STATUSES 이면 휴원으로 간주하고, pause 기간이 명시되어 있으면
@@ -184,69 +185,14 @@ export function getActiveEnrollments(s, dateStr) {
         return true;
     });
 
-    // 2) 내신이 활성 기간이면 정규를 숨김
-    // - 기존: class_type='내신' enrollment
-    // - 신규: class_settings의 naesin_start~naesin_end 자동 감지
-    const regularEnroll = current.find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
-    const activeNaesinEnrollment = (() => {
-        const explicitNaesin = current.find(e =>
-            e.class_type === '내신' &&
-            validDate(e.start_date) && e.start_date <= today
-        );
-        if (explicitNaesin) return explicitNaesin;
-        if (!regularEnroll) return null;
-        const csKey = resolveNaesinCsKey(s, regularEnroll);
-        if (!csKey) return null;
-        const cs = state.classSettings[csKey];
-        if (!cs?.naesin_start || !cs?.naesin_end) return null;
-        if (cs.naesin_start > today || cs.naesin_end < today) return null;
-        return {
-            class_type: '내신',
-            level_symbol: '',
-            class_number: csKey,
-            day: Object.keys(cs.schedule || {}),
-            schedule: cs.schedule || {},
-            start_date: cs.naesin_start,
-            end_date: cs.naesin_end,
-        };
-    })();
-    if (activeNaesinEnrollment) {
-        const nonRegular = current.filter(e => !['정규', '자유학기', ''].includes(e.class_type || ''));
-        return [activeNaesinEnrollment, ...nonRegular.filter(e => e !== activeNaesinEnrollment)];
-    }
-
-    // 3) 자유학기가 활성 기간이면 같은 반코드의 정규 숨김
-    const activeFreeEnrollment = (() => {
-        const explicitFree = current.find(e =>
-            e.class_type === '자유학기' &&
-            validDate(e.start_date) && e.start_date <= today
-        );
-        if (explicitFree) return explicitFree;
-        if (!regularEnroll) return null;
-        const code = enrollmentCode(regularEnroll);
-        const cs = state.classSettings[code];
-        if (!cs?.free_start || !cs?.free_end) return null;
-        if (cs.free_start > today || cs.free_end < today) return null;
-        return {
-            class_type: '자유학기',
-            level_symbol: regularEnroll.level_symbol || '',
-            class_number: regularEnroll.class_number || '',
-            day: Object.keys(cs.free_schedule || {}),
-            schedule: cs.free_schedule || {},
-            start_date: cs.free_start,
-            end_date: cs.free_end,
-        };
-    })();
-    if (activeFreeEnrollment) {
-        const freeCode = enrollmentCode(activeFreeEnrollment);
-        return [
-            activeFreeEnrollment,
-            ...current.filter(e => e.class_type !== '정규' || enrollmentCode(e) !== freeCode)
-                .filter(e => e !== activeFreeEnrollment),
-        ];
-    }
-
-    return current;
+    // 2) 내신/자유학기 기간 파생 (공유 모듈 @impact7/shared/enrollment-derivation).
+    //    내신(기간 활성) > 자유학기(기간 활성) > 정규 그대로. 활성 시 정규를 숨긴다.
+    return applyNaesinFreeDerivation(current, {
+        classSettings: state.classSettings,
+        dateStr: today,
+        resolveNaesinCsKey: (re) => resolveNaesinCsKey(s, re),
+        enrollmentCode,
+    });
 }
 
 // 학생의 "현재 수업 모드" 판정용 predicate.
