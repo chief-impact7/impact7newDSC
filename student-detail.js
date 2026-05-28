@@ -634,9 +634,40 @@ function scoreValue(value) {
     return n == null ? '—' : String(n);
 }
 
+function scoreHalfNum(value) {
+    return typeof value === 'number' && Number.isFinite(value)
+        ? Math.round(value * 2) / 2
+        : null;
+}
+
+function scoreHalfValue(value) {
+    const n = scoreHalfNum(value);
+    return n == null ? '—' : String(n);
+}
+
 function finalScoreValue(result) {
     return result && Object.prototype.hasOwnProperty.call(result, 'finalScore')
         ? scoreValue(result.finalScore)
+        : '—';
+}
+
+function departmentTotalPoints(department) {
+    const configured = Number(department?.examConfig?.totalPoints);
+    if (Number.isFinite(configured) && configured > 0) return configured;
+    const domainTotal = (department?.domains || []).reduce((sum, domain) => {
+        const points = Number(domain?.totalPoints);
+        return Number.isFinite(points) ? sum + points : sum;
+    }, 0);
+    return domainTotal > 0 ? domainTotal : 100;
+}
+
+function reportScoreValue(result, department) {
+    if (!result) return '—';
+    if (Object.prototype.hasOwnProperty.call(result, 'reportScore')) {
+        return scoreHalfValue(result.reportScore);
+    }
+    return Object.prototype.hasOwnProperty.call(result, 'finalScore')
+        ? scoreHalfValue((Number(result.finalScore) / departmentTotalPoints(department)) * 100)
         : '—';
 }
 
@@ -660,7 +691,7 @@ function renderDomainScores(result, department) {
 
     const items = domains
         .map(domain => {
-            const value = scoreNum(scores[domain.id]);
+            const value = scoreHalfNum(scores[domain.id]);
             if (value == null) return '';
             const label = shortDomainName(domain.name);
             return `<span class="score-domain-chip" title="${escAttr(domain.name)}">${esc(label)} ${esc(String(value))}</span>`;
@@ -782,7 +813,7 @@ async function loadAcademyScores(studentId) {
         return {
             title: esc(exam.title || '원내고사'),
             date: esc(scoreDateText(exam.schedule?.startDate) || ''),
-            score: esc(finalScoreValue(r)),
+            score: esc(reportScoreValue(r, department)),
             domains: renderDomainScores(r, department),
         };
     }));
