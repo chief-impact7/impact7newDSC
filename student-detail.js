@@ -5,9 +5,10 @@
 
 import {
     collection, getDocs, doc, getDoc,
-    query, where, deleteField
+    query, where, orderBy, limit, deleteField
 } from 'firebase/firestore';
 import { db } from './firebase-config.js';
+import { deriveTenure } from '@impact7/shared/history';
 import { isEnrollableStatus, STATUS_TONE } from '@impact7/shared/enrollment-status';
 import { state, LEAVE_STATUSES, LEVEL_SHORT } from './state.js';
 import {
@@ -62,6 +63,62 @@ export function initStudentDetailDeps(deps) {
 // ─── Module-local state ─────────────────────────────────────────────────────
 let _lastRenderedStudentId = null;
 let _renderConsultationFn = null;
+
+// ─── 재원기간 (tenure) ───────────────────────────────────────────────────────
+// history_logs에서 공유 deriveTenure로 파생해 등원 일정 카드에 표시 (DB app.js와 동일 SSoT 로직).
+// renderStudentDetail은 동기 렌더라 여기서 비동기 조회 후, 그 학생이 아직 선택돼 있을 때만 반영(stale 방지).
+
+// Date → 'YYYY-MM-DD' (로컬 시간 기준, DB formatDate와 동일). 비정상 값은 '—'.
+function _fmtTenureDate(d) {
+    if (!(d instanceof Date) || isNaN(d.getTime())) return '—';
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+// 재원기간 표시 문자열. start 없으면 '—'. END 규칙: end 있으면 퇴원일,
+// 없고 status='종강'이면 status_changed_at(없으면 updated_at), 그 외(재원계열)면 '현재'.
+function formatTenure(start, end, student) {
+    if (!start) return '—';
+    const startStr = _fmtTenureDate(start);
+    let endStr;
+    if (end) {
+        endStr = _fmtTenureDate(end);
+    } else if (student?.status === '종강') {
+        const ts = student.status_changed_at || student.updated_at;
+        const d = ts?.toDate ? ts.toDate() : (ts ? new Date(ts) : null);
+        endStr = d && !isNaN(d.getTime()) ? _fmtTenureDate(d) : '종강';
+    } else {
+        endStr = '현재';
+    }
+    return `${startStr} ~ ${endStr}`;
+}
+
+async function fillTenure(studentId, student) {
+    const el = document.getElementById('detail-tenure');
+    if (!el) return;
+    try {
+        const q = query(
+            collection(db, 'history_logs'),
+            where('doc_id', '==', studentId),
+            orderBy('timestamp', 'desc'),
+            limit(200)
+        );
+        const snap = await getDocs(q);
+        if (state.selectedStudentId !== studentId) return; // 그 사이 다른 학생 선택됨
+        const logs = [];
+        snap.forEach(d => logs.push({ id: d.id, ...d.data() }));
+        const { start, end } = deriveTenure(
+            logs,
+            (l) => l.timestamp?.toDate ? l.timestamp.toDate() : (l.timestamp ? new Date(l.timestamp) : null)
+        );
+        el.textContent = formatTenure(start, end, student);
+    } catch (e) {
+        if (state.selectedStudentId !== studentId) return;
+        console.warn('[TENURE] 재원기간 조회 실패:', e.code, e.message);
+        el.textContent = '—';
+    }
+}
 
 // ─── Checklist & Departure ──────────────────────────────────────────────────
 
@@ -1113,6 +1170,10 @@ export function renderStudentDetail(studentId) {
                 <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">schedule</span>
                 등원 일정
             </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--text-sec);">
+                <span style="min-width:48px;">재원기간</span>
+                <span id="detail-tenure">…</span>
+            </div>
             ${semesterEnrollments.map(e => {
                 const idx = enrollments.indexOf(e);   // 합성 enrollment는 -1 → edit 버튼 숨김
                 const code = enrollmentCode(e);
@@ -1407,6 +1468,9 @@ export function renderStudentDetail(studentId) {
         <!-- 메모 카드 (통합) -->
         ${renderUnifiedMemoCard(studentId)}
     `;
+
+    // 재원기간 — 등원 일정 카드에 비동기로 채움 (history_logs deriveTenure, DB와 동일 로직)
+    if (document.getElementById('detail-tenure')) fillTenure(studentId, student);
 
     // 탭 상태 복원 — 학생 모드: 출결현황/성적 탭 노출.
     // 비활성 학생(퇴원/종강/상담 등)은 출결 의미가 약하므로 라벨을 "수업이력"으로 전환.
