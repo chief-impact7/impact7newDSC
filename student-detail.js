@@ -98,6 +98,7 @@ function formatTenure(start, end, startEvent, student) {
 async function fillTenure(studentId, student) {
     const el = document.getElementById('detail-header-tenure');
     if (!el) return;
+    el.textContent = '…';
     try {
         const q = query(
             collection(db, 'history_logs'),
