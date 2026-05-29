@@ -1165,7 +1165,7 @@ window.submitWizard = async function () {
                 }
             }
             if (naesinStudents.length) {
-                const ok = confirm(`다음 학생은 현재 내신 기간입니다: ${naesinStudents.join(', ')}. 정규로만 추가하면 내신이 안 잡힙니다. 내신 반편성 마법사로 배정하세요.\n그래도 계속하시겠습니까?`);
+                const ok = confirm(`다음 학생은 현재 내신 기간입니다: ${naesinStudents.join(', ')}. 정규로만 추가하면 내신이 안 잡힙니다. 내신 반생성마법사로 배정하세요.\n그래도 계속하시겠습니까?`);
                 if (!ok) { btn.disabled = false; btn.innerHTML = '<span class="material-symbols-outlined">check</span> 반 생성'; return; }
             }
         }
@@ -1181,7 +1181,7 @@ window.submitWizard = async function () {
         const batch = writeBatch(db);
         batchSet(batch, doc(db, 'class_settings', d.classCode), classSettingsData, { merge: true });
 
-        // 반편성 마법사 수업이력 로그 — DB의 UPDATE 로그와 동일 필드/형식으로 기록.
+        // 반생성마법사 수업이력 로그 — DB의 UPDATE 로그와 동일 필드/형식으로 기록.
         // 공유 분류기(@impact7/shared)가 before/after를 파싱해 전반/수업추가로 분류한다.
         const _logActor = currentUser?.email || auth.currentUser?.email || 'unknown';
         const _pushFormationLog = (b, docId, before, after) => {

@@ -68,9 +68,10 @@ function getNaesinTime(enrollment, csKey, dayName, classSettings) {
 
 // ─── Core functions ───────────────────────────────────────────────────────────
 
-export function getNaesinStudents() {
+export function getNaesinStudents({ ignoreDayFilter = false } = {}) {
     const { allStudents, selectedDate, selectedBranch } = _state();
-    const dayName = getDayName(selectedDate);
+    // 표시용(ignoreDayFilter)은 요일 가드를 건너뛰어 내신 기간 중인 학생을 요일 무관하게 모은다.
+    const dayName = ignoreDayFilter ? undefined : getDayName(selectedDate);
     const result = [];
 
     for (const student of allStudents) {
@@ -94,6 +95,11 @@ export function getNaesinStudents() {
     }
 
     return result;
+}
+
+// 요일 무관 내신 기간 학생 ID 집합 — 학생 카드 표시(배지·부제목 축약)용. 운영 집계(오늘 등원)와 분리.
+export function getNaesinPeriodStudentIds() {
+    return new Set(getNaesinStudents({ ignoreDayFilter: true }).map(({ student }) => student.docId));
 }
 
 export function getNaesinClasses(students) {
@@ -1198,6 +1204,7 @@ window.addStudentToNaesin = async function(csKey, studentId) {
 
 // ─── 외부 모듈/onclick 핸들러용 window 노출 ──────────────────────────────────
 window._getNaesinStudents = getNaesinStudents;
+window._getNaesinPeriodStudentIds = getNaesinPeriodStudentIds;
 window._getNaesinClasses = getNaesinClasses;
 window.renderNaesinList = renderNaesinList;
 window.renderNaesinDetail = renderNaesinDetail;

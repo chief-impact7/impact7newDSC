@@ -1927,10 +1927,13 @@ function renderListPanel() {
     const isHw1stFilter = state.currentCategory === 'homework' && state.currentSubFilter.has('hw_1st');
     const isTest1stFilter = state.currentCategory === 'test' && state.currentSubFilter.has('test_1st');
 
-    // 내신 학생 ID 집합 (오늘 요일 기준): 검색 시 todayStudents 분류 및 반코드 표시에 사용
+    // 내신 학생 ID 집합 (오늘 요일 기준): 검색 시 todayStudents 분류 및 일일 운영 집계에 사용
     const naesinIds = new Set(
         (window._getNaesinStudents?.() || []).map(({ student }) => student.docId)
     );
+    // 표시용 내신 집합 (요일 무관, 내신 기간 기준): 카드 배지·부제목 축약·반코드 fallback에 사용.
+    // 같은 학생이 보는 요일에 따라 다르게 표시되지 않도록 운영 집계와 분리한다.
+    const naesinPeriodIds = window._getNaesinPeriodStudentIds?.() || naesinIds;
 
     const renderItemHtml = (s) => {
         const isActive = s.docId === state.selectedStudentId ? 'active' : '';
@@ -1938,7 +1941,7 @@ function renderListPanel() {
         const _activeEnrolls = getActiveEnrollments(s, state.selectedDate);
         const _todayEnrolls = _activeEnrolls.filter(e => e.day.includes(dayN));
         // 내신 기간이라 정규 enrollment가 숨겨진 경우 내신 반코드로 대체
-        const _naesinCodeFallback = (!_todayEnrolls.length && !_activeEnrolls.length && naesinIds.has(s.docId))
+        const _naesinCodeFallback = (!_todayEnrolls.length && !_activeEnrolls.length && naesinPeriodIds.has(s.docId))
             ? (() => {
                 const re = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
                 return re ? (deriveNaesinCode(s, re) || '') : '';
@@ -2303,7 +2306,7 @@ function renderListPanel() {
             }
         }
 
-        const isNaesinStudent = naesinIds.has(s.docId);
+        const isNaesinStudent = naesinPeriodIds.has(s.docId);
         const naesinBadge = isNaesinStudent ? '<span class="tag-naesin">내신</span>' : '';
         // 내신 학생: 부제목을 내신반명 하나로 축약 (배지가 '내신' 표시 + 반명에 학교·학년 포함되어 중복)
         const descCode = isNaesinStudent ? code.split(', ').filter(c => c !== '내신').join(', ') : code;
@@ -2829,9 +2832,9 @@ function openEnrollmentModal(studentId, enrollIdx) {
 
     // 가드: 이 모달은 정규/특강만 편집 가능 (select 옵션이 둘뿐).
     // 내신/자유학기 enrollment를 열면 class_type이 '정규'로 silent 변경되는 회로가 있어 차단.
-    // 반편성도우미를 사용하도록 안내.
+    // 반생성마법사를 사용하도록 안내.
     if (enroll.class_type === '내신' || enroll.class_type === '자유학기') {
-        alert(`${enroll.class_type} enrollment는 이 모달로 편집할 수 없습니다.\n반편성도우미에서 편집하세요. (정규/특강만 이 모달로 편집 가능)`);
+        alert(`${enroll.class_type} enrollment는 이 모달로 편집할 수 없습니다.\n반생성마법사에서 편집하세요. (정규/특강만 이 모달로 편집 가능)`);
         return;
     }
 
@@ -2878,10 +2881,10 @@ async function saveEnrollment() {
         selectedDays.push(btn.dataset.day);
     });
 
-    // 정합성 가드: 반편성도우미(class-setup.js) 규칙과 동일.
+    // 정합성 가드: 반생성마법사(class-setup.js) 규칙과 동일.
     // 잘못 저장하면 getActiveEnrollments가 분류 못해 내신 override 등이 깨짐(96건 사고 재발 방지).
     if (classType === '내신') {
-        alert('내신 enrollment는 이 모달로 직접 추가/편집할 수 없습니다.\n반편성도우미를 사용하세요. 내신은 정규의 일시 override 형태로 csKey 별도 관리됩니다.');
+        alert('내신 enrollment는 이 모달로 직접 추가/편집할 수 없습니다.\n반생성마법사를 사용하세요. 내신은 정규의 일시 override 형태로 csKey 별도 관리됩니다.');
         return;
     }
     if ((classType === '정규' || classType === '자유학기') && (!levelSymbol || !classNumber)) {
