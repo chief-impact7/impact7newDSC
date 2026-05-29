@@ -7,8 +7,8 @@ import { auth, db } from './firebase-config.js';
 import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { signInWithGoogle, logout } from './auth.js';
 import { todayStr, studentShortLabel, ACTIVE_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
-import { LEAVE_STATUSES, LEVEL_SHORT } from './state.js';
-import { buildNaesinCsKey } from './student-helpers.js';
+import { LEAVE_STATUSES, LEVEL_SHORT, state } from './state.js';
+import { buildNaesinCsKey, resolveNaesinCsKey } from './student-helpers.js';
 import { schoolSearchTerms } from './school-normalizer.js';
 import { batchSet, batchUpdate } from './audit.js';
 import { recordTeacherChange } from './teacher-history.js';
@@ -1129,6 +1129,45 @@ window.submitWizard = async function () {
             snaps.forEach(snap => {
                 enrollmentsByDocId.set(snap.id, snap.data()?.enrollments || []);
             });
+        }
+
+        // ── 가드: 내신 기간 중 정규/자유학기 추가 시 override 없음 경고 ──────────
+        // 내신은 모두 '정규 + naesin_class_override'로 파생 표시된다. 내신 기간 중인
+        // 학생을 정규/자유학기 모드로 추가하면 override가 안 박혀 내신이 안 잡힌다
+        // (silvia가 김시헌을 내신 기간 중 정규 HS201로 추가한 사고). 내신 모드는
+        // override를 박는 정상 경로라 가드 불필요.
+        if (d.classType === '정규' || d.classType === '자유학기') {
+            const naesinStudents = [];
+            for (const student of d.students) {
+                if (!isEnrollableStatus(student.status)) continue;
+                const existing = enrollmentsByDocId.get(student.docId) || [];
+                // override 없는 정규 enrollment를 probe로 만들어 csKey를 유도한다.
+                // 정규 모드: 이번에 추가될 새 정규(코드 입력값). 자유학기 모드: 기존 정규.
+                let probe;
+                if (d.classType === '정규') {
+                    probe = { class_type: '정규', level_symbol: d.levelSymbol || '', class_number: d.classNumber || '' };
+                } else {
+                    probe = existing.find(e => (e.class_type === '정규' || e.class_type === '자유학기') &&
+                        `${e.level_symbol || ''}${e.class_number || ''}` === d.classCode);
+                    // 자유학기에 이미 override가 박혀 있으면(또는 자동 유도) 정상 경로 → 가드 제외
+                    if (!probe || typeof probe.naesin_class_override === 'string') continue;
+                }
+                const csKey = resolveNaesinCsKey(student, probe);
+                if (!csKey) continue;
+                // class-setup 진입점은 state.classSettings를 채우지 않으므로 필요한 키만 읽어 주입.
+                if (!state.classSettings[csKey]) {
+                    const csSnap = await getDoc(doc(db, 'class_settings', csKey));
+                    state.classSettings[csKey] = csSnap.exists() ? csSnap.data() : {};
+                }
+                const cs = state.classSettings[csKey];
+                if (cs?.naesin_start && cs?.naesin_end && cs.naesin_start <= today && cs.naesin_end >= today) {
+                    naesinStudents.push(student.name || student.docId);
+                }
+            }
+            if (naesinStudents.length) {
+                const ok = confirm(`다음 학생은 현재 내신 기간입니다: ${naesinStudents.join(', ')}. 정규로만 추가하면 내신이 안 잡힙니다. 내신 반편성 마법사로 배정하세요.\n그래도 계속하시겠습니까?`);
+                if (!ok) { btn.disabled = false; btn.innerHTML = '<span class="material-symbols-outlined">check</span> 반 생성'; return; }
+            }
         }
 
         // 정규 enrollment 추가 시 옛 정규 enrollment의 자동 종료일(새 학기 start_date - 1).
