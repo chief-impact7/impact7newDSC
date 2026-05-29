@@ -9,6 +9,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { deriveTenure } from '@impact7/shared/history';
+import { deriveLevelPeriod } from '@impact7/shared/enrollment-derivation';
 import { isEnrollableStatus, STATUS_TONE } from '@impact7/shared/enrollment-status';
 import { state, LEAVE_STATUSES, LEVEL_SHORT } from './state.js';
 import {
@@ -22,7 +23,7 @@ import {
     allClassCodes
 } from './student-helpers.js';
 import {
-    parseDateKST, todayStr, getDayName
+    todayStr, getDayName
 } from './src/shared/firestore-helpers.js';
 import { auditSet } from './audit.js';
 import {
@@ -65,7 +66,7 @@ let _lastRenderedStudentId = null;
 let _renderConsultationFn = null;
 
 // ─── 재원기간 (tenure) ───────────────────────────────────────────────────────
-// history_logs에서 공유 deriveTenure로 파생해 등원 일정 카드에 표시 (DB app.js와 동일 SSoT 로직).
+// history_logs에서 공유 deriveTenure로 파생해 헤더에 표시 (DB app.js와 동일 SSoT 로직).
 // renderStudentDetail은 동기 렌더라 여기서 비동기 조회 후, 그 학생이 아직 선택돼 있을 때만 반영(stale 방지).
 
 // Date → 'YYYY-MM-DD' (로컬 시간 기준, DB formatDate와 동일). 비정상 값은 '—'.
@@ -95,7 +96,7 @@ function formatTenure(start, end, student) {
 }
 
 async function fillTenure(studentId, student) {
-    const el = document.getElementById('detail-tenure');
+    const el = document.getElementById('detail-header-tenure');
     if (!el) return;
     try {
         const q = query(
@@ -334,79 +335,12 @@ function buildStayStatsHtml(student) {
     const enrollments = (student.enrollments || []).filter(e => e.level_symbol || e.start_date);
     if (!enrollments.length) return '';
 
-    // 재원기간 (start_date 없거나 2020 이전이면 2026-01-01 기본값)
-    const startDates = enrollments.map(e => e.start_date)
-        .filter(d => d && d !== '?' && /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= '2020-01-01')
-        .sort();
-    const firstDate = startDates.length ? startDates[0] : '2026-01-01';
-    let periodHtml = '—';
-    {
-        const start = parseDateKST(firstDate);
-        const now = parseDateKST(todayStr());
-        const diffDays = Math.floor((now - start) / (1000 * 60 * 60 * 24));
-        const totalMonths = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
-        const years = Math.floor(totalMonths / 12);
-        const months = totalMonths % 12;
-        const duration = diffDays < 0 ? '등원예정'
-            : totalMonths < 1 ? `${diffDays}일`
-            : years > 0 ? `${years}년${months > 0 ? ' ' + months + '개월' : ''}`
-            : `${totalMonths}개월`;
-        periodHtml = `${firstDate} 부터 &nbsp;&middot;&nbsp; <strong>${duration}</strong>`;
-    }
-
-    // 현재 활성 enrollment 구하기 (class_type별 가장 최근 시작된 enrollment)
-    const today = todayStr();
-    const byType = {};
-    for (const e of enrollments) {
-        const ct = e.class_type || '정규';
-        if (!byType[ct]) byType[ct] = [];
-        byType[ct].push(e);
-    }
-    const activeSet = new Set();
-    for (const [, list] of Object.entries(byType)) {
-        const validDate = (v) => v && /^\d{4}-/.test(v);
-        const started = list
-            .filter(e => !validDate(e.start_date) || e.start_date <= today)
-            .sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''));
-        if (started.length > 0) activeSet.add(started[0]);
-        else {
-            const sorted = [...list].sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''));
-            activeSet.add(sorted[0]);
-        }
-    }
-
-    // 레벨 이력 (현재 활성 enrollment 제외, 과거 학기만)
-    const levelMap = {};
-    for (const e of enrollments) {
-        if (activeSet.has(e)) continue;
-        const sym = e.level_symbol;
-        if (!sym) continue;
-        if (!levelMap[sym]) levelMap[sym] = { semesters: new Set(), firstDate: '' };
-        if (e.semester) levelMap[sym].semesters.add(e.semester);
-        if (e.start_date && (!levelMap[sym].firstDate || e.start_date < levelMap[sym].firstDate))
-            levelMap[sym].firstDate = e.start_date;
-    }
-
-    const levelRows = Object.entries(levelMap)
-        .sort((a, b) => (a[1].firstDate || '').localeCompare(b[1].firstDate || ''))
-        .map(([sym, data]) => {
-            const sems = [...data.semesters].sort();
-            const semStr = sems.length ? sems.join(' \u00b7 ') : '—';
-            const cnt = sems.length;
-            return `<div class="stay-level-row">
-                <span class="stay-level-tag">${esc(sym)}</span>
-                <span class="stay-level-sems">${esc(semStr)}</span>
-                <span class="stay-level-count">${cnt}학기</span>
-            </div>`;
-        }).join('');
-
+    // 헤더 기간 = 재원기간(이력 기반 deriveTenure, fillTenure가 비동기로 채움). 레벨기간은 등원 일정 카드.
     return `
         <div class="stay-period">
-            <span class="stay-period-value">${periodHtml}</span>
+            <span class="stay-period-label">재원기간</span>
+            <span class="stay-period-value" id="detail-header-tenure">…</span>
         </div>
-        ${levelRows ? `<div class="stay-levels">
-            <div class="stay-level-list">${levelRows}</div>
-        </div>` : ''}
     `;
 }
 
@@ -1164,6 +1098,12 @@ export function renderStudentDetail(studentId) {
         ? enrollments
         : getActiveEnrollments(student, state.selectedDate);
     const dayNameForDetail = getDayName(state.selectedDate);
+    const lp = deriveLevelPeriod(enrollments, todayStr());
+    const lpLevel = (enrollments.find(e => e.start_date === lp.start && e.level_symbol)
+        || semesterEnrollments.find(e => e.level_symbol) || {}).level_symbol || '';
+    const levelPeriodHtml = lp.start
+        ? `${lpLevel ? `<span class="stay-level-tag">${esc(lpLevel)}</span> ` : ''}${lp.start} &middot; ${lp.label}`
+        : '—';
     const arrivalTimeHtml = (isLeaveStudent || isWithdrawn) ? '' : semesterEnrollments.length > 0 ? `
         <div class="detail-card">
             <div class="detail-card-title">
@@ -1171,8 +1111,8 @@ export function renderStudentDetail(studentId) {
                 등원 일정
             </div>
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--text-sec);">
-                <span style="min-width:48px;">재원기간</span>
-                <span id="detail-tenure">…</span>
+                <span style="min-width:48px;">레벨기간</span>
+                <span id="detail-level-period">${levelPeriodHtml}</span>
             </div>
             ${semesterEnrollments.map(e => {
                 const idx = enrollments.indexOf(e);   // 합성 enrollment는 -1 → edit 버튼 숨김
@@ -1469,8 +1409,8 @@ export function renderStudentDetail(studentId) {
         ${renderUnifiedMemoCard(studentId)}
     `;
 
-    // 재원기간 — 등원 일정 카드에 비동기로 채움 (history_logs deriveTenure, DB와 동일 로직)
-    if (document.getElementById('detail-tenure')) fillTenure(studentId, student);
+    // 재원기간 — 헤더에 비동기로 채움 (history_logs deriveTenure, DB와 동일 로직)
+    if (document.getElementById('detail-header-tenure')) fillTenure(studentId, student);
 
     // 탭 상태 복원 — 학생 모드: 출결현황/성적 탭 노출.
     // 비활성 학생(퇴원/종강/상담 등)은 출결 의미가 약하므로 라벨을 "수업이력"으로 전환.

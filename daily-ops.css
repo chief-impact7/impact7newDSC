@@ -3136,13 +3136,9 @@ textarea.field-input {
 /* 재원현황 (프로필 내) */
 .profile-stay-stats { margin-top: 6px; }
 .stay-period { margin-bottom: 4px; }
+.stay-period-label { font-size: 11px; color: var(--text-sec); margin-right: 6px; }
 .stay-period-value { font-size: 11px; color: var(--text-sec); }
-.stay-levels { margin-top: 2px; }
-.stay-level-list { display: flex; flex-wrap: wrap; gap: 4px; }
-.stay-level-row { display: flex; align-items: center; gap: 4px; }
 .stay-level-tag { font-size: 10px; font-weight: 600; background: var(--primary-light); color: var(--primary); padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
-.stay-level-sems { font-size: 10px; color: var(--text-sec); }
-.stay-level-count { font-size: 10px; font-weight: 600; color: var(--text-main); white-space: nowrap; }
 
 /* 일괄 선택 모드 */
 .bulk-action-bar { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; background: var(--primary-light); border-bottom: 1px solid #aec6f6; gap: 8px; flex-shrink: 0; }

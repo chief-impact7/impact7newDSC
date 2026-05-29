@@ -2303,12 +2303,16 @@ function renderListPanel() {
             }
         }
 
-        const naesinBadge = naesinIds.has(s.docId) ? '<span class="tag-naesin">내신</span>' : '';
+        const isNaesinStudent = naesinIds.has(s.docId);
+        const naesinBadge = isNaesinStudent ? '<span class="tag-naesin">내신</span>' : '';
+        // 내신 학생: 부제목을 내신반명 하나로 축약 (배지가 '내신' 표시 + 반명에 학교·학년 포함되어 중복)
+        const descCode = isNaesinStudent ? code.split(', ').filter(c => c !== '내신').join(', ') : code;
+        const descTail = isNaesinStudent ? '' : (studentShortLabel(s) ? ' · ' + esc(studentShortLabel(s)) : '');
         return `<div class="list-item ${isActive}${state.bulkMode ? ' bulk-mode' : ''}${state.selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}" onclick="handleListItemClick(event, '${escAttr(s.docId)}')">
             <input type="checkbox" class="list-item-checkbox" ${state.selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">
             <div class="item-info">
                 <span class="item-title">${esc(s.name)}${newBadge}${naesinBadge}${leaveBadge}${pauseExpiredBadge}${lrPendingTags}${siblingIcon}${hwFailIconHtml}${overrideBadge}${overrideInBadge} ${teacherBadge}</span>
-                <span class="item-desc">${esc(code)}${studentShortLabel(s) ? ' · ' + esc(studentShortLabel(s)) : ''}</span>
+                <span class="item-desc">${esc(descCode)}${descTail}</span>
             </div>
             ${timeHtml}
             <div class="item-actions">${toggleHtml}</div>
