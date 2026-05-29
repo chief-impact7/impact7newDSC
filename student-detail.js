@@ -79,8 +79,8 @@ function _fmtTenureDate(d) {
 
 // 재원기간 표시 문자열. start 없으면 '—'. END 규칙: end 있으면 퇴원일,
 // 없고 status='종강'이면 status_changed_at(없으면 updated_at), 그 외(재원계열)면 '현재'.
-function formatTenure(start, end, student) {
-    if (!start) return '—';
+function formatTenure(start, end, startEvent, student) {
+    if (!start) return startEvent ? '등원예정' : '—';
     const startStr = _fmtTenureDate(start);
     let endStr;
     if (end) {
@@ -105,15 +105,19 @@ async function fillTenure(studentId, student) {
             orderBy('timestamp', 'desc'),
             limit(200)
         );
-        const snap = await getDocs(q);
+        const aq = query(collection(db, 'daily_records'), where('student_id', '==', studentId));
+        const [snap, asnap] = await Promise.all([getDocs(q), getDocs(aq)]);
         if (state.selectedStudentId !== studentId) return; // 그 사이 다른 학생 선택됨
         const logs = [];
         snap.forEach(d => logs.push({ id: d.id, ...d.data() }));
-        const { start, end } = deriveTenure(
+        const attendances = [];
+        asnap.forEach(d => { const r = d.data(); attendances.push({ date: r.date, status: r.attendance?.status }); });
+        const { start, end, startEvent } = deriveTenure(
             logs,
-            (l) => l.timestamp?.toDate ? l.timestamp.toDate() : (l.timestamp ? new Date(l.timestamp) : null)
+            (l) => l.timestamp?.toDate ? l.timestamp.toDate() : (l.timestamp ? new Date(l.timestamp) : null),
+            attendances
         );
-        el.textContent = formatTenure(start, end, student);
+        el.textContent = formatTenure(start, end, startEvent, student);
     } catch (e) {
         if (state.selectedStudentId !== studentId) return;
         console.warn('[TENURE] 재원기간 조회 실패:', e.code, e.message);
