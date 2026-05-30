@@ -98,7 +98,7 @@ export async function exportDailyReport() {
 
     const HEADERS = [
         '반', '담당', '이름', '소속', '학교', '학년', '상태',
-        '예정시간', '출결', '실제등원', '출결사유',
+        '예정시간', '출결', '실제등원',
         '숙제1차', '숙제2차', '테스트1차', '테스트2차',
         '후속조치', '다음숙제',
         '귀가', '귀가시간',
@@ -137,7 +137,6 @@ export async function exportDailyReport() {
         const attStatus = rec?.attendance?.status || '미확인';
         const displayAtt = attStatus === '미확인' ? '정규' : attStatus;
         const arrTime = rec?.arrival_time ? formatTime12h(rec.arrival_time) : '';
-        const attReason = rec?.attendance?.reason || '';
 
         // 상태 (휴원이면 기간 포함)
         let statusText = s.status || '재원';
@@ -178,7 +177,7 @@ export async function exportDailyReport() {
         const startTime = getStudentStartTime(todayEnroll);
         return [
             code, teacher, s.name, branchFromStudent(s), currentSchool(s), s.grade || '', statusText,
-            startTime ? formatTime12h(startTime) : '', displayAtt, arrTime, attReason,
+            startTime ? formatTime12h(startTime) : '', displayAtt, arrTime,
             hw1st, hw2nd, test1st, test2nd,
             actions, nextHw,
             depStatus, depTime,
