@@ -201,7 +201,7 @@ function nextHomeworkText(rec) {
     return values.join(' / ');
 }
 
-function buildLogData({ students, dailyLog, branchFilter, classFilter, date }) {
+function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilter, date }) {
     const {
         dailyRecords = [],
         tempAttendances = [],
@@ -215,6 +215,8 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, date }) {
     const testTasks = mapByStudent(testFailTasks);
     const absenceByStudent = mapByStudent(absenceRecords);
     const dayName = getDayName(date);
+    const LEVEL_SHORT = { '초등': '초', '중등': '중', '고등': '고' };
+    const gradeKey = (s) => (LEVEL_SHORT[s.level] || '') + (s.grade ?? '');
 
     const groups = {
         diagnostic: tempAttendances
@@ -244,6 +246,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, date }) {
         const id = student.id;
         if (!id || isWithdrawnAt(student, date)) return;
         if (branchFilter && branchFromStudent(student) !== branchFilter) return;
+        if (gradeFilter?.size && !gradeFilter.has(gradeKey(student))) return;
 
         const enrolls = activeEnrollments(student, date, classSettings);
         const todayEnrolls = enrolls.filter(e => normalizedDays(e.day).includes(dayName));
@@ -527,10 +530,10 @@ function SideList({ title, icon, rows, type }) {
     );
 }
 
-export default function DailyLogBoard({ students, dailyLog, branchFilter, classFilter, date }) {
+export default function DailyLogBoard({ students, dailyLog, branchFilter, classFilter, gradeFilter, date }) {
     const data = useMemo(() =>
-        buildLogData({ students, dailyLog, branchFilter, classFilter, date }),
-    [students, dailyLog, branchFilter, classFilter, date]);
+        buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilter, date }),
+    [students, dailyLog, branchFilter, classFilter, gradeFilter, date]);
     const regularEntries = Object.entries(data.groups.regular).sort(([a], [b]) => a.localeCompare(b, 'ko'));
     const regularRows = regularEntries.flatMap(([, rows]) => rows);
 
