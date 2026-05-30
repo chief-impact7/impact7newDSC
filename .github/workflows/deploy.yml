@@ -30,6 +30,9 @@ jobs:
       - run: npm run build
 
       - uses: FirebaseExtended/action-hosting-deploy@v0
+        # v0 릴리스가 아직 node20 런타임이라 node24로 강제 (2026-06-16 GitHub 기본 전환 시 제거 가능)
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
