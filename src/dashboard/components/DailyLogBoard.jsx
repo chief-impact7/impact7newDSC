@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { getDayName, studentShortLabel } from '../../shared/firestore-helpers.js';
-import { currentSchool } from '@impact7/shared/student-label';
+import { branchFromStudent, resolveNaesinCsKey } from '../../../student-helpers.js';
 
 const ACTIVE_STATUSES = new Set(['재원', '등원예정', '실휴원', '가휴원', '상담']);
 const ATTENDED_STATUSES = new Set(['출석', '지각', '조퇴']);
@@ -40,36 +40,10 @@ const fmtTime = (value) => {
 };
 const fmtDateTime = (date, time) => [fmtDate(date), time ? fmtTime(time) : ''].filter(Boolean).join(' ');
 
-function getBranch(student) {
-    if (student?.branch) return student.branch;
-    const num = student?.enrollments?.[0]?.class_number || '';
-    const first = String(num).trim()[0];
-    if (first === '1') return '2단지';
-    if (first === '2') return '10단지';
-    return '';
-}
-
 function isWithdrawnAt(student, date) {
     if (student.status === '퇴원' || student.status === '종강') return true;
     if (ACTIVE_STATUSES.has(student.status || '')) return false;
     return student.withdrawal_date ? student.withdrawal_date <= date : false;
-}
-
-function buildNaesinKey(student, enrollment) {
-    const levelShortMap = { '초등': '초', '중등': '중', '고등': '고' };
-    const levelShort = levelShortMap[student.level] || '';
-    const school = currentSchool(student);
-    const grade = student.grade || '';
-    const cn = String(enrollment?.class_number || '');
-    let group = '';
-    const last = cn.slice(-1).toUpperCase();
-    if (last === 'A' || last === 'B') group = last;
-    else {
-        const n = Number.parseInt(last, 10);
-        if (!Number.isNaN(n)) group = n % 2 === 1 ? 'A' : 'B';
-    }
-    if (!school || !grade || !group) return '';
-    return `${getBranch(student)}${school}${levelShort}${grade}${group}`;
 }
 
 function currentEnrollments(student, date) {
@@ -81,11 +55,7 @@ function regularEnrollment(enrollments) {
 }
 
 function resolveNaesinKey(student, enrollment) {
-    if (!enrollment) return '';
-    if (typeof enrollment.naesin_class_override === 'string') {
-        return enrollment.naesin_class_override;
-    }
-    return buildNaesinKey(student, enrollment);
+    return resolveNaesinCsKey(student, enrollment) || '';
 }
 
 function hasExplicitNaesin(enrollments, date) {
@@ -273,7 +243,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, date }) {
     students.forEach(student => {
         const id = student.id;
         if (!id || isWithdrawnAt(student, date)) return;
-        if (branchFilter && getBranch(student) !== branchFilter) return;
+        if (branchFilter && branchFromStudent(student) !== branchFilter) return;
 
         const enrolls = activeEnrollments(student, date, classSettings);
         const todayEnrolls = enrolls.filter(e => normalizedDays(e.day).includes(dayName));
@@ -336,7 +306,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, date }) {
         const row = {
             id,
             name: student.name || id,
-            meta: [studentShortLabel(student), code, getBranch(student)].filter(Boolean).join(' · '),
+            meta: [studentShortLabel(student), code, branchFromStudent(student)].filter(Boolean).join(' · '),
             time: startTime(primaryEnroll, dayName, classSettings) || rec.extra_visit?.time || '',
             attendance: attStatus,
             attendanceMeta: fmtTime(attendance.time || rec.arrival_time || ''),
