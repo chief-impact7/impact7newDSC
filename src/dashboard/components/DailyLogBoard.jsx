@@ -294,7 +294,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, date }) {
             rec.note_class_to_study && `강의실→학습실: ${rec.note_class_to_study}`,
             rec.note_to_parent && `학원→부모님: ${rec.note_to_parent}`,
             rec.naesin_memo,
-            attendance.reason && `출결사유: ${attendance.reason}`,
+            attendance.reason,
             ...studentAbsences.map(a => a.consultation_note || a.reason || '').filter(Boolean),
         ].filter(Boolean).join(' / ');
         const next = [
@@ -518,7 +518,7 @@ function SideList({ title, icon, rows, type }) {
                             <span>{row.classCode} · {row.attendanceMeta || fmtTime(row.time)}</span>
                         </div>
                         <div className="daily-log-side-note">
-                            {row.notes || row.next || (type === 'late' ? '지각 사유 미입력' : '결석 사유 미입력')}
+                            {row.notes || row.next || ''}
                         </div>
                     </div>
                 ))}
