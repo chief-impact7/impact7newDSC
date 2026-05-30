@@ -116,7 +116,8 @@ async function fillTenure(studentId, student) {
         const { start, end, startEvent } = deriveTenure(
             logs,
             (l) => l.timestamp?.toDate ? l.timestamp.toDate() : (l.timestamp ? new Date(l.timestamp) : null),
-            attendances
+            attendances,
+            isEnrollableStatus(student.status)
         );
         el.textContent = formatTenure(start, end, startEvent, student);
     } catch (e) {
