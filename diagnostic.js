@@ -238,6 +238,7 @@ async function _upsertStudentFromTemp(data) {
             grade: data.grade || '',
             student_phone: data.student_phone || '',
             parent_phone_1: data.parent_phone_1,
+            updated_at: serverTimestamp(),
         };
         const _sf = SCHOOL_FIELD[data.level];
         if (_sf && data.school) baseFields[_sf] = data.school;
