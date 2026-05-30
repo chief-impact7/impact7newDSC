@@ -845,7 +845,7 @@ body {
   width: 380px;
   min-width: 380px;
   border-left: 1px solid var(--border);
-  overflow-y: hidden;
+  overflow-y: auto;
   padding: 0;
   background: var(--surface);
   display: flex;
@@ -3290,8 +3290,13 @@ textarea.field-input {
 }
 .report-date-range .field-input {
     flex: 1;
+    min-width: 0;
     padding: 6px 8px;
     font-size: 13px;
+}
+.report-date-range .btn {
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 .report-date-sep {
     color: var(--text-sec);
@@ -3316,10 +3321,16 @@ textarea.field-input {
     color: var(--text-sec);
     border-bottom: 1px solid var(--border);
     font-size: 11px;
+    white-space: nowrap;
 }
 .report-attendance-table td {
     padding: 5px 8px;
     border-bottom: 1px solid var(--border-light, #f0f0f0);
+    white-space: nowrap;
+}
+/* 비고는 길 수 있으므로 줄바꿈 허용 */
+.report-attendance-table td:last-child {
+    white-space: normal;
 }
 .att-present { color: var(--success, #34a853); }
 .att-absent { color: var(--danger, #ea4335); }
