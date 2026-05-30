@@ -56,7 +56,7 @@ service cloud.firestore {
 
       function hasOnlyAllowedStudentFields() {
         let allowed = [
-          'name', 'level', 'school', 'grade',
+          'name', 'level', 'grade',
           'school_elementary', 'school_middle', 'school_high', 'school_level_grade',
           'student_phone', 'parent_phone_1', 'parent_phone_2',
           'guardian_name_1', 'guardian_name_2',
