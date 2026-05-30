@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { getDayName, studentShortLabel } from '../../shared/firestore-helpers.js';
+import { currentSchool } from '@impact7/shared/student-label';
 
 const ACTIVE_STATUSES = new Set(['재원', '등원예정', '실휴원', '가휴원', '상담']);
 const ATTENDED_STATUSES = new Set(['출석', '지각', '조퇴']);
@@ -57,7 +58,7 @@ function isWithdrawnAt(student, date) {
 function buildNaesinKey(student, enrollment) {
     const levelShortMap = { '초등': '초', '중등': '중', '고등': '고' };
     const levelShort = levelShortMap[student.level] || '';
-    const school = student.school || '';
+    const school = currentSchool(student);
     const grade = student.grade || '';
     const cn = String(enrollment?.class_number || '');
     let group = '';
