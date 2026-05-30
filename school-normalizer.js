@@ -1,63 +1,24 @@
-const LEVEL_SUFFIXES = {
-    '초등': [
-        { suffix: '초등학교', safe: true },
-        { suffix: '초등', safe: true },
-        { suffix: '초교', safe: true },
-        { suffix: '초', safe: false },
-    ],
-    '중등': [
-        { suffix: '중학교', safe: true },
-        { suffix: '중등', safe: true },
-        { suffix: '중', safe: false },
-    ],
-    '고등': [
-        { suffix: '고등학교', safe: true },
-        { suffix: '고등', safe: true },
-        { suffix: '고교', safe: true },
-        { suffix: '고', safe: false },
-    ],
-};
+// studentFullLabel(shared)과 동일 기준으로 [학교, 학교+학부글자, 풀라벨] 검색어 생성.
+// 예: (신목, 중등, 2) → ['신목', '신목중', '신목중2']
+//     졸업생(고졸+1)    → ['대일', '대일고', '대일고(졸업+1)']
+import { studentFullLabel, normalizeRealLevelGrade, SCHOOL_FIELD } from '@impact7/shared/student-label';
 
-export function cleanSchoolName(school) {
-    return String(school || '').trim().replace(/\s+/g, ' ');
-}
-
-export function levelShortName(level) {
-    if (level === '초등') return '초';
-    if (level === '중등') return '중';
-    if (level === '고등') return '고';
-    return level || '';
-}
-
-export function collectKnownSchoolNames(students = []) {
-    return new Set(students.map(s => cleanSchoolName(s.school)).filter(Boolean));
-}
-
-export function normalizeStudentSchools(students = [], knownStudents = []) {
-    const knownSchools = collectKnownSchoolNames([...knownStudents, ...students]);
-    for (const student of students) {
-        student.school = normalizeSchoolName(student.school, student.level, knownSchools);
-    }
-}
-
-export function normalizeSchoolName(school, level, knownSchools = new Set()) {
-    const value = cleanSchoolName(school);
-    const suffixes = LEVEL_SUFFIXES[level] || [];
-    for (const { suffix, safe } of suffixes) {
-        if (!value.endsWith(suffix) || value.length <= suffix.length) continue;
-        const base = value.slice(0, -suffix.length).trim();
-        if (safe || knownSchools.has(base)) return base;
-    }
-    return value;
-}
+const LEVEL_SHORT = { '초등': '초', '중등': '중', '고등': '고' };
 
 export function schoolSearchTerms(student) {
-    const school = cleanSchoolName(student?.school);
-    const levelShort = levelShortName(student?.level);
-    const grade = student?.grade ? String(student.grade).replace(/[^0-9]/g, '') : '';
-    return [
-        school,
-        school && levelShort ? `${school}${levelShort}` : '',
-        school && levelShort && grade ? `${school}${levelShort}${grade}` : '',
-    ].filter(Boolean);
+    if (!student) return [];
+    const full = studentFullLabel(student);
+    const { level, graduated } = normalizeRealLevelGrade(student);
+    const predLevel = graduated ? '고등' : level;
+    const lv = LEVEL_SHORT[predLevel] || '';
+    const rawSchool = student[SCHOOL_FIELD[predLevel]] || '';
+    if (!rawSchool) return [full].filter(Boolean);
+
+    // full에서 학년/졸업 꼬리를 제거해 '학교+학부글자' 단계를 복원한다.
+    const schoolWithLevel = full.replace(/\d+$/, '').replace(/\(졸업\+\d+\)$/, '');
+    const school = lv && schoolWithLevel.endsWith(lv)
+        ? schoolWithLevel.slice(0, -lv.length)
+        : schoolWithLevel;
+
+    return [school, schoolWithLevel, full].filter(Boolean);
 }

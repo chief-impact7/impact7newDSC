@@ -1,6 +1,7 @@
 import {
     collection, getDocs, query, where
 } from 'firebase/firestore';
+import { studentFullLabel } from '@impact7/shared/student-label';
 import { db } from '../../firebase-config.js';
 
 // 학부별 학기 정의 (impact7db.web.app 설정과 동일하게 유지)
@@ -281,34 +282,8 @@ export const ACTIVE_STUDENT_STATUSES = new Set([
 export const PAST_STUDENT_STATUSES = new Set(['퇴원', '종강']);
 
 // ─── 학생 표시명 ───
-// 학교 + 학부(초/중/고) + 학년을 하나로 합친 축약 라벨
-// 예: (신목, 중등, 2) → "신목중2"
-//     (진명여자고등학교, 고등, 1) → "진명여고1"
-//     (신목중, 중등, 3) → "신목중3"  (중복 '중' 방지)
-//     (신목중학교, 중등, 3) → "신목중3"
-//     (윤중, 초등, 6) → "윤중초6"   (학교가 '중'으로 끝나도 학부가 다르면 suffix 붙임)
-export function studentShortLabel(s) {
-    if (!s) return '';
-    let school = (s.school || '').replace('여자', '여');
-    const level = s.level || '';
-    const grade = s.grade != null ? String(s.grade) : '';
-    if (!school) return '';
-
-    // 학부 접미어 축약: 초등→초, 중등→중, 고등→고
-    const levelShort = level === '초등' ? '초'
-                     : level === '중등' ? '중'
-                     : level === '고등' ? '고'
-                     : (level[0] || '');
-
-    // 학교명 긴 형식 → 짧은 형식
-    school = school.replace(/초등학교$/, '초')
-                   .replace(/중학교$/, '중')
-                   .replace(/고등학교$/, '고');
-    // 학교명이 이미 '학부 접미어와 같은' 글자로 끝날 때만 중복 방지.
-    // (예: '신목중' + 중등 → '신목중3', '윤중' + 초등 → '윤중초6')
-    const suffix = (levelShort && school.endsWith(levelShort)) ? '' : levelShort;
-    return school + suffix + grade;
-}
+// DB와 동일한 예측 학부 기준 라벨을 재노출. 소비처 8곳은 이 이름으로 계속 import.
+export const studentShortLabel = studentFullLabel;
 
 // ─── 날짜 유틸 ───
 
