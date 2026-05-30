@@ -7,6 +7,7 @@ import { state, TEMP_FIELD_LABELS } from './state.js';
 import { esc, formatTime12h, nowTimeStr, showSaveIndicator, stripEmailDomain, _fmtTs } from './ui-utils.js';
 import { auditDelete, auditUpdate, auditSet, auditAdd } from './audit.js';
 import { todayStr } from './src/shared/firestore-helpers.js';
+import { SCHOOL_FIELD } from '@impact7/shared/student-label';
 
 const _normalizePhone = (phone) => (phone || '').replace(/\D/g, '').replace(/^0(?=\d{10}$)/, '');
 
@@ -234,11 +235,12 @@ async function _upsertStudentFromTemp(data) {
         const baseFields = {
             name: data.name,
             level: data.level || '',
-            school: data.school || '',
             grade: data.grade || '',
             student_phone: data.student_phone || '',
             parent_phone_1: data.parent_phone_1,
         };
+        const _sf = SCHOOL_FIELD[data.level];
+        if (_sf && data.school) baseFields[_sf] = data.school;
         if (data.branch) baseFields.branch = data.branch;
 
         const snap = await getDoc(ref);

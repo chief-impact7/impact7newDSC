@@ -15,6 +15,7 @@ import { db } from './firebase-config.js';
 import { state } from './state.js';
 import { esc } from './ui-utils.js';
 import { enrollmentCode, findStudent } from './student-helpers.js';
+import { currentSchool } from '@impact7/shared/student-label';
 import { todayStr } from './src/shared/firestore-helpers.js';
 
 // ─── 활성 상태 집합 (분기 기준) ────────────────────────────────────────────
@@ -474,7 +475,7 @@ export async function renderPastHistory(studentId) {
     const headerMeta = `
         <div class="ph-header">
             <div class="ph-header-line">
-                <span class="ph-meta">${esc(student.school || '—')} · ${esc(student.level || '')}${esc(student.grade != null ? student.grade : '')}</span>
+                <span class="ph-meta">${esc(currentSchool(student) || '—')} · ${esc(student.level || '')}${esc(student.grade != null ? student.grade : '')}</span>
                 <span class="ph-meta">상태 <b>${esc(student.status || '—')}</b></span>
             </div>
             <div class="ph-header-line">

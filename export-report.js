@@ -9,6 +9,7 @@ import {
     getActiveEnrollments, matchesBranchFilter, enrollmentCode,
     allClassCodes, branchFromStudent, getStudentStartTime
 } from './student-helpers.js';
+import { currentSchool } from '@impact7/shared/student-label';
 
 // ─── 의존성 주입 (daily-ops.js에서 init 호출) ──────────────────────────────
 let getStudentDomains, getStudentTestItems, getTeacherName;
@@ -176,7 +177,7 @@ export async function exportDailyReport() {
 
         const startTime = getStudentStartTime(todayEnroll);
         return [
-            code, teacher, s.name, branchFromStudent(s), s.school || '', s.grade || '', statusText,
+            code, teacher, s.name, branchFromStudent(s), currentSchool(s), s.grade || '', statusText,
             startTime ? formatTime12h(startTime) : '', displayAtt, arrTime, attReason,
             hw1st, hw2nd, test1st, test2nd,
             actions, nextHw,

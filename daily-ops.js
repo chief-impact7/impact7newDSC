@@ -8,6 +8,7 @@ import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
 import { initHelpGuide } from './help-guide.js';
 import { toDateStrKST, parseDateKST, todayStr, getDayName, studentShortLabel, ACTIVE_STUDENT_STATUSES, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
+import { schoolSearchTerms } from './school-normalizer.js';
 import { auditUpdate, auditSet } from './audit.js';
 import {
     state,
@@ -1582,7 +1583,7 @@ function getFilteredStudents() {
             const q = state.searchQuery.trim().toLowerCase();
             students = students.filter(s => {
                 return (s.name?.toLowerCase().includes(q)) ||
-                    (s.school?.toLowerCase().includes(q)) ||
+                    schoolSearchTerms(s).some(t => t.toLowerCase().includes(q)) ||
                     (s.student_phone?.includes(q)) ||
                     (s.parent_phone_1?.includes(q)) ||
                     (s.enrollments || []).some(e => enrollmentCode(e).toLowerCase().includes(q)) ||
@@ -1670,7 +1671,7 @@ function getFilteredStudents() {
         const q = state.searchQuery.trim().toLowerCase();
         students = students.filter(s => {
             return (s.name?.toLowerCase().includes(q)) ||
-                (s.school?.toLowerCase().includes(q)) ||
+                schoolSearchTerms(s).some(t => t.toLowerCase().includes(q)) ||
                 (s.student_phone?.includes(q)) ||
                 (s.parent_phone_1?.includes(q)) ||
                 s.enrollments.some(e => enrollmentCode(e).toLowerCase().includes(q)) ||
@@ -1785,7 +1786,7 @@ function getFilteredStudents() {
                 const q = state.searchQuery.trim().toLowerCase();
                 filtered = filtered.filter(s => {
                     return (s.name?.toLowerCase().includes(q)) ||
-                        (s.school?.toLowerCase().includes(q)) ||
+                        schoolSearchTerms(s).some(t => t.toLowerCase().includes(q)) ||
                         s.enrollments.some(e => enrollmentCode(e).toLowerCase().includes(q));
                 });
             }
@@ -1883,7 +1884,7 @@ function renderListPanel() {
         const consultStudents = state.allStudents
             .filter(s => s.status === '상담' && (
                 s.name?.toLowerCase().includes(q) ||
-                s.school?.toLowerCase().includes(q) ||
+                schoolSearchTerms(s).some(t => t.toLowerCase().includes(q)) ||
                 s.student_phone?.includes(q) ||
                 s.parent_phone_1?.includes(q)
             ))
