@@ -13,6 +13,7 @@ import RetestSummary from './components/RetestSummary.jsx';
 import ScheduleSummary from './components/ScheduleSummary.jsx';
 import PostponedTasks from './components/PostponedTasks.jsx';
 import DailyLogBoard from './components/DailyLogBoard.jsx';
+import GradeFilter from './components/GradeFilter.jsx';
 
 // 이번 주 월요일~일요일 구하기
 function getWeekRange(dateStr) {
@@ -50,6 +51,7 @@ export default function App() {
     const [customEnd, setCustomEnd] = useState(todayStr());
     const [branchFilter, setBranchFilter] = useState('');
     const [classFilter, setClassFilter] = useState('');
+    const [gradeFilter, setGradeFilter] = useState(new Set());
     const [semesterSettings, setSemesterSettings] = useState({});
     const [loginError, setLoginError] = useState('');
 
@@ -301,6 +303,11 @@ export default function App() {
                 </div>
 
                 <div className="dash-filter-group">
+                    <label>학년</label>
+                    <GradeFilter value={gradeFilter} onChange={setGradeFilter} />
+                </div>
+
+                <div className="dash-filter-group">
                     <label>반</label>
                     <select value={classFilter} onChange={e => setClassFilter(e.target.value)}>
                         <option value="">전체</option>
@@ -325,6 +332,7 @@ export default function App() {
                             dailyLog={dailyLog}
                             branchFilter={branchFilter}
                             classFilter={classFilter}
+                            gradeFilter={gradeFilter}
                             date={baseDate}
                         />
                     </ErrorBoundary>
