@@ -925,3 +925,54 @@ body {
         min-height: 100px;
     }
 }
+
+/* ─── 학년 필터 ─── */
+.dash-grade-filter {
+    display: flex;
+    gap: 4px;
+}
+.dash-grade-group {
+    position: relative;
+}
+.dash-grade-btn {
+    padding: 5px 10px;
+    font-size: 13px;
+    border: 1px solid var(--border, #dadce0);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--text-sec, #5f6368);
+    cursor: pointer;
+}
+.dash-grade-btn.active {
+    background: var(--primary, #4285f4);
+    border-color: var(--primary, #4285f4);
+    color: #fff;
+}
+.dash-grade-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 50;
+    background: #fff;
+    border: 1px solid var(--border, #dadce0);
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 72px;
+}
+.dash-grade-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.dash-grade-option:hover {
+    background: var(--surface, #f1f3f4);
+}
