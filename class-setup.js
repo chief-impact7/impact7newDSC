@@ -8,7 +8,7 @@ import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { signInWithGoogle, logout } from './auth.js';
 import { todayStr, studentShortLabel, ACTIVE_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { LEAVE_STATUSES, LEVEL_SHORT, state } from './state.js';
-import { buildNaesinCsKey, resolveNaesinCsKey } from './student-helpers.js';
+import { buildNaesinCsKey, resolveNaesinCsKey, isActiveNaesinBase } from './student-helpers.js';
 import { schoolSearchTerms } from './school-normalizer.js';
 import { batchSet, batchUpdate } from './audit.js';
 import { recordTeacherChange } from './teacher-history.js';
@@ -1252,10 +1252,10 @@ window.submitWizard = async function () {
                 // 정규/자유학기 enrollment에 naesin_class_override 박아 명시 매핑.
                 // arrayUnion으로는 기존 element 수정 불가 → 전체 enrollments 다시 쓰기.
                 const existing = enrollmentsByDocId.get(student.docId) || [];
-                const hasRegular = existing.some(e => e.class_type === '정규' || e.class_type === '자유학기');
-                if (!hasRegular) throw new Error(`${student.name} 학생은 정규/자유학기 등록이 없어 내신반에 추가할 수 없습니다.`);
+                const hasRegular = existing.some(e => isActiveNaesinBase(e));
+                if (!hasRegular) throw new Error(`${student.name} 학생은 활성 정규/자유학기 등록(종료 안 됨·요일 있음)이 없어 내신반에 추가할 수 없습니다. 정규반을 먼저 정상 등록하세요.`);
                 const updated = existing.map(e =>
-                    (e.class_type === '정규' || e.class_type === '자유학기')
+                    isActiveNaesinBase(e)
                         ? { ...e, naesin_class_override: d.classCode }
                         : e
                 );
@@ -1264,10 +1264,10 @@ window.submitWizard = async function () {
             } else if (d.classType === '자유학기') {
                 const existing = enrollmentsByDocId.get(student.docId) || [];
                 const hasRegular = existing.some(e =>
-                    (e.class_type === '정규' || e.class_type === '자유학기') &&
+                    isActiveNaesinBase(e) &&
                     `${e.level_symbol || ''}${e.class_number || ''}` === d.classCode
                 );
-                if (!hasRegular) throw new Error(`${student.name} 학생은 ${d.classCode} 정규반 등록이 없어 자유학기반에 추가할 수 없습니다.`);
+                if (!hasRegular) throw new Error(`${student.name} 학생은 ${d.classCode} 활성 정규반 등록(종료 안 됨)이 없어 자유학기반에 추가할 수 없습니다.`);
             } else if (d.classType === '정규') {
                 // 신학기 정규 enrollment 추가 시 옛 정규 enrollment를 강제 종료
                 // (end_date 미설정 + 같은 class_type='정규'인 항목에 end_date=새 start_date - 1 설정).

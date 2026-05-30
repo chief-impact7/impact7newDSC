@@ -10,7 +10,7 @@ import { getDayName, studentShortLabel } from './src/shared/firestore-helpers.js
 import { db } from './firebase-config.js';
 import { doc, getDoc } from 'firebase/firestore';
 import { auditUpdate, auditSet } from './audit.js';
-import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt } from './student-helpers.js';
+import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt, isActiveNaesinBase } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 import { renderClassDeleteCard, applyClassDetailTabMode } from './class-detail.js';
 import { cancelStudentPendingTasks } from './data-layer.js';
@@ -1158,9 +1158,9 @@ window.addStudentToNaesin = async function(csKey, studentId) {
     }
 
     const enrollments = (student.enrollments || []).slice();
-    const idx = enrollments.findIndex(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
+    const idx = enrollments.findIndex(e => isActiveNaesinBase(e) && e.class_number);
     if (idx === -1) {
-        alert('정규 반에 먼저 등록된 학생만 추가할 수 있습니다.');
+        alert('활성 정규반(종료 안 됨·요일 있음)에 먼저 등록된 학생만 추가할 수 있습니다.');
         return;
     }
 

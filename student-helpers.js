@@ -167,6 +167,18 @@ export function displayCodeFromCsKey(csKey, branch) {
     return branch && csKey.startsWith(branch) ? csKey.slice(branch.length) : csKey;
 }
 
+// 내신/자유학기 override의 base가 될 수 있는 "건강한" 정규/자유학기 enrollment인가.
+// 죽은 정규(end_date 과거)나 요일 없는 정규에 내신을 올리면, 내신 종료 후 정규 복귀 시
+// 활성 enrollment·등원요일이 없어 출결·검색에서 누락된다 (이예원 유령 사고, 2026-05-31).
+export function isActiveNaesinBase(e, dateStr) {
+    if (e.class_type !== '정규' && e.class_type !== '자유학기') return false;
+    const today = dateStr || todayStr();
+    const validDate = (d) => d && /^\d{4}-/.test(d);
+    if (validDate(e.end_date) && e.end_date < today) return false;                          // 죽은 정규
+    if (e.class_type === '정규' && !(Array.isArray(e.day) && e.day.length)) return false;   // 요일 없는 정규
+    return true;
+}
+
 // 활성 enrollment만 반환.
 // - start_date가 미래인 enrollment 제외 (등원예정 학생의 미래 등원일 회로 차단)
 // - end_date가 지난 enrollment(내신/특강)은 제외
