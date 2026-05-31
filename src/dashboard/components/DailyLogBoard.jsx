@@ -230,7 +230,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
                 attendanceMeta: fmtDate(item.temp_date || date),
                 homework: [{ label: '진단평가', issue: false }],
                 tests: [],
-                notes: item.memo || '',
+                notes: (item.memo || '').split('\n').filter(l => !l.includes('자동등록 접수번호')).join('\n').trim(),
                 next: '결과 입력 후 반배정',
                 classCode: '진단평가',
                 groupKey: 'diagnostic',
@@ -435,7 +435,7 @@ function LogTable({ rows, diagnostic = false }) {
                         <th>{diagnostic ? '진단평가/준비' : '숙제/리뷰'}</th>
                         {!diagnostic && <th>테스트/재시</th>}
                         <th>전달/상담</th>
-                        <th>다음 숙제/후속</th>
+                        <th>{diagnostic ? '상담결과' : '다음 숙제/후속'}</th>
                     </tr>
                 </thead>
                 <tbody>
