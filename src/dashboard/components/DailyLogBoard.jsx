@@ -230,7 +230,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
                 attendanceMeta: fmtDate(item.temp_date || date),
                 homework: [{ label: '진단평가', issue: false }],
                 tests: [],
-                notes: (item.memo || '').split('\n').filter(l => !l.includes('자동등록 접수번호')).join('\n').trim(),
+                notes: (item.memo || '').split('\n').filter(l => !l.includes('자동등록') && !l.includes('접수번호')).join('\n').trim(),
                 next: '결과 입력 후 반배정',
                 classCode: '진단평가',
                 groupKey: 'diagnostic',
