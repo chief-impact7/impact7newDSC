@@ -427,15 +427,33 @@ function LogTable({ rows, diagnostic = false }) {
     return (
         <div className="daily-log-table-wrap">
             <table className="daily-log-table">
+                <colgroup>
+                    <col className="dlc-student" />
+                    <col className="dlc-time" />
+                    <col className="dlc-att" />
+                    <col className="dlc-hw" />
+                    <col className="dlc-test" />
+                    <col className="dlc-note" />
+                    <col className="dlc-next" />
+                </colgroup>
                 <thead>
                     <tr>
                         <th>학생</th>
-                        <th>{diagnostic ? '예정' : '시간'}</th>
+                        <th>시간</th>
                         <th>{diagnostic ? '상태' : '출결'}</th>
-                        <th>{diagnostic ? '진단평가/준비' : '숙제/리뷰'}</th>
-                        {!diagnostic && <th>테스트/재시</th>}
-                        <th>전달/상담</th>
-                        <th>{diagnostic ? '상담결과' : '다음 숙제/후속'}</th>
+                        {diagnostic ? (
+                            <>
+                                <th colSpan={2}>전달/상담</th>
+                                <th colSpan={2}>상담결과</th>
+                            </>
+                        ) : (
+                            <>
+                                <th>숙제/리뷰</th>
+                                <th>테스트/재시</th>
+                                <th>전달/상담</th>
+                                <th>다음 숙제/후속</th>
+                            </>
+                        )}
                     </tr>
                 </thead>
                 <tbody>
@@ -450,10 +468,19 @@ function LogTable({ rows, diagnostic = false }) {
                                 <span className={`daily-log-pill ${attendanceClass(row.attendance)}`}>{row.attendance}</span>
                                 {row.attendanceMeta && <span className="daily-log-sub">{row.attendanceMeta}</span>}
                             </td>
-                            <td><ChipList chips={row.homework} /></td>
-                            {!diagnostic && <td><ChipList chips={row.tests} /></td>}
-                            <td>{row.notes || '-'}</td>
-                            <td>{row.next || '-'}</td>
+                            {diagnostic ? (
+                                <>
+                                    <td colSpan={2}>{row.notes || '-'}</td>
+                                    <td colSpan={2}>{row.next || '-'}</td>
+                                </>
+                            ) : (
+                                <>
+                                    <td><ChipList chips={row.homework} /></td>
+                                    <td><ChipList chips={row.tests} /></td>
+                                    <td>{row.notes || '-'}</td>
+                                    <td>{row.next || '-'}</td>
+                                </>
+                            )}
                         </tr>
                     ))}
                 </tbody>

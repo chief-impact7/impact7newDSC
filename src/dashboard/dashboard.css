@@ -649,7 +649,18 @@ body {
     border-collapse: separate;
     border-spacing: 0;
     font-size: 13px;
+    table-layout: fixed;
 }
+/* 진단평가·정규 테이블 컬럼 너비 정렬 (합 100%) */
+.dlc-student { width: 17%; }
+.dlc-time { width: 8%; }
+.dlc-att { width: 9%; }
+.dlc-hw { width: 17%; }
+.dlc-test { width: 17%; }
+.dlc-note { width: 16%; }
+.dlc-next { width: 16%; }
+/* fixed 레이아웃에서 셀 내용이 넘치면 줄바꿈 */
+.daily-log-table td { overflow-wrap: anywhere; }
 
 .daily-log-table th,
 .daily-log-table td {
