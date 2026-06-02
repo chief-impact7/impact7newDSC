@@ -2,10 +2,10 @@
 // daily-ops.js에서 추출한 휴퇴원 요청 & 복귀 관련 함수
 // Phase 3-1
 
-import { collection, doc, serverTimestamp, deleteField } from 'firebase/firestore';
+import { collection, doc, serverTimestamp, deleteField, writeBatch } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { parseDateKST, todayStr } from './src/shared/firestore-helpers.js';
-import { auditUpdate, auditAdd } from './audit.js';
+import { auditUpdate, auditAdd, batchUpdate } from './audit.js';
 import { state, LEAVE_STATUSES } from './state.js';
 import { esc, escAttr, showSaveIndicator, _fmtTs } from './ui-utils.js';
 import { branchFromStudent, allClassCodes, activeClassCodes, enrollmentCode, findStudent } from './student-helpers.js';
@@ -460,7 +460,13 @@ export function renderLeaveRequestCard(studentId) {
     const student = findStudent(studentId);
     const stuStatus = student?.status || '';
     const isWithdrawnStu = stuStatus === '퇴원';
-    const isLeaveStu = LEAVE_STATUSES.includes(stuStatus);
+    // 휴원 시작 후(status=가/실휴원, 또는 미래예약이지만 시작일 도래)면 복귀,
+    // 휴원 시작 전(미래 예약 + pause_start_date 미래)이면 취소 버튼.
+    // d601b18에서 미래 휴원은 status='재원' 유지 + scheduled_leave_status로 저장된다.
+    const today = todayStr();
+    const isLeaveStu = LEAVE_STATUSES.includes(stuStatus)
+        || (LEAVE_STATUSES.includes(student?.scheduled_leave_status) && student?.pause_start_date && student.pause_start_date <= today);
+    const isScheduledLeave = !isLeaveStu && LEAVE_STATUSES.includes(student?.scheduled_leave_status);
 
     // 복귀요청은 "휴원 → 재원" 이므로 휴원 라이프사이클(휴원요청서 카드)에 소속.
     // 재등원요청(퇴원 → 재원)만 퇴원요청서 카드에 남김.
@@ -470,11 +476,15 @@ export function renderLeaveRequestCard(studentId) {
     const btnStyle = 'font-size:11px;padding:2px 8px;margin-left:auto;display:inline-flex;align-items:center;gap:4px;';
     let cards = '';
 
-    // 휴원요청서 카드
-    const leaveBtn = isLeaveStu
-        ? `<button class="lr-btn lr-btn-tonal" style="${btnStyle}" onclick="openReturnFromLeaveModal('${escAttr(studentId)}')">
-            <span class="material-symbols-outlined" style="font-size:14px;">undo</span>복귀</button>`
-        : '';
+    // 휴원요청서 카드 — 휴원 중이면 복귀, 미래 예약이면 취소
+    let leaveBtn = '';
+    if (isLeaveStu) {
+        leaveBtn = `<button class="lr-btn lr-btn-tonal" style="${btnStyle}" onclick="openReturnFromLeaveModal('${escAttr(studentId)}')">
+            <span class="material-symbols-outlined" style="font-size:14px;">undo</span>복귀</button>`;
+    } else if (isScheduledLeave) {
+        leaveBtn = `<button class="lr-btn lr-btn-tonal" style="${btnStyle}" onclick="cancelScheduledLeave('${escAttr(studentId)}')">
+            <span class="material-symbols-outlined" style="font-size:14px;">close</span>휴원취소</button>`;
+    }
     if (leaveRecords.length > 0 || leaveBtn) {
         cards += `<div class="detail-card">
             <div class="detail-card-title" style="display:flex;align-items:center;gap:6px;">
@@ -694,6 +704,60 @@ export async function toggleCancelLeaveRequest(docId, studentId) {
         if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) renderLeaveRequestList();
         renderStudentDetail(studentId);
     } catch (err) { alert('처리 실패: ' + err.message); }
+}
+
+// 미래 휴원 예약(아직 시작 전) 취소: student 예약 필드 정리 + 관련 휴원요청 레코드 cancelled.
+// 서버 finalize는 approved→cancelled 전이에 반응하지 않으므로(functions/index.js) 클라 정리와 충돌 없음.
+export async function cancelScheduledLeave(studentId) {
+    const student = findStudent(studentId);
+    if (!student) { alert('학생 정보를 찾을 수 없습니다.'); return; }
+
+    // 방어 가드: 버튼 노출 조건(isScheduledLeave)과 동일 — 이미 휴원 중이거나 시작일이
+    // 지난 학생의 pause 날짜를 지워 휴원 정보를 손실시키는 오호출을 차단.
+    const today = todayStr();
+    if (LEAVE_STATUSES.includes(student.status)) { alert('이미 휴원이 시작된 학생입니다. 복귀 처리를 사용하세요.'); return; }
+    if (!LEAVE_STATUSES.includes(student.scheduled_leave_status)) return;
+    if (student.pause_start_date && student.pause_start_date <= today) { alert('휴원 시작일이 지났습니다. 복귀 처리를 사용하세요.'); return; }
+
+    const period = `${student.pause_start_date || ''} ~ ${student.pause_end_date || ''}`;
+    if (!confirm(`${student.name} 학생의 예약된 휴원을 취소하시겠습니까?\n(${period})`)) return;
+
+    const targets = state.leaveRequests.filter(r =>
+        r.student_id === studentId
+        && !_isWithdrawalType(r.request_type) && !_isReEnrollType(r.request_type)
+        && r.status === 'approved'
+        && (!r.leave_start_date || r.leave_start_date > today)
+    );
+
+    showSaveIndicator('saving');
+    try {
+        // student 1건 + 레코드 N건을 단일 batch로 atomic 처리 (부분 실패 시 비일관 방지).
+        const batch = writeBatch(db);
+        batchUpdate(batch, doc(db, 'students', studentId), {
+            scheduled_leave_status: deleteField(),
+            pause_start_date: deleteField(),
+            pause_end_date: deleteField(),
+        });
+        for (const r of targets) {
+            batchUpdate(batch, doc(db, 'leave_requests', r.docId), { status: 'cancelled' });
+        }
+        await batch.commit();
+
+        // 로컬 state 반영은 commit 성공 후에만.
+        delete student.scheduled_leave_status;
+        delete student.pause_start_date;
+        delete student.pause_end_date;
+        for (const r of targets) {
+            const idx = state.leaveRequests.findIndex(lr => lr.docId === r.docId);
+            if (idx >= 0) state.leaveRequests[idx].status = 'cancelled';
+        }
+
+        showSaveIndicator('saved');
+        renderSubFilters();
+        renderStudentDetail(studentId);
+    } catch (err) {
+        alert('휴원 취소 처리 실패: ' + err.message);
+    }
 }
 
 // 방어 가드: 최종 승인 시 RETURN 유형(복귀/재등원)은 반드시 target_class_code 필요
