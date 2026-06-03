@@ -17,7 +17,7 @@ import { normalizeDays, enrollmentCode, branchFromStudent, makeDailyRecordId, ge
 import { DEFAULT_HISTORY_LIMIT } from './consultation-filter.js';
 import { createPromoteEnrollPending } from '@impact7/shared/promote-enroll';
 import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
-import { deriveStudentNumber } from '@impact7/shared/student-number';
+import { deriveStudentNumber, studentNumberIdentityKey } from '@impact7/shared/student-number';
 
 const _promoteEnrollPending = createPromoteEnrollPending(
     { db, writeBatch, doc, collection, serverTimestamp },
@@ -260,15 +260,17 @@ export async function backfillStudentNumbers() {
     if (READ_ONLY) return;
     const targets = state.allStudents.filter(s => ENROLLABLE_STATUSES.has(s.status) && !s.studentNumber);
     if (targets.length === 0) return;
-    const assigned = new Set(state.allStudents.filter(s => s.studentNumber).map(s => s.studentNumber));
+    const assigned = new Set(state.allStudents.filter(s => s.studentNumber).map(s => studentNumberIdentityKey(s.name, s.studentNumber)));
     const batch = writeBatch(db);
     const pending = [];
     const duplicates = [];
     for (const s of targets) {
         const { studentNumber, source } = deriveStudentNumber(s);
         if (!studentNumber) continue;
-        if (assigned.has(studentNumber)) { duplicates.push(s.name); continue; }
-        assigned.add(studentNumber);
+        const key = studentNumberIdentityKey(s.name, studentNumber);
+        if (!key) continue;
+        if (assigned.has(key)) { duplicates.push(`${s.name} (#${studentNumber})`); continue; }
+        assigned.add(key);
         batchUpdate(batch, doc(db, 'students', s.docId), { studentNumber, studentNumberSource: source, studentNumberIssuedAt: serverTimestamp() });
         pending.push({ s, studentNumber, source });
     }
@@ -285,7 +287,7 @@ export async function backfillStudentNumbers() {
         }
     }
     if (duplicates.length > 0) {
-        const msg = `학생번호 중복 발생 — 수동 확인 필요: ${duplicates.join(', ')}`;
+        const msg = `이름+학생번호 중복 발생 — 수동 확인 필요: ${duplicates.join(', ')}`;
         console.warn('[backfillStudentNumbers]', msg);
         showToast(msg);
     }
