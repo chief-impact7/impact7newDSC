@@ -6,6 +6,8 @@ const ACTIVE_STATUSES = new Set(['재원', '등원예정', '실휴원', '가휴�
 const ATTENDED_STATUSES = new Set(['출석', '지각', '조퇴']);
 const DEFAULT_ATTENDANCE_LABELS = new Set(['정규', '특강', '내신', '자유', '자유학기', '비정규', '미확인']);
 const REGULAR_CLASS_TYPES = new Set(['정규', '자유학기', undefined, null, '']);
+const WITHDRAW_REQUEST_TYPES = new Set(['퇴원요청', '휴원→퇴원']);
+const LEAVE_REQUEST_TYPES = new Set(['휴원요청', '퇴원→휴원', '휴원연장']);
 const GROUP_ORDER = ['diagnostic', 'regular', 'irregular', 'naesin', 'free', 'special'];
 const OPTIONAL_GROUPS = GROUP_ORDER.filter(key => !['diagnostic', 'regular'].includes(key));
 const GROUP_LABELS = {
@@ -39,6 +41,16 @@ const fmtTime = (value) => {
     return `${displayHour}:${match[2]}`;
 };
 const fmtDateTime = (date, time) => [fmtDate(date), time ? fmtTime(time) : ''].filter(Boolean).join(' ');
+const fmtApprovedTime = (value) => {
+    const date = value instanceof Date ? value : (value?.toDate ? value.toDate() : new Date(value));
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleTimeString('ko-KR', {
+        timeZone: 'Asia/Seoul',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+};
 
 function isWithdrawnAt(student, date) {
     if (student.status === '퇴원' || student.status === '종강') return true;
@@ -208,6 +220,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
         hwFailTasks = [],
         testFailTasks = [],
         absenceRecords = [],
+        leaveRequests = [],
         classSettings = {},
     } = dailyLog || {};
     const records = new Map(dailyRecords.map(rec => [rec.student_id, rec]));
@@ -217,6 +230,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
     const dayName = getDayName(date);
     const LEVEL_SHORT = { '초등': '초', '중등': '중', '고등': '고' };
     const gradeKey = (s) => (LEVEL_SHORT[s.level] || '') + (s.grade ?? '');
+    const studentById = new Map(students.map(student => [student.id, student]));
 
     const groups = {
         diagnostic: tempAttendances
@@ -332,12 +346,84 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
     Object.values(groups.regular).forEach(rows => rows.sort(sortRows));
     ['irregular', 'naesin', 'free', 'special'].forEach(key => groups[key].sort(sortRows));
 
+    const withdrawalRows = buildLeaveRows({
+        requests: leaveRequests,
+        students: studentById,
+        branchFilter,
+        classFilter,
+        gradeFilter,
+        gradeKey,
+        typeSet: WITHDRAW_REQUEST_TYPES,
+        rowType: 'withdrawal',
+    });
+    const leaveRows = buildLeaveRows({
+        requests: leaveRequests,
+        students: studentById,
+        branchFilter,
+        classFilter,
+        gradeFilter,
+        gradeKey,
+        typeSet: LEAVE_REQUEST_TYPES,
+        rowType: 'leave',
+    });
+
     return {
         groups,
         lateRows: allRows(groups).filter(row => row.attendance === '지각'),
         absentRows: allRows(groups).filter(row => row.attendance === '결석'),
-        summary: buildSummary(groups),
+        withdrawalRows,
+        leaveRows,
+        summary: {
+            ...buildSummary(groups),
+            withdrawals: withdrawalRows.length,
+            leaves: leaveRows.length,
+        },
     };
+}
+
+function normalizeClassCodes(value) {
+    if (Array.isArray(value)) return value.filter(Boolean);
+    if (!value) return [];
+    return String(value).split(/[,·\s]+/).map(v => v.trim()).filter(Boolean);
+}
+
+function buildLeaveRows({ requests, students, branchFilter, classFilter, gradeFilter, gradeKey, typeSet, rowType }) {
+    return requests
+        .filter(request => request.status === 'approved' && typeSet.has(request.request_type))
+        .map(request => {
+            const student = students.get(request.student_id) || null;
+            const classCodes = normalizeClassCodes(request.class_codes);
+            return { request, student, classCodes };
+        })
+        .filter(({ request, student, classCodes }) => {
+            const branch = request.branch || (student ? branchFromStudent(student) : '');
+            if (branchFilter && branch !== branchFilter) return false;
+            if (classFilter && !classCodes.includes(classFilter)) return false;
+            if (gradeFilter?.size && student && !gradeFilter.has(gradeKey(student))) return false;
+            return true;
+        })
+        .map(({ request, student, classCodes }) => {
+            const period = rowType === 'withdrawal'
+                ? `퇴원일 ${fmtDate(request.withdrawal_date)}`
+                : request.request_type === '휴원연장'
+                    ? `연장 종료 ${fmtDate(request.leave_end_date)}`
+                    : `${fmtDate(request.leave_start_date)} ~ ${fmtDate(request.leave_end_date)}`;
+            const classText = classCodes.length ? classCodes.join(', ') : '미지정';
+            const note = [
+                period,
+                request.leave_sub_type,
+                request.consultation_note,
+            ].filter(Boolean).join(' / ');
+            return {
+                id: request.id || request.docId || `${request.student_id}-${request.request_type}`,
+                name: request.student_name || student?.name || request.student_id || '(이름 없음)',
+                meta: [student ? studentShortLabel(student) : '', request.branch].filter(Boolean).join(' · '),
+                classCode: classText,
+                attendanceMeta: `승인 ${fmtApprovedTime(request.final_approved_at || request.approved_at || request.teacher_approved_at)}`,
+                notes: note,
+            };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
 }
 
 function sortRows(a, b) {
@@ -528,7 +614,7 @@ function AccordionGroup({ groupKey, rows, children, open = false }) {
     );
 }
 
-function SideList({ title, icon, rows, type }) {
+function SideList({ title, icon, rows, type, hideEmptyBody = false }) {
     return (
         <div className={`daily-log-side-card ${type}`}>
             <div className={`daily-log-side-head ${type}`}>
@@ -538,21 +624,23 @@ function SideList({ title, icon, rows, type }) {
                 </div>
                 <span>{rows.length}명</span>
             </div>
-            <div className="daily-log-side-list">
-                {rows.length === 0 ? (
-                    <div className="daily-log-empty">명단 없음</div>
-                ) : rows.map(row => (
-                    <div key={`${type}-${row.id}`} className="daily-log-side-item">
-                        <div className="daily-log-side-top">
-                            <strong>{row.name}</strong>
-                            <span>{row.classCode} · {row.attendanceMeta || fmtTime(row.time)}</span>
+            {!(hideEmptyBody && rows.length === 0) && (
+                <div className="daily-log-side-list">
+                    {rows.length === 0 ? (
+                        <div className="daily-log-empty">명단 없음</div>
+                    ) : rows.map(row => (
+                        <div key={`${type}-${row.id}`} className="daily-log-side-item">
+                            <div className="daily-log-side-top">
+                                <strong>{row.name}</strong>
+                                <span>{row.classCode} · {row.attendanceMeta || fmtTime(row.time)}</span>
+                            </div>
+                            <div className="daily-log-side-note">
+                                {row.notes || row.next || ''}
+                            </div>
                         </div>
-                        <div className="daily-log-side-note">
-                            {row.notes || row.next || ''}
-                        </div>
-                    </div>
-                ))}
-            </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
@@ -574,6 +662,8 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                 <SummaryCard icon="person_off" label="결석" value={data.summary.absent} note="결석대장/사유 함께 표시" />
                 <SummaryCard icon="pending_actions" label="미입력" value={data.summary.pending} note="출결 미기록 학생" />
                 <SummaryCard icon="assignment_late" label="학습 이슈" value={data.summary.issues} note="숙제/테스트/후속조치" />
+                <SummaryCard icon="logout" label="퇴원" value={data.summary.withdrawals} note="승인일 기준" />
+                <SummaryCard icon="pause_circle" label="휴원" value={data.summary.leaves} note="승인일 기준" />
             </div>
 
             <div className="daily-log-work-area">
@@ -601,8 +691,10 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                 </div>
 
                 <aside className="daily-log-side-stack">
-                    <SideList title="결석 명단" icon="person_off" rows={data.absentRows} type="absent" />
-                    <SideList title="지각 명단" icon="schedule" rows={data.lateRows} type="late" />
+                    <SideList title="퇴원 명단" icon="logout" rows={data.withdrawalRows} type="withdrawal" hideEmptyBody />
+                    <SideList title="휴원 명단" icon="pause_circle" rows={data.leaveRows} type="leave" hideEmptyBody />
+                    <SideList title="결석 명단" icon="person_off" rows={data.absentRows} type="absent" hideEmptyBody />
+                    <SideList title="지각 명단" icon="schedule" rows={data.lateRows} type="late" hideEmptyBody />
                 </aside>
             </div>
         </div>

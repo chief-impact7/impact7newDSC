@@ -436,7 +436,7 @@ body {
 
 .daily-log-summary {
     display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(9, minmax(0, 1fr));
     gap: 12px;
     margin-bottom: 14px;
 }
@@ -454,13 +454,23 @@ body {
     background: #ffffff;
 }
 
-.daily-log-side-card.absent {
+.daily-log-side-card.withdrawal {
     order: 1;
+    background: #f6f0ff;
+}
+
+.daily-log-side-card.leave {
+    order: 2;
+    background: #eef7ff;
+}
+
+.daily-log-side-card.absent {
+    order: 3;
     background: #fff7f6;
 }
 
 .daily-log-side-card.late {
-    order: 2;
+    order: 4;
     background: #fff9ea;
 }
 
@@ -520,6 +530,14 @@ body {
 
 .daily-log-main-head {
     background: #006241;
+}
+
+.daily-log-side-head.withdrawal {
+    background: #6b45b6;
+}
+
+.daily-log-side-head.leave {
+    background: #1672b8;
 }
 
 .daily-log-side-head.absent {
@@ -702,7 +720,6 @@ body {
     display: inline-flex;
     align-items: center;
     border-radius: 50px;
-    white-space: nowrap;
 }
 
 .daily-log-pill {
@@ -710,6 +727,7 @@ body {
     padding: 2px 9px;
     font-size: 12px;
     font-weight: 800;
+    white-space: nowrap;
 }
 
 .daily-log-pill.ok { background: var(--daily-green-light); color: var(--daily-green); }
@@ -725,6 +743,10 @@ body {
     padding: 3px 8px;
     color: rgba(0, 0, 0, .74);
     font-size: 12px;
+    max-width: 100%;
+    line-height: 1.35;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .daily-log-chip.issue {

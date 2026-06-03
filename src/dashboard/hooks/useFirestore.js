@@ -12,6 +12,7 @@ const emptyDailyLogData = () => ({
     hwFailTasks: [],
     testFailTasks: [],
     absenceRecords: [],
+    leaveRequests: [],
     classSettings: {},
 });
 

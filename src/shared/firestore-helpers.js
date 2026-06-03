@@ -205,6 +205,38 @@ export async function fetchAbsenceRecordsForDailyLog(date) {
     return [...map.values()];
 }
 
+const dateFromFirestoreValue = (value) => {
+    if (!value) return null;
+    if (value.toDate) return value.toDate();
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const finalApprovalDate = (request) => {
+    const dates = [request.approved_at, request.teacher_approved_at]
+        .map(dateFromFirestoreValue)
+        .filter(Boolean);
+    if (!dates.length) return null;
+    return new Date(Math.max(...dates.map(date => date.getTime())));
+};
+
+export async function fetchApprovedLeaveRequestsForDate(date) {
+    const q = query(
+        collection(db, 'leave_requests'),
+        where('status', '==', 'approved')
+    );
+    const snap = await getDocs(q);
+    const list = [];
+    snap.forEach(docSnap => {
+        const data = { id: docSnap.id, ...docSnap.data() };
+        const approvedDate = finalApprovalDate(data);
+        if (approvedDate && toDateStrKST(approvedDate) === date) {
+            list.push({ ...data, final_approved_at: approvedDate });
+        }
+    });
+    return list;
+}
+
 export async function fetchDashboardDailyLogData(date) {
     const [
         dailyRecords,
@@ -212,6 +244,7 @@ export async function fetchDashboardDailyLogData(date) {
         hwFailTasks,
         testFailTasks,
         absenceRecords,
+        leaveRequests,
         classSettings,
     ] = await Promise.all([
         fetchDailyRecordsForDate(date),
@@ -219,6 +252,7 @@ export async function fetchDashboardDailyLogData(date) {
         fetchScheduledTaskRows('hw_fail_tasks', date),
         fetchScheduledTaskRows('test_fail_tasks', date),
         fetchAbsenceRecordsForDailyLog(date),
+        fetchApprovedLeaveRequestsForDate(date),
         fetchClassSettingsMap(),
     ]);
     return {
@@ -227,6 +261,7 @@ export async function fetchDashboardDailyLogData(date) {
         hwFailTasks,
         testFailTasks,
         absenceRecords,
+        leaveRequests,
         classSettings,
     };
 }
