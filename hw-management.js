@@ -6,7 +6,7 @@ import { doc, writeBatch } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { auditUpdate, auditSet, batchSet, batchUpdate } from './audit.js';
 import { state } from './state.js';
-import { esc, escAttr, showSaveIndicator, formatTime12h, nextOXValue, oxDisplayClass, _stripYear, _isNoShow, _renderRescheduleHistory } from './ui-utils.js';
+import { esc, escAttr, showSaveIndicator, formatTime12h, renderTime12hSelect, nextOXValue, oxDisplayClass, _stripYear, _isNoShow, _renderRescheduleHistory } from './ui-utils.js';
 import { enrollmentCode, getActiveEnrollments, matchesBranchFilter, makeDailyRecordId, branchFromStudent } from './student-helpers.js';
 import { getDayName, studentShortLabel } from './src/shared/firestore-helpers.js';
 
@@ -136,8 +136,12 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
                             <label class="field-label" style="font-size:11px;color:var(--text-sec);flex-shrink:0;">등원일시</label>
                             <input type="date" class="field-input hw-fail-input" data-hw-field="scheduled_date" style="flex:1;padding:4px 8px;font-size:12px;"
                                 value="${escAttr(action.scheduled_date || '')}">
-                            <input type="time" class="field-input hw-fail-input" data-hw-field="scheduled_time" style="width:90px;padding:4px 8px;font-size:12px;"
-                                value="${escAttr(action.scheduled_time || '')}" placeholder="시간">
+                            ${renderTime12hSelect({
+                                value: action.scheduled_time || '16:00',
+                                dataAttr: 'data-hw-field="scheduled_time"',
+                                className: 'hw-fail-input',
+                                style: 'width:105px;padding:4px 8px;font-size:12px;',
+                            })}
                         </div>
                         <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc((action.handler || state.currentUser?.email || '').split('@')[0])}</div>
                         <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveHwFailFields('${escAttr(studentId)}', '${escapedDomain}', this)">
@@ -846,4 +850,3 @@ export function handleHomeworkStatusChange(studentId, hwIndex, value) {
         state.dailyRecords[studentId].homework = homework;
     }
 }
-

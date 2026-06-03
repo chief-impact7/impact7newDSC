@@ -1417,6 +1417,11 @@ body {
   outline: none;
 }
 
+.time12-select {
+  appearance: auto;
+  min-width: 105px;
+}
+
 textarea.field-input {
   resize: vertical;
   min-height: 48px;

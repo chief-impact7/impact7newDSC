@@ -33,6 +33,28 @@ export function formatTime12h(time24) {
     return `${ampm} ${h12}:${m}`;
 }
 
+export function renderTime12hOptions(value = '16:00') {
+    const normalized = value || '16:00';
+    const slots = [
+        ...Array.from({ length: 22 }, (_, idx) => {
+            const totalMinutes = 12 * 60 + idx * 30;
+            return `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
+        }),
+        ...Array.from({ length: 6 }, (_, idx) => {
+            const totalMinutes = 9 * 60 + idx * 30;
+            return `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
+        }),
+    ];
+    const options = slots.includes(normalized) ? slots : [normalized, ...slots];
+    return options.map(time => `<option value="${escAttr(time)}" ${time === normalized ? 'selected' : ''}>${esc(formatTime12h(time))}</option>`).join('');
+}
+
+export function renderTime12hSelect({ value = '16:00', dataAttr = '', className = '', style = '' } = {}) {
+    return `<select class="field-input time12-select ${escAttr(className)}" ${dataAttr} style="${escAttr(style)}">
+        ${renderTime12hOptions(value)}
+    </select>`;
+}
+
 export function nowTimeStr() {
     const d = new Date();
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;

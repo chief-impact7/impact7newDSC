@@ -18,7 +18,7 @@ import {
     DAY_ORDER
 } from './state.js';
 import {
-    esc, escAttr, decodeHtmlEntities, formatTime12h, nowTimeStr,
+    esc, escAttr, decodeHtmlEntities, formatTime12h, renderTime12hOptions, nowTimeStr,
     showSaveIndicator, showToast, nextOXValue, oxDisplayClass,
     _attToggleClass, _toVisitStatus, _visitBtnStyles, _visitLabel,
     _stripYear, _fmtTs, _isNoShow, _renderRescheduleHistory
@@ -2846,7 +2846,12 @@ function openEnrollmentModal(studentId, enrollIdx) {
     document.getElementById('enroll-level').value = enroll.level_symbol || '';
     document.getElementById('enroll-class-num').value = enroll.class_number || '';
     document.getElementById('enroll-class-type').value = enroll.class_type || '정규';
-    document.getElementById('enroll-time').value = enroll.start_time || enroll.time || '';
+    const enrollTimeEl = document.getElementById('enroll-time');
+    if (enrollTimeEl) {
+        const enrollTime = enroll.start_time || enroll.time || '16:00';
+        enrollTimeEl.innerHTML = renderTime12hOptions(enrollTime);
+        enrollTimeEl.value = enrollTime;
+    }
     document.getElementById('enroll-start-date').value = enroll.start_date || '';
     document.getElementById('enroll-end-date').value = enroll.end_date || '';
 
@@ -3313,6 +3318,7 @@ window.renderFilterChips = renderFilterChips;
 window._esc = esc;
 window._escAttr = escAttr;
 window._formatTime12h = formatTime12h;
+window._renderTime12hOptions = renderTime12hOptions;
 window.getTeacherName = getTeacherName;
 Object.defineProperty(window, 'teachersList', { get() { return state.teachersList; }, configurable: true });
 

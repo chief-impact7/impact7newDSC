@@ -13,7 +13,7 @@ import { deriveLevelPeriod } from '@impact7/shared/enrollment-derivation';
 import { isEnrollableStatus, STATUS_TONE } from '@impact7/shared/enrollment-status';
 import { state, LEAVE_STATUSES, LEVEL_SHORT } from './state.js';
 import {
-    esc, escAttr, formatTime12h, oxDisplayClass,
+    esc, escAttr, formatTime12h, renderTime12hSelect, oxDisplayClass,
     nowTimeStr, showSaveIndicator, showToast, _stripYear
 } from './ui-utils.js';
 import {
@@ -1460,14 +1460,17 @@ export function renderStudentDetail(studentId) {
 export function renderClinicInputs(studentId, extraVisit, isReadonly) {
     const v = extraVisit || {};
     const dateOn = isReadonly ? 'readonly' : `onchange="saveExtraVisit('${escAttr(studentId)}', 'date', this.value)"`;
-    const timeOn = isReadonly ? 'readonly' : `onchange="saveExtraVisit('${escAttr(studentId)}', 'time', this.value)"`;
+    const timeAttr = isReadonly ? 'disabled' : `onchange="saveExtraVisit('${escAttr(studentId)}', 'time', this.value)"`;
     const reasonOn = isReadonly ? 'readonly' : `onchange="saveExtraVisit('${escAttr(studentId)}', 'reason', this.value)"`;
     return `<div style="display:flex;flex-direction:column;gap:6px;">
         <div style="display:flex;gap:6px;">
             <input type="date" class="field-input" style="flex:1;padding:4px 8px;font-size:12px;"
                 value="${escAttr(v.date || '')}" ${dateOn}>
-            <input type="time" class="field-input" style="width:100px;padding:4px 8px;font-size:12px;"
-                value="${escAttr(v.time || '')}" ${timeOn}>
+            ${renderTime12hSelect({
+                value: v.time || '16:00',
+                dataAttr: timeAttr,
+                style: 'width:105px;padding:4px 8px;font-size:12px;',
+            })}
         </div>
         <input type="text" class="field-input" style="width:100%;padding:4px 8px;font-size:12px;"
             placeholder="사유 (예: 보충수업, 재시험 등)"

@@ -6,7 +6,7 @@ import { doc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { auditUpdate, auditSet } from './audit.js';
 import { state } from './state.js';
-import { esc, escAttr, showSaveIndicator, _fmtTs, _stripYear, _renderRescheduleHistory } from './ui-utils.js';
+import { esc, escAttr, showSaveIndicator, renderTime12hSelect, _fmtTs, _stripYear, _renderRescheduleHistory } from './ui-utils.js';
 import { makeDailyRecordId } from './student-helpers.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
@@ -506,8 +506,11 @@ export function renderAbsenceRecordCard(studentId) {
                         <div style="display:flex;align-items:center;gap:4px;${makeupActions ? 'margin-bottom:4px;' : ''}">
                             <input type="date" class="field-input" style="font-size:12px;width:130px;" value="${escAttr(makeupDateVal)}"
                                 onchange="updateAbsenceField('${escAttr(r.docId)}', 'makeup_date', this.value, '${escAttr(studentId)}')" />
-                            <input type="time" class="field-input" style="font-size:12px;width:100px;" value="${escAttr(makeupTimeVal)}"
-                                onchange="updateAbsenceField('${escAttr(r.docId)}', 'makeup_time', this.value, '${escAttr(studentId)}')" />
+                            ${renderTime12hSelect({
+                                value: makeupTimeVal,
+                                dataAttr: `onchange="updateAbsenceField('${escAttr(r.docId)}', 'makeup_time', this.value, '${escAttr(studentId)}')"`,
+                                style: 'font-size:12px;width:105px;',
+                            })}
                             ${isUndecided ? `<span style="font-size:11px;color:var(--warning);font-weight:600;">미정</span>` :
                               !hasMakeupDate ? `<button class="hw-fail-type-btn" style="font-size:11px;color:var(--text-sec);"
                                 onclick="updateAbsenceField('${escAttr(r.docId)}', 'makeup_date', 'undecided', '${escAttr(studentId)}')">미정</button>` : ''}

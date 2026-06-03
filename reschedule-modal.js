@@ -6,7 +6,7 @@ import { arrayUnion, doc } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { state } from './state.js';
 import {
-    esc, formatTime12h, showSaveIndicator, _stripYear
+    esc, formatTime12h, renderTime12hOptions, showSaveIndicator, _stripYear
 } from './ui-utils.js';
 import { auditUpdate } from './audit.js';
 
@@ -24,6 +24,13 @@ export function initRescheduleModalDeps(deps) {
 
 let _rescheduleTarget = null;
 
+function setRescheduleTime(value) {
+    const el = document.getElementById('reschedule-time');
+    if (!el) return;
+    el.innerHTML = renderTime12hOptions(value || '16:00');
+    el.value = value || '16:00';
+}
+
 export function openRescheduleModal(collection, docId, studentId) {
     const dateLabel = document.getElementById('reschedule-date-label');
     const timeField = document.getElementById('reschedule-time-field');
@@ -38,7 +45,7 @@ export function openRescheduleModal(collection, docId, studentId) {
         document.getElementById('reschedule-prev-info').innerHTML =
             `<strong>현재 보충 예정:</strong> ${r.makeup_date ? esc(_stripYear(r.makeup_date)) : '미정'}${r.makeup_time ? ' ' + esc(formatTime12h(r.makeup_time)) : ''}`;
         document.getElementById('reschedule-date').value = '';
-        document.getElementById('reschedule-time').value = r.makeup_time || '16:00';
+        setRescheduleTime(r.makeup_time || '16:00');
         document.getElementById('reschedule-reason').value = '';
         document.getElementById('reschedule-modal').style.display = 'flex';
         return;
@@ -54,13 +61,13 @@ export function openRescheduleModal(collection, docId, studentId) {
         timeField.style.display = 'none';
         document.getElementById('reschedule-prev-info').innerHTML =
             `<strong>현재 기한:</strong> ${t.scheduled_date ? esc(_stripYear(t.scheduled_date)) : '미정'}`;
-        document.getElementById('reschedule-time').value = '';
+        setRescheduleTime('16:00');
     } else {
         dateLabel.textContent = '새 날짜';
         timeField.style.display = '';
         document.getElementById('reschedule-prev-info').innerHTML =
             `<strong>현재 예정:</strong> ${t.scheduled_date ? esc(_stripYear(t.scheduled_date)) : '미정'}${t.scheduled_time ? ' ' + esc(formatTime12h(t.scheduled_time)) : ''}`;
-        document.getElementById('reschedule-time').value = t.scheduled_time || '16:00';
+        setRescheduleTime(t.scheduled_time || '16:00');
     }
     document.getElementById('reschedule-date').value = '';
     document.getElementById('reschedule-reason').value = '';

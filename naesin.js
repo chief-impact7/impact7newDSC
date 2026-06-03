@@ -336,7 +336,10 @@ export function renderNaesinDetail(studentId) {
             <div class="naesin-day-badge ${dayCls}">${_esc(day)}</div>
             <span class="naesin-time${isOverride ? ' naesin-time-override' : ''}">${_esc(formatted)}</span>
             <span class="naesin-time-label${isOverride ? ' naesin-time-override' : ''}">${timeLabel}</span>
-            <span class="naesin-edit-btn" onclick="window.editNaesinTime('${_escAttr(studentId)}', '${_escAttr(day)}')">수정</span>
+            <select class="field-input time12-select" style="width:105px;padding:4px 8px;font-size:12px;"
+                onchange="window.editNaesinTime('${_escAttr(studentId)}', '${_escAttr(day)}', this.value)">
+                ${window._renderTime12hOptions ? window._renderTime12hOptions(timeText || '16:00') : ''}
+            </select>
         </div>`;
     }).join('') : '<div class="detail-card-empty">등원 요일을 선택하세요</div>';
 
@@ -469,7 +472,7 @@ window.openNaesinClinic = function(studentId) {
 };
 
 // ─── 등원시간 수정 ────────────────────────────────────────────────────────────
-window.editNaesinTime = async function(studentId, day) {
+window.editNaesinTime = async function(studentId, day, selectedTime = null) {
     const { allStudents, selectedDate, classSettings } = _state();
 
     const student = allStudents?.find(s => s.docId === studentId);
@@ -486,7 +489,7 @@ window.editNaesinTime = async function(studentId, day) {
     // 현재 시간 결정 (개별 우선, 반 기본 fallback)
     const currentTime = getNaesinTime(enrollment, csKey, day, classSettings);
 
-    const newTime = window.prompt(
+    const newTime = selectedTime ?? window.prompt(
         `${day}요일 등원시간 수정 (예: 14:00)\n현재: ${currentTime || '없음'}`,
         currentTime
     );
@@ -735,7 +738,10 @@ export function renderTeukangDetail(studentId) {
             <div class="naesin-schedule-row" style="margin-top:8px;">
                 <span class="naesin-time${isOverride ? ' naesin-time-override' : ''}">${_esc(formatted)}</span>
                 <span class="naesin-time-label${isOverride ? ' naesin-time-override' : ''}">${timeLabel}</span>
-                <span class="naesin-edit-btn" onclick="window.editTeukangTime('${_escAttr(studentId)}', '${_escAttr(classCode)}')">수정</span>
+                <select class="field-input time12-select" style="width:105px;padding:4px 8px;font-size:12px;margin-left:auto;"
+                    onchange="window.editTeukangTime('${_escAttr(studentId)}', '${_escAttr(classCode)}', this.value)">
+                    ${window._renderTime12hOptions ? window._renderTime12hOptions(effectiveTime || '16:00') : ''}
+                </select>
             </div>
         </div>`;
 
@@ -853,7 +859,7 @@ window.toggleTeukangDay = async function(studentId, classCode, day) {
 };
 
 // ─── 특강 등원시간 수정 ──────────────────────────────────────────────────────
-window.editTeukangTime = async function(studentId, classCode) {
+window.editTeukangTime = async function(studentId, classCode, selectedTime = null) {
     const { allStudents, classSettings } = _state();
     const student = allStudents?.find(s => s.docId === studentId);
     if (!student) return;
@@ -870,7 +876,7 @@ window.editTeukangTime = async function(studentId, classCode) {
     const classDefault = classSchedule[firstDay] || '';
     const currentTime = enrollments[idx].start_time || classDefault;
 
-    const newTime = window.prompt(
+    const newTime = selectedTime ?? window.prompt(
         `${classCode} 등원시간 수정 (예: 16:00)\n현재: ${currentTime || '없음'}\n반 기본: ${classDefault || '없음'}`,
         currentTime
     );

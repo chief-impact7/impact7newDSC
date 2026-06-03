@@ -6,7 +6,7 @@ import { doc, writeBatch } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { auditUpdate, auditSet, batchUpdate, batchSet } from './audit.js';
 import { state } from './state.js';
-import { esc, escAttr, showSaveIndicator, oxDisplayClass, formatTime12h, _stripYear } from './ui-utils.js';
+import { esc, escAttr, showSaveIndicator, oxDisplayClass, formatTime12h, renderTime12hSelect, _stripYear } from './ui-utils.js';
 import { makeDailyRecordId, branchFromStudent } from './student-helpers.js';
 
 // 재입력 버튼으로 명시적으로 편집 요청된 item 추적 (pending이지만 폼 표시)
@@ -145,8 +145,12 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
                             <label class="field-label" style="font-size:11px;color:var(--text-sec);flex-shrink:0;">등원일시</label>
                             <input type="date" class="field-input hw-fail-input" data-test-field="scheduled_date" style="flex:1;padding:4px 8px;font-size:12px;"
                                 value="${escAttr(action.scheduled_date || '')}">
-                            <input type="time" class="field-input hw-fail-input" data-test-field="scheduled_time" style="width:90px;padding:4px 8px;font-size:12px;"
-                                value="${escAttr(action.scheduled_time || '')}" placeholder="시간">
+                            ${renderTime12hSelect({
+                                value: action.scheduled_time || '16:00',
+                                dataAttr: 'data-test-field="scheduled_time"',
+                                className: 'hw-fail-input',
+                                style: 'width:105px;padding:4px 8px;font-size:12px;',
+                            })}
                         </div>
                         <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc((action.handler || state.currentUser?.email || '').split('@')[0])}</div>
                         <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveTestFailFields('${escAttr(studentId)}', '${escapedItem}', this)">
