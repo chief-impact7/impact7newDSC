@@ -3,9 +3,10 @@
 // Phase 3-3
 
 import { doc, getDoc, getDocFromServer, writeBatch, arrayUnion, deleteField, addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db } from './firebase-config.js';
+import { db, auth } from './firebase-config.js';
 import { todayStr } from './src/shared/firestore-helpers.js';
-import { auditUpdate, auditDelete, batchUpdate, READ_ONLY } from './audit.js';
+import { auditUpdate, auditDelete, batchUpdate, batchSet, READ_ONLY } from './audit.js';
+import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { state, DAY_ORDER } from './state.js';
 import { esc, escAttr, showSaveIndicator, showToast } from './ui-utils.js';
 import { matchesBranchFilter, enrollmentCode, getActiveEnrollments, resolveNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE } from './student-helpers.js';
@@ -1142,16 +1143,56 @@ export async function addStudentToTeukang(classCode, studentId) {
     }
 
     const newEnrollment = _buildTeukangEnrollment(classCode);
+    const prevStatus = student.status || '';
+    const shouldReactivate = !isEnrollableStatus(prevStatus);
+    if (shouldReactivate) {
+        const ok = confirm(
+            `${student.name || studentId} 학생은 현재 ${prevStatus || '상태없음'} 상태입니다.\n\n` +
+            `특강 저장을 위해 상태를 '재원'으로 전환하고 이력을 남깁니다. 계속하시겠습니까?`
+        );
+        if (!ok) return;
+    }
 
     showSaveIndicator('saving');
     try {
-        await auditUpdate(doc(db, 'students', studentId), {
+        const studentRef = doc(db, 'students', studentId);
+        const update = {
             enrollments: arrayUnion(newEnrollment),
             status2: '특강',
-        });
+        };
+        if (shouldReactivate) {
+            const actor = auth.currentUser?.email || window._auditUser || 'unknown';
+            update.status = '재원';
+            update.status_changed_at = serverTimestamp();
+            update.status_changed_by = actor;
+            update.status_previous = prevStatus || null;
+
+            const batch = writeBatch(db);
+            batchUpdate(batch, studentRef, update);
+            batchSet(batch, doc(collection(db, 'history_logs')), {
+                doc_id: studentId,
+                change_type: 'RETURN',
+                before: `상태:${prevStatus}`,
+                after: `상태:재원, 반:${classCode} (특강 재원전환)`,
+                google_login_id: actor,
+                timestamp: serverTimestamp(),
+            });
+            batchSet(batch, doc(collection(db, 'history_logs')), {
+                doc_id: studentId,
+                change_type: 'STATUS_CHANGE',
+                before: JSON.stringify({ status: prevStatus }),
+                after: JSON.stringify({ status: '재원' }),
+                google_login_id: actor,
+                timestamp: serverTimestamp(),
+            });
+            await batch.commit();
+        } else {
+            await auditUpdate(studentRef, update);
+        }
         if (!READ_ONLY) {
             student.enrollments = [...(student.enrollments || []), newEnrollment];
             student.status2 = '특강';
+            if (shouldReactivate) student.status = '재원';
             if (isFromRemote) {
                 state.allStudents.push(student);
                 state.allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));

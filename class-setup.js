@@ -1194,18 +1194,65 @@ window.submitWizard = async function () {
                 timestamp: serverTimestamp(),
             });
         };
+        const _pushStatusChangeLog = (b, docId, beforeStatus, afterStatus, afterText) => {
+            batchSet(b, doc(collection(db, 'history_logs')), {
+                doc_id: docId,
+                change_type: 'RETURN',
+                before: `상태:${beforeStatus || ''}`,
+                after: afterText,
+                google_login_id: _logActor,
+                timestamp: serverTimestamp(),
+            });
+            batchSet(b, doc(collection(db, 'history_logs')), {
+                doc_id: docId,
+                change_type: 'STATUS_CHANGE',
+                before: JSON.stringify({ status: beforeStatus || '' }),
+                after: JSON.stringify({ status: afterStatus }),
+                google_login_id: _logActor,
+                timestamp: serverTimestamp(),
+            });
+        };
+        const _specialReactivations = d.classType === '특강'
+            ? d.students.filter(student => !isEnrollableStatus(student.status))
+            : [];
+        if (_specialReactivations.length) {
+            const ok = confirm(
+                `다음 학생은 현재 재원 상태가 아닙니다:\n${_specialReactivations.map(s => `${s.name || s.docId} (${s.status || '상태없음'})`).join(', ')}\n\n` +
+                `특강 저장을 위해 상태를 '재원'으로 전환하고 이력을 남깁니다. 계속하시겠습니까?`
+            );
+            if (!ok) {
+                btn.disabled = false;
+                btn.innerHTML = '<span class="material-symbols-outlined">check</span> 반 생성';
+                return;
+            }
+        }
         const _rejectedStudents = [];
         for (const student of d.students) {
             // 재원생만 반배정 가능 — 상담/퇴원/종강은 제외 (enrollment-status 정합성)
-            if (!isEnrollableStatus(student.status)) {
+            if (d.classType !== '특강' && !isEnrollableStatus(student.status)) {
                 _rejectedStudents.push(student.name || student.docId);
                 continue;
             }
             const studentRef = doc(db, 'students', student.docId);
+            let studentUpdate = null;
 
             // 특강 수강생은 모두 status2: '특강' 설정
             if (d.classType === '특강') {
-                batchUpdate(batch, studentRef, { status2: '특강' });
+                studentUpdate = { status2: '특강' };
+                if (!isEnrollableStatus(student.status)) {
+                    studentUpdate.status = '재원';
+                    studentUpdate.status_changed_at = serverTimestamp();
+                    studentUpdate.status_changed_by = _logActor;
+                    studentUpdate.status_previous = student.status || null;
+                    _pushStatusChangeLog(
+                        batch,
+                        student.docId,
+                        student.status || '',
+                        '재원',
+                        `상태:재원, 반:${d.classCode} (특강 재원전환)`
+                    );
+                    student.status = '재원';
+                }
             }
 
             const newEnrollment = {
@@ -1295,6 +1342,7 @@ window.submitWizard = async function () {
                 }
             } else {
                 batchUpdate(batch, studentRef, {
+                    ...(studentUpdate || {}),
                     enrollments: arrayUnion(newEnrollment),
                 });
                 _pushFormationLog(batch, student.docId, '—', `추가: ${d.classCode} (특강) 누적`);
