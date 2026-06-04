@@ -194,6 +194,14 @@ body {
     cursor: pointer;
     padding: 0;
 }
+.dash-date-nav .dash-text-btn {
+    width: auto;
+    min-width: 58px;
+    padding: 0 10px;
+    font-size: 13px;
+    font-family: inherit;
+    white-space: nowrap;
+}
 .dash-date-nav button:hover { background: var(--bg); }
 .dash-date-nav .material-symbols-outlined { font-size: 20px; }
 .dash-range-label {
@@ -203,6 +211,12 @@ body {
     border-radius: 6px;
     background: var(--bg);
     white-space: nowrap;
+}
+.dash-range-label.week {
+    min-width: 154px;
+    text-align: center;
+    font-weight: 600;
+    color: var(--text);
 }
 .dash-date-warning {
     font-size: 12px;
@@ -395,6 +409,151 @@ body {
     margin-top: 8px;
 }
 
+/* ─── 기간 로그북 ─── */
+.period-log-page {
+    padding: 20px 24px;
+}
+.period-log-board {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+.period-board-head {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 18px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+.period-board-head > div {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+}
+.period-board-head .material-symbols-outlined {
+    color: var(--primary);
+}
+.period-board-head > span {
+    font-size: 13px;
+    color: var(--text-sec);
+}
+.period-metrics {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 10px;
+}
+.period-metric {
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+.period-metric-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-sec);
+    white-space: nowrap;
+}
+.period-metric-label .material-symbols-outlined {
+    font-size: 18px;
+    color: var(--primary);
+}
+.period-metric-value {
+    margin-top: 6px;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text);
+}
+.period-metric-note {
+    margin-top: 2px;
+    font-size: 11px;
+    color: var(--text-third);
+}
+.period-section {
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+.period-section-wide {
+    grid-column: 1 / -1;
+}
+.period-section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+.period-section-head strong {
+    font-size: 15px;
+}
+.period-section-head span {
+    font-size: 12px;
+    color: var(--text-sec);
+    text-align: right;
+}
+.period-chart {
+    width: 100%;
+    height: 260px;
+}
+.period-chart-wide {
+    height: 300px;
+}
+.period-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+}
+.period-details {
+    margin-top: 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.period-details summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--bg);
+    cursor: pointer;
+    font-size: 13px;
+}
+.period-details summary span {
+    color: var(--text-sec);
+}
+.period-split-charts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+.period-class-table th button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+.period-detail-cards {
+    padding: 16px 0 0;
+}
+
 /* ─── 테이블 (카드 내부) ─── */
 .dash-table {
     width: 100%;
@@ -456,22 +615,22 @@ body {
 
 .daily-log-side-card.withdrawal {
     order: 1;
-    background: #f6f0ff;
+    background: #fff7f6;
 }
 
 .daily-log-side-card.leave {
     order: 2;
-    background: #eef7ff;
+    background: #fff9ea;
 }
 
 .daily-log-side-card.absent {
     order: 3;
-    background: #fff7f6;
+    background: #f6f0ff;
 }
 
 .daily-log-side-card.late {
     order: 4;
-    background: #fff9ea;
+    background: #eef7ff;
 }
 
 .daily-log-metric {
@@ -533,19 +692,19 @@ body {
 }
 
 .daily-log-side-head.withdrawal {
-    background: #6b45b6;
-}
-
-.daily-log-side-head.leave {
-    background: #1672b8;
-}
-
-.daily-log-side-head.absent {
     background: #c82014;
 }
 
-.daily-log-side-head.late {
+.daily-log-side-head.leave {
     background: #c27a00;
+}
+
+.daily-log-side-head.absent {
+    background: #6b45b6;
+}
+
+.daily-log-side-head.late {
+    background: #1672b8;
 }
 
 .daily-log-main-head > div,
@@ -597,7 +756,7 @@ body {
     transition: transform .15s ease;
 }
 
-.daily-log-details[open] .daily-log-chev { transform: rotate(90deg); }
+.daily-log-details[open] > summary .daily-log-chev { transform: rotate(90deg); }
 
 .daily-log-group-title {
     display: flex;
@@ -620,6 +779,57 @@ body {
     white-space: nowrap;
 }
 
+.daily-log-class-list {
+    display: grid;
+    gap: 10px;
+    padding: 0 12px 12px;
+}
+
+.daily-log-class-details {
+    border: 1px solid var(--daily-border);
+    border-radius: 10px;
+    background: #fff;
+    overflow: hidden;
+}
+
+.daily-log-class-details > summary {
+    min-height: 44px;
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    cursor: pointer;
+    list-style: none;
+    background: #f8f6f1;
+}
+
+.daily-log-class-details > summary::-webkit-details-marker { display: none; }
+
+.daily-log-class-details > summary strong {
+    color: var(--daily-green-dark);
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.daily-log-class-details > summary span:last-child {
+    color: var(--daily-muted);
+    font-size: 12px;
+    font-weight: 700;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.daily-log-class-chev {
+    color: var(--daily-green-accent);
+    font-size: 20px;
+    transition: transform .15s ease;
+}
+
+.daily-log-class-details[open] > summary .daily-log-class-chev { transform: rotate(90deg); }
+
 .daily-log-counts,
 .daily-log-chips {
     display: flex;
@@ -629,32 +839,6 @@ body {
 
 .daily-log-counts {
     justify-content: flex-end;
-}
-
-.daily-log-class-block {
-    border-top: 1px solid var(--daily-border);
-}
-
-.daily-log-class-head {
-    min-height: 42px;
-    background: var(--daily-green-light);
-    border-bottom: 1px solid var(--daily-border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 0 14px;
-}
-
-.daily-log-class-head strong {
-    color: var(--daily-green-dark);
-    font-size: 14px;
-}
-
-.daily-log-class-head span {
-    color: var(--daily-muted);
-    font-size: 12px;
-    font-weight: 700;
 }
 
 .daily-log-table-wrap {
@@ -736,6 +920,8 @@ body {
 .daily-log-pill.info { background: #e5f3ee; color: var(--daily-green-accent); }
 .daily-log-pill.gold { background: var(--daily-gold-light); color: #775315; }
 .daily-log-pill.dark { background: var(--daily-green-dark); color: #fff; }
+.daily-log-pill.count-late { background: #eef7ff; color: #1672b8; }
+.daily-log-pill.count-absent { background: #f6f0ff; color: #6b45b6; }
 
 .daily-log-chip {
     border: 1px solid rgba(0, 0, 0, .1);
@@ -912,6 +1098,36 @@ body {
         height: 160px;
         min-height: 120px;
     }
+    .period-log-page {
+        padding: 12px;
+    }
+    .period-log-board {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    .period-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .period-board-head,
+    .period-section-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+    }
+    .period-section-head span {
+        text-align: left;
+    }
+    .period-chart,
+    .period-chart-wide {
+        height: 240px;
+    }
+    .period-detail-grid,
+    .period-split-charts {
+        grid-template-columns: 1fr;
+    }
+    .period-detail-cards {
+        padding-top: 12px;
+    }
     .dash-donut-wrap {
         width: 100px;
         height: 100px;
@@ -939,6 +1155,14 @@ body {
         display: block;
         margin-top: 2px;
     }
+    .daily-log-class-details > summary {
+        grid-template-columns: 24px minmax(0, 1fr);
+    }
+    .daily-log-class-details > summary span:last-child {
+        grid-column: 2;
+        text-align: left;
+        white-space: normal;
+    }
 }
 
 @media (max-width: 540px) {
@@ -953,9 +1177,29 @@ body {
     .dash-filter-group input[type="date"] {
         flex: 1;
     }
+    .dash-date-nav {
+        flex-wrap: wrap;
+    }
+    .dash-range-label.week {
+        flex-basis: 100%;
+        min-width: 0;
+    }
     .dash-chart {
         height: 140px;
         min-height: 100px;
+    }
+    .period-metrics {
+        grid-template-columns: 1fr;
+    }
+    .period-chart,
+    .period-chart-wide {
+        height: 220px;
+    }
+    .period-metric {
+        padding: 12px;
+    }
+    .period-metric-value {
+        font-size: 22px;
     }
 }
 

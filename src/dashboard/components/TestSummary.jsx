@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import ReactECharts from 'echarts-for-react';
 import { TEST_FIELDS } from '../constants.js';
 
 const BAR_COLORS = ['#1a73e8', '#188038', '#f9ab00', '#d93025'];
@@ -16,7 +16,7 @@ function median(arr) {
 function TestSummary({ checks }) {
     const [showStudents, setShowStudents] = useState(false);
 
-    const { fieldStats, chartData, studentRows } = useMemo(() => {
+    const { fieldStats, chartOption, studentRows } = useMemo(() => {
         const stats = {};
         TEST_FIELDS.forEach(f => {
             stats[f.key] = { label: f.label, scores: [], sum: 0, count: 0 };
@@ -52,6 +52,27 @@ function TestSummary({ checks }) {
                 응시: s.count,
             };
         });
+        const option = {
+            color: BAR_COLORS,
+            tooltip: {
+                trigger: 'axis',
+                confine: true,
+                axisPointer: { type: 'shadow' },
+            },
+            grid: { top: 18, right: 12, bottom: 28, left: 34 },
+            xAxis: { type: 'category', data: chart.map(d => d.label), axisLabel: { fontSize: 12 } },
+            yAxis: { type: 'value', min: 0, max: 100, axisLabel: { fontSize: 11 } },
+            series: [{
+                name: '평균',
+                type: 'bar',
+                barMaxWidth: 36,
+                itemStyle: {
+                    borderRadius: [4, 4, 0, 0],
+                    color: ({ dataIndex }) => BAR_COLORS[dataIndex % BAR_COLORS.length],
+                },
+                data: chart.map(d => d.평균),
+            }],
+        };
 
         // 학생별 행
         const rows = Object.keys(studentScores).sort().map(name => {
@@ -63,7 +84,7 @@ function TestSummary({ checks }) {
             return row;
         });
 
-        return { fieldStats: stats, chartData: chart, studentRows: rows };
+        return { fieldStats: stats, chartOption: option, studentRows: rows };
     }, [checks]);
 
     const hasData = TEST_FIELDS.some(f => fieldStats[f.key].count > 0);
@@ -103,18 +124,7 @@ function TestSummary({ checks }) {
                         </div>
 
                         <div className="dash-chart">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={chartData} barCategoryGap="30%">
-                                    <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                                    <YAxis tick={{ fontSize: 11 }} width={30} domain={[0, 100]} />
-                                    <Tooltip />
-                                    <Bar dataKey="평균" radius={[4, 4, 0, 0]}>
-                                        {chartData.map((_, i) => (
-                                            <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
-                                        ))}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
+                            <ReactECharts option={chartOption} style={{ width: '100%', height: '100%' }} notMerge lazyUpdate />
                         </div>
 
                         {studentRows.length > 0 && (

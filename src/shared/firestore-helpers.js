@@ -152,6 +152,20 @@ export async function fetchDailyRecordsForDate(date) {
     return list;
 }
 
+export async function fetchDailyRecordsRange(startDate, endDate) {
+    const q = query(
+        collection(db, 'daily_records'),
+        where('date', '>=', startDate),
+        where('date', '<=', endDate)
+    );
+    const snap = await getDocs(q);
+    const list = [];
+    snap.forEach(docSnap => {
+        list.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    return list;
+}
+
 export async function fetchTempAttendancesForDate(date) {
     const q = query(
         collection(db, 'temp_attendance'),
@@ -322,8 +336,21 @@ export const studentShortLabel = studentFullLabel;
 
 // ─── 날짜 유틸 ───
 
-export const toDateStrKST = (date) => date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
-export const parseDateKST = (dateStr) => new Date(dateStr + 'T00:00:00+09:00');
+const pad2 = (value) => String(value).padStart(2, '0');
+
+export const toDateStrKST = (date) => {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+    const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+    return `${kst.getUTCFullYear()}-${pad2(kst.getUTCMonth() + 1)}-${pad2(kst.getUTCDate())}`;
+};
+export const parseDateKST = (dateStr) => {
+    const raw = String(dateStr || '').trim();
+    const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return new Date(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])) - 9 * 60 * 60 * 1000);
+    const slash = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (slash) return new Date(Date.UTC(Number(slash[3]), Number(slash[1]) - 1, Number(slash[2])) - 9 * 60 * 60 * 1000);
+    return new Date(raw);
+};
 
 export function todayStr() {
     return toDateStrKST(new Date());

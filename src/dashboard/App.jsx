@@ -3,28 +3,61 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../../firebase-config.js';
 import { signInWithGoogle, logout } from '../../auth.js';
 import { useStudents, useDashboardData } from './hooks/useFirestore.js';
-import { branchFromStudent, enrollmentCode, todayStr, addDays, toDateStrKST, parseDateKST, fetchSemesterSettings, getSemestersForDate } from '../shared/firestore-helpers.js';
+import { branchFromStudent, enrollmentCode, todayStr, fetchSemesterSettings, getSemestersForDate } from '../shared/firestore-helpers.js';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
-import OverviewCard from './components/OverviewCard.jsx';
-import AttendanceSummary from './components/AttendanceSummary.jsx';
-import HomeworkSummary from './components/HomeworkSummary.jsx';
-import TestSummary from './components/TestSummary.jsx';
-import RetestSummary from './components/RetestSummary.jsx';
-import ScheduleSummary from './components/ScheduleSummary.jsx';
-import PostponedTasks from './components/PostponedTasks.jsx';
 import DailyLogBoard from './components/DailyLogBoard.jsx';
 import GradeFilter from './components/GradeFilter.jsx';
+import PeriodLogBoard from './components/PeriodLogBoard.jsx';
 
-// 이번 주 월요일~일요일 구하기
+const pad2 = (value) => String(value).padStart(2, '0');
+const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})/;
+const US_DATE_RE = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
+
+function dateParts(dateStr) {
+    const raw = String(dateStr || '').trim();
+    const iso = raw.match(ISO_DATE_RE);
+    if (iso) return { y: Number(iso[1]), m: Number(iso[2]), d: Number(iso[3]) };
+    const us = raw.match(US_DATE_RE);
+    if (us) return { y: Number(us[3]), m: Number(us[1]), d: Number(us[2]) };
+    return null;
+}
+
+function datePartsToIso(parts) {
+    if (!parts || !parts.y || !parts.m || !parts.d) return '';
+    return `${parts.y}-${pad2(parts.m)}-${pad2(parts.d)}`;
+}
+
+function normalizeDateStr(dateStr) {
+    return datePartsToIso(dateParts(dateStr)) || todayStr();
+}
+
+function addDays(dateStr, days) {
+    const parts = dateParts(normalizeDateStr(dateStr));
+    const utcNoon = Date.UTC(parts.y, parts.m - 1, parts.d, 12) + days * 24 * 60 * 60 * 1000;
+    const shifted = new Date(utcNoon);
+    return `${shifted.getUTCFullYear()}-${pad2(shifted.getUTCMonth() + 1)}-${pad2(shifted.getUTCDate())}`;
+}
+
+// 선택한 기준일이 속한 월요일~일요일
 function getWeekRange(dateStr) {
-    const d = parseDateKST(dateStr);
-    const day = d.getDay();
+    const iso = normalizeDateStr(dateStr);
+    const parts = dateParts(iso);
+    const day = new Date(Date.UTC(parts.y, parts.m - 1, parts.d, 12)).getUTCDay();
     const diffToMon = day === 0 ? -6 : 1 - day;
-    const monday = new Date(d);
-    monday.setDate(d.getDate() + diffToMon);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    return { start: toDateStrKST(monday), end: toDateStrKST(sunday) };
+    const startDate = addDays(iso, diffToMon);
+    return { startDate, endDate: addDays(startDate, 6) };
+}
+
+function formatWeekRangeLabel(startDate, endDate) {
+    const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+    const fmt = (dateStr) => {
+        if (!dateStr) return '-';
+        const iso = normalizeDateStr(dateStr);
+        const parts = dateParts(iso);
+        const day = new Date(Date.UTC(parts.y, parts.m - 1, parts.d, 12)).getUTCDay();
+        return `${iso.slice(5).replace('-', '/')}(${dayNames[day]})`;
+    };
+    return `${fmt(startDate)} - ${fmt(endDate)}`;
 }
 
 function SkeletonCard() {
@@ -88,15 +121,17 @@ export default function App() {
     const dateRangeSwapped = rangeType === 'custom' && customStart > customEnd;
 
     // 날짜 범위 계산
+    const normalizedBaseDate = useMemo(() => normalizeDateStr(baseDate), [baseDate]);
+
     const { startDate, endDate } = useMemo(() => {
-        if (rangeType === 'day') return { startDate: baseDate, endDate: baseDate };
-        if (rangeType === 'week') return getWeekRange(baseDate);
+        if (rangeType === 'day') return { startDate: normalizedBaseDate, endDate: normalizedBaseDate };
+        if (rangeType === 'week') return getWeekRange(normalizedBaseDate);
         return { startDate: validCustomStart, endDate: validCustomEnd };
-    }, [rangeType, baseDate, validCustomStart, validCustomEnd]);
+    }, [rangeType, normalizedBaseDate, validCustomStart, validCustomEnd]);
 
     // 데이터 로드
     const { students, loading: studentsLoading, error } = useStudents(user);
-    const { checks, postponed, dailyLog, loading: dataLoading, error: dashError } = useDashboardData(user, startDate, endDate);
+    const { checks, dailyRecords, postponed, dailyLog, loading: dataLoading, error: dashError } = useDashboardData(user, startDate, endDate);
 
     // 선택 날짜 기준 학기 감지
     const currentSemesters = useMemo(() =>
@@ -124,26 +159,53 @@ export default function App() {
 
     // 필터 적용된 checks
     const filteredChecks = useMemo(() => {
+        const LEVEL_SHORT = { '초등': '초', '중등': '중', '고등': '고' };
+        const gradeKey = (s) => (LEVEL_SHORT[s?.level] || '') + (s?.grade ?? '');
+        const studentById = new Map(students.map(s => [s.id, s]));
         return checks.filter(c => {
             if (branchFilter && c.branch !== branchFilter) return false;
             if (classFilter && c.class_code !== classFilter) return false;
+            if (gradeFilter?.size) {
+                const student = studentById.get(c.student_id);
+                if (student && !gradeFilter.has(gradeKey(student))) return false;
+            }
             return true;
         });
-    }, [checks, branchFilter, classFilter]);
+    }, [checks, branchFilter, classFilter, gradeFilter, students]);
 
     const filteredPostponed = useMemo(() => {
-        if (!branchFilter && !classFilter) return postponed;
+        if (!branchFilter && !classFilter && !gradeFilter?.size) return postponed;
+        const LEVEL_SHORT = { '초등': '초', '중등': '중', '고등': '고' };
+        const gradeKey = (s) => (LEVEL_SHORT[s?.level] || '') + (s?.grade ?? '');
         return postponed.filter(p => {
             const student = students.find(s => s.id === p.student_id);
             if (!student) return true;
             if (branchFilter && branchFromStudent(student) !== branchFilter) return false;
+            if (gradeFilter?.size && !gradeFilter.has(gradeKey(student))) return false;
             if (classFilter) {
                 const hasClass = (student.enrollments || []).some(e => enrollmentCode(e) === classFilter);
                 if (!hasClass) return false;
             }
             return true;
         });
-    }, [postponed, branchFilter, classFilter, students]);
+    }, [postponed, branchFilter, classFilter, gradeFilter, students]);
+
+    const filteredDailyRecords = useMemo(() => {
+        const LEVEL_SHORT = { '초등': '초', '중등': '중', '고등': '고' };
+        const gradeKey = (s) => (LEVEL_SHORT[s?.level] || '') + (s?.grade ?? '');
+        const studentById = new Map(students.map(s => [s.id, s]));
+        return dailyRecords.filter(rec => {
+            const student = studentById.get(rec.student_id);
+            if (!student) return !branchFilter && !classFilter && !gradeFilter?.size;
+            if (branchFilter && branchFromStudent(student) !== branchFilter) return false;
+            if (gradeFilter?.size && !gradeFilter.has(gradeKey(student))) return false;
+            if (classFilter) {
+                const hasClass = (student.enrollments || []).some(e => enrollmentCode(e) === classFilter);
+                if (!hasClass) return false;
+            }
+            return true;
+        });
+    }, [dailyRecords, branchFilter, classFilter, gradeFilter, students]);
 
     const handleDashboardLogin = async () => {
         setLoginError('');
@@ -249,11 +311,11 @@ export default function App() {
                     <div className="dash-filter-group">
                         <label>날짜</label>
                         <div className="dash-date-nav">
-                            <button onClick={() => setBaseDate(addDays(baseDate, -1))}>
+                            <button onClick={() => setBaseDate(addDays(normalizedBaseDate, -1))}>
                                 <span className="material-symbols-outlined">chevron_left</span>
                             </button>
-                            <input type="date" value={baseDate} onChange={e => setBaseDate(e.target.value)} />
-                            <button onClick={() => setBaseDate(addDays(baseDate, 1))}>
+                            <input type="date" value={normalizedBaseDate} onChange={e => setBaseDate(e.target.value)} />
+                            <button onClick={() => setBaseDate(addDays(normalizedBaseDate, 1))}>
                                 <span className="material-symbols-outlined">chevron_right</span>
                             </button>
                             <button onClick={() => setBaseDate(todayStr())} title="오늘">
@@ -265,18 +327,19 @@ export default function App() {
 
                 {rangeType === 'week' && (
                     <div className="dash-filter-group">
-                        <label>주</label>
+                        <label>기준일</label>
                         <div className="dash-date-nav">
-                            <button onClick={() => setBaseDate(addDays(baseDate, -7))}>
+                            <button onClick={() => setBaseDate(addDays(normalizedBaseDate, -7))}>
                                 <span className="material-symbols-outlined">chevron_left</span>
                             </button>
-                            <span className="dash-range-label">{startDate} ~ {endDate}</span>
-                            <button onClick={() => setBaseDate(addDays(baseDate, 7))}>
+                            <input type="date" value={normalizedBaseDate} onChange={e => setBaseDate(e.target.value)} />
+                            <button onClick={() => setBaseDate(addDays(normalizedBaseDate, 7))}>
                                 <span className="material-symbols-outlined">chevron_right</span>
                             </button>
-                            <button onClick={() => setBaseDate(todayStr())} title="이번 주">
-                                <span className="material-symbols-outlined">today</span>
+                            <button className="dash-text-btn" onClick={() => setBaseDate(todayStr())}>
+                                이번 주
                             </button>
+                            <span className="dash-range-label week">{formatWeekRangeLabel(startDate, endDate)}</span>
                         </div>
                     </div>
                 )}
@@ -338,38 +401,27 @@ export default function App() {
                     </ErrorBoundary>
                 )
             ) : (
-                <div className="dash-grid">
+                <div className="period-log-page">
                     {loading ? (
-                        <>
+                        <div className="dash-grid">
                             <SkeletonCard />
                             <SkeletonCard />
                             <SkeletonCard />
                             <SkeletonCard />
                             <SkeletonCard />
                             <SkeletonCard />
-                        </>
+                        </div>
                     ) : (
                         <>
                             <ErrorBoundary>
-                                <OverviewCard checks={filteredChecks} students={students} />
-                            </ErrorBoundary>
-                            <ErrorBoundary>
-                                <AttendanceSummary checks={filteredChecks} startDate={startDate} endDate={endDate} />
-                            </ErrorBoundary>
-                            <ErrorBoundary>
-                                <HomeworkSummary checks={filteredChecks} />
-                            </ErrorBoundary>
-                            <ErrorBoundary>
-                                <TestSummary checks={filteredChecks} />
-                            </ErrorBoundary>
-                            <ErrorBoundary>
-                                <RetestSummary checks={filteredChecks} />
-                            </ErrorBoundary>
-                            <ErrorBoundary>
-                                <ScheduleSummary checks={filteredChecks} />
-                            </ErrorBoundary>
-                            <ErrorBoundary>
-                                <PostponedTasks tasks={filteredPostponed} />
+                                <PeriodLogBoard
+                                    checks={filteredChecks}
+                                    dailyRecords={filteredDailyRecords}
+                                    students={students}
+                                    postponed={filteredPostponed}
+                                    startDate={startDate}
+                                    endDate={endDate}
+                                />
                             </ErrorBoundary>
                         </>
                     )}

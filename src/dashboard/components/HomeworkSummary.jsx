@@ -1,21 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import ReactECharts from 'echarts-for-react';
 import { HW_FIELDS } from '../constants.js';
 
 const PIE_COLORS = ['#188038', '#d93025', '#f9ab00', '#dadce0'];
-
-const RADIAN = Math.PI / 180;
-function renderPieLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent }) {
-    if (percent < 0.05) return null;
-    const radius = innerRadius + (outerRadius - innerRadius) * 1.4;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-    return (
-        <text x={x} y={y} fill="var(--text-pri)" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={11}>
-            {`${(percent * 100).toFixed(0)}%`}
-        </text>
-    );
-}
 
 function HomeworkSummary({ checks }) {
     const [showIncomplete, setShowIncomplete] = useState(false);
@@ -63,6 +50,24 @@ function HomeworkSummary({ checks }) {
         { name: 'X (미완)', value: totalX },
         { name: '△ (부분)', value: totalTri },
     ].filter(d => d.value > 0);
+    const pieOption = {
+        color: PIE_COLORS,
+        tooltip: { trigger: 'item', confine: true },
+        series: [{
+            name: '숙제',
+            type: 'pie',
+            radius: ['48%', '76%'],
+            center: ['50%', '50%'],
+            avoidLabelOverlap: true,
+            label: {
+                color: '#202124',
+                fontSize: 11,
+                formatter: ({ percent }) => percent >= 5 ? `${Math.round(percent)}%` : '',
+            },
+            labelLine: { length: 8, length2: 8 },
+            data: pieData,
+        }],
+    };
 
     const rateColor = overallRate >= 80 ? 'var(--success)' : overallRate >= 50 ? 'var(--warning)' : 'var(--danger)';
     const incompleteStudents = Object.keys(incompleteByStudent).sort();
@@ -86,22 +91,7 @@ function HomeworkSummary({ checks }) {
                         <div className="dash-flex-row">
                             {pieData.length > 0 && (
                                 <div className="dash-donut-wrap">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            <Pie
-                                                data={pieData}
-                                                dataKey="value"
-                                                cx="50%"
-                                                cy="50%"
-                                                innerRadius={30}
-                                                outerRadius={50}
-                                                label={renderPieLabel}
-                                            >
-                                                {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
-                                            </Pie>
-                                            <Tooltip />
-                                        </PieChart>
-                                    </ResponsiveContainer>
+                                    <ReactECharts option={pieOption} style={{ width: '100%', height: '100%' }} notMerge lazyUpdate />
                                 </div>
                             )}
                             <div className="dash-stats" style={{ flex: 1, marginBottom: 0 }}>

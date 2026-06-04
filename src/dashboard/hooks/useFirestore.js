@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
     fetchStudents,
     fetchDailyChecksRange,
+    fetchDailyRecordsRange,
     fetchPostponedTasksRange,
     fetchDashboardDailyLogData,
 } from '../../shared/firestore-helpers.js';
@@ -41,6 +42,7 @@ export function useStudents(user) {
 // 기간별 daily_checks + postponed_tasks 로드
 export function useDashboardData(user, startDate, endDate) {
     const [checks, setChecks] = useState([]);
+    const [dailyRecords, setDailyRecords] = useState([]);
     const [postponed, setPostponed] = useState([]);
     const [dailyLog, setDailyLog] = useState(emptyDailyLogData);
     const [loading, setLoading] = useState(false);
@@ -52,11 +54,13 @@ export function useDashboardData(user, startDate, endDate) {
         setError(null);
         Promise.all([
             fetchDailyChecksRange(startDate, endDate),
+            fetchDailyRecordsRange(startDate, endDate),
             fetchPostponedTasksRange(startDate, endDate),
             startDate === endDate ? fetchDashboardDailyLogData(startDate) : Promise.resolve(null),
         ])
-            .then(([c, p, log]) => {
+            .then(([c, records, p, log]) => {
                 setChecks(c);
+                setDailyRecords(records);
                 setPostponed(p);
                 if (log) setDailyLog(log);
                 else setDailyLog(emptyDailyLogData());
@@ -70,5 +74,5 @@ export function useDashboardData(user, startDate, endDate) {
 
     useEffect(() => { reload(); }, [reload]);
 
-    return { checks, postponed, dailyLog, loading, reload, error };
+    return { checks, dailyRecords, postponed, dailyLog, loading, reload, error };
 }

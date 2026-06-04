@@ -1,13 +1,10 @@
 import React, { useMemo } from 'react';
-import {
-    BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
-    LineChart, Line,
-} from 'recharts';
+import ReactECharts from 'echarts-for-react';
 
 const COLORS = { 출석: '#188038', 결석: '#d93025', 지각: '#f9ab00', 조퇴: '#e67e22' };
 
 function AttendanceSummary({ checks, startDate, endDate }) {
-    const { counts, rate, dailyData, rateData, summaryText } = useMemo(() => {
+    const { counts, rate, dailyData, summaryText, dailyOption, rateOption } = useMemo(() => {
         const cnt = { 출석: 0, 결석: 0, 지각: 0, 조퇴: 0 };
         const byDate = {};
 
@@ -55,7 +52,46 @@ function AttendanceSummary({ checks, startDate, endDate }) {
             ? `평균 출석률 ${avgRate}%, 최다 결석일: ${worstDay}`
             : `평균 출석률 ${avgRate}%`;
 
-        return { counts: cnt, rate: r, dailyData: daily, rateData: rData, summaryText: summary };
+        const commonGrid = { top: 18, right: 12, bottom: 28, left: 34 };
+        const commonTooltip = { trigger: 'axis', confine: true };
+        const dailyChart = {
+            color: [COLORS.출석, COLORS.지각, COLORS.조퇴, COLORS.결석],
+            tooltip: commonTooltip,
+            grid: commonGrid,
+            xAxis: { type: 'category', data: daily.map(d => d.label), axisLabel: { fontSize: 11 } },
+            yAxis: { type: 'value', axisLabel: { fontSize: 11 } },
+            series: ['출석', '지각', '조퇴', '결석'].map(key => ({
+                name: key,
+                type: 'bar',
+                stack: 'attendance',
+                emphasis: { focus: 'series' },
+                data: daily.map(d => d[key]),
+            })),
+        };
+        const rateChart = {
+            color: ['#1a73e8'],
+            tooltip: { ...commonTooltip, valueFormatter: value => `${value}%` },
+            grid: commonGrid,
+            xAxis: { type: 'category', data: rData.map(d => d.label), axisLabel: { fontSize: 11 } },
+            yAxis: { type: 'value', min: 0, max: 100, axisLabel: { fontSize: 11, formatter: '{value}%' } },
+            series: [{
+                name: '출석률',
+                type: 'line',
+                smooth: true,
+                symbolSize: 7,
+                lineStyle: { width: 2 },
+                data: rData.map(d => d.출석률),
+            }],
+        };
+
+        return {
+            counts: cnt,
+            rate: r,
+            dailyData: daily,
+            summaryText: summary,
+            dailyOption: dailyChart,
+            rateOption: rateChart,
+        };
     }, [checks]);
 
     return (
@@ -96,35 +132,11 @@ function AttendanceSummary({ checks, startDate, endDate }) {
                 {dailyData.length > 1 && (
                     <>
                         <div className="dash-chart">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={dailyData} barGap={0} barCategoryGap="20%">
-                                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                                    <YAxis tick={{ fontSize: 11 }} width={30} />
-                                    <Tooltip />
-                                    <Bar dataKey="출석" stackId="a" fill={COLORS.출석} />
-                                    <Bar dataKey="지각" stackId="a" fill={COLORS.지각} />
-                                    <Bar dataKey="조퇴" stackId="a" fill={COLORS.조퇴} />
-                                    <Bar dataKey="결석" stackId="a" fill={COLORS.결석} />
-                                </BarChart>
-                            </ResponsiveContainer>
+                            <ReactECharts option={dailyOption} style={{ width: '100%', height: '100%' }} notMerge lazyUpdate />
                         </div>
 
                         <div className="dash-chart">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={rateData}>
-                                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                                    <YAxis tick={{ fontSize: 11 }} width={30} domain={[0, 100]} unit="%" />
-                                    <Tooltip formatter={(v) => `${v}%`} />
-                                    <Line
-                                        type="monotone"
-                                        dataKey="출석률"
-                                        stroke="#1a73e8"
-                                        strokeWidth={2}
-                                        dot={{ r: 3 }}
-                                        activeDot={{ r: 5 }}
-                                    />
-                                </LineChart>
-                            </ResponsiveContainer>
+                            <ReactECharts option={rateOption} style={{ width: '100%', height: '100%' }} notMerge lazyUpdate />
                         </div>
 
                         <p className="dash-card-header-meta" style={{ marginTop: 4, textAlign: 'center' }}>

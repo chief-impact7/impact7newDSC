@@ -523,6 +523,22 @@ function countRows(rows, attendance) {
     return rows.filter(row => row.attendance === attendance).length;
 }
 
+function groupRowsByClass(rows) {
+    const map = new Map();
+    rows.forEach(row => {
+        const code = row.classCode || '미지정';
+        if (!map.has(code)) map.set(code, []);
+        map.get(code).push(row);
+    });
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b, 'ko'));
+}
+
+function classGroupTitle(groupKey, code) {
+    const label = GROUP_LABELS[groupKey] || '';
+    if (!label || code === label) return code;
+    return `${code} ${label}`;
+}
+
 function attendanceClass(status) {
     if (status === '출석' || status === '조퇴' || status === '완료') return 'ok';
     if (status === '결석') return 'bad';
@@ -624,17 +640,30 @@ function LogTable({ rows, diagnostic = false }) {
     );
 }
 
-function RegularGroup({ classCode, rows }) {
+function ClassGroup({ groupKey, classCode, rows, open = false }) {
     const late = countRows(rows, '지각');
     const absent = countRows(rows, '결석');
     const issues = rows.reduce((sum, row) => sum + rowIssueCount(row), 0);
     return (
-        <div className="daily-log-class-block">
-            <div className="daily-log-class-head">
-                <strong>{classCode} 정규</strong>
+        <details className="daily-log-class-details" open={open}>
+            <summary>
+                <span className="material-symbols-outlined daily-log-class-chev">chevron_right</span>
+                <strong>{classGroupTitle(groupKey, classCode)}</strong>
                 <span>{rows.length}명 · 지각 {late} · 결석 {absent} · 이슈 {issues}</span>
-            </div>
+            </summary>
             <LogTable rows={rows} />
+        </details>
+    );
+}
+
+function ClassGroupedRows({ groupKey, rows, entries, empty }) {
+    const groupedEntries = entries || groupRowsByClass(rows);
+    if (groupedEntries.length === 0) return <div className="daily-log-empty">{empty || '해당 학생 없음'}</div>;
+    return (
+        <div className="daily-log-class-list">
+            {groupedEntries.map(([code, classRows]) => (
+                <ClassGroup key={`${groupKey}-${code}`} groupKey={groupKey} classCode={code} rows={classRows} />
+            ))}
         </div>
     );
 }
@@ -653,12 +682,14 @@ function AccordionGroup({ groupKey, rows, children, open = false }) {
                 </div>
                 <div className="daily-log-counts">
                     <span className="daily-log-pill info">{rows.length}명</span>
-                    {late > 0 && <span className="daily-log-pill warn">지각 {late}</span>}
-                    {absent > 0 && <span className="daily-log-pill bad">결석 {absent}</span>}
+                    {late > 0 && <span className="daily-log-pill count-late">지각 {late}</span>}
+                    {absent > 0 && <span className="daily-log-pill count-absent">결석 {absent}</span>}
                     {issueCount > 0 && <span className="daily-log-pill gold">이슈 {issueCount}</span>}
                 </div>
             </summary>
-            {children || <LogTable rows={rows} diagnostic={groupKey === 'diagnostic'} />}
+            {children || (groupKey === 'diagnostic'
+                ? <LogTable rows={rows} diagnostic />
+                : <ClassGroupedRows groupKey={groupKey} rows={rows} />)}
         </details>
     );
 }
@@ -725,13 +756,9 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                         <span>{fmtDate(date)} ({getDayName(date)})</span>
                     </div>
                     <div className="daily-log-accordion">
-                        <AccordionGroup groupKey="diagnostic" rows={data.groups.diagnostic} open />
-                        <AccordionGroup groupKey="regular" rows={regularRows} open>
-                            {regularEntries.length === 0 ? (
-                                <div className="daily-log-empty">정규 학생 없음</div>
-                            ) : regularEntries.map(([code, rows]) => (
-                                <RegularGroup key={code} classCode={code} rows={rows} />
-                            ))}
+                        <AccordionGroup groupKey="diagnostic" rows={data.groups.diagnostic} />
+                        <AccordionGroup groupKey="regular" rows={regularRows}>
+                            <ClassGroupedRows groupKey="regular" rows={regularRows} entries={regularEntries} empty="정규 학생 없음" />
                         </AccordionGroup>
                         {OPTIONAL_GROUPS.map(key => (
                             <AccordionGroup key={key} groupKey={key} rows={data.groups[key]} />
