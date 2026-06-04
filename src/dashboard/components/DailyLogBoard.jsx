@@ -162,6 +162,38 @@ function startTime(enrollment, dayName, classSettings) {
         || '';
 }
 
+function earliestExpectedTime({ enrollments, dayName, classSettings, rec, hwTasks, testTasks, absences, date }) {
+    const times = [];
+    enrollments.forEach(enrollment => {
+        const time = startTime(enrollment, dayName, classSettings);
+        if (time) times.push(time);
+    });
+    hwTasks.forEach(task => {
+        if (task.type === '등원' && task.scheduled_date === date && task.scheduled_time) times.push(task.scheduled_time);
+    });
+    testTasks.forEach(task => {
+        if (task.type === '등원' && task.scheduled_date === date && task.scheduled_time) times.push(task.scheduled_time);
+    });
+    [rec.hw_fail_action, rec.test_fail_action].forEach(actionMap => {
+        Object.values(actionMap || {}).forEach(action => {
+            if (action.type === '등원' && action.scheduled_date === date && action.scheduled_time) times.push(action.scheduled_time);
+        });
+    });
+    if (rec.extra_visit?.date === date && rec.extra_visit.time) times.push(rec.extra_visit.time);
+    absences.forEach(absence => {
+        if (
+            absence.resolution === '보충'
+            && absence.makeup_date === date
+            && absence.status !== 'closed'
+            && absence.makeup_status !== '미등원'
+            && absence.makeup_time
+        ) {
+            times.push(absence.makeup_time);
+        }
+    });
+    return times.sort()[0] || '';
+}
+
 function mapByStudent(rows) {
     const map = new Map();
     rows.forEach(row => {
@@ -317,7 +349,16 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
             rec.departure?.status ? `귀가: ${rec.departure.status}${rec.departure.time ? ` ${fmtTime(rec.departure.time)}` : ''}` : '',
             rec.extra_visit?.date === date ? `비정규: ${rec.extra_visit.reason || '클리닉'} ${fmtTime(rec.extra_visit.time)}` : '',
         ].filter(Boolean).join(' / ');
-        const expectedTime = startTime(primaryEnroll, dayName, classSettings) || rec.extra_visit?.time || '';
+        const expectedTime = earliestExpectedTime({
+            enrollments: todayEnrolls,
+            dayName,
+            classSettings,
+            rec,
+            hwTasks: studentHwTasks,
+            testTasks: studentTestTasks,
+            absences: studentAbsences,
+            date,
+        });
         const arrivalTime = attendance.time || rec.arrival_time || '';
         const classTeacher = teacherNameForClass(classSettings, code);
 
