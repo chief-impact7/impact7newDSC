@@ -163,7 +163,7 @@ export function _getReturnUpcomingStudents() {
         if (state.selectedBranch && s.branch !== state.selectedBranch) continue;
         const end = parseDateKST(s.pause_end_date);
         const daysLeft = Math.ceil((end - now) / 86400000);
-        if (daysLeft < 0 || daysLeft > 14) continue;
+        if (daysLeft > 14) continue;
         results.push({ student: s, daysLeft, leaveRequest: approvedByStudent.get(s.docId) || null });
     }
     results.sort((a, b) => a.daysLeft - b.daysLeft);
@@ -184,14 +184,16 @@ export function renderReturnUpcomingList() {
     countEl.textContent = `${items.length}건`;
 
     if (items.length === 0) {
-        container.innerHTML = '<div class="empty-state">2주 이내 복귀예정 학생이 없습니다.</div>';
+        container.innerHTML = '<div class="empty-state">복귀예정/만료 학생이 없습니다.</div>';
         return;
     }
 
-    const urgent = items.filter(x => x.daysLeft <= 7);
+    const expired = items.filter(x => x.daysLeft < 0);
+    const urgent = items.filter(x => x.daysLeft >= 0 && x.daysLeft <= 7);
     const soon = items.filter(x => x.daysLeft > 7);
 
     const groups = [
+        { label: '복귀만료', items: expired, ddayCls: 'expired' },
         { label: '1주일 이내 복귀예정', items: urgent, ddayCls: 'urgent' },
         { label: '2주일 이내 복귀예정', items: soon, ddayCls: 'soon' }
     ];
@@ -203,7 +205,7 @@ export function renderReturnUpcomingList() {
         for (const { student: s, daysLeft, leaveRequest: lr } of g.items) {
             const isActive = s.docId === state.selectedStudentId;
             const codes = allClassCodes(s).join(', ');
-            const ddayLabel = daysLeft === 0 ? 'D-Day' : `D-${daysLeft}`;
+            const ddayLabel = daysLeft < 0 ? `만료 ${Math.abs(daysLeft)}일` : daysLeft === 0 ? 'D-Day' : `D-${daysLeft}`;
             const typeBadge = _leaveTypeBadgeOrFallback(lr, s.status);
             const consultDone = s.return_consult_done;
             const consultIcon = `<span class="return-consult-icon material-symbols-outlined" title="복귀상담" style="color:${consultDone ? '#22c55e' : '#f59e0b'};" onclick="event.stopPropagation();toggleReturnConsult('${escAttr(s.docId)}')">${consultDone ? 'check_circle' : 'phone_in_talk'}</span>`;

@@ -150,11 +150,15 @@ export async function saveReschedule() {
         t.scheduled_time = newTime || '';
         if (!t.reschedule_history) t.reschedule_history = [];
         t.reschedule_history.push(entry);
-        // 로컬 캐시 동기화: daily_records.hw_fail_action도 갱신 (후속대책 카드 pre-fill 일치)
+        // 로컬 캐시 동기화: 후속대책 카드/학부모알림 pre-fill 일치
         const rec = state.dailyRecords[t.student_id];
         if (rec?.hw_fail_action?.[t.domain]) {
             rec.hw_fail_action[t.domain].scheduled_date = newDate;
             if (t.type !== '대체숙제') rec.hw_fail_action[t.domain].scheduled_time = newTime || '';
+        }
+        if (rec?.test_fail_action?.[t.domain]) {
+            rec.test_fail_action[t.domain].scheduled_date = newDate;
+            if (t.type !== '대체숙제') rec.test_fail_action[t.domain].scheduled_time = newTime || '';
         }
 
         document.getElementById('reschedule-modal').style.display = 'none';

@@ -153,15 +153,11 @@ export function collectStudentDaySummary(studentId) {
     const matchedTestTasks = state.testFailTasks.filter(t => t.student_id === studentId && t.status === 'pending');
     matchedHwTasks.filter(t => t.source_date === state.selectedDate || t.scheduled_date === state.selectedDate).forEach(t => {
         const key = t.domain || t.type || 'etc';
-        if (!summary.hw_fail_actions[key]) {
-            summary.hw_fail_actions[key] = { type: t.type, scheduled_date: t.scheduled_date, scheduled_time: t.scheduled_time, alt_hw: t.alt_hw };
-        }
+        summary.hw_fail_actions[key] = { type: t.type, scheduled_date: t.scheduled_date, scheduled_time: t.scheduled_time, alt_hw: t.alt_hw };
     });
     matchedTestTasks.filter(t => t.source_date === state.selectedDate || t.scheduled_date === state.selectedDate).forEach(t => {
         const key = t.domain || t.type || 'etc';
-        if (!summary.test_fail_actions[key]) {
-            summary.test_fail_actions[key] = { type: t.type, scheduled_date: t.scheduled_date, scheduled_time: t.scheduled_time, alt_hw: t.alt_hw };
-        }
+        summary.test_fail_actions[key] = { type: t.type, scheduled_date: t.scheduled_date, scheduled_time: t.scheduled_time, alt_hw: t.alt_hw };
     });
 
     return summary;
