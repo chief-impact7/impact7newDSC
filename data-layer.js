@@ -324,12 +324,20 @@ export async function promoteWithdrawalDate() {
     if (toWithdraw.length === 0) return;
     const batch = writeBatch(db);
     for (const s of toWithdraw) {
-        batchUpdate(batch, doc(db, 'students', s.docId), { status: '퇴원' });
+        batchUpdate(batch, doc(db, 'students', s.docId), {
+            status: '퇴원',
+            enrollments: [],
+            pre_withdrawal_status: deleteField()
+        });
     }
     try {
         await batch.commit();
         if (READ_ONLY) return;
-        toWithdraw.forEach(s => { s.status = '퇴원'; });
+        toWithdraw.forEach(s => {
+            s.status = '퇴원';
+            s.enrollments = [];
+            delete s.pre_withdrawal_status;
+        });
         const toWithdrawSet = new Set(toWithdraw);
         state.allStudents = state.allStudents.filter(s => !toWithdrawSet.has(s));
         state.withdrawnStudents.push(...toWithdraw);
