@@ -45,6 +45,11 @@ const shortEmailName = (value) => {
     if (!raw) return '';
     return raw.split('@')[0] || raw;
 };
+const teacherNameForClass = (classSettings, code) => shortEmailName(classSettings?.[code]?.teacher);
+const teacherNamesForClasses = (classSettings, codes) => {
+    const names = codes.map(code => teacherNameForClass(classSettings, code)).filter(Boolean);
+    return [...new Set(names)].join(', ');
+};
 
 function isWithdrawnAt(student, date) {
     if (student.status === '퇴원' || student.status === '종강') return true;
@@ -314,13 +319,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
         ].filter(Boolean).join(' / ');
         const expectedTime = startTime(primaryEnroll, dayName, classSettings) || rec.extra_visit?.time || '';
         const arrivalTime = attendance.time || rec.arrival_time || '';
-        const absentOwnerRecord = studentAbsences.find(a => a.marked_absent_by || a.created_by || a.updated_by);
-        const absentOwner = shortEmailName(
-            absentOwnerRecord?.marked_absent_by
-            || absentOwnerRecord?.created_by
-            || absentOwnerRecord?.updated_by
-            || rec.updated_by
-        );
+        const classTeacher = teacherNameForClass(classSettings, code);
 
         const row = {
             id,
@@ -332,7 +331,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
             sideMeta: attStatus === '지각'
                 ? `${fmtTime(arrivalTime)}/${fmtTime(expectedTime)}`
                 : attStatus === '결석'
-                    ? (absentOwner || '미지정')
+                    ? (classTeacher || '미지정')
                     : '',
             homework: chips,
             tests,
@@ -362,6 +361,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
         gradeKey,
         typeSet: WITHDRAW_REQUEST_TYPES,
         rowType: 'withdrawal',
+        classSettings,
     });
     const leaveRows = buildLeaveRows({
         requests: leaveRequests,
@@ -372,6 +372,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
         gradeKey,
         typeSet: LEAVE_REQUEST_TYPES,
         rowType: 'leave',
+        classSettings,
     });
 
     return {
@@ -394,7 +395,7 @@ function normalizeClassCodes(value) {
     return String(value).split(/[,·\s]+/).map(v => v.trim()).filter(Boolean);
 }
 
-function buildLeaveRows({ requests, students, branchFilter, classFilter, gradeFilter, gradeKey, typeSet, rowType }) {
+function buildLeaveRows({ requests, students, branchFilter, classFilter, gradeFilter, gradeKey, typeSet, rowType, classSettings }) {
     return requests
         .filter(request => request.status === 'approved' && typeSet.has(request.request_type))
         .map(request => {
@@ -426,7 +427,7 @@ function buildLeaveRows({ requests, students, branchFilter, classFilter, gradeFi
                 name: request.student_name || student?.name || request.student_id || '(이름 없음)',
                 meta: [student ? studentShortLabel(student) : '', request.branch].filter(Boolean).join(' · '),
                 classCode: classText,
-                sideMeta: shortEmailName(request.approved_by || request.teacher_approved_by || request.requested_by) || '미지정',
+                sideMeta: teacherNamesForClasses(classSettings, classCodes) || '미지정',
                 notes: note,
             };
         })
