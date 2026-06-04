@@ -474,6 +474,10 @@ export function renderLeaveRequestCard(studentId) {
     // 재등원요청(퇴원 → 재원)만 퇴원요청서 카드에 남김.
     const leaveRecords = records.filter(r => !_isWithdrawalType(r.request_type) && !_isReEnrollType(r.request_type));
     const withdrawRecords = records.filter(r => _isWithdrawalType(r.request_type) || _isReEnrollType(r.request_type));
+    const approvedWithdrawalRecords = withdrawRecords.filter(r => _isWithdrawalType(r.request_type) && r.status === 'approved');
+    const futureWithdrawal = approvedWithdrawalRecords.find(r => r.withdrawal_date && r.withdrawal_date > today);
+    const isWithdrawalStarted = approvedWithdrawalRecords.some(r => r.withdrawal_date && r.withdrawal_date <= today)
+        || (student?.withdrawal_date && student.withdrawal_date <= today);
 
     const btnStyle = 'font-size:11px;padding:2px 8px;margin-left:auto;display:inline-flex;align-items:center;gap:4px;';
     let cards = '';
@@ -499,10 +503,13 @@ export function renderLeaveRequestCard(studentId) {
     }
 
     // 퇴원요청서 카드
-    const withdrawBtn = isWithdrawnStu
+    const withdrawBtn = isWithdrawnStu || isWithdrawalStarted
         ? `<button class="lr-btn lr-btn-tonal" style="${btnStyle}" onclick="openReEnrollModal('${escAttr(studentId)}')">
             <span class="material-symbols-outlined" style="font-size:14px;">person_add</span>재등원</button>`
-        : '';
+        : futureWithdrawal
+            ? `<button class="lr-btn lr-btn-tonal" style="${btnStyle}" onclick="cancelScheduledWithdrawal('${escAttr(studentId)}')">
+                <span class="material-symbols-outlined" style="font-size:14px;">close</span>퇴원취소</button>`
+            : '';
     if (withdrawRecords.length > 0 || withdrawBtn) {
         cards += `<div class="detail-card">
             <div class="detail-card-title" style="display:flex;align-items:center;gap:6px;">
@@ -759,6 +766,57 @@ export async function cancelScheduledLeave(studentId) {
         renderStudentDetail(studentId);
     } catch (err) {
         alert('휴원 취소 처리 실패: ' + err.message);
+    }
+}
+
+export async function cancelScheduledWithdrawal(studentId) {
+    const student = findStudent(studentId);
+    if (!student) { alert('학생 정보를 찾을 수 없습니다.'); return; }
+
+    const today = todayStr();
+    if (student.status === '퇴원') { alert('이미 퇴원이 시작된 학생입니다. 재등원 처리를 사용하세요.'); return; }
+    if (student.withdrawal_date && student.withdrawal_date <= today) { alert('퇴원시작일이 지났습니다. 재등원 처리를 사용하세요.'); return; }
+
+    const targets = state.leaveRequests.filter(r =>
+        r.student_id === studentId
+        && _isWithdrawalType(r.request_type)
+        && r.status === 'approved'
+        && r.withdrawal_date
+        && r.withdrawal_date > today
+    );
+    if (targets.length === 0) {
+        alert('취소할 예약 퇴원 요청이 없습니다.');
+        return;
+    }
+
+    const dates = [...new Set(targets.map(r => r.withdrawal_date))].sort().join(', ');
+    if (!confirm(`${student.name} 학생의 예약된 퇴원을 취소하시겠습니까?\n(퇴원시작일: ${dates})`)) return;
+
+    showSaveIndicator('saving');
+    try {
+        const batch = writeBatch(db);
+        batchUpdate(batch, doc(db, 'students', studentId), {
+            withdrawal_date: deleteField(),
+            pre_withdrawal_status: deleteField(),
+        });
+        for (const r of targets) {
+            batchUpdate(batch, doc(db, 'leave_requests', r.docId), { status: 'cancelled' });
+        }
+        await batch.commit();
+
+        delete student.withdrawal_date;
+        delete student.pre_withdrawal_status;
+        for (const r of targets) {
+            const idx = state.leaveRequests.findIndex(lr => lr.docId === r.docId);
+            if (idx >= 0) state.leaveRequests[idx].status = 'cancelled';
+        }
+
+        showSaveIndicator('saved');
+        renderSubFilters();
+        if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) renderLeaveRequestList();
+        renderStudentDetail(studentId);
+    } catch (err) {
+        alert('퇴원 취소 처리 실패: ' + err.message);
     }
 }
 

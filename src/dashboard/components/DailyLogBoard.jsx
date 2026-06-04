@@ -40,16 +40,10 @@ const fmtTime = (value) => {
     const displayHour = hour % 12 || 12;
     return `${displayHour}:${match[2]}`;
 };
-const fmtDateTime = (date, time) => [fmtDate(date), time ? fmtTime(time) : ''].filter(Boolean).join(' ');
-const fmtApprovedTime = (value) => {
-    const date = value instanceof Date ? value : (value?.toDate ? value.toDate() : new Date(value));
-    if (Number.isNaN(date.getTime())) return '';
-    return date.toLocaleTimeString('ko-KR', {
-        timeZone: 'Asia/Seoul',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-    });
+const shortEmailName = (value) => {
+    const raw = text(value);
+    if (!raw) return '';
+    return raw.split('@')[0] || raw;
 };
 
 function isWithdrawnAt(student, date) {
@@ -180,24 +174,23 @@ function oxChips(map, label) {
         .map(([key, value]) => ({ label: `${label} ${key} ${value}`, issue: value !== 'O' }));
 }
 
-function actionChips(map) {
+function actionChips(map, tasks = []) {
+    const taskKeys = new Set(tasks.map(task => task.domain || task.item || task.content || '').filter(Boolean));
     return Object.entries(map || {})
         .filter(([, action]) => action?.type)
+        .filter(([key]) => !taskKeys.has(key))
         .map(([key, action]) => {
-            const dateTime = fmtDateTime(action.scheduled_date, action.scheduled_time);
             return {
-                label: `${key} ${action.type}${dateTime ? ` ${dateTime}` : ''}`,
+                label: `${key} ${action.type}`,
                 issue: action.type === '등원',
             };
         });
 }
 
-function taskChips(tasks, label, date) {
+function taskChips(tasks, label) {
     return tasks.map(task => {
         const key = task.domain || task.item || task.content || '';
-        const when = task.scheduled_date === date
-            ? fmtDateTime(task.scheduled_date, task.scheduled_time)
-            : fmtDate(task.source_date);
+        const when = fmtDate(task.source_date || task.original_date || task.created_date);
         return {
             label: `${label}${key ? ` ${key}` : ''}${when ? ` ${when}` : ''}`,
             issue: task.status === 'pending' || task.status === '예정',
@@ -297,14 +290,14 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
         const chips = [
             ...oxChips(rec.hw_domains_1st, '숙제1차'),
             ...oxChips(rec.hw_domains_2nd, '숙제2차'),
-            ...actionChips(rec.hw_fail_action),
-            ...taskChips(studentHwTasks, '숙제미통과', date),
+            ...actionChips(rec.hw_fail_action, studentHwTasks),
+            ...taskChips(studentHwTasks, '숙제미통과'),
         ];
         const tests = [
             ...oxChips(rec.test_domains_1st, '테스트1차'),
             ...oxChips(rec.test_domains_2nd, '테스트2차'),
-            ...actionChips(rec.test_fail_action),
-            ...taskChips(studentTestTasks, '테스트미통과', date),
+            ...actionChips(rec.test_fail_action, studentTestTasks),
+            ...taskChips(studentTestTasks, '테스트미통과'),
         ];
         const notes = [
             rec.note,
@@ -319,14 +312,28 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
             rec.departure?.status ? `귀가: ${rec.departure.status}${rec.departure.time ? ` ${fmtTime(rec.departure.time)}` : ''}` : '',
             rec.extra_visit?.date === date ? `비정규: ${rec.extra_visit.reason || '클리닉'} ${fmtTime(rec.extra_visit.time)}` : '',
         ].filter(Boolean).join(' / ');
+        const expectedTime = startTime(primaryEnroll, dayName, classSettings) || rec.extra_visit?.time || '';
+        const arrivalTime = attendance.time || rec.arrival_time || '';
+        const absentOwnerRecord = studentAbsences.find(a => a.marked_absent_by || a.created_by || a.updated_by);
+        const absentOwner = shortEmailName(
+            absentOwnerRecord?.marked_absent_by
+            || absentOwnerRecord?.created_by
+            || absentOwnerRecord?.updated_by
+            || rec.updated_by
+        );
 
         const row = {
             id,
             name: student.name || id,
             meta: [studentShortLabel(student), code, branchFromStudent(student)].filter(Boolean).join(' · '),
-            time: startTime(primaryEnroll, dayName, classSettings) || rec.extra_visit?.time || '',
+            time: expectedTime,
             attendance: attStatus,
-            attendanceMeta: fmtTime(attendance.time || rec.arrival_time || ''),
+            attendanceMeta: fmtTime(arrivalTime),
+            sideMeta: attStatus === '지각'
+                ? `${fmtTime(arrivalTime)}/${fmtTime(expectedTime)}`
+                : attStatus === '결석'
+                    ? (absentOwner || '미지정')
+                    : '',
             homework: chips,
             tests,
             notes,
@@ -419,7 +426,7 @@ function buildLeaveRows({ requests, students, branchFilter, classFilter, gradeFi
                 name: request.student_name || student?.name || request.student_id || '(이름 없음)',
                 meta: [student ? studentShortLabel(student) : '', request.branch].filter(Boolean).join(' · '),
                 classCode: classText,
-                attendanceMeta: `승인 ${fmtApprovedTime(request.final_approved_at || request.approved_at || request.teacher_approved_at)}`,
+                sideMeta: shortEmailName(request.approved_by || request.teacher_approved_by || request.requested_by) || '미지정',
                 notes: note,
             };
         })
@@ -632,7 +639,7 @@ function SideList({ title, icon, rows, type, hideEmptyBody = false }) {
                         <div key={`${type}-${row.id}`} className="daily-log-side-item">
                             <div className="daily-log-side-top">
                                 <strong>{row.name}</strong>
-                                <span>{row.classCode} · {row.attendanceMeta || fmtTime(row.time)}</span>
+                                <span>{[row.classCode, row.sideMeta || row.attendanceMeta || fmtTime(row.time)].filter(Boolean).join(' · ')}</span>
                             </div>
                             <div className="daily-log-side-note">
                                 {row.notes || row.next || ''}

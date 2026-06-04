@@ -51,7 +51,7 @@ import {
     renderReturnConsultCard, renderLeaveRequestCard,
     toggleReturnConsult, updateReturnConsultNote,
     openLeaveRequestModal, onLeaveRequestTypeChange, searchLeaveRequestStudent, selectLeaveRequestStudentById,
-    submitLeaveRequest, toggleCancelLeaveRequest, cancelScheduledLeave, teacherApproveLeaveRequest,
+    submitLeaveRequest, toggleCancelLeaveRequest, cancelScheduledLeave, cancelScheduledWithdrawal, teacherApproveLeaveRequest,
     approveLeaveRequest, cancelLeaveRequest,
     openReEnrollModal, openReturnFromLeaveModal, submitReturnFromLeave,
     retryFinalize
@@ -217,6 +217,7 @@ window.selectLeaveRequestStudentById = selectLeaveRequestStudentById;
 window.submitLeaveRequest = submitLeaveRequest;
 window.toggleCancelLeaveRequest = toggleCancelLeaveRequest;
 window.cancelScheduledLeave = cancelScheduledLeave;
+window.cancelScheduledWithdrawal = cancelScheduledWithdrawal;
 window.teacherApproveLeaveRequest = teacherApproveLeaveRequest;
 window.approveLeaveRequest = approveLeaveRequest;
 window.cancelLeaveRequest = cancelLeaveRequest;
