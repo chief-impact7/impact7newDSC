@@ -3004,7 +3004,7 @@ onAuthStateChanged(auth, async (user) => {
         window._auditUser = user.email || null;
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('main-screen').style.display = '';
-        document.getElementById('user-email').textContent = user.email;
+        document.getElementById('user-email').textContent = (user.email || '').split('@')[0];
         document.getElementById('user-avatar').textContent = (user.email || 'U')[0].toUpperCase();
 
         // 날짜/UI는 데이터 로드 실패와 무관하게 반드시 표시
