@@ -27,9 +27,21 @@ service cloud.firestore {
     function getUserRole() {
       return get(/databases/$(database)/documents/HR_users/$(request.auth.uid)).data.role;
     }
-    function isDirector() { return isLoggedIn() && getUserRole() == 'director'; }
+    function isOwner() { return isLoggedIn() && getUserRole() == 'owner'; }
+    function isDirector() { return isLoggedIn() && getUserRole() in ['owner', 'director']; }
     function isStaff() { return isLoggedIn() && getUserRole() == 'staff'; }
     function isShortTerm() { return isLoggedIn() && getUserRole() == 'shortterm'; }
+    function canManagePermissions() {
+      return isLoggedIn()
+        && (isDirector()
+            || get(/databases/$(database)/documents/HR_users/$(request.auth.uid)).data.permissions.canManagePermissions == true);
+    }
+    function isImpact7VerifiedEmail() {
+      return isLoggedIn()
+        && request.auth.token.email_verified == true
+        && (request.auth.token.email.matches('.*@gw\\.impact7\\.kr$')
+            || request.auth.token.email.matches('.*@impact7\\.kr$'));
+    }
 
     // =========================================================================
     // [공통] 학생 마스터 컬렉션
@@ -636,11 +648,54 @@ service cloud.firestore {
     // [Director] 사용자/역할 (uid 기반)
     // =========================================================================
     match /HR_users/{uid} {
+      function isSafeShortTermSelfCreate() {
+        return request.resource.data.role == 'shortterm'
+          && isImpact7VerifiedEmail()
+          && request.resource.data.email == request.auth.token.email
+          && request.resource.data.keys().hasOnly(['email', 'name', 'role', 'permissions', 'assignedBuildings'])
+          && request.resource.data.permissions is map
+          && request.resource.data.assignedBuildings is list
+          && request.resource.data.permissions.get('canViewPopulationStats', false) == false
+          && request.resource.data.permissions.get('canViewDashboard', false) == false
+          && request.resource.data.permissions.get('canViewStudents', false) == false
+          && request.resource.data.permissions.get('canEditStudents', false) == false
+          && request.resource.data.permissions.get('canViewStudentPrivateInfo', false) == false
+          && request.resource.data.permissions.get('canViewAttendance', false) == false
+          && request.resource.data.permissions.get('canEditAttendance', false) == false
+          && request.resource.data.permissions.get('canViewConsultations', false) == false
+          && request.resource.data.permissions.get('canEditConsultations', false) == false
+          && request.resource.data.permissions.get('canViewPayments', false) == false
+          && request.resource.data.permissions.get('canManagePayments', false) == false
+          && request.resource.data.permissions.get('canViewSalary', false) == false
+          && request.resource.data.permissions.get('canManagePayroll', false) == false
+          && request.resource.data.permissions.get('canManageEmployees', false) == false
+          && request.resource.data.permissions.get('canManagePermissions', false) == false
+          && request.resource.data.permissions.get('canSendEmail', false) == false;
+      }
+
+      function canUpdateNonOwnerUser() {
+        return canManagePermissions()
+          && request.auth.uid != uid
+          && !(resource.data.role in ['owner', 'director'])
+          && request.resource.data.role in ['manager', 'teacher', 'payment', 'staff', 'shortterm']
+          && request.resource.data.keys().hasOnly(['email', 'name', 'role', 'permissions', 'assignedBuildings'])
+          && request.resource.data.permissions is map
+          && request.resource.data.permissions.get('canManagePermissions', false) == resource.data.permissions.get('canManagePermissions', false);
+      }
+
       allow read: if isLoggedIn() && request.auth.uid == uid;
       allow read: if isDirector();
+      allow read: if canManagePermissions();
       // Allow self-create for bootstrap (only if doc doesn't exist yet)
-      allow create: if isLoggedIn() && request.auth.uid == uid && !exists(/databases/$(database)/documents/HR_users/$(uid));
-      allow write: if isDirector();
+      allow create: if isLoggedIn()
+        && request.auth.uid == uid
+        && !exists(/databases/$(database)/documents/HR_users/$(uid))
+        && (
+          isSafeShortTermSelfCreate()
+          || (uid == 'pdeLLg8tBReyyBLr7HoHnCxWz6Z2' && request.resource.data.role in ['owner', 'director'])
+        );
+      allow update: if isOwner() || canUpdateNonOwnerUser();
+      allow delete: if isOwner();
     }
 
     // =========================================================================

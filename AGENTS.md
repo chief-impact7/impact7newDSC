@@ -32,8 +32,10 @@
 - HR 앱의 사용자 컬렉션은 `director_users` (DB의 `users`와 분리)
 
 ## 코드 품질 관리
-- 빌드 완성 후 커밋 전에 `/simplify`를 실행하여 코드를 정리한다
-- 큰 변경(여러 파일, 인증/보안 관련) 시 푸시 전에 `/code-review` 실행을 권장한다
+- 소스 코드(`.js`·`.ts`·`.tsx`·`.py`·`.svelte` 등) 추가·수정·삭제가 포함된 커밋은 commit 전에 `/simplify` → `/code-review`를 순차 실행하고 결과를 반영한다.
+- 제외: 문서(`*.md`)·lock 파일·JSON 데이터·단순 설정만 바뀐 커밋.
+- skip: 사용자가 "이번엔 commit만"·"급해" 등으로 명시한 경우만 허용한다.
+- 로컬 git hook은 staged source/security diff가 품질 확인 마커 없이 커밋되는 것을 차단한다. simplify/review/fix 후 해당 repo 루트에서 `node /Users/jongsooyi/projects/impact7DB/.agents/hooks/impact7-precommit-quality-guard.mjs --mark`로 현재 staged diff를 표시한다.
 - 푸시하면 Actions로 자동 배포되므로, 푸시 전 점검이 마지막 안전장치다
 
 ## Git 관련
