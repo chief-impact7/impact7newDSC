@@ -9,7 +9,7 @@ import { state } from './state.js';
 import { esc, escAttr, showSaveIndicator, oxDisplayClass, formatTime12h, renderTime12hSelect, _stripYear } from './ui-utils.js';
 import { makeDailyRecordId, branchFromStudent } from './student-helpers.js';
 
-// 재입력 버튼으로 명시적으로 편집 요청된 item 추적 (pending이지만 폼 표시)
+// 명시적으로 편집 요청된 item 추적 (pending이지만 폼 표시)
 const _reopenedTestItems = new Set();
 
 // ─── deps injection ─────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
     }
 
     // pending task 항목은 밀린 Task로 이동됐으므로 숨김.
-    // 단, 재입력 버튼으로 명시적 편집 요청된 항목은 폼을 표시한다.
+    // 단, 명시적으로 편집 요청된 항목은 폼을 표시한다.
     const filteredItems = failItems.filter(item => {
         const isPending = !!state.testFailTasks.find(t =>
             t.student_id === studentId && t.domain === item
@@ -191,7 +191,7 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
     `;
 }
 
-// 닫힌(완료/취소/기타) test_fail_task 항목 — read-only + [재입력] 버튼.
+// 닫힌(완료/취소/기타) test_fail_task 항목.
 function _renderClosedTestFailRow(studentId, item, task) {
     const detail = task.type === '등원'
         ? `${_stripYear(task.scheduled_date || '')}${task.scheduled_time ? ' ' + formatTime12h(task.scheduled_time) : ''}`
@@ -201,10 +201,6 @@ function _renderClosedTestFailRow(studentId, item, task) {
             <div class="hw-fail-domain-header">
                 <span style="font-size:12px;font-weight:600;color:var(--text-main);">${esc(item)}</span>
                 <span style="font-size:11px;padding:1px 6px;border-radius:4px;background:var(--surface-alt);color:var(--text-sec);">처리됨 (${esc(task.status)})</span>
-                <button class="hw-fail-type-btn" style="margin-left:auto;font-size:11px;"
-                    onclick="reopenTestFailDomain('${escAttr(studentId)}', '${escAttr(item)}')">
-                    <span class="material-symbols-outlined" style="font-size:13px;">refresh</span>재입력
-                </button>
             </div>
             <div style="font-size:11px;color:var(--text-sec);padding:4px 0 0 6px;">
                 ${esc(task.type)} · ${esc(detail)}
@@ -213,9 +209,9 @@ function _renderClosedTestFailRow(studentId, item, task) {
     `;
 }
 
-// 닫힌 task를 명시적으로 다시 활성화 (사용자가 [재입력] 누른 경우).
+// 닫힌 task 재활성화는 UI에서 제공하지 않는다. 기존 window API 호환용으로만 유지.
 export async function reopenTestFailDomain(studentId, item) {
-    const taskDocId = `${studentId}_${item}_${state.selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
+    const taskDocId = `test_${studentId}_${item}_${state.selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
     const task = state.testFailTasks.find(t => t.docId === taskDocId);
     if (!task || task.status === 'pending') return;
     if (!confirm(`'${item}' 후속대책을 다시 활성화하시겠습니까?`)) return;
@@ -338,7 +334,6 @@ export async function saveTestFailAction(studentId, testFailAction, onlyDomain) 
             if (!check) continue;
             const { item, action, taskDocId, existing } = check;
             // 닫힌(완료/취소/기타) task는 saveTestFailAction이 건드리지 않는다.
-            // [재입력] 버튼으로만 명시적 reopen 가능 (reopenTestFailDomain).
             if (existing && existing.status && existing.status !== 'pending') continue;
 
             const taskData = {

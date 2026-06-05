@@ -10,7 +10,7 @@ import { esc, escAttr, showSaveIndicator, formatTime12h, renderTime12hSelect, ne
 import { enrollmentCode, getActiveEnrollments, matchesBranchFilter, makeDailyRecordId, branchFromStudent } from './student-helpers.js';
 import { getDayName, studentShortLabel } from './src/shared/firestore-helpers.js';
 
-// 재입력 버튼으로 명시적으로 편집 요청된 domain 추적 (pending이지만 폼 표시)
+// 명시적으로 편집 요청된 domain 추적 (pending이지만 폼 표시)
 const _reopenedHwDomains = new Set();
 
 // ─── deps injection ─────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
     }
 
     // pending task 영역은 밀린 Task로 이동됐으므로 숨김.
-    // 단, 재입력 버튼으로 명시적 편집 요청된 영역은 폼을 표시한다.
+    // 단, 명시적으로 편집 요청된 영역은 폼을 표시한다.
     const filteredDomains = failDomains.filter(domain => {
         const isPending = !!state.hwFailTasks.find(t =>
             t.student_id === studentId && t.domain === domain
@@ -183,7 +183,7 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
     `;
 }
 
-// 닫힌(완료/취소/기타) hw_fail_task 영역 — read-only + [재입력] 버튼.
+// 닫힌(완료/취소/기타) hw_fail_task 영역.
 function _renderClosedHwFailRow(studentId, domain, task) {
     const detail = task.type === '등원'
         ? `${_stripYear(task.scheduled_date || '')}${task.scheduled_time ? ' ' + formatTime12h(task.scheduled_time) : ''}`
@@ -193,10 +193,6 @@ function _renderClosedHwFailRow(studentId, domain, task) {
             <div class="hw-fail-domain-header">
                 <span style="font-size:12px;font-weight:600;color:var(--text-main);">${esc(domain)}</span>
                 <span style="font-size:11px;padding:1px 6px;border-radius:4px;background:var(--surface-alt);color:var(--text-sec);">처리됨 (${esc(task.status)})</span>
-                <button class="hw-fail-type-btn" style="margin-left:auto;font-size:11px;"
-                    onclick="reopenHwFailDomain('${escAttr(studentId)}', '${escAttr(domain)}')">
-                    <span class="material-symbols-outlined" style="font-size:13px;">refresh</span>재입력
-                </button>
             </div>
             <div style="font-size:11px;color:var(--text-sec);padding:4px 0 0 6px;">
                 ${esc(task.type)} · ${esc(detail)}
@@ -205,8 +201,7 @@ function _renderClosedHwFailRow(studentId, domain, task) {
     `;
 }
 
-// 닫힌 task를 명시적으로 다시 활성화 (사용자가 [재입력] 누른 경우).
-// saveHwFailAction의 자동 reopen이 제거되었으므로 이 경로만이 reopen의 유일한 트리거.
+// 닫힌 task 재활성화는 UI에서 제공하지 않는다. 기존 window API 호환용으로만 유지.
 export async function reopenHwFailDomain(studentId, domain) {
     const taskDocId = `${studentId}_${domain}_${state.selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
     const task = state.hwFailTasks.find(t => t.docId === taskDocId);
@@ -335,7 +330,6 @@ export async function saveHwFailAction(studentId, hwFailAction, onlyDomain) {
             if (!check) continue;
             const { domain, action, taskDocId, existing } = check;
             // 닫힌(완료/취소/기타) task는 saveHwFailAction이 건드리지 않는다.
-            // [재입력] 버튼으로만 명시적으로 reopen 가능 (reopenHwFailDomain).
             // 방어적 가드 — UI에서도 이미 입력 필드 자체가 노출되지 않음.
             if (existing && existing.status && existing.status !== 'pending') continue;
 
