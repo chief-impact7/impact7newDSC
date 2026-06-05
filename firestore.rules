@@ -148,7 +148,8 @@ service cloud.firestore {
 
       function hasOnlyAllowedLogFields() {
         return request.resource.data.keys().hasOnly([
-          'doc_id', 'change_type', 'before', 'after', 'google_login_id', 'timestamp'
+          'doc_id', 'change_type', 'before', 'after', 'google_login_id', 'timestamp',
+          'updated_by', 'updated_at'
         ]);
       }
 
