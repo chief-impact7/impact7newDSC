@@ -388,7 +388,14 @@ export async function saveHwFailAction(studentId, hwFailAction, onlyDomain) {
 export function renderPendingTasksCard(studentId, tasks) {
     if (tasks.length === 0) return '';
 
-    const taskRows = tasks.map((t, idx) => {
+    const sortedTasks = [...tasks].sort((a, b) => {
+        const aRescheduled = Array.isArray(a.reschedule_history) && a.reschedule_history.length > 0;
+        const bRescheduled = Array.isArray(b.reschedule_history) && b.reschedule_history.length > 0;
+        if (aRescheduled !== bRescheduled) return aRescheduled ? 1 : -1;
+        return (a.scheduled_date || '').localeCompare(b.scheduled_date || '') || (a.scheduled_time || '').localeCompare(b.scheduled_time || '');
+    });
+
+    const taskRows = sortedTasks.map((t, idx) => {
         const isTest = t.source === 'test';
         const completeFunc = isTest ? 'completeTestFailTask' : 'completeHwFailTask';
         const cancelFunc = isTest ? 'cancelTestFailTask' : 'cancelHwFailTask';
@@ -396,10 +403,17 @@ export function renderPendingTasksCard(studentId, tasks) {
         const sourceLabel = isTest ? '테스트' : '숙제';
         const typeIcon = t.type === '등원' ? '🚶' : '📝';
         const noShow = _isNoShow(t);
+        const isRescheduled = Array.isArray(t.reschedule_history) && t.reschedule_history.length > 0;
+        const rowClass = [
+            'pending-task-row',
+            isRescheduled ? 'rescheduled' : '',
+            noShow ? 'no-show' : '',
+        ].filter(Boolean).join(' ');
 
         // 1줄 요약: 도메인 · 타입 · 출처날짜 + 미등원 뱃지
         const noShowBadge = noShow ? '<span class="no-show-badge">미등원</span>' : '';
-        const summary = `${esc(t.domain)} ${typeIcon} ${esc(t.type)} · ${esc(sourceLabel)} ${esc(_stripYear(t.source_date))}${noShowBadge}`;
+        const rescheduledBadge = isRescheduled ? '<span class="rescheduled-badge">재지정됨</span>' : '';
+        const summary = `${esc(t.domain)} ${typeIcon} ${esc(t.type)} · ${esc(sourceLabel)} ${esc(_stripYear(t.source_date))}${noShowBadge}${rescheduledBadge}`;
 
         // 상세 내용
         const detail = t.type === '등원'
@@ -416,7 +430,7 @@ export function renderPendingTasksCard(studentId, tasks) {
         const historyHtml = _renderRescheduleHistory(t.reschedule_history);
 
         return `
-            <div class="pending-task-row" data-task-idx="${idx}">
+            <div class="${rowClass}" data-task-idx="${idx}">
                 <div class="pending-task-summary" onclick="this.parentElement.classList.toggle('expanded')">
                     <span>${summary}</span>
                     <span class="pending-task-arrow material-symbols-outlined" style="font-size:16px;color:var(--text-sec);">expand_more</span>

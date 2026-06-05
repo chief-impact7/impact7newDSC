@@ -1289,6 +1289,16 @@ body {
     overflow: hidden;
 }
 
+.pending-task-row.rescheduled {
+    background: #f6f2ff;
+    border-color: #c4b5fd;
+}
+
+.pending-task-row.no-show {
+    background: #fff5f5;
+    border-color: #fca5a5;
+}
+
 .pending-task-summary {
     display: flex;
     align-items: center;
@@ -1300,6 +1310,10 @@ body {
 }
 
 .pending-task-summary:hover { background: #fef9e7; }
+
+.pending-task-row.rescheduled .pending-task-summary:hover { background: #f0e9ff; }
+
+.pending-task-row.no-show .pending-task-summary:hover { background: #fee2e2; }
 
 .pending-task-arrow {
     transition: transform 0.2s;
@@ -1341,6 +1355,19 @@ body {
     font-weight: 700;
     color: #fff;
     background: var(--danger);
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+.rescheduled-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    color: #5b21b6;
+    background: #ede9fe;
+    border: 1px solid #c4b5fd;
     border-radius: 4px;
     padding: 1px 5px;
     margin-left: 4px;
