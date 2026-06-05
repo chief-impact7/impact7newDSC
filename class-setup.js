@@ -73,7 +73,7 @@ let teachersList = [];
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         const email = user.email || '';
-        if (!email.endsWith('@gw.impact7.kr') && !email.endsWith('@impact7.kr')) {
+        if (!email.endsWith('@impact7.kr') && !email.endsWith('@gw.impact7.kr')) {
             await logout();
             showToast('허용되지 않은 계정입니다.', 'error');
             return;
