@@ -2988,6 +2988,10 @@ window.closeDetail = () => {
     renderListPanel();
 };
 
+function displayImpact7Email(email) {
+    return String(email || '').replace(/@gw\.impact7\.kr$/i, '@impact7.kr');
+}
+
 // ─── Auth ───────────────────────────────────────────────────────────────────
 
 onAuthStateChanged(auth, async (user) => {
@@ -3006,6 +3010,7 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('main-screen').style.display = '';
         document.getElementById('user-email').textContent = (user.email || '').split('@')[0];
         document.getElementById('user-avatar').textContent = (user.email || 'U')[0].toUpperCase();
+        document.getElementById('user-avatar').title = `${displayImpact7Email(user.email)} (클릭: 로그아웃)`;
 
         // 날짜/UI는 데이터 로드 실패와 무관하게 반드시 표시
         updateDateDisplay();

@@ -13,6 +13,10 @@ const pad2 = (value) => String(value).padStart(2, '0');
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})/;
 const US_DATE_RE = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
 
+function displayImpact7Email(email) {
+    return String(email || '').replace(/@gw\.impact7\.kr$/i, '@impact7.kr');
+}
+
 function dateParts(dateStr) {
     const raw = String(dateStr || '').trim();
     const iso = raw.match(ISO_DATE_RE);
@@ -283,7 +287,7 @@ export default function App() {
                             )}
                         </div>
                     )}
-                    <span className="dash-user-email">{user.email}</span>
+                    <span className="dash-user-email">{displayImpact7Email(user.email)}</span>
                     <button className="dash-avatar" onClick={() => logout()} title="로그아웃">
                         {user.email[0].toUpperCase()}
                     </button>

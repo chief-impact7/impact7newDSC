@@ -29,6 +29,9 @@ const escAttr = (str) =>
     String(str ?? '').replace(/&/g, '&amp;').replace(/'/g, '&#39;')
         .replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+function displayImpact7Email(email) {
+    return String(email || '').replace(/@gw\.impact7\.kr$/i, '@impact7.kr');
+}
 
 function normalizeDays(day) {
     if (!day) return [];
@@ -221,7 +224,7 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('user-email').textContent = user.email.split('@')[0];
         const avatar = document.querySelector('.avatar');
         avatar.textContent = user.email[0].toUpperCase();
-        avatar.title = `${user.email} (클릭: 로그아웃)`;
+        avatar.title = `${displayImpact7Email(user.email)} (클릭: 로그아웃)`;
 
         await loadAllStudents();
         setDate(todayStr());
