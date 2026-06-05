@@ -1,7 +1,11 @@
 import {
     collection, getDocs, query, where
 } from 'firebase/firestore';
-import { studentFullLabel } from '@impact7/shared/student-label';
+import {
+    currentSchool,
+    normalizeRealLevelGrade,
+    studentFullLabel,
+} from '@impact7/shared/student-label';
 import { db } from '../../firebase-config.js';
 
 // 학부별 학기 정의 (impact7db.web.app 설정과 동일하게 유지)
@@ -333,6 +337,23 @@ export const PAST_STUDENT_STATUSES = new Set(['퇴원', '종강']);
 // ─── 학생 표시명 ───
 // DB와 동일한 예측 학부 기준 라벨을 재노출. 소비처 8곳은 이 이름으로 계속 import.
 export const studentShortLabel = studentFullLabel;
+export { currentSchool, normalizeRealLevelGrade };
+
+const LEVEL_SHORT = { '초등': '초', '중등': '중', '고등': '고' };
+
+export function studentLevel(student) {
+    return normalizeRealLevelGrade(student || {}).level || '';
+}
+
+export function studentGrade(student) {
+    const grade = normalizeRealLevelGrade(student || {}).grade;
+    return grade ? String(grade) : '';
+}
+
+export function studentGradeKey(student) {
+    const { level, grade } = normalizeRealLevelGrade(student || {});
+    return `${LEVEL_SHORT[level] || ''}${grade || ''}`;
+}
 
 // ─── 날짜 유틸 ───
 

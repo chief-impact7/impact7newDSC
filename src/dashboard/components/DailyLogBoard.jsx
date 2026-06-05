@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { getDayName, studentShortLabel } from '../../shared/firestore-helpers.js';
+import { getDayName, studentGradeKey, studentShortLabel } from '../../shared/firestore-helpers.js';
 import { branchFromStudent, resolveNaesinCsKey } from '../../../student-helpers.js';
 
 const ACTIVE_STATUSES = new Set(['재원', '등원예정', '실휴원', '가휴원', '상담']);
@@ -258,8 +258,6 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
     const testTasks = mapByStudent(testFailTasks);
     const absenceByStudent = mapByStudent(absenceRecords);
     const dayName = getDayName(date);
-    const LEVEL_SHORT = { '초등': '초', '중등': '중', '고등': '고' };
-    const gradeKey = (s) => (LEVEL_SHORT[s.level] || '') + (s.grade ?? '');
     const studentById = new Map(students.map(student => [student.id, student]));
 
     const groups = {
@@ -290,7 +288,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
         const id = student.id;
         if (!id || isWithdrawnAt(student, date)) return;
         if (branchFilter && branchFromStudent(student) !== branchFilter) return;
-        if (gradeFilter?.size && !gradeFilter.has(gradeKey(student))) return;
+        if (gradeFilter?.size && !gradeFilter.has(studentGradeKey(student))) return;
 
         const enrolls = activeEnrollments(student, date, classSettings);
         const todayEnrolls = enrolls.filter(e => normalizedDays(e.day).includes(dayName));
@@ -399,7 +397,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
         branchFilter,
         classFilter,
         gradeFilter,
-        gradeKey,
+        gradeKey: studentGradeKey,
         typeSet: WITHDRAW_REQUEST_TYPES,
         rowType: 'withdrawal',
         classSettings,
@@ -410,7 +408,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
         branchFilter,
         classFilter,
         gradeFilter,
-        gradeKey,
+        gradeKey: studentGradeKey,
         typeSet: LEAVE_REQUEST_TYPES,
         rowType: 'leave',
         classSettings,

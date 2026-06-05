@@ -2,14 +2,13 @@
 // daily-ops.js에서 분리 (Phase 2-2)
 
 import { state, LEAVE_STATUSES } from './state.js';
-import { getDayName } from './src/shared/firestore-helpers.js';
+import { currentSchool, getDayName, studentGrade } from './src/shared/firestore-helpers.js';
 import { getGoogleAccessToken, ensureGoogleAccessToken } from './auth.js';
 import { formatTime12h, showSaveIndicator } from './ui-utils.js';
 import {
     getActiveEnrollments, matchesBranchFilter, enrollmentCode,
     allClassCodes, branchFromStudent, getStudentStartTime
 } from './student-helpers.js';
-import { currentSchool } from '@impact7/shared/student-label';
 
 // ─── 의존성 주입 (daily-ops.js에서 init 호출) ──────────────────────────────
 let getStudentDomains, getStudentTestItems, getTeacherName;
@@ -176,7 +175,7 @@ export async function exportDailyReport() {
 
         const startTime = getStudentStartTime(todayEnroll);
         return [
-            code, teacher, s.name, branchFromStudent(s), currentSchool(s), s.grade || '', statusText,
+            code, teacher, s.name, branchFromStudent(s), currentSchool(s), studentGrade(s), statusText,
             startTime ? formatTime12h(startTime) : '', displayAtt, arrTime,
             hw1st, hw2nd, test1st, test2nd,
             actions, nextHw,

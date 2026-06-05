@@ -3,7 +3,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../../firebase-config.js';
 import { signInWithGoogle, logout } from '../../auth.js';
 import { useStudents, useDashboardData } from './hooks/useFirestore.js';
-import { branchFromStudent, enrollmentCode, todayStr, fetchSemesterSettings, getSemestersForDate } from '../shared/firestore-helpers.js';
+import { branchFromStudent, enrollmentCode, todayStr, fetchSemesterSettings, getSemestersForDate, studentGradeKey } from '../shared/firestore-helpers.js';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import DailyLogBoard from './components/DailyLogBoard.jsx';
 import GradeFilter from './components/GradeFilter.jsx';
@@ -159,15 +159,13 @@ export default function App() {
 
     // 필터 적용된 checks
     const filteredChecks = useMemo(() => {
-        const LEVEL_SHORT = { '초등': '초', '중등': '중', '고등': '고' };
-        const gradeKey = (s) => (LEVEL_SHORT[s?.level] || '') + (s?.grade ?? '');
         const studentById = new Map(students.map(s => [s.id, s]));
         return checks.filter(c => {
             if (branchFilter && c.branch !== branchFilter) return false;
             if (classFilter && c.class_code !== classFilter) return false;
             if (gradeFilter?.size) {
                 const student = studentById.get(c.student_id);
-                if (student && !gradeFilter.has(gradeKey(student))) return false;
+                if (student && !gradeFilter.has(studentGradeKey(student))) return false;
             }
             return true;
         });
@@ -175,13 +173,11 @@ export default function App() {
 
     const filteredPostponed = useMemo(() => {
         if (!branchFilter && !classFilter && !gradeFilter?.size) return postponed;
-        const LEVEL_SHORT = { '초등': '초', '중등': '중', '고등': '고' };
-        const gradeKey = (s) => (LEVEL_SHORT[s?.level] || '') + (s?.grade ?? '');
         return postponed.filter(p => {
             const student = students.find(s => s.id === p.student_id);
             if (!student) return true;
             if (branchFilter && branchFromStudent(student) !== branchFilter) return false;
-            if (gradeFilter?.size && !gradeFilter.has(gradeKey(student))) return false;
+            if (gradeFilter?.size && !gradeFilter.has(studentGradeKey(student))) return false;
             if (classFilter) {
                 const hasClass = (student.enrollments || []).some(e => enrollmentCode(e) === classFilter);
                 if (!hasClass) return false;
@@ -191,14 +187,12 @@ export default function App() {
     }, [postponed, branchFilter, classFilter, gradeFilter, students]);
 
     const filteredDailyRecords = useMemo(() => {
-        const LEVEL_SHORT = { '초등': '초', '중등': '중', '고등': '고' };
-        const gradeKey = (s) => (LEVEL_SHORT[s?.level] || '') + (s?.grade ?? '');
         const studentById = new Map(students.map(s => [s.id, s]));
         return dailyRecords.filter(rec => {
             const student = studentById.get(rec.student_id);
             if (!student) return !branchFilter && !classFilter && !gradeFilter?.size;
             if (branchFilter && branchFromStudent(student) !== branchFilter) return false;
-            if (gradeFilter?.size && !gradeFilter.has(gradeKey(student))) return false;
+            if (gradeFilter?.size && !gradeFilter.has(studentGradeKey(student))) return false;
             if (classFilter) {
                 const hasClass = (student.enrollments || []).some(e => enrollmentCode(e) === classFilter);
                 if (!hasClass) return false;

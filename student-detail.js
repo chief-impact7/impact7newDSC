@@ -23,7 +23,7 @@ import {
     allClassCodes
 } from './student-helpers.js';
 import {
-    todayStr, getDayName
+    currentSchool, studentGrade, todayStr, getDayName
 } from './src/shared/firestore-helpers.js';
 import { auditSet } from './audit.js';
 import {
@@ -748,8 +748,8 @@ function studentNumberOf(student) {
 
 function isSameSchoolGradeResult(result, student) {
     const className = result.className || '';
-    const school = student?.school || '';
-    const grade = String(student?.grade || '').trim();
+    const school = currentSchool(student);
+    const grade = studentGrade(student);
     return (!school || className.includes(school)) && (!grade || className.includes(`${grade}학년`));
 }
 

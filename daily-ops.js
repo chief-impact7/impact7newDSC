@@ -6,7 +6,7 @@ import {
 import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
 import { initHelpGuide } from './help-guide.js';
-import { toDateStrKST, parseDateKST, todayStr, getDayName, studentShortLabel, ACTIVE_STUDENT_STATUSES, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
+import { toDateStrKST, parseDateKST, todayStr, getDayName, studentLevel, studentShortLabel, ACTIVE_STUDENT_STATUSES, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { schoolSearchTerms } from './school-normalizer.js';
 import { auditUpdate, auditSet } from './audit.js';
@@ -627,7 +627,7 @@ function renderBranchFilter() {
 
         if (isBranchSelected) {
             for (const level of b.children) {
-                const levelCount = branchStudents.filter(s => (s.level || '') === level).length;
+                const levelCount = branchStudents.filter(s => studentLevel(s) === level).length;
                 const isLevelActive = state.selectedBranchLevel === level;
                 const levelActive = isLevelActive ? 'active' : '';
                 html += `<div class="nav-l2 nav-l3 ${levelActive}" data-filter="${b.key}_${level}" onclick="setBranchLevel('${level}')">
@@ -850,7 +850,7 @@ function _getClassesForBranchLevel(branch, level) {
     const students = state.allStudents.filter(s =>
         !isWithdrawnAt(s, today) &&
         branchFromStudent(s) === branch &&
-        (s.level || '') === level
+        studentLevel(s) === level
     );
     const countBy = (pred) => students.filter(s => (s.enrollments || []).some(pred)).length;
 

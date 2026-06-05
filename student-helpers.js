@@ -4,7 +4,7 @@
 import { todayStr, parseDateKST } from './src/shared/firestore-helpers.js';
 import { state, LEVEL_SHORT, LEAVE_STATUSES } from './state.js';
 import { applyNaesinFreeDerivation } from '@impact7/shared/enrollment-derivation';
-import { currentSchool } from '@impact7/shared/student-label';
+import { currentSchool, normalizeRealLevelGrade } from '@impact7/shared/student-label';
 
 // 학생이 특정 날짜에 휴원 중인지 판정.
 // status ∈ LEAVE_STATUSES 이면 휴원으로 간주하고, pause 기간이 명시되어 있으면
@@ -85,7 +85,7 @@ export function branchFromStudent(s) {
 
 export function matchesBranchFilter(s) {
     if (state.selectedBranch && branchFromStudent(s) !== state.selectedBranch) return false;
-    if (state.selectedBranch && state.selectedBranchLevel && (s.level || '') !== state.selectedBranchLevel) return false;
+    if (state.selectedBranch && state.selectedBranchLevel && normalizeRealLevelGrade(s || {}).level !== state.selectedBranchLevel) return false;
     return true;
 }
 
@@ -111,8 +111,8 @@ export function buildNaesinCsKey({ branch, school, level, grade, group }) {
 // A/B 판별: 정규반 class_number 끝자리 홀수=A, 짝수=B
 export function deriveNaesinCode(student, enrollment) {
     const school = currentSchool(student);
-    const levelShort = LEVEL_SHORT[student.level] || '';
-    const grade = student.grade || '';
+    const { level, grade } = normalizeRealLevelGrade(student || {});
+    const levelShort = LEVEL_SHORT[level] || '';
     if (!school || !grade) return '';
 
     // 내신 enrollment의 class_number에서 A/B 판별

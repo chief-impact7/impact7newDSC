@@ -6,7 +6,14 @@ import * as XLSX from 'xlsx';
 import { auth, db } from './firebase-config.js';
 import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { signInWithGoogle, logout } from './auth.js';
-import { todayStr, studentShortLabel, ACTIVE_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
+import {
+    currentSchool,
+    studentGrade,
+    studentLevel,
+    todayStr,
+    studentShortLabel,
+    ACTIVE_STUDENT_STATUSES
+} from './src/shared/firestore-helpers.js';
 import { LEAVE_STATUSES, LEVEL_SHORT, state } from './state.js';
 import { buildNaesinCsKey, resolveNaesinCsKey, isActiveNaesinBase } from './student-helpers.js';
 import { schoolSearchTerms } from './school-normalizer.js';
@@ -112,9 +119,9 @@ function makeBaseRow(student) {
         // 학생 식별/표시는 항상 studentShortLabel 사용 (예: "양정중2")
         shortLabel: studentShortLabel(student),
         branch: getStudentBranch(student),
-        school: normalizeText(student.school, '학교 미지정'),
-        level: normalizeText(student.level, '학부 미지정'),
-        grade: normalizeGrade(student.grade),
+        school: normalizeText(currentSchool(student), '학교 미지정'),
+        level: normalizeText(studentLevel(student), '학부 미지정'),
+        grade: normalizeGrade(studentGrade(student)),
         phone: student.parent_phone_1 || student.student_phone || '',
         status: student.status || '',
     };
@@ -784,9 +791,9 @@ function populateSchoolList() {
     const selectedShort = document.getElementById('input-naesin-level')?.value || '';
     const schools = new Set();
     allStudents.forEach(s => {
-        const school = (s.school || '').trim();
+        const school = (currentSchool(s) || '').trim();
         if (s.status !== '재원' || !school) return;
-        if (selectedShort && LEVEL_SHORT[s.level] !== selectedShort) return;
+        if (selectedShort && LEVEL_SHORT[studentLevel(s)] !== selectedShort) return;
         schools.add(school);
     });
     const dl = document.getElementById('school-list');
@@ -925,9 +932,9 @@ window.addStudent = function (docId) {
 
     if (wizardData.classType === '내신') {
         const checks = [
-            ['학교', wizardData.school, found.school || ''],
-            ['과정', wizardData.naesinLevel, LEVEL_SHORT[found.level] || ''],
-            ['학년', String(wizardData.grade), String(found.grade || '')],
+            ['학교', wizardData.school, currentSchool(found) || ''],
+            ['과정', wizardData.naesinLevel, LEVEL_SHORT[studentLevel(found)] || ''],
+            ['학년', String(wizardData.grade), studentGrade(found)],
         ];
         for (const [label, expected, actual] of checks) {
             if (expected !== actual) {
@@ -938,8 +945,8 @@ window.addStudent = function (docId) {
     }
 
     // 자유학기제는 중학교 한정 운영 → 중등이 아니면 추가 차단
-    if (wizardData.classType === '자유학기' && (found.level || '') !== '중등') {
-        showToast(`자유학기는 중학생만 추가 가능합니다 (학부: ${found.level || '미지정'})`, 'error');
+    if (wizardData.classType === '자유학기' && studentLevel(found) !== '중등') {
+        showToast(`자유학기는 중학생만 추가 가능합니다 (학부: ${studentLevel(found) || '미지정'})`, 'error');
         return;
     }
 
@@ -1310,11 +1317,14 @@ window.submitWizard = async function () {
                 _pushFormationLog(batch, student.docId, '—', `추가: ${d.classCode} (내신) 누적`);
             } else if (d.classType === '자유학기') {
                 const existing = enrollmentsByDocId.get(student.docId) || [];
-                const hasRegular = existing.some(e =>
-                    isActiveNaesinBase(e) &&
-                    `${e.level_symbol || ''}${e.class_number || ''}` === d.classCode
+                const hasRegular = existing.some(e => isActiveNaesinBase(e));
+                if (!hasRegular) throw new Error(`${student.name} 학생은 활성 정규반 등록(종료 안 됨·요일 있음)이 없어 자유학기반에 추가할 수 없습니다.`);
+                const updated = existing.filter(e =>
+                    !(e.class_type === '자유학기' && `${e.level_symbol || ''}${e.class_number || ''}` === d.classCode)
                 );
-                if (!hasRegular) throw new Error(`${student.name} 학생은 ${d.classCode} 활성 정규반 등록(종료 안 됨)이 없어 자유학기반에 추가할 수 없습니다.`);
+                updated.push(newEnrollment);
+                batchUpdate(batch, studentRef, { enrollments: updated });
+                _pushFormationLog(batch, student.docId, '—', `추가: ${d.classCode} (자유학기) 누적`);
             } else if (d.classType === '정규') {
                 // 신학기 정규 enrollment 추가 시 옛 정규 enrollment를 강제 종료
                 // (end_date 미설정 + 같은 class_type='정규'인 항목에 end_date=새 start_date - 1 설정).
