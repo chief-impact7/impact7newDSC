@@ -14,7 +14,7 @@ import {
     studentShortLabel,
     ACTIVE_STUDENT_STATUSES
 } from './src/shared/firestore-helpers.js';
-import { LEAVE_STATUSES, LEVEL_SHORT, state } from './state.js';
+import { LEVEL_SHORT, state } from './state.js';
 import { buildNaesinCsKey, resolveNaesinCsKey, isActiveNaesinBase } from './student-helpers.js';
 import { schoolSearchTerms } from './school-normalizer.js';
 import { batchSet, batchUpdate } from './audit.js';
@@ -858,14 +858,12 @@ function _doSearchStudents(q) {
     const selectedIds = new Set(wizardData.students.map(s => s.docId));
     const isSpecial = wizardData.classType === '특강';
 
-    // 특강: 모든 상태 허용 (퇴원/종강 학생도 특강 수강 가능)
-    // 기타 반 유형(정규/내신/자유학기): 활성 상태 + 휴원 제외
-    //   — 정규의 일종이므로 휴원 중인 학생은 편성 대상 아님
+    // 특강: 모든 상태 허용하되 저장 시 재원 전환 확인.
+    // 기타 반 유형: 공유 계약상 enrollment 보유 가능한 상태만 허용.
     const filtered = allStudents
         .filter(s => {
             if (!isSpecial) {
-                if (!ACTIVE_STUDENT_STATUSES.has(s.status)) return false;
-                if (LEAVE_STATUSES.includes(s.status)) return false;
+                if (!isEnrollableStatus(s.status)) return false;
                 // 반배정(enrollment ≥1) 안 된 학생(상담생 등) 제외 — 첫 반배정은 DB에서 (수업이력 로그 남기기 위함)
                 const hasClass = (s.enrollments || []).some(e => e && (e.level_symbol || e.class_number));
                 if (!hasClass) return false;
@@ -926,6 +924,14 @@ window.addStudent = function (docId) {
     if (wizardData.students.some(s => s.docId === docId)) return;
     const found = allStudents.find(s => s.docId === docId);
     if (!found) return;
+
+    if (
+        (wizardData.classType === '내신' || wizardData.classType === '자유학기')
+        && !isEnrollableStatus(found.status)
+    ) {
+        alert(`${found.name} 학생은 현재 "${found.status || '상태없음'}" 상태입니다.\n${wizardData.classType}반 등록은 재원·등원예정·실휴원·가휴원 학생만 가능합니다.`);
+        return;
+    }
 
     if (wizardData.classType === '정규') {
         const classCode = buildClassCode();
@@ -1089,6 +1095,17 @@ window.submitWizard = async function () {
 
     try {
         const d = wizardData;
+        if (d.classType === '내신' || d.classType === '자유학기') {
+            const rejected = d.students.filter(student => !isEnrollableStatus(student.status));
+            if (rejected.length) {
+                alert(
+                    `${d.classType}반을 생성할 수 없습니다.\n\n` +
+                    `등록 가능 상태: 재원·등원예정·실휴원·가휴원\n` +
+                    `대상 오류: ${rejected.map(s => `${s.name || s.docId} (${s.status || '상태없음'})`).join(', ')}`
+                );
+                return;
+            }
+        }
 
         // 1. 기존 class_settings에 같은 코드가 있는지 확인
         const existingDoc = await getDoc(doc(db, 'class_settings', d.classCode));
@@ -1238,13 +1255,10 @@ window.submitWizard = async function () {
                 return;
             }
         }
-        const _rejectedStudents = [];
         const _duplicateStudents = [];
         for (const student of d.students) {
-            // 재원생만 반배정 가능 — 상담/퇴원/종강은 제외 (enrollment-status 정합성)
             if (d.classType !== '특강' && !isEnrollableStatus(student.status)) {
-                _rejectedStudents.push(student.name || student.docId);
-                continue;
+                throw new Error(`${student.name || student.docId} 학생의 상태(${student.status || '상태없음'})로는 반을 등록할 수 없습니다.`);
             }
             const studentRef = doc(db, 'students', student.docId);
             let studentUpdate = null;
@@ -1367,9 +1381,6 @@ window.submitWizard = async function () {
                 _pushFormationLog(batch, student.docId, '—', `추가: ${d.classCode} (특강) 누적`);
             }
         }
-        if (_rejectedStudents.length) {
-            alert(`재원생만 반에 추가할 수 있습니다. 다음 학생은 제외되었습니다:\n${_rejectedStudents.join(', ')}\n(상담·퇴원·종강 학생은 먼저 재원 상태로 전환하세요)`);
-        }
         await batch.commit();
 
         if (_duplicateStudents.length) {
@@ -1388,7 +1399,7 @@ window.submitWizard = async function () {
             });
         }
 
-        showToast(`"${d.classCode}" 반이 생성되었습니다! (${d.students.length - _rejectedStudents.length - _duplicateStudents.length}명)`, 'success');
+        showToast(`"${d.classCode}" 반이 생성되었습니다! (${d.students.length - _duplicateStudents.length}명)`, 'success');
 
         // 3초 후 DSC 홈으로 이동
         setTimeout(() => { window.location.href = '/'; }, 2000);

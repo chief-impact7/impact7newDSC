@@ -9,9 +9,9 @@
  *   createStudentSearcher({...})(k, q)  — 검색 실행 (호출자가 window 핸들러로 감쌈)
  */
 
-import { studentShortLabel, ACTIVE_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
+import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
+import { studentShortLabel } from './src/shared/firestore-helpers.js';
 import { _searchContactsDSC } from './past-search.js';
-import { LEAVE_STATUSES } from './state.js';
 import { schoolSearchTerms } from './school-normalizer.js';
 
 // daily-ops.js에서 window로 노출된 이스케이프 헬퍼
@@ -38,7 +38,13 @@ export function renderAddStudentCard({ key, idPrefix, searchHandlerName, footerT
     `;
 }
 
-export function createStudentSearcher({ idPrefix, addHandlerName, getEnrolledIds, getAllStudents, excludeOnLeave = false }) {
+export function createStudentSearcher({
+    idPrefix,
+    addHandlerName,
+    getEnrolledIds,
+    getAllStudents,
+    allowNonEnrollable = false,
+}) {
     let timer = null;
     let reqId = 0;
 
@@ -65,8 +71,7 @@ export function createStudentSearcher({ idPrefix, addHandlerName, getEnrolledIds
         const enrolledIds = getEnrolledIds(key);
 
         const localItems = (getAllStudents() || []).filter(s => {
-            if (!ACTIVE_STUDENT_STATUSES.has(s.status)) return false;
-            if (excludeOnLeave && LEAVE_STATUSES.includes(s.status)) return false;
+            if (!allowNonEnrollable && !isEnrollableStatus(s.status)) return false;
             if (enrolledIds.has(s.docId)) return false;
             const name = (s.name || '').toLowerCase();
             const terms = schoolSearchTerms(s).map(t => t.toLowerCase());
@@ -86,7 +91,9 @@ export function createStudentSearcher({ idPrefix, addHandlerName, getEnrolledIds
             // 리모트(퇴원/종강) prefix 쿼리 — reqId가 바뀌면 stale로 폐기
             const remote = await _searchContactsDSC(q);
             if (currentReqId !== reqId) return;
-            const pastItems = remote.filter(r => !enrolledIds.has(r.id)).slice(0, 10);
+            const pastItems = allowNonEnrollable
+                ? remote.filter(r => !enrolledIds.has(r.id)).slice(0, 10)
+                : [];
             renderCombined(localItems.slice(0, 20), pastItems);
         } catch (err) {
             console.debug(`[${idPrefix} remote search]`, err?.message || err);

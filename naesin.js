@@ -7,8 +7,9 @@
  */
 
 import { getDayName, studentShortLabel } from './src/shared/firestore-helpers.js';
+import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { db } from './firebase-config.js';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, getDocFromServer } from 'firebase/firestore';
 import { auditUpdate, auditSet } from './audit.js';
 import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt, isActiveNaesinBase } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
@@ -1133,7 +1134,6 @@ function _renderNaesinAddStudentCard(csKey) {
 const _naesinSearcher = createStudentSearcher({
     idPrefix: 'naesin-add',
     addHandlerName: 'addStudentToNaesin',
-    excludeOnLeave: true,
     getEnrolledIds: (csKey) => new Set(
         (window.getNaesinStudentsByDerivedCode?.(csKey) || [])
             .map(({ student }) => student.docId)
@@ -1162,6 +1162,24 @@ window.addStudentToNaesin = async function(csKey, studentId) {
             return;
         }
     }
+
+    if (!isEnrollableStatus(student.status)) {
+        alert(`${student.name || studentId} 학생은 현재 "${student.status || '상태없음'}" 상태입니다.\n내신반 등록은 재원·등원예정·실휴원·가휴원 학생만 가능합니다.`);
+        return;
+    }
+
+    let classSnap;
+    try {
+        classSnap = await getDocFromServer(doc(db, 'class_settings', csKey));
+    } catch (err) {
+        alert(`내신반 설정 확인에 실패했습니다: ${err.message}`);
+        return;
+    }
+    if (!classSnap.exists() || classSnap.data()?.class_type !== '내신') {
+        alert(`"${csKey}"는 반 생성 마법사에서 생성된 내신반이 아닙니다.\n학생을 추가할 수 없습니다.`);
+        return;
+    }
+    classSettings[csKey] = classSnap.data();
 
     const enrollments = (student.enrollments || []).slice();
     const idx = enrollments.findIndex(e => isActiveNaesinBase(e) && e.class_number);

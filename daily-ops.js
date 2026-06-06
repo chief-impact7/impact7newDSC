@@ -847,35 +847,53 @@ function _getClassesForBranchLevel(branch, level) {
         return !!cs?.schedule?.[dayName] && inPeriod(cs.special_start, cs.special_end);
     };
 
-    const students = state.allStudents.filter(s =>
+    const branchStudents = state.allStudents.filter(s =>
         !isWithdrawnAt(s, today) &&
-        branchFromStudent(s) === branch &&
-        studentLevel(s) === level
+        branchFromStudent(s) === branch
     );
+    const students = branchStudents.filter(s => studentLevel(s) === level);
     const countBy = (pred) => students.filter(s => (s.enrollments || []).some(pred)).length;
+    const dominantLevel = (pred) => {
+        const counts = new Map();
+        for (const student of branchStudents) {
+            if (!pred(student)) continue;
+            const studentAcademicLevel = studentLevel(student);
+            if (!studentAcademicLevel) continue;
+            counts.set(studentAcademicLevel, (counts.get(studentAcademicLevel) || 0) + 1);
+        }
+        return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+    };
 
     const result = [];
     for (const code of regular) {
         if (!hasRegularToday(code)) continue;
-        const count = countBy(e => (e.class_type || '정규') === '정규' && enrollmentCode(e) === code);
+        const matchesClass = e => (e.class_type || '정규') === '정규' && enrollmentCode(e) === code;
+        if (dominantLevel(s => (s.enrollments || []).some(matchesClass)) !== level) continue;
+        const count = countBy(matchesClass);
         if (count > 0) result.push({ mode: 'regular', code, display: code, count });
     }
     for (const { code } of free) {
         if (!hasFreeToday(code)) continue;
-        const count = countBy(e => (e.class_type === '정규' || e.class_type === '자유학기') && enrollmentCode(e) === code);
+        const matchesClass = e => (e.class_type === '정규' || e.class_type === '자유학기') && enrollmentCode(e) === code;
+        if (dominantLevel(s => (s.enrollments || []).some(matchesClass)) !== level) continue;
+        const count = countBy(matchesClass);
         if (count > 0) result.push({ mode: 'free', code, display: code, count });
     }
     for (const { code: csKey, displayCode } of naesin) {
         if (!hasNaesinToday(csKey)) continue;
-        const count = students.filter(s => {
+        const matchesClass = s => {
             const reg = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
             return reg && resolveNaesinCsKey(s, reg) === csKey;
-        }).length;
+        };
+        if (dominantLevel(matchesClass) !== level) continue;
+        const count = students.filter(matchesClass).length;
         if (count > 0) result.push({ mode: 'naesin', code: csKey, display: displayCode, count });
     }
     for (const code of teukang) {
         if (!hasTeukangToday(code)) continue;
-        const count = countBy(e => e.class_type === '특강' && enrollmentCode(e) === code);
+        const matchesClass = e => e.class_type === '특강' && enrollmentCode(e) === code;
+        if (dominantLevel(s => (s.enrollments || []).some(matchesClass)) !== level) continue;
+        const count = countBy(matchesClass);
         if (count > 0) result.push({ mode: 'teukang', code, display: code, count });
     }
     return result;

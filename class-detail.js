@@ -1077,6 +1077,7 @@ const _teukangSearcher = createStudentSearcher({
     addHandlerName: 'addStudentToTeukang',
     getEnrolledIds: (classCode) => new Set(getTeukangClassStudents(classCode).map(s => s.docId)),
     getAllStudents: () => state.allStudents,
+    allowNonEnrollable: true,
 });
 
 export function searchTeukangAddStudent(classCode, q) {
@@ -1089,39 +1090,37 @@ function _findTeukangEnrollment(student, classCode) {
     );
 }
 
-// 새 enrollment 빌드: class_settings.special_start/end 우선,
-// 없으면 같은 반 기존 enrollment, 그것도 없으면 today.
-function _buildTeukangEnrollment(classCode) {
-    const cs = state.classSettings[classCode] || {};
+// 반 생성 마법사가 저장한 class_settings만 enrollment로 변환한다.
+function _buildTeukangEnrollment(classCode, cs) {
     const days = Object.keys(cs.schedule || {})
         .sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b));
-
-    let startDate = cs.special_start || '';
-    let endDate = cs.special_end || '';
-
-    if (!startDate || !endDate) {
-        for (const s of state.allStudents) {
-            const e = _findTeukangEnrollment(s, classCode);
-            if (e) {
-                if (!startDate && e.start_date) startDate = e.start_date;
-                if (!endDate && e.end_date) endDate = e.end_date;
-                break;
-            }
-        }
-    }
 
     const enrollment = {
         class_type: '특강',
         level_symbol: '',
         class_number: classCode,
         day: days,
-        start_date: startDate || todayStr(),
+        start_date: cs.special_start || todayStr(),
     };
-    if (endDate) enrollment.end_date = endDate;
+    if (cs.special_end) enrollment.end_date = cs.special_end;
     return enrollment;
 }
 
 export async function addStudentToTeukang(classCode, studentId) {
+    let classSnap;
+    try {
+        classSnap = await getDocFromServer(doc(db, 'class_settings', classCode));
+    } catch (err) {
+        alert(`특강반 설정 확인에 실패했습니다: ${err.message}`);
+        return;
+    }
+    if (!classSnap.exists() || classSnap.data()?.class_type !== '특강') {
+        alert(`"${classCode}"는 반 생성 마법사에서 생성된 특강반이 아닙니다.\n학생을 추가할 수 없습니다.`);
+        return;
+    }
+    const classSettings = classSnap.data();
+    state.classSettings[classCode] = classSettings;
+
     // 로컬 캐시 우선, 없으면 Firestore에서 가져옴 (퇴원/종강 학생 처리)
     let student = state.allStudents.find(s => s.docId === studentId);
     let isFromRemote = false;
@@ -1142,7 +1141,7 @@ export async function addStudentToTeukang(classCode, studentId) {
         return;
     }
 
-    const newEnrollment = _buildTeukangEnrollment(classCode);
+    const newEnrollment = _buildTeukangEnrollment(classCode, classSettings);
     const prevStatus = student.status || '';
     const shouldReactivate = !isEnrollableStatus(prevStatus);
     if (shouldReactivate) {
