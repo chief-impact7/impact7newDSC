@@ -7,7 +7,7 @@ import { db } from './firebase-config.js';
 import { auditUpdate, auditSet } from './audit.js';
 import { state } from './state.js';
 import { esc, escAttr, showSaveIndicator, renderTime12hSelect, _fmtTs, _stripYear, _renderRescheduleHistory } from './ui-utils.js';
-import { makeDailyRecordId } from './student-helpers.js';
+import { getStudentClassContextsForDate, makeDailyRecordId } from './student-helpers.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, renderFilterChips;
@@ -43,6 +43,25 @@ function _getAbsenceStatusGroup(r) {
     return { order: 6, label: '기타', badgeClass: 'undecided' };
 }
 
+function _getAbsenceClassMeta(record) {
+    const student = state.allStudents.find(s => s.docId === record.student_id);
+    const contexts = getStudentClassContextsForDate(student, record.absence_date);
+    const storedCodes = (record.class_code || '').split(',').map(code => code.trim()).filter(Boolean);
+    const displayCodes = storedCodes.length > 0
+        ? storedCodes
+        : contexts.map(context => context.displayCode);
+    const primaryCode = storedCodes[0] || '';
+    const primaryContext = contexts.find(context =>
+        context.settingsKey === primaryCode || context.displayCode === primaryCode
+    ) || contexts[0];
+    const settingsKey = state.classSettings[primaryCode] ? primaryCode : primaryContext?.settingsKey;
+
+    return {
+        displayCode: [...new Set(displayCodes)].join(', '),
+        settingsKey: settingsKey || '',
+    };
+}
+
 export function renderAbsenceLedgerList() {
     const container = document.getElementById('list-items');
     const countEl = document.getElementById('list-count');
@@ -62,7 +81,10 @@ export function renderAbsenceLedgerList() {
     if (state.selectedBranch) records = records.filter(r => r.branch === state.selectedBranch);
     if (state.searchQuery) {
         const q = state.searchQuery.trim().toLowerCase();
-        records = records.filter(r => r.student_name?.toLowerCase().includes(q) || r.class_code?.toLowerCase().includes(q));
+        records = records.filter(r =>
+            r.student_name?.toLowerCase().includes(q)
+            || _getAbsenceClassMeta(r).displayCode.toLowerCase().includes(q)
+        );
     }
 
     // 퇴원요청 플래그 부여
@@ -97,8 +119,8 @@ export function renderAbsenceLedgerList() {
             ? '<span class="material-symbols-outlined" style="font-size:14px;color:var(--success);">check_circle</span>'
             : `<button class="btn-icon" style="padding:2px;" onclick="event.stopPropagation(); toggleConsultation('${escAttr(r.docId)}', '${escAttr(r.student_id)}')" title="상담 완료 처리"><span class="material-symbols-outlined" style="font-size:14px;color:var(--text-sec);">phone_callback</span></button>`;
 
-        const _primaryCode = (r.class_code || '').split(',')[0].trim();
-        const _teacherEmail = state.classSettings[_primaryCode]?.teacher;
+        const classMeta = _getAbsenceClassMeta(r);
+        const _teacherEmail = state.classSettings[classMeta.settingsKey]?.teacher;
         const _teacher = _teacherEmail ? getTeacherName(_teacherEmail) : '';
         const metaStr = _teacher ? ` · ${_teacher}` : '';
 
@@ -114,7 +136,7 @@ export function renderAbsenceLedgerList() {
                         ${validityBadge}
                     </div>
                     <div style="font-size:11px;color:var(--text-sec);margin-top:2px;">
-                        ${esc(r.class_code || '')} · ${esc(_stripYear(r.absence_date))}${r.reason ? ' · ' + esc(r.reason) : ''}${metaStr}
+                        ${esc(classMeta.displayCode)} · ${esc(_stripYear(r.absence_date))}${r.reason ? ' · ' + esc(r.reason) : ''}${metaStr}
                     </div>
                 </div>
             </div>
@@ -406,6 +428,7 @@ export function renderAbsenceRecordCard(studentId) {
 
     const rows = records.map((r, idx) => {
         const group = _getAbsenceStatusGroup(r);
+        const classMeta = _getAbsenceClassMeta(r);
         const validityBadge = _renderValidityBadge(r.reason_valid);
         const consultChecked = r.consultation_done ? 'checked' : '';
 
@@ -575,7 +598,7 @@ export function renderAbsenceRecordCard(studentId) {
                 <div class="pending-task-summary" onclick="this.parentElement.classList.toggle('expanded')">
                     <span style="display:flex;align-items:center;gap:4px;">
                         <span class="absence-status-badge ${group.badgeClass}">${esc(group.label)}</span>
-                        ${esc(r.class_code || '')} · ${esc(_stripYear(r.absence_date))}
+                        ${esc(classMeta.displayCode)} · ${esc(_stripYear(r.absence_date))}
                         ${validityBadge}
                     </span>
                     <span class="pending-task-arrow material-symbols-outlined" style="font-size:16px;color:var(--text-sec);">expand_more</span>

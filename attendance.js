@@ -8,7 +8,7 @@ import { auditUpdate, auditSet, auditDelete, batchUpdate } from './audit.js';
 import { getDayName } from './src/shared/firestore-helpers.js';
 import { state, NEW_STUDENT_DAYS } from './state.js';
 import { showSaveIndicator, nowTimeStr } from './ui-utils.js';
-import { enrollmentCode, branchFromStudent, isPauseExpired, pauseExpiredDays, findStudent } from './student-helpers.js';
+import { branchFromStudent, getStudentClassContextsForDate, isPauseExpired, pauseExpiredDays, findStudent } from './student-helpers.js';
 import { saveImmediately, saveDailyRecord } from './data-layer.js';
 
 // 토글 UI의 "기본" 라벨 집합 — 이 라벨들을 클릭하면 attendance.status는 '미확인'으로 리셋.
@@ -185,11 +185,8 @@ export async function autoCreateAbsenceRecord(studentId, overrides, date = state
 
     let name, branch, classCode, reason;
     if (student) {
-        const dayName = getDayName(date);
-        const classCodes = (student.enrollments || [])
-            .filter(e => e.day && e.day.includes(dayName))
-            .map(e => enrollmentCode(e))
-            .filter(Boolean);
+        const classCodes = getStudentClassContextsForDate(student, date)
+            .map(context => context.displayCode);
         name = student.name || '';
         branch = branchFromStudent(student);
         classCode = [...new Set(classCodes)].join(', ');

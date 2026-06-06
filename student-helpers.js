@@ -1,7 +1,7 @@
 // ─── Student Helpers ───────────────────────────────────────────────────────
 // daily-ops.js에서 추출한 학생 관련 유틸리티 함수들
 
-import { todayStr, parseDateKST } from './src/shared/firestore-helpers.js';
+import { todayStr, parseDateKST, getDayName } from './src/shared/firestore-helpers.js';
 import { state, LEVEL_SHORT, LEAVE_STATUSES } from './state.js';
 import { applyNaesinFreeDerivation } from '@impact7/shared/enrollment-derivation';
 import { currentSchool, normalizeRealLevelGrade } from '@impact7/shared/student-label';
@@ -101,6 +101,28 @@ export const _enrollCodeList = (enrolls) => {
     const codes = enrolls.flatMap(e => e.class_type === '내신' ? [enrollmentCode(e), '내신'] : [enrollmentCode(e)]);
     return [...new Set(codes)].join(', ');
 };
+
+export function getStudentClassContextsForDate(student, dateStr) {
+    if (!student) return [];
+    const branch = branchFromStudent(student);
+    const active = getActiveEnrollments(student, dateStr);
+    const dayName = getDayName(dateStr);
+    const scheduled = active.filter(e => normalizeDays(e.day).includes(dayName));
+    const candidates = scheduled.length > 0 ? scheduled : active;
+    const seen = new Set();
+    const contexts = [];
+
+    for (const enrollment of candidates) {
+        const settingsKey = enrollmentCode(enrollment);
+        if (!settingsKey || seen.has(settingsKey)) continue;
+        seen.add(settingsKey);
+        contexts.push({
+            settingsKey,
+            displayCode: displayCodeFromCsKey(settingsKey, branch),
+        });
+    }
+    return contexts;
+}
 
 // 내신 csKey 빌더 — 마법사·자동 유도가 모두 이 함수를 거쳐 형식이 silent drift 하지 않도록 단일 정의.
 export function buildNaesinCsKey({ branch, school, level, grade, group }) {
