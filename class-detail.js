@@ -7,6 +7,7 @@ import { db, auth } from './firebase-config.js';
 import { todayStr } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditDelete, batchUpdate, batchSet, READ_ONLY } from './audit.js';
 import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
+import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { state, DAY_ORDER } from './state.js';
 import { esc, escAttr, showSaveIndicator, showToast } from './ui-utils.js';
 import { matchesBranchFilter, enrollmentCode, getActiveEnrollments, resolveNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE } from './student-helpers.js';
@@ -241,7 +242,7 @@ export function renderClassDetail(classCode) {
     const timeUpdatedBy = state.classSettings[classCode]?.default_time_updated_by || '';
     const timeUpdatedAt = state.classSettings[classCode]?.default_time_updated_at || '';
     const timeUpdatedLabel = timeUpdatedBy
-        ? `${getTeacherName(timeUpdatedBy)} · ${timeUpdatedAt ? new Date(timeUpdatedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}`
+        ? `${getTeacherName(timeUpdatedBy)} · ${formatDateTimeKST(timeUpdatedAt)}`
         : '';
 
     // ② 영역숙제관리

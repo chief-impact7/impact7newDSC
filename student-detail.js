@@ -11,6 +11,7 @@ import { db } from './firebase-config.js';
 import { deriveTenure } from '@impact7/shared/history';
 import { deriveLevelPeriod } from '@impact7/shared/enrollment-derivation';
 import { isEnrollableStatus, STATUS_TONE } from '@impact7/shared/enrollment-status';
+import { staffLabel } from '@impact7/shared/staff-label';
 import { state, LEAVE_STATUSES, LEVEL_SHORT } from './state.js';
 import {
     esc, escAttr, formatTime12h, renderTime12hSelect, oxDisplayClass,
@@ -311,7 +312,7 @@ export async function confirmDeparture(studentId) {
         const departure = {
             status: '귀가',
             time: nowTimeStr(),
-            confirmed_by: (state.currentUser?.email || '').split('@')[0],
+            confirmed_by: staffLabel(state.currentUser?.email),
             confirmed_at: new Date().toISOString()
         };
         if (reason) {

@@ -18,6 +18,7 @@ import { DEFAULT_HISTORY_LIMIT } from './consultation-filter.js';
 import { createPromoteEnrollPending } from '@impact7/shared/promote-enroll';
 import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 import { deriveStudentNumber, studentNumberIdentityKey } from '@impact7/shared/student-number';
+import { staffLabel } from '@impact7/shared/staff-label';
 
 const _promoteEnrollPending = createPromoteEnrollPending(
     { db, writeBatch, doc, collection, serverTimestamp },
@@ -72,7 +73,7 @@ export async function trackTeacherLogin(user) {
     try {
         await auditSet(doc(db, 'teachers', user.email), {
             email: user.email,
-            display_name: user.displayName || user.email.split('@')[0],
+            display_name: user.displayName || staffLabel(user.email),
             photo_url: user.photoURL || '',
             last_login: serverTimestamp()
         }, { merge: true });
@@ -82,8 +83,7 @@ export async function trackTeacherLogin(user) {
 }
 
 export function getTeacherName(email) {
-    if (!email) return '';
-    return email.split('@')[0];
+    return staffLabel(email);
 }
 
 // ─── Class Next Homework (반별 다음숙제) ────────────────────────────────────

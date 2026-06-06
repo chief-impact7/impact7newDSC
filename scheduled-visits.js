@@ -8,6 +8,7 @@ import { auditUpdate } from './audit.js';
 import { state, VISIT_STATUS_CYCLE } from './state.js';
 import { showSaveIndicator, _visitLabel, _visitBtnStyles } from './ui-utils.js';
 import { saveImmediately } from './data-layer.js';
+import { staffLabel } from '@impact7/shared/staff-label';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderSubFilters, renderListPanel, renderStudentDetail,
@@ -32,7 +33,7 @@ export async function completeScheduledVisit(source, docId, studentId) {
     }
     showSaveIndicator('saving');
     try {
-        const completedBy = (state.currentUser?.email || '').split('@')[0];
+        const completedBy = staffLabel(state.currentUser?.email);
 
         const completedAt = new Date().toISOString();
 
@@ -191,7 +192,7 @@ export async function confirmVisitStatus(docId) {
         // '기타'
         showSaveIndicator('saving');
         try {
-            const completedBy = (state.currentUser?.email || '').split('@')[0];
+            const completedBy = staffLabel(state.currentUser?.email);
             const completedAt = new Date().toISOString();
             const statusPayload = { completed_by: completedBy, completed_at: completedAt };
 
@@ -299,7 +300,7 @@ export async function confirmDiagnosticCancel() {
     if (!_diagnosticActionDocId) return;
     showSaveIndicator('saving');
     try {
-        const completedBy = (state.currentUser?.email || '').split('@')[0];
+        const completedBy = staffLabel(state.currentUser?.email);
         const completedAt = new Date().toISOString();
         await auditUpdate(doc(db, 'temp_attendance', _diagnosticActionDocId), {
             visit_status: '기타',

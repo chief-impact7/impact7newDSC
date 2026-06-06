@@ -20,6 +20,7 @@ import { buildConsultationPayload } from './consultation-payload.js';
 import { generateConsultationTitle } from './consultation-ai.js';
 import { enrollmentCode } from './student-helpers.js';
 import { PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
+import { formatDateTimeKST } from '@impact7/shared/datetime';
 
 let _deps = {};
 let _activeSubtab = 'input';  // 'input' | 'search'
@@ -124,14 +125,7 @@ function renderMarkdown(md) {
 }
 
 function formatGeneratedAt(value) {
-  const date = value?.toDate ? value.toDate() : value ? new Date(value) : null;
-  if (!date || Number.isNaN(date.getTime())) return '';
-  return date.toLocaleString('ko-KR', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatDateTimeKST(value);
 }
 
 function renderAiAction(studentId, artifact) {

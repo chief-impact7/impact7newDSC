@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { getDayName, studentGradeKey, studentShortLabel } from '../../shared/firestore-helpers.js';
 import { branchFromStudent, resolveNaesinCsKey } from '../../../student-helpers.js';
+import { staffLabel } from '@impact7/shared/staff-label';
 
 const ACTIVE_STATUSES = new Set(['재원', '등원예정', '실휴원', '가휴원', '상담']);
 const ATTENDED_STATUSES = new Set(['출석', '지각', '조퇴']);
@@ -40,11 +41,7 @@ const fmtTime = (value) => {
     const displayHour = hour % 12 || 12;
     return `${displayHour}:${match[2]}`;
 };
-const shortEmailName = (value) => {
-    const raw = text(value);
-    if (!raw) return '';
-    return raw.split('@')[0] || raw;
-};
+const shortEmailName = (value) => staffLabel(text(value));
 const teacherNameForClass = (classSettings, code) => shortEmailName(classSettings?.[code]?.teacher);
 const teacherNamesForClasses = (classSettings, codes) => {
     const names = codes.map(code => teacherNameForClass(classSettings, code)).filter(Boolean);

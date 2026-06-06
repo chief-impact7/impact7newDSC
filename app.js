@@ -7,6 +7,7 @@ import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
 import { todayStr, getDayName, addDays, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditSet, auditAdd } from './audit.js';
+import { staffLabel } from '@impact7/shared/staff-label';
 
 // ─── State ───────────────────────────────────────────────────────────────────
 let currentUser = null;
@@ -221,7 +222,7 @@ onAuthStateChanged(auth, async (user) => {
         window._auditUser = user.email || null;
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('main-screen').style.display = 'block';
-        document.getElementById('user-email').textContent = user.email.split('@')[0];
+        document.getElementById('user-email').textContent = staffLabel(user.email);
         const avatar = document.querySelector('.avatar');
         avatar.textContent = user.email[0].toUpperCase();
         avatar.title = `${displayImpact7Email(user.email)} (클릭: 로그아웃)`;

@@ -9,6 +9,7 @@ import {
     esc, formatTime12h, renderTime12hOptions, showSaveIndicator, _stripYear
 } from './ui-utils.js';
 import { auditUpdate } from './audit.js';
+import { staffLabel } from '@impact7/shared/staff-label';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderSubFilters, renderListPanel, renderStudentDetail, _subFilterBaseRef;
@@ -91,7 +92,7 @@ export async function saveReschedule() {
             prev_time: r.makeup_time || '',
             new_date: newDate,
             new_time: newTime || '',
-            rescheduled_by: (state.currentUser?.email || '').split('@')[0],
+            rescheduled_by: staffLabel(state.currentUser?.email),
             rescheduled_at: new Date().toISOString()
         };
         if (reason) entry.reason = reason;
@@ -133,7 +134,7 @@ export async function saveReschedule() {
         prev_time: t.scheduled_time || '',
         new_date: newDate,
         new_time: newTime || '',
-        rescheduled_by: (state.currentUser?.email || '').split('@')[0],
+        rescheduled_by: staffLabel(state.currentUser?.email),
         rescheduled_at: new Date().toISOString()
     };
     if (reason) entry.reason = reason;

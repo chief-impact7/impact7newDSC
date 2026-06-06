@@ -8,6 +8,7 @@ import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
 import { initHelpGuide } from './help-guide.js';
 import { toDateStrKST, parseDateKST, todayStr, getDayName, studentLevel, studentShortLabel, ACTIVE_STUDENT_STATUSES, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
+import { staffLabel } from '@impact7/shared/staff-label';
 import { schoolSearchTerms } from './school-normalizer.js';
 import { auditUpdate, auditSet } from './audit.js';
 import {
@@ -2618,7 +2619,7 @@ async function completeRetake(retakeDocId) {
     if (!confirm('이 일정을 완료 처리하시겠습니까?')) return;
     showSaveIndicator('saving');
     try {
-        const completedBy = (state.currentUser?.email || '').split('@')[0];
+        const completedBy = staffLabel(state.currentUser?.email);
         await auditUpdate(doc(db, 'retake_schedule', retakeDocId), {
             status: '완료',
             completed_by: completedBy,
@@ -2639,7 +2640,7 @@ async function cancelRetake(retakeDocId) {
     if (!confirm('이 일정을 취소하시겠습니까?')) return;
     showSaveIndicator('saving');
     try {
-        const cancelledBy = (state.currentUser?.email || '').split('@')[0];
+        const cancelledBy = staffLabel(state.currentUser?.email);
         await auditUpdate(doc(db, 'retake_schedule', retakeDocId), {
             status: '취소',
             cancelled_by: cancelledBy,
@@ -3026,7 +3027,7 @@ onAuthStateChanged(auth, async (user) => {
         window._auditUser = user.email || null;
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('main-screen').style.display = '';
-        document.getElementById('user-email').textContent = (user.email || '').split('@')[0];
+        document.getElementById('user-email').textContent = staffLabel(user.email);
         document.getElementById('user-avatar').textContent = (user.email || 'U')[0].toUpperCase();
         document.getElementById('user-avatar').title = `${displayImpact7Email(user.email)} (클릭: 로그아웃)`;
 

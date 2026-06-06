@@ -10,6 +10,8 @@ import { state } from './state.js';
 import { esc, escAttr, showSaveIndicator } from './ui-utils.js';
 import { findStudent, enrollmentCode } from './student-helpers.js';
 import { schoolSearchTerms } from './school-normalizer.js';
+import { staffLabel } from '@impact7/shared/staff-label';
+import { formatTimeKST } from '@impact7/shared/datetime';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderStudentDetail;
@@ -228,13 +230,11 @@ function renderMemoList(container) {
             const isUnread = m._isReceived && m.sender_email !== state.currentUser?.email && !m.read_by?.includes(state.currentUser?.email);
             const studentLabel = m.type === 'student' && m.student_name ? `<div class="memo-item-student">${esc(m.student_name)}</div>` : '';
             const targets = m.target_roles?.join(', ') || '';
-            const timeStr = m.created_at?.toDate?.()
-                ? m.created_at.toDate().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
-                : '';
+            const timeStr = formatTimeKST(m.created_at);
 
             const senderLabel = state.memoTab === 'outbox'
                 ? '→ ' + esc(targets)
-                : esc(m.sender_email?.split('@')[0] || '') + ' (' + esc(m.sender_role || '') + ')';
+                : esc(staffLabel(m.sender_email)) + ' (' + esc(m.sender_role || '') + ')';
 
             const isPinned = !!m.pinned;
             const pinClass = isPinned ? ' pinned' : '';
@@ -451,12 +451,10 @@ export function renderStudentRoleMemoCard(studentId) {
         memosHtml = '<div class="detail-card-empty">이 학생에 대한 롤 메모 없음</div>';
     } else {
         memosHtml = memos.map(m => {
-            const timeStr = m.created_at?.toDate?.()
-                ? m.created_at.toDate().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
-                : '';
+            const timeStr = formatTimeKST(m.created_at);
             return `<div class="detail-role-memo">
                 <div class="detail-role-memo-header">
-                    <span class="detail-role-memo-sender">${esc(m.sender_email?.split('@')[0] || '')} (${esc(m.sender_role || '')})</span>
+                    <span class="detail-role-memo-sender">${esc(staffLabel(m.sender_email))} (${esc(m.sender_role || '')})</span>
                     <span class="detail-role-memo-date">${esc(timeStr)}</span>
                 </div>
                 <div class="detail-role-memo-content">${esc(m.content || '')}</div>
@@ -520,7 +518,7 @@ export function renderUnifiedMemoCard(studentId) {
         listHtml = displayItems.map(m => {
             const pinnedCls = m.pinned ? ' pinned' : '';
             const pinIcon = m.pinned ? 'keep' : 'keep_off';
-            const byStr = m.created_by ? m.created_by.split('@')[0] : '';
+            const byStr = staffLabel(m.created_by);
             const dateLabel = m._source === 'pin' && m.date && m.date !== state.selectedDate ? m.date : '';
             const meta = [byStr, dateLabel || m.created_at || ''].filter(Boolean).join(' · ');
 

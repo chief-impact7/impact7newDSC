@@ -16,6 +16,7 @@ import { state } from './state.js';
 import { esc } from './ui-utils.js';
 import { enrollmentCode, findStudent } from './student-helpers.js';
 import { currentSchool, studentGrade, studentLevel, todayStr } from './src/shared/firestore-helpers.js';
+import { staffLabel } from '@impact7/shared/staff-label';
 
 // ─── 활성 상태 집합 (분기 기준) ────────────────────────────────────────────
 // firestore-helpers.js의 ACTIVE_STUDENT_STATUSES는 '상담'을 포함하므로
@@ -30,8 +31,7 @@ export function isPastViewStudent(student) {
 
 // ─── 담당 선생 lookup ──────────────────────────────────────────────────────
 function _teacherDisplayName(email) {
-    if (!email) return '';
-    return email.split('@')[0] || '';
+    return staffLabel(email);
 }
 
 function _enrollmentTeacher(code) {

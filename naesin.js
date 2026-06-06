@@ -8,6 +8,8 @@
 
 import { getDayName, studentShortLabel } from './src/shared/firestore-helpers.js';
 import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
+import { staffLabel } from '@impact7/shared/staff-label';
+import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { db } from './firebase-config.js';
 import { doc, getDoc, getDocFromServer } from 'firebase/firestore';
 import { auditUpdate, auditSet } from './audit.js';
@@ -177,7 +179,7 @@ export function renderNaesinList() {
                 : startTime;
 
             const teacherEmail = classSettings?.[naesinKey]?.teacher || '';
-            const teacherName = teacherEmail ? teacherEmail.split('@')[0] : '';
+            const teacherName = staffLabel(teacherEmail);
             const subLine = [naesinCode, teacherName].filter(Boolean).join(' · ');
 
             const isSelected = sid === window.selectedStudentId ? 'active' : '';
@@ -265,7 +267,7 @@ export function renderNaesinDetail(studentId) {
     }
     if (tagsEl) {
         const teacherEmail = cs.teacher || '';
-        const teacherName  = teacherEmail ? teacherEmail.split('@')[0] : '';
+        const teacherName  = staffLabel(teacherEmail);
         const branch       = window.branchFromStudent?.(student) || '';
         const schoolGrade  = studentShortLabel(student);
         tagsEl.innerHTML =
@@ -364,13 +366,11 @@ export function renderNaesinDetail(studentId) {
     const memo    = rec?.naesin_memo || '';
     const memoBy  = rec?.naesin_memo_by || '';
     const memoAt  = rec?.naesin_memo_at || '';
-    const memoAtStr = memoAt
-        ? (memoAt.toDate ? memoAt.toDate().toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : String(memoAt))
-        : '';
+    const memoAtStr = formatDateTimeKST(memoAt);
 
     const memoDisplayHtml = memo
         ? `<div class="naesin-memo-item">${_esc(memo)}</div>
-           <div class="naesin-memo-meta">${_esc(memoBy ? memoBy.split('@')[0] : '')} ${_esc(memoAtStr)}</div>`
+           <div class="naesin-memo-meta">${_esc(staffLabel(memoBy))} ${_esc(memoAtStr)}</div>`
         : `<div class="naesin-memo-empty">메모 없음</div>`;
 
     const memoHtml = `
@@ -666,7 +666,7 @@ export function renderTeukangDetail(studentId) {
     }
     if (tagsEl) {
         const teacherEmail = cs.teacher || '';
-        const teacherName = teacherEmail ? teacherEmail.split('@')[0] : '';
+        const teacherName = staffLabel(teacherEmail);
         const branch = window.branchFromStudent?.(student) || '';
         const schoolGrade = studentShortLabel(student);
         tagsEl.innerHTML =
@@ -753,12 +753,10 @@ export function renderTeukangDetail(studentId) {
     const memo = rec?.naesin_memo || '';
     const memoBy = rec?.naesin_memo_by || '';
     const memoAt = rec?.naesin_memo_at || '';
-    const memoAtStr = memoAt
-        ? (memoAt.toDate ? memoAt.toDate().toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : String(memoAt))
-        : '';
+    const memoAtStr = formatDateTimeKST(memoAt);
     const memoDisplayHtml = memo
         ? `<div class="naesin-memo-item">${_esc(memo)}</div>
-           <div class="naesin-memo-meta">${_esc(memoBy ? memoBy.split('@')[0] : '')} ${_esc(memoAtStr)}</div>`
+           <div class="naesin-memo-meta">${_esc(staffLabel(memoBy))} ${_esc(memoAtStr)}</div>`
         : `<div class="naesin-memo-empty">메모 없음</div>`;
     const memoHtml = `
         <div class="detail-card">
@@ -982,7 +980,7 @@ function renderNaesinClassDetail(csKey) {
     const teachersList = window.teachersList || [];
     const currentTeacher = cs.teacher || '';
     const teacherOptions = teachersList.map(t => {
-        const name = window.getTeacherName?.(t.email) || t.email.split('@')[0];
+        const name = window.getTeacherName?.(t.email) || staffLabel(t.email);
         return `<option value="${_escAttr(t.email)}" ${t.email === currentTeacher ? 'selected' : ''}>${_esc(name)}</option>`;
     }).join('');
 

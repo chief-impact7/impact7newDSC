@@ -9,6 +9,7 @@ import { state } from './state.js';
 import { esc, escAttr, showSaveIndicator, formatTime12h, renderTime12hSelect, nextOXValue, oxDisplayClass, _stripYear, _isNoShow, _renderRescheduleHistory } from './ui-utils.js';
 import { enrollmentCode, getActiveEnrollments, matchesBranchFilter, makeDailyRecordId, branchFromStudent } from './student-helpers.js';
 import { getDayName, studentShortLabel } from './src/shared/firestore-helpers.js';
+import { staffLabel } from '@impact7/shared/staff-label';
 
 // 명시적으로 편집 요청된 domain 추적 (pending이지만 폼 표시)
 const _reopenedHwDomains = new Set();
@@ -143,7 +144,7 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
                                 style: 'width:105px;padding:4px 8px;font-size:12px;',
                             })}
                         </div>
-                        <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc((action.handler || state.currentUser?.email || '').split('@')[0])}</div>
+                        <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc(staffLabel(action.handler || state.currentUser?.email || ''))}</div>
                         <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveHwFailFields('${escAttr(studentId)}', '${escapedDomain}', this)">
                             <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
                         </button>
@@ -158,7 +159,7 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
                             <input type="date" class="field-input hw-fail-input" data-hw-field="scheduled_date" style="flex:1;padding:4px 8px;font-size:12px;"
                                 value="${escAttr(action.scheduled_date || '')}">
                         </div>
-                        <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc((action.handler || state.currentUser?.email || '').split('@')[0])}</div>
+                        <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc(staffLabel(action.handler || state.currentUser?.email || ''))}</div>
                         <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveHwFailFields('${escAttr(studentId)}', '${escapedDomain}', this)">
                             <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
                         </button>
@@ -342,9 +343,9 @@ export async function saveHwFailAction(studentId, hwFailAction, onlyDomain) {
                 scheduled_date: action.scheduled_date || '',
                 scheduled_time: action.scheduled_time || '',
                 alt_hw: action.alt_hw || '',
-                handler: (action.handler || state.currentUser?.email || '').split('@')[0],
+                handler: staffLabel(action.handler || state.currentUser?.email || ''),
                 status: 'pending',
-                created_by: (state.currentUser?.email || '').split('@')[0],
+                created_by: staffLabel(state.currentUser?.email),
                 created_at: existing?.created_at || new Date().toISOString(),
                 branch: branchFromStudent(student || {}),
             };
@@ -370,7 +371,7 @@ export async function saveHwFailAction(studentId, hwFailAction, onlyDomain) {
             for (const t of hwCancelTargets) {
                 batchUpdate(cancelBatch, doc(db, 'hw_fail_tasks', t.docId), {
                     status: '취소',
-                    cancelled_by: (state.currentUser?.email || '').split('@')[0],
+                    cancelled_by: staffLabel(state.currentUser?.email),
                     cancelled_at: new Date().toISOString()
                 });
                 t.status = '취소';
@@ -471,7 +472,7 @@ export async function completeHwFailTask(taskDocId, studentId) {
     if (!confirm('완료 처리하시겠습니까?')) return;
     showSaveIndicator('saving');
     try {
-        const completedBy = (state.currentUser?.email || '').split('@')[0];
+        const completedBy = staffLabel(state.currentUser?.email);
         await auditUpdate(doc(db, 'hw_fail_tasks', taskDocId), {
             status: '완료',
             completed_by: completedBy,
@@ -493,7 +494,7 @@ export async function cancelHwFailTask(taskDocId, studentId) {
     if (!confirm('취소 처리하시겠습니까?')) return;
     showSaveIndicator('saving');
     try {
-        const cancelledBy = (state.currentUser?.email || '').split('@')[0];
+        const cancelledBy = staffLabel(state.currentUser?.email);
         await auditUpdate(doc(db, 'hw_fail_tasks', taskDocId), {
             status: '취소',
             cancelled_by: cancelledBy,

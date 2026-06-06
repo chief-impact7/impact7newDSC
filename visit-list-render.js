@@ -20,6 +20,7 @@ import {
 import {
     todayStr, getDayName, studentShortLabel
 } from './src/shared/firestore-helpers.js';
+import { staffLabel } from '@impact7/shared/staff-label';
 
 // ─── Injection slots ────────────────────────────────────────────────────────
 let getStudentChecklistStatus, renderFilterChips;
@@ -45,7 +46,7 @@ export function getScheduledVisits() {
     // 이메일/아이디에서 이름 prefix 추출: "홍길동" → "길동", "Iris Lee" → "Iris", "chief" → "chief"
     const callerName = (emailOrId) => {
         if (!emailOrId) return '';
-        const id = emailOrId.split('@')[0];
+        const id = staffLabel(emailOrId);
         const name = id;
         if (KOREAN_CHAR_RE.test(name)) return name.length >= 2 ? name.slice(1) : name;
         return name.split(' ')[0];
@@ -172,7 +173,7 @@ export function getScheduledVisits() {
             status: r.makeup_status === '완료' ? 'completed' : 'pending',
             visitStatus: r.makeup_status === '완료' ? '완료' : (r.makeup_status === '미등원' ? '미등원' : ''),
             caller: '',
-            completedBy: r.makeup_completed_by ? (r.makeup_completed_by.split('@')[0]) : '',
+            completedBy: r.makeup_completed_by ? staffLabel(r.makeup_completed_by) : '',
             completedAt: r.makeup_completed_at || '',
             docId: r.docId
         });

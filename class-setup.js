@@ -19,6 +19,7 @@ import { buildNaesinCsKey, resolveNaesinCsKey, isActiveNaesinBase } from './stud
 import { schoolSearchTerms } from './school-normalizer.js';
 import { batchSet, batchUpdate } from './audit.js';
 import { recordTeacherChange } from './teacher-history.js';
+import { staffLabel } from '@impact7/shared/staff-label';
 import {
     hasActiveRegularClass,
     uniquePlanningEnrollments,
@@ -86,7 +87,7 @@ onAuthStateChanged(auth, async (user) => {
         window._auditUser = email;
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('main-screen').style.display = '';
-        document.getElementById('user-email').textContent = email.split('@')[0];
+        document.getElementById('user-email').textContent = staffLabel(email);
         await Promise.all([loadStudents(), loadTeachers()]);
         bindStudentEventDelegation();
         // 학생 로드 도중 step 2 진입(정규 카드 빠르게 클릭)했을 수 있음 — 빈 데이터로 그려진
@@ -483,13 +484,13 @@ async function loadTeachers() {
     teachersList = [];
     snap.forEach(d => teachersList.push({ email: d.id, ...d.data() }));
     teachersList.sort((a, b) =>
-        a.email.split('@')[0].localeCompare(b.email.split('@')[0], 'ko')
+        staffLabel(a.email).localeCompare(staffLabel(b.email), 'ko')
     );
     // 선생님 드롭다운 채우기
     const sel = document.getElementById('input-teacher');
     sel.innerHTML = '<option value="">선택</option>' +
         teachersList.map(t =>
-            `<option value="${esc(t.email)}">${esc(t.email.split('@')[0])}</option>`
+            `<option value="${esc(t.email)}">${esc(staffLabel(t.email))}</option>`
         ).join('');
 }
 
@@ -1043,7 +1044,7 @@ function renderSummary() {
     const card = document.getElementById('summary-card');
     if (!card) return;
     const d = wizardData;
-    const teacherName = d.teacher ? d.teacher.split('@')[0] : '미지정';
+    const teacherName = d.teacher ? staffLabel(d.teacher) : '미지정';
     const dayTimeStr = d.days.length
         ? d.days.map(day => `${day} ${d.schedule[day] || ''}`).join(', ')
         : '미선택';
