@@ -19,6 +19,10 @@ import { buildNaesinCsKey, resolveNaesinCsKey, isActiveNaesinBase } from './stud
 import { schoolSearchTerms } from './school-normalizer.js';
 import { batchSet, batchUpdate } from './audit.js';
 import { recordTeacherChange } from './teacher-history.js';
+import {
+    hasActiveRegularClass,
+    uniquePlanningEnrollments,
+} from './class-setup-enrollment.js';
 
 const CLASS_TYPE_LABELS = {
     '정규': '정규반',
@@ -181,14 +185,7 @@ function getStudentBranch(student) {
 }
 
 function getPlanningEnrollments(student) {
-    const today = todayStr();
-    // class_type이 명시적으로 정규/자유학기인 것만 — fallback('|| 정규') 제거.
-    // 잔존 enrollment(class_type 누락 또는 비정규 형식)가 정규로 오인되어 "반 미지정" 또는
-    // 학교+학년 형식 그룹으로 흡수되던 문제 차단 (feedback_naesin_regular_identification.md).
-    return (student.enrollments || []).filter(e => {
-        if (e.class_type !== '정규' && e.class_type !== '자유학기') return false;
-        return !e.end_date || e.end_date >= today;
-    });
+    return uniquePlanningEnrollments(student.enrollments, todayStr());
 }
 
 function getPlanningDays(student) {
@@ -930,6 +927,14 @@ window.addStudent = function (docId) {
     const found = allStudents.find(s => s.docId === docId);
     if (!found) return;
 
+    if (wizardData.classType === '정규') {
+        const classCode = buildClassCode();
+        if (classCode && hasActiveRegularClass(found.enrollments, classCode, todayStr())) {
+            showToast(`${found.name} 학생은 이미 ${classCode} 정규반에 등록되어 있습니다.`, 'error');
+            return;
+        }
+    }
+
     if (wizardData.classType === '내신') {
         const checks = [
             ['학교', wizardData.school, currentSchool(found) || ''],
@@ -1234,6 +1239,7 @@ window.submitWizard = async function () {
             }
         }
         const _rejectedStudents = [];
+        const _duplicateStudents = [];
         for (const student of d.students) {
             // 재원생만 반배정 가능 — 상담/퇴원/종강은 제외 (enrollment-status 정합성)
             if (d.classType !== '특강' && !isEnrollableStatus(student.status)) {
@@ -1242,6 +1248,12 @@ window.submitWizard = async function () {
             }
             const studentRef = doc(db, 'students', student.docId);
             let studentUpdate = null;
+            const existing = enrollmentsByDocId.get(student.docId) || [];
+
+            if (d.classType === '정규' && hasActiveRegularClass(existing, d.classCode, today)) {
+                _duplicateStudents.push(student.name || student.docId);
+                continue;
+            }
 
             // 특강 수강생은 모두 status2: '특강' 설정
             if (d.classType === '특강') {
@@ -1305,7 +1317,6 @@ window.submitWizard = async function () {
             if (d.classType === '내신') {
                 // 정규/자유학기 enrollment에 naesin_class_override 박아 명시 매핑.
                 // arrayUnion으로는 기존 element 수정 불가 → 전체 enrollments 다시 쓰기.
-                const existing = enrollmentsByDocId.get(student.docId) || [];
                 const hasRegular = existing.some(e => isActiveNaesinBase(e));
                 if (!hasRegular) throw new Error(`${student.name} 학생은 활성 정규/자유학기 등록(종료 안 됨·요일 있음)이 없어 내신반에 추가할 수 없습니다. 정규반을 먼저 정상 등록하세요.`);
                 const updated = existing.map(e =>
@@ -1316,7 +1327,6 @@ window.submitWizard = async function () {
                 batchUpdate(batch, studentRef, { enrollments: updated });
                 _pushFormationLog(batch, student.docId, '—', `추가: ${d.classCode} (내신) 누적`);
             } else if (d.classType === '자유학기') {
-                const existing = enrollmentsByDocId.get(student.docId) || [];
                 const hasRegular = existing.some(e => isActiveNaesinBase(e));
                 if (!hasRegular) throw new Error(`${student.name} 학생은 활성 정규반 등록(종료 안 됨·요일 있음)이 없어 자유학기반에 추가할 수 없습니다.`);
                 const updated = existing.filter(e =>
@@ -1330,7 +1340,6 @@ window.submitWizard = async function () {
                 // (end_date 미설정 + 같은 class_type='정규'인 항목에 end_date=새 start_date - 1 설정).
                 // 자유학기/내신은 정규의 일시 전환이라 종료하지 않는다.
                 const closeDate = yesterdayOf(newEnrollment.start_date);
-                const existing = enrollmentsByDocId.get(student.docId) || [];
                 const oldReg = existing.find(e => e.class_type === '정규' && !e.end_date);
                 const oldCode = oldReg ? `${oldReg.level_symbol || ''}${oldReg.class_number || ''}` : '';
                 const updated = existing.map(e =>
@@ -1363,6 +1372,10 @@ window.submitWizard = async function () {
         }
         await batch.commit();
 
+        if (_duplicateStudents.length) {
+            alert(`이미 ${d.classCode} 정규반에 등록된 학생은 중복 추가하지 않았습니다:\n${_duplicateStudents.join(', ')}`);
+        }
+
         // 반 생성 시 첫 강사 배정을 이력에 기록 (prev=''=신규). class_settings 저장(commit) 성공 후.
         if (d.teacher) {
             await recordTeacherChange(d.classCode, {
@@ -1375,7 +1388,7 @@ window.submitWizard = async function () {
             });
         }
 
-        showToast(`"${d.classCode}" 반이 생성되었습니다! (${d.students.length - _rejectedStudents.length}명)`, 'success');
+        showToast(`"${d.classCode}" 반이 생성되었습니다! (${d.students.length - _rejectedStudents.length - _duplicateStudents.length}명)`, 'success');
 
         // 3초 후 DSC 홈으로 이동
         setTimeout(() => { window.location.href = '/'; }, 2000);
