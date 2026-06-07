@@ -10,7 +10,7 @@ import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { state, DAY_ORDER } from './state.js';
 import { esc, escAttr, showSaveIndicator, showToast } from './ui-utils.js';
-import { matchesBranchFilter, enrollmentCode, getActiveEnrollments, resolveNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE } from './student-helpers.js';
+import { matchesBranchFilter, enrollmentCode, getActiveEnrollments, isActiveNaesinBase } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 import { cancelStudentPendingTasks } from './data-layer.js';
 import { recordTeacherChange } from './teacher-history.js';
@@ -744,35 +744,23 @@ const _MODES = {
         describe: (count) => `내신 ${count}명이 정규로 복귀합니다. 학생의 정규 등록은 보존됩니다.`,
         toast: (code, count) => `내신 "${code}" 정리 완료 (${count}명 정규 복귀)`,
         getPeriod: (cs) => ({ start: cs?.naesin_start, end: cs?.naesin_end }),
-        // 자동 유도 학생(내신 enrollment·override 없이 csKey만 매칭)도 영향 카운트에 포함하기 위한 별도 매처.
-        // applyToStudent는 enrollment 변경이 있는 학생만 update 대상으로 반환하므로 카운트와 분리.
         countMatch: (s, csKey) => {
-            const reg = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
-            return !!reg && resolveNaesinCsKey(s, reg) === csKey;
+            const today = todayStr();
+            return (s.enrollments || []).some(e => isActiveNaesinBase(e, today) && e.naesin_class_override === csKey);
         },
         applyToStudent: (s, csKey) => {
+            const today = todayStr();
             const original = s.enrollments || [];
-            const reg = original.find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
-            if (!reg || resolveNaesinCsKey(s, reg) !== csKey) return null;
-            let changed = false;
+            if (!original.some(e => isActiveNaesinBase(e, today) && e.naesin_class_override === csKey)) return null;
             const updated = original.flatMap(e => {
-                if (e.class_type === '내신') { changed = true; return []; }
-                if (e.class_type === '정규' || e.class_type === '자유학기') {
-                    // override가 csKey 매칭이면 제거 → 자동 유도로 fallback
-                    if (e.naesin_class_override === csKey) {
-                        changed = true;
-                        const { naesin_class_override: _drop, ...rest } = e;
-                        return [rest];
-                    }
-                    // override 미설정 + 자동 유도가 csKey 매칭이면 EXCLUDE 센티넬로 차단
-                    if (typeof e.naesin_class_override !== 'string' && resolveNaesinCsKey(s, e) === csKey) {
-                        changed = true;
-                        return [{ ...e, naesin_class_override: NAESIN_OVERRIDE_EXCLUDE }];
-                    }
+                if (isActiveNaesinBase(e, today) && e.naesin_class_override === csKey) {
+                    const { naesin_class_override: _drop, ...rest } = e;
+                    return [rest];
                 }
+                // 레거시 내신-타입: 이 반(csKey)에 속한 것만 정리
+                if (e.class_type === '내신' && enrollmentCode(e) === csKey) return [];
                 return [e];
             });
-            if (!changed) return null;
             return { update: { enrollments: updated }, before: original };
         },
     },
@@ -952,11 +940,10 @@ async function _cleanupEmptyClasses() {
             if (cs.naesin_start > today) continue;
             const has = state.allStudents.some(s => {
                 if (s.status === '퇴원') return false;
-                const reg = (s.enrollments || []).find(e =>
+                return (s.enrollments || []).some(e =>
                     (e.class_type === '정규' || e.class_type === '자유학기') &&
-                    e.class_number && isActive(e)
+                    e.class_number && isActive(e) && e.naesin_class_override === code
                 );
-                return reg && resolveNaesinCsKey(s, reg) === code;
             });
             if (!has) targets.push({ mode: 'naesin', code });
             continue;

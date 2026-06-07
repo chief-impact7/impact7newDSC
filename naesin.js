@@ -13,7 +13,7 @@ import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { db } from './firebase-config.js';
 import { doc, getDoc, getDocFromServer } from 'firebase/firestore';
 import { auditUpdate, auditSet } from './audit.js';
-import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt, isActiveNaesinBase } from './student-helpers.js';
+import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt, isActiveNaesinBase, resolveNaesinCsKey } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 import { renderClassDeleteCard, applyClassDetailTabMode } from './class-detail.js';
 import { cancelStudentPendingTasks } from './data-layer.js';
@@ -34,14 +34,14 @@ function getNaesinInfo(student, selectedDate, dayName) {
     // 휴원 기간 내 학생은 내신 대상 아님 (내신은 정규의 일시적 전환 — 정규가 멈춰있으면 내신도 멈춤)
     if (isOnLeaveAt(student, selectedDate)) return null;
 
-    // 정규 enrollment 확인 (초등 제외는 class_settings에 naesin 기간 없으면 자연히 걸러짐)
+    // 정규 enrollment 확인: 만료·요일 없는 enrollment 제외, override 있는 것만
     const regularEnroll = (student.enrollments || []).find(
-        e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number
+        e => isActiveNaesinBase(e, selectedDate) && e.naesin_class_override
     );
     if (!regularEnroll) return null;
 
-    // 내신 반 매칭: 수동 override 우선, 없으면 자동 유도 (빈 문자열 override = 배제)
-    const csKey = window.resolveNaesinCsKey?.(student, regularEnroll);
+    // 내신 반 매칭 (빈 문자열 override = 배제)
+    const csKey = resolveNaesinCsKey(student, regularEnroll);
     if (!csKey) return null;
 
     // 표시용 반코드: csKey에서 소속 접두사 제거
@@ -588,22 +588,25 @@ window.removeFromNaesin = async function(studentId, csKey) {
     if (!confirm(`${student.name} 학생을 ${displayCode} 반에서 제거합니다. 계속할까요?`)) return;
 
     const enrollments = (student.enrollments || []).slice();
-    const idx = enrollments.findIndex(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
-    if (idx === -1) {
-        alert('정규 enrollment을 찾을 수 없어 제거할 수 없습니다.');
+    if (!enrollments.some(e => isActiveNaesinBase(e) && e.class_number && e.naesin_class_override === csKey)) {
+        alert('해당 학생은 이 내신 반에 등록되어 있지 않습니다.');
         return;
     }
 
-    // 재추가 시 새 반 기준으로 초기화되도록 naesin_days/schedule도 함께 제거
-    const updated = { ...enrollments[idx], naesin_class_override: NAESIN_OVERRIDE_EXCLUDE };
-    delete updated.naesin_days;
-    delete updated.naesin_schedule;
-    enrollments[idx] = updated;
+    // csKey 소속 enrollment에만 EXCLUDE 세팅 (다른 반 배정은 보존)
+    const updatedEnrollments = enrollments.map(e => {
+        if (!isActiveNaesinBase(e) || !e.class_number) return e;
+        if (e.naesin_class_override !== csKey) return e;
+        const u = { ...e, naesin_class_override: NAESIN_OVERRIDE_EXCLUDE };
+        delete u.naesin_days;
+        delete u.naesin_schedule;
+        return u;
+    });
 
     window.showSaveIndicator?.('saving');
     try {
-        await auditUpdate(doc(db, 'students', studentId), { enrollments });
-        student.enrollments = enrollments;
+        await auditUpdate(doc(db, 'students', studentId), { enrollments: updatedEnrollments });
+        student.enrollments = updatedEnrollments;
         window.showSaveIndicator?.('saved');
     } catch (err) {
         console.error('[removeFromNaesin] 저장 실패:', err);
@@ -1180,14 +1183,14 @@ window.addStudentToNaesin = async function(csKey, studentId) {
     classSettings[csKey] = classSnap.data();
 
     const enrollments = (student.enrollments || []).slice();
-    const idx = enrollments.findIndex(e => isActiveNaesinBase(e) && e.class_number);
-    if (idx === -1) {
+    const baseEnroll = enrollments.find(e => isActiveNaesinBase(e) && e.class_number);
+    if (!baseEnroll) {
         alert('활성 정규반(종료 안 됨·요일 있음)에 먼저 등록된 학생만 추가할 수 있습니다.');
         return;
     }
 
-    // 이미 같은 반이면 skip (resolveNaesinCsKey는 override === '' 일 때 null 반환)
-    if (window.resolveNaesinCsKey?.(student, enrollments[idx]) === csKey) {
+    // 이미 같은 반이면 skip (어떤 enrollment이든 csKey 있으면 중복)
+    if (enrollments.some(e => isActiveNaesinBase(e) && e.naesin_class_override === csKey)) {
         alert(`${student.name} 학생은 이미 ${csKey} 반에 등록되어 있습니다.`);
         return;
     }
@@ -1198,16 +1201,22 @@ window.addStudentToNaesin = async function(csKey, studentId) {
         if (!confirm(`${csKey} 반에 내신 기간이 설정되어 있지 않아 리스트에 바로 노출되지 않을 수 있습니다. 그래도 추가할까요?`)) return;
     }
 
-    const updated = { ...enrollments[idx], naesin_class_override: csKey };
-    // 이전 반의 학생별 요일/시간 override는 새 반 기준으로 초기화
-    delete updated.naesin_days;
-    delete updated.naesin_schedule;
-    enrollments[idx] = updated;
+    // 모든 active base enrollment에 override 세팅 (첫 번째만 업데이트하면
+    // getNaesinStudentsByDerivedCode가 다른 enrollment을 집어 override가 없는 것처럼 보이는 문제 방지).
+    // 단, 이미 다른 반으로 배정된 enrollment는 건드리지 않는다.
+    const updatedEnrollments = enrollments.map(e => {
+        if (!isActiveNaesinBase(e) || !e.class_number) return e;
+        if (e.naesin_class_override && e.naesin_class_override !== csKey) return e;
+        const u = { ...e, naesin_class_override: csKey };
+        delete u.naesin_days;
+        delete u.naesin_schedule;
+        return u;
+    });
 
     window.showSaveIndicator?.('saving');
     try {
-        await auditUpdate(doc(db, 'students', studentId), { enrollments });
-        student.enrollments = enrollments;
+        await auditUpdate(doc(db, 'students', studentId), { enrollments: updatedEnrollments });
+        student.enrollments = updatedEnrollments;
         if (isFromRemote && Array.isArray(allStudents)) {
             allStudents.push(student);
             allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));

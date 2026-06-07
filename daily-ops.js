@@ -27,8 +27,8 @@ import {
 import {
     normalizeDays, branchFromStudent, matchesBranchFilter,
     enrollmentCode, allClassCodes, activeClassCodes, _enrollCodeList,
-    deriveNaesinCode, resolveNaesinCsKey, displayCodeFromCsKey, getActiveEnrollments, getStudentStartTime, isOnLeaveAt, isWithdrawnAt,
-    isNaesinActiveToday, isFreeSemesterActiveToday, isPauseExpired, pauseExpiredDays,
+    deriveNaesinCode, displayCodeFromCsKey, getActiveEnrollments, getStudentStartTime, isOnLeaveAt, isWithdrawnAt,
+    isNaesinActiveToday, isFreeSemesterActiveToday, isActiveNaesinBase, isPauseExpired, pauseExpiredDays,
     makeDailyRecordId, findStudent, buildSiblingMap
 } from './student-helpers.js';
 import {
@@ -662,11 +662,6 @@ function renderBranchFilter() {
     branchL1.classList.toggle('has-filter', !!state.selectedBranch);
 }
 
-// state._classMgmtMode → state._classMgmtMode
-// LEVEL_SHORT → imported from state.js
-
-// deriveNaesinCode → imported from student-helpers.js
-
 // 특강 학생 조회: enrollmentCode 기반(신규) + schedule 기반(구형 데이터 호환)
 function isInTeukangClass(s, classCode, _scheduleDays) {
     const scheduleDays = _scheduleDays ?? new Set(Object.keys(state.classSettings[classCode]?.schedule || {}));
@@ -764,9 +759,9 @@ function _getAllClassCodes() {
         studentFreeCodes.forEach(code => freeCounts.set(code, freeCounts.get(code) + 1));
 
         // 내신 카운트 (class_settings 등록된 csKey만)
-        const reg = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
+        const reg = (s.enrollments || []).find(e => isActiveNaesinBase(e, state.selectedDate) && e.naesin_class_override);
         if (!reg) return;
-        const csKey = resolveNaesinCsKey(s, reg);
+        const csKey = reg.naesin_class_override;
         if (csKey && naesinCounts.has(csKey)) naesinCounts.get(csKey).count++;
     });
 
@@ -793,10 +788,8 @@ function getNaesinStudentsByDerivedCode(classKey) {
         if (isWithdrawnAt(s, state.selectedDate)) return;
         if (isOnLeaveAt(s, state.selectedDate)) return;
         if (!matchesBranchFilter(s)) return;
-        const regularEnroll = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
-        if (!regularEnroll) return;
-        const resolved = resolveNaesinCsKey(s, regularEnroll);
-        if (resolved !== classKey) return;
+        const hasMatch = (s.enrollments || []).some(e => isActiveNaesinBase(e, state.selectedDate) && e.naesin_class_override === classKey);
+        if (!hasMatch) return;
         if (!seen.has(s.docId)) {
             seen.add(s.docId);
             result.push({ student: s });
@@ -806,7 +799,6 @@ function getNaesinStudentsByDerivedCode(classKey) {
 }
 window.branchFromStudent = branchFromStudent;
 window.deriveNaesinCode = deriveNaesinCode;
-window.resolveNaesinCsKey = resolveNaesinCsKey;
 window.displayCodeFromCsKey = displayCodeFromCsKey;
 window.getNaesinStudentsByDerivedCode = getNaesinStudentsByDerivedCode;
 
@@ -882,10 +874,8 @@ function _getClassesForBranchLevel(branch, level) {
     }
     for (const { code: csKey, displayCode } of naesin) {
         if (!hasNaesinToday(csKey)) continue;
-        const matchesClass = s => {
-            const reg = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
-            return reg && resolveNaesinCsKey(s, reg) === csKey;
-        };
+        const matchesClass = s =>
+            (s.enrollments || []).some(e => isActiveNaesinBase(e, today) && e.naesin_class_override === csKey);
         if (dominantLevel(matchesClass) !== level) continue;
         const count = students.filter(matchesClass).length;
         if (count > 0) result.push({ mode: 'naesin', code: csKey, display: displayCode, count });
