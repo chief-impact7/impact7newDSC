@@ -20,8 +20,8 @@ import {
 import {
     enrollmentCode, findStudent,
     branchFromStudent, makeDailyRecordId,
-    getActiveEnrollments, getStudentStartTime, resolveNaesinCsKey,
-    allClassCodes
+    getActiveEnrollments, getStudentStartTime,
+    allClassCodes, isActiveNaesinBase
 } from './student-helpers.js';
 import {
     currentSchool, studentGrade, todayStr, getDayName
@@ -360,7 +360,7 @@ function _classTypeLabel(types) {
     return [...types].join('/');
 }
 
-// 내신 활성 체크 — class_type='내신' enrollment 또는 class_settings.naesin_*로 자동 유도
+// 내신 활성 체크 — class_type='내신' enrollment 또는 naesin_class_override+class_settings 기간
 function _isNaesinActiveAt(student, date) {
     const enrolls = student.enrollments || [];
     const valid = (d) => d && /^\d{4}-/.test(d);
@@ -368,13 +368,12 @@ function _isNaesinActiveAt(student, date) {
         e.class_type === '내신' &&
         valid(e.start_date) && e.start_date <= date &&
         (!valid(e.end_date) || e.end_date >= date))) return true;
-    const regular = enrolls.find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
-    if (!regular) return false;
-    const csKey = resolveNaesinCsKey(student, regular);
-    if (!csKey) return false;
-    const cs = state.classSettings[csKey];
-    if (!cs?.naesin_start || !cs?.naesin_end) return false;
-    return cs.naesin_start <= date && date <= cs.naesin_end;
+    return enrolls.some(e => {
+        if (!isActiveNaesinBase(e, date) || !e.naesin_class_override) return false;
+        const cs = state.classSettings[e.naesin_class_override];
+        if (!cs?.naesin_start || !cs?.naesin_end) return false;
+        return cs.naesin_start <= date && date <= cs.naesin_end;
+    });
 }
 
 function _ensureReportInputDefaults() {

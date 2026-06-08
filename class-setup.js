@@ -15,7 +15,7 @@ import {
     ACTIVE_STUDENT_STATUSES
 } from './src/shared/firestore-helpers.js';
 import { LEVEL_SHORT, state } from './state.js';
-import { buildNaesinCsKey, resolveNaesinCsKey, isActiveNaesinBase } from './student-helpers.js';
+import { buildNaesinCsKey, isActiveNaesinBase } from './student-helpers.js';
 import { schoolSearchTerms } from './school-normalizer.js';
 import { batchSet, batchUpdate, normalizeImpact7Email } from './audit.js';
 import { recordTeacherChange } from './teacher-history.js';
@@ -1171,19 +1171,10 @@ window.submitWizard = async function () {
             for (const student of d.students) {
                 if (!isEnrollableStatus(student.status)) continue;
                 const existing = enrollmentsByDocId.get(student.docId) || [];
-                // override 없는 정규 enrollment를 probe로 만들어 csKey를 유도한다.
-                // 정규 모드: 이번에 추가될 새 정규(코드 입력값). 자유학기 모드: 기존 정규.
-                let probe;
-                if (d.classType === '정규') {
-                    probe = { class_type: '정규', level_symbol: d.levelSymbol || '', class_number: d.classNumber || '' };
-                } else {
-                    probe = existing.find(e => (e.class_type === '정규' || e.class_type === '자유학기') &&
-                        `${e.level_symbol || ''}${e.class_number || ''}` === d.classCode);
-                    // 자유학기에 이미 override가 박혀 있으면(또는 자동 유도) 정상 경로 → 가드 제외
-                    if (!probe || typeof probe.naesin_class_override === 'string') continue;
-                }
-                const csKey = resolveNaesinCsKey(student, probe);
-                if (!csKey) continue;
+                // 이미 naesin_class_override가 있는 활성 enrollment를 직접 찾아 csKey로 사용.
+                const naesinEnroll = existing.find(e => isActiveNaesinBase(e, today) && e.naesin_class_override);
+                if (!naesinEnroll) continue;
+                const csKey = naesinEnroll.naesin_class_override;
                 // class-setup 진입점은 state.classSettings를 채우지 않으므로 필요한 키만 읽어 주입.
                 if (!state.classSettings[csKey]) {
                     const csSnap = await getDoc(doc(db, 'class_settings', csKey));

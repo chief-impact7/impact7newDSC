@@ -941,8 +941,7 @@ async function _cleanupEmptyClasses() {
             const has = state.allStudents.some(s => {
                 if (s.status === '퇴원') return false;
                 return (s.enrollments || []).some(e =>
-                    (e.class_type === '정규' || e.class_type === '자유학기') &&
-                    e.class_number && isActive(e) && e.naesin_class_override === code
+                    isActiveNaesinBase(e, today) && e.class_number && e.naesin_class_override === code
                 );
             });
             if (!has) targets.push({ mode: 'naesin', code });
