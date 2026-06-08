@@ -70,7 +70,7 @@ service cloud.firestore {
         let allowed = [
           'name', 'level', 'grade',
           'school_elementary', 'school_middle', 'school_high', 'school_level_grade',
-          'student_phone', 'parent_phone_1', 'parent_phone_2',
+          'student_phone', 'parent_phone_1', 'parent_phone_2', 'other_phone',
           'guardian_name_1', 'guardian_name_2',
           'branch', 'status', 'status2', 'enrollments',
           'enrollments_cleared_at', 'enrollments_cleared_by',
@@ -101,13 +101,13 @@ service cloud.firestore {
       allow create: if isAuthorized()
         && hasRequiredStudentFields()
         && hasOnlyAllowedStudentFields()
-        && withinFieldLimit(35)
+        && withinFieldLimit(36)
         && enrollmentStatusConsistent();
 
       allow update: if isAuthorized()
         && hasRequiredStudentFields()
         && hasOnlyAllowedStudentFields()
-        && withinFieldLimit(35)
+        && withinFieldLimit(36)
         && (!resource.data.keys().hasAny(['status']) || request.resource.data.keys().hasAny(['status']))
         && enrollmentStatusConsistent();
 
