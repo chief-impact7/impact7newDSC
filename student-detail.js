@@ -739,6 +739,9 @@ function externalEventLabel(event) {
         const schoolWithLevel = levelShort && !school.endsWith(levelShort) ? `${school}${levelShort}` : school;
         return `${event.year || ''} ${schoolWithLevel}${event.grade || ''} ${event.semester || ''}학기 ${event.examName || ''}`.replace(/\s+/g, ' ').trim();
     }
+    if (event.type === 'suneung_index') {
+        return `${event.year || ''} ${event.month || ''}월 수능인덱스`.replace(/\s+/g, ' ').trim();
+    }
     return `${event.year || ''} ${event.month || ''}월 모의고사 ${event.grade ? `${event.grade}학년` : ''}`.replace(/\s+/g, ' ').trim();
 }
 
@@ -808,10 +811,30 @@ async function loadAcademyScores(studentId) {
         const r = resultSnap.data();
         const department = departmentsById.get(exam.deptId);
         return {
-            title: esc(exam.title || '원내고사'),
+            title: esc(exam.title || '진단평가'),
             date: esc(scoreDateText(exam.schedule?.startDate) || ''),
             score: esc(reportScoreValue(r, department)),
             domains: renderDomainScores(r, department),
+        };
+    }));
+
+    return rows.filter(Boolean).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+}
+
+async function loadSuneungIndexScores(studentId) {
+    const eventSnap = await getDocs(query(collection(db, 'external_score_events'), where('type', '==', 'suneung_index')));
+    const events = [];
+    eventSnap.forEach(d => events.push({ id: d.id, ...d.data() }));
+
+    const rows = await Promise.all(events.map(async event => {
+        const scoreSnap = await getDoc(doc(db, 'external_score_events', event.id, 'students', studentId));
+        if (!scoreSnap.exists()) return null;
+        const s = scoreSnap.data();
+        return {
+            title: esc(`${event.year || ''} ${event.month || ''}월 수능인덱스`.replace(/\s+/g, ' ').trim()),
+            date: esc(event.date || event.updatedAt || ''),
+            raw: esc(s.rawScore != null ? String(s.rawScore) : '—'),
+            index: esc('준비 중'),
         };
     }));
 
@@ -868,9 +891,13 @@ export async function loadScoreCard() {
     contentEl.innerHTML = '<div class="detail-card-empty" style="padding:32px;text-align:center;">성적을 불러오는 중...</div>';
 
     try {
-        const [academyRows, schoolRows, mockRows] = await Promise.all([
+        const [academyRows, suneungRows, schoolRows, mockRows] = await Promise.all([
             loadAcademyScores(studentId).catch(err => {
-                console.warn('원내고사 조회 실패:', err);
+                console.warn('진단평가 조회 실패:', err);
+                return [];
+            }),
+            loadSuneungIndexScores(studentId).catch(err => {
+                console.warn('수능인덱스 조회 실패:', err);
                 return [];
             }),
             loadExternalScores(studentId, 'school').catch(err => {
@@ -884,11 +911,17 @@ export async function loadScoreCard() {
         ]);
         if (state.selectedStudentId !== studentId) return;
 
-        const academyHtml = renderScoreTable('원내고사', 'bar_chart', academyRows, '원내고사 결과가 없습니다.', [
+        const academyHtml = renderScoreTable('진단평가', 'bar_chart', academyRows, '진단평가 결과가 없습니다.', [
             { key: 'title', label: '시험' },
             { key: 'date', label: '일자' },
             { key: 'score', label: '최종', align: 'right' },
             { key: 'domains', label: '영역', wide: true },
+        ]);
+        const suneungHtml = renderScoreTable('수능인덱스', 'insights', suneungRows, '수능인덱스 기록이 없습니다.', [
+            { key: 'title', label: '시험' },
+            { key: 'date', label: '일자' },
+            { key: 'raw', label: '원점수', align: 'right' },
+            { key: 'index', label: '수능인덱스', align: 'right' },
         ]);
         const schoolHtml = renderScoreTable('학교내신', 'school', schoolRows, '학교내신 성적 기록이 없습니다.', [
             { key: 'title', label: '시험' },
@@ -909,7 +942,7 @@ export async function loadScoreCard() {
             { key: 'extra', label: '부가', wide: true },
         ]);
 
-        contentEl.innerHTML = `<div class="score-tab-content">${academyHtml}${schoolHtml}${mockHtml}</div>`;
+        contentEl.innerHTML = `<div class="score-tab-content">${academyHtml}${suneungHtml}${schoolHtml}${mockHtml}</div>`;
     } catch (err) {
         console.error('성적 조회 실패:', err);
         contentEl.innerHTML = '<div class="detail-card-empty" style="padding:32px;text-align:center;color:var(--danger);">성적 조회 실패: ' + esc(err.message) + '</div>';
