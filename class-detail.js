@@ -5,7 +5,7 @@
 import { doc, getDoc, getDocFromServer, writeBatch, arrayUnion, deleteField, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from './firebase-config.js';
 import { todayStr } from './src/shared/firestore-helpers.js';
-import { auditUpdate, auditDelete, batchUpdate, batchSet, READ_ONLY } from './audit.js';
+import { auditUpdate, auditDelete, batchUpdate, batchSet, READ_ONLY, normalizeImpact7Email } from './audit.js';
 import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { state, DAY_ORDER } from './state.js';
@@ -781,7 +781,7 @@ async function _logClassDeletion(classCode, mode, csBefore, affected) {
             students: affected.map(s => ({ docId: s.docId, name: s.name, enrollments: s.before })),
         }),
         after: JSON.stringify({ deleted: true, mode, affected_count: affected.length }),
-        google_login_id: state.currentUser?.email || 'unknown',
+        google_login_id: normalizeImpact7Email(state.currentUser?.email || 'unknown'),
         timestamp: serverTimestamp(),
     });
 }
@@ -1148,7 +1148,7 @@ export async function addStudentToTeukang(classCode, studentId) {
             status2: '특강',
         };
         if (shouldReactivate) {
-            const actor = auth.currentUser?.email || window._auditUser || 'unknown';
+            const actor = normalizeImpact7Email(auth.currentUser?.email || window._auditUser || 'unknown');
             update.status = '재원';
             update.status_changed_at = serverTimestamp();
             update.status_changed_by = actor;

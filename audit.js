@@ -36,8 +36,12 @@ if (READ_ONLY) {
     }
 }
 
+export function normalizeImpact7Email(email) {
+    return String(email || '').replace(/@gw\.impact7\.kr$/i, '@impact7.kr');
+}
+
 function _auditFields() {
-    const email = auth.currentUser?.email || window._auditUser || 'unknown';
+    const email = normalizeImpact7Email(auth.currentUser?.email || window._auditUser || 'unknown');
     return { updated_by: email, updated_at: serverTimestamp() };
 }
 
@@ -71,7 +75,7 @@ export async function auditDelete(ref) {
                 collection: ref.parent.id,
                 doc_id: ref.id,
                 data_before: snap.data(),
-                deleted_by: auth.currentUser?.email || window._auditUser || 'unknown',
+                deleted_by: normalizeImpact7Email(auth.currentUser?.email || window._auditUser || 'unknown'),
                 deleted_at: serverTimestamp()
             });
         }

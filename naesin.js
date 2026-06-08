@@ -12,7 +12,7 @@ import { staffLabel } from '@impact7/shared/staff-label';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { db } from './firebase-config.js';
 import { doc, getDoc, getDocFromServer } from 'firebase/firestore';
-import { auditUpdate, auditSet } from './audit.js';
+import { auditUpdate, auditSet, normalizeImpact7Email } from './audit.js';
 import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt, isActiveNaesinBase, resolveNaesinCsKey } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 import { renderClassDeleteCard, applyClassDetailTabMode } from './class-detail.js';
@@ -454,7 +454,7 @@ window.saveNaesinMemo = function(studentId) {
     const memoText = ta.value.trim();
     window.saveDailyRecord(studentId, {
         naesin_memo:    memoText,
-        naesin_memo_by: currentUser?.email || '',
+        naesin_memo_by: normalizeImpact7Email(currentUser?.email || ''),
         naesin_memo_at: new Date(),
     });
     // 재렌더

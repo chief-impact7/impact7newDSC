@@ -17,7 +17,7 @@ import {
 import { LEVEL_SHORT, state } from './state.js';
 import { buildNaesinCsKey, resolveNaesinCsKey, isActiveNaesinBase } from './student-helpers.js';
 import { schoolSearchTerms } from './school-normalizer.js';
-import { batchSet, batchUpdate } from './audit.js';
+import { batchSet, batchUpdate, normalizeImpact7Email } from './audit.js';
 import { recordTeacherChange } from './teacher-history.js';
 import { staffLabel } from '@impact7/shared/staff-label';
 import {
@@ -84,7 +84,7 @@ onAuthStateChanged(auth, async (user) => {
             return;
         }
         currentUser = user;
-        window._auditUser = email;
+        window._auditUser = normalizeImpact7Email(email);
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('main-screen').style.display = '';
         document.getElementById('user-email').textContent = staffLabel(email);
@@ -1213,7 +1213,7 @@ window.submitWizard = async function () {
 
         // 반생성마법사 수업이력 로그 — DB의 UPDATE 로그와 동일 필드/형식으로 기록.
         // 공유 분류기(@impact7/shared)가 before/after를 파싱해 전반/수업추가로 분류한다.
-        const _logActor = currentUser?.email || auth.currentUser?.email || 'unknown';
+        const _logActor = normalizeImpact7Email(currentUser?.email || auth.currentUser?.email || 'unknown');
         const _pushFormationLog = (b, docId, before, after) => {
             batchSet(b, doc(collection(db, 'history_logs')), {
                 doc_id: docId,

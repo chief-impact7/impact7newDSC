@@ -4,7 +4,7 @@
 
 import { collection, getDocs, doc, getDoc, query, where, serverTimestamp, deleteField, writeBatch } from 'firebase/firestore';
 import { db } from './firebase-config.js';
-import { auditUpdate, auditSet, auditDelete, batchUpdate } from './audit.js';
+import { auditUpdate, auditSet, auditDelete, batchUpdate, normalizeImpact7Email } from './audit.js';
 import { getDayName } from './src/shared/firestore-helpers.js';
 import { state, NEW_STUDENT_DAYS } from './state.js';
 import { showSaveIndicator, nowTimeStr } from './ui-utils.js';
@@ -221,9 +221,9 @@ export async function autoCreateAbsenceRecord(studentId, overrides, date = state
             reschedule_history: [],
             status: 'open',
             // 결석을 체크한 사람/시간 (daily_records 기준, syncAbsenceRecords 실행자가 아닌 실제 체크자)
-            marked_absent_by: state.dailyRecords[studentId]?.updated_by || state.currentUser?.email || '',
+            marked_absent_by: state.dailyRecords[studentId]?.updated_by || normalizeImpact7Email(state.currentUser?.email || ''),
             marked_absent_at: state.dailyRecords[studentId]?.updated_at || '',
-            created_by: state.currentUser?.email || ''
+            created_by: normalizeImpact7Email(state.currentUser?.email || '')
         };
         if (!overrides && state.dailyRecords[studentId]?.attendance?.status !== '결석') return;
 

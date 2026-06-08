@@ -12,10 +12,10 @@
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from './firebase-config.js';
 import { state } from './state.js';
-import { READ_ONLY } from './audit.js';
+import { READ_ONLY, normalizeImpact7Email } from './audit.js';
 
 function currentUserEmail() {
-    return auth.currentUser?.email || state.currentUser?.email || window._auditUser || '';
+    return normalizeImpact7Email(auth.currentUser?.email || state.currentUser?.email || window._auditUser || '');
 }
 
 /**

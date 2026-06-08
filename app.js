@@ -6,7 +6,7 @@ import {
 import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
 import { todayStr, getDayName, addDays, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
-import { auditUpdate, auditSet, auditAdd } from './audit.js';
+import { auditUpdate, auditSet, auditAdd, normalizeImpact7Email } from './audit.js';
 import { staffLabel } from '@impact7/shared/staff-label';
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -30,9 +30,6 @@ const escAttr = (str) =>
     String(str ?? '').replace(/&/g, '&amp;').replace(/'/g, '&#39;')
         .replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-function displayImpact7Email(email) {
-    return String(email || '').replace(/@gw\.impact7\.kr$/i, '@impact7.kr');
-}
 
 function normalizeDays(day) {
     if (!day) return [];
@@ -219,13 +216,13 @@ onAuthStateChanged(auth, async (user) => {
         }
 
         currentUser = user;
-        window._auditUser = user.email || null;
+        window._auditUser = normalizeImpact7Email(user.email) || null;
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('main-screen').style.display = 'block';
         document.getElementById('user-email').textContent = staffLabel(user.email);
         const avatar = document.querySelector('.avatar');
         avatar.textContent = user.email[0].toUpperCase();
-        avatar.title = `${displayImpact7Email(user.email)} (클릭: 로그아웃)`;
+        avatar.title = `${normalizeImpact7Email(user.email)} (클릭: 로그아웃)`;
 
         await loadAllStudents();
         setDate(todayStr());

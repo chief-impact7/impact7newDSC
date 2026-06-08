@@ -10,7 +10,7 @@ import { toDateStrKST, parseDateKST, todayStr, getDayName, studentLevel, student
 import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { schoolSearchTerms } from './school-normalizer.js';
-import { auditUpdate, auditSet } from './audit.js';
+import { auditUpdate, auditSet, normalizeImpact7Email } from './audit.js';
 import {
     state,
     OX_CYCLE, VISIT_STATUS_CYCLE, DEFAULT_DOMAINS, KOREAN_CHAR_RE,
@@ -2997,9 +2997,6 @@ window.closeDetail = () => {
     renderListPanel();
 };
 
-function displayImpact7Email(email) {
-    return String(email || '').replace(/@gw\.impact7\.kr$/i, '@impact7.kr');
-}
 
 // ─── Auth ───────────────────────────────────────────────────────────────────
 
@@ -3014,12 +3011,12 @@ onAuthStateChanged(auth, async (user) => {
         }
 
         state.currentUser = user;
-        window._auditUser = user.email || null;
+        window._auditUser = normalizeImpact7Email(user.email) || null;
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('main-screen').style.display = '';
         document.getElementById('user-email').textContent = staffLabel(user.email);
         document.getElementById('user-avatar').textContent = (user.email || 'U')[0].toUpperCase();
-        document.getElementById('user-avatar').title = `${displayImpact7Email(user.email)} (클릭: 로그아웃)`;
+        document.getElementById('user-avatar').title = `${normalizeImpact7Email(user.email)} (클릭: 로그아웃)`;
 
         // 날짜/UI는 데이터 로드 실패와 무관하게 반드시 표시
         updateDateDisplay();
