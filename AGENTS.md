@@ -162,6 +162,11 @@ hook이 없다면 `bash scripts/install-hooks.sh`로 설치한다.
 크로스앱·공유 컬렉션 변경은 impact7DB의 `impact7-orchestrator` 하네스에서 조율한다.
 → 크로스앱 작업은 impact7DB에서 시작 권장.
 
+## codegraph 탐색 원칙
+
+코드를 탐색할 때 Read·grep 전에 **`codegraph_explore`를 먼저** 실행한다.
+`.memory/reference_codegraph_guide.md`에 도메인별 핵심 쿼리가 정리되어 있다.
+
 ## 메모리 (계정 공유)
 
 1인 개발. 여러 Claude 계정을 번갈아 사용하지만 동일 사용자.

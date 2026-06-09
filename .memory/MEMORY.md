@@ -26,3 +26,5 @@
 - [feedback_enrollment_integrity_guards.md](feedback_enrollment_integrity_guards.md) — enrollment class_type×코드 정합성 가드는 모든 저장 경로(반편성도우미·DB 모달·DSC 모달·CSV import)에서 강제 (2026-05 263건 사고 재발 방지)
 - [reference_cs_naesin_period_sync.md](reference_cs_naesin_period_sync.md) — Cloud Function `onClassSettingsNaesinPeriodChanged` 가 cs.naesin_end 변경 시 학생 enrollment.end_date 자동 sync (7303749)
 - [feedback_outlier_detection_pattern.md](feedback_outlier_detection_pattern.md) — "한 명만 이상함" 보고 시 같은 csKey·반 멤버 dump해서 형식 불일치 outlier 검출하는 패턴
+
+- [codegraph 활용 가이드](reference_codegraph_guide.md) — 인덱스 현황, 도메인별 탐색 쿼리, 주요 모듈 위치
