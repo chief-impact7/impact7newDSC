@@ -42,10 +42,14 @@ export function initDataLayerDeps(deps) {
 // state._classSettingsLoaded → state._classSettingsLoaded
 export async function loadClassSettings(force = false) {
     if (state._classSettingsLoaded && !force) return;
-    const snap = await getDocs(collection(db, 'class_settings'));
-    state.classSettings = {};
-    snap.forEach(d => { state.classSettings[d.id] = d.data(); });
-    state._classSettingsLoaded = true;
+    try {
+        const snap = await getDocs(collection(db, 'class_settings'));
+        state.classSettings = {};
+        snap.forEach(d => { state.classSettings[d.id] = d.data(); });
+        state._classSettingsLoaded = true;
+    } catch (err) {
+        console.error('[loadClassSettings]', err);
+    }
 }
 
 export function getClassDomains(classCode) {
