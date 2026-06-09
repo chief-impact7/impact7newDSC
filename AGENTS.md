@@ -157,6 +157,39 @@ hook이 없다면 `bash scripts/install-hooks.sh`로 설치한다.
 |------|----------|------|------|
 | 2026-04-22 | 초기 구성 | skills/firestore-data-fix/SKILL.md | 유시우 복구(check-yoosiwoo.mjs + restore-yoosiwoo.mjs) 패턴을 체계화. 1인 개발자가 프로덕션 데이터를 수정할 때 실수 없이 진행하도록 dry-run + history_logs + batch atomic 규율을 스킬로 명문화 |
 
+## 하네스: Firestore Rules 동기화
+
+**목표:** firestore.rules를 4개 프로젝트(impact7DB·impact7newDSC·impact7HR·impact7exam)에 동기화. diff 확인 → 기준 파일 결정 → 사용자 승인 → 복사 → 검증 순으로 실행
+
+**트리거:** rules 동기화/firestore.rules 수정/4개 프로젝트 동기화/rules 맞춰줘/배포 전 rules 확인 요청 시 `firestore-rules-sync` 스킬을 사용하라. `pre-deploy` 하네스도 자동으로 호출한다.
+
+**변경 이력:**
+| 날짜 | 변경 내용 | 대상 | 사유 |
+|------|----------|------|------|
+| 2026-06-09 | 포인터 등록 + description pushy화 | skills/firestore-rules-sync/SKILL.md | AGENTS.md 포인터 누락(drift) 수정. description에 트리거·후속 키워드 추가 |
+
+## 하네스: Enrollment 정합성 감사
+
+**목표:** 학생 enrollments[] 배열의 class_type×코드 정합성을 두 가지 축으로 검증. (1) 4개 필수 가드 위치 정적 감사, (2) 실제 Firestore 데이터 위반 탐지 스크립트 생성
+
+**트리거:** enrollment 검증/enrollment 정합성/등록 데이터 확인/수강 데이터 검증/class_type 오류/enrollment 감사/263건 같은 사고 방지/enrollment 일괄 점검/가드 코드 확인 요청 시 `enrollment-integrity` 스킬을 사용하라.
+
+**변경 이력:**
+| 날짜 | 변경 내용 | 대상 | 사유 |
+|------|----------|------|------|
+| 2026-06-09 | 초기 구성 | agents/enrollment-validator.md, skills/enrollment-integrity/SKILL.md | 2026-05 263건 사고(CSV class_type 누락으로 잘못된 enrollment 대량 생성) 재발 방지. 정적 가드 감사 + 데이터 감사 스크립트 생성을 에이전트화 |
+
+## 하네스: 성능·Firestore 비용 감사
+
+**목표:** onSnapshot 리스너 현황, 고비용 쿼리 패턴(N+1·전체 스캔), unsubscribe 누락, 번들 크기를 정적 분석하여 Firestore 읽기 비용 위험 요소를 발굴
+
+**트리거:** 성능 감사/Firestore 읽기 비용/onSnapshot 분석/읽기 스파이크/쿼리 비용/번들 크기/performance audit/읽기 패턴 분석/Firestore 비용 최적화/N+1 쿼리/unsubscribe 누락 요청 시 `performance-audit` 스킬을 사용하라.
+
+**변경 이력:**
+| 날짜 | 변경 내용 | 대상 | 사유 |
+|------|----------|------|------|
+| 2026-06-09 | 초기 구성 | agents/performance-auditor.md, skills/performance-audit/SKILL.md | 8개 컬렉션 onSnapshot 전환(2026-03-24) 후 읽기 스파이크 모니터링 중. 비용 위험 요소를 사전에 정적 분석하는 하네스 필요 |
+
 ## 크로스앱 조율
 
 크로스앱·공유 컬렉션 변경은 impact7DB의 `impact7-orchestrator` 하네스에서 조율한다.

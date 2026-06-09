@@ -1,6 +1,5 @@
-export function enrollmentCode(enrollment) {
-    return `${enrollment?.level_symbol || ''}${enrollment?.class_number || ''}`.trim();
-}
+import { enrollmentCode } from './student-core.js';
+export { enrollmentCode };
 
 export function uniquePlanningEnrollments(enrollments, today) {
     const byCode = new Map();

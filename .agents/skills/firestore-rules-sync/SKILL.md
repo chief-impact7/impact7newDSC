@@ -1,6 +1,6 @@
 ---
 name: firestore-rules-sync
-description: firestore.rules 변경 감지 시 impact7DB, impact7newDSC, impact7HR, impact7exam 4개 프로젝트에 동기화. 규칙 수정 후 또는 커밋 전에 호출.
+description: "Firestore Security Rules를 4개 프로젝트(impact7DB·impact7newDSC·impact7HR·impact7exam)에 동기화하는 런북. 'rules 동기화', 'firestore.rules 수정했어', '4개 프로젝트 동기화', 'rules 복사해줘', 'rules 맞춰줘', '규칙 파일 맞추기', 'rules가 달라', '배포 전 rules 확인', 'rules 불일치' 요청 시 반드시 이 스킬을 사용. pre-deploy 하네스가 자동으로 호출하기도 함. 후속: 'rules 다시 확인', '동기화 됐어?', '배포는', '나머지 프로젝트 커밋' 시에도 사용."
 ---
 
 # Firestore Rules 동기화

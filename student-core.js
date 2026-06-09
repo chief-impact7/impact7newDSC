@@ -9,7 +9,7 @@ export function normalizeDays(day) {
 
 export function enrollmentCode(e) {
     if (!e) return '';
-    return `${e.level_symbol || ''}${e.class_number || ''}`;
+    return `${e.level_symbol || ''}${e.class_number || ''}`.trim();
 }
 
 export function branchFromStudent(s) {
