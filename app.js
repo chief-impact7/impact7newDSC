@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
-import { todayStr, getDayName, addDays, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
+import { todayStr, getDayName, addDays, PAST_STUDENT_STATUSES, normalizeDays, enrollmentCode, branchFromStudent } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditSet, auditAdd, normalizeImpact7Email } from './audit.js';
 import { staffLabel } from '@impact7/shared/staff-label';
 
@@ -30,24 +30,6 @@ const escAttr = (str) =>
     String(str ?? '').replace(/&/g, '&amp;').replace(/'/g, '&#39;')
         .replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-
-function normalizeDays(day) {
-    if (!day) return [];
-    if (Array.isArray(day)) return day.map(d => d.replace('요일', '').trim());
-    return day.split(/[,·\s]+/).map(d => d.replace('요일', '').trim()).filter(Boolean);
-}
-
-const enrollmentCode = (e) => `${e.level_symbol || ''}${e.class_number || ''}`;
-
-const branchFromClassNumber = (num) => {
-    const first = (num || '').trim()[0];
-    if (first === '1') return '2단지';
-    if (first === '2') return '10단지';
-    return '';
-};
-
-const branchFromStudent = (s) =>
-    s.branch || (s.enrollments?.[0] ? branchFromClassNumber(s.enrollments[0].class_number) : '');
 
 // 활성 enrollment만 반환. 내신/자유학기가 활성 기간이면 정규를 숨김.
 // start_date 미래·end_date 과거 enrollment 제외 (등원예정 학생의 미래 등원일 누출 차단)

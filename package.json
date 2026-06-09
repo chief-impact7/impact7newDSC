@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test consultation-filter.test.js consultation-payload.test.js class-setup-enrollment.test.js"
+    "test": "node --test consultation-filter.test.js consultation-payload.test.js class-setup-enrollment.test.js student-core.test.js"
   },
   "dependencies": {
     "@impact7/shared": "github:chief-impact7/impact7-shared#v1.26.1",
