@@ -527,8 +527,10 @@ export function renderListPanel() {
 
         let toggleHtml = '';
         const isLeave = LEAVE_STATUSES.includes(s.status);
-        // isLeave가 true면 short-circuit으로 every() 미실행
-        const isTeukangOnly = !isLeave && _todayEnrolls.length > 0 && _todayEnrolls.every(e => e.class_type === '특강');
+        // classSettings 검증 인라인 — end_date 없는 구 정규/고아 enrollment 오분류 방지, _todayEnrolls 재사용
+        const isTeukangOnly = !isLeave
+            && _todayEnrolls.some(e => { const ec = enrollmentCode(e); return e.class_type === '특강' && ec && state.classSettings[ec]?.class_type === '특강'; })
+            && !_todayEnrolls.some(e => { if (!REGULAR_CLASS_TYPES.includes(e.class_type || '정규')) return false; const ec = enrollmentCode(e); return !ec || state.classSettings[ec] !== undefined; });
 
         if (isLeave || (PAST_STUDENT_STATUSES.has(s.status) && !isTeukangOnly)) {
             toggleHtml = '';
