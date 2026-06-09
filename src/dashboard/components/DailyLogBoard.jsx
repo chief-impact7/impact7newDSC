@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { getDayName, studentGradeKey, studentShortLabel } from '../../shared/firestore-helpers.js';
-import { branchFromStudent, resolveNaesinCsKey } from '../../../student-helpers.js';
+import { branchFromStudent, resolveNaesinCsKey, displayCodeFromCsKey } from '../../../student-helpers.js';
 import { staffLabel } from '@impact7/shared/staff-label';
 
 const ACTIVE_STATUSES = new Set(['재원', '등원예정', '실휴원', '가휴원', '상담']);
@@ -357,6 +357,9 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
         const arrivalTime = attendance.time || rec.arrival_time || '';
         const classTeacher = teacherNameForClass(classSettings, code);
 
+        const classLabel = groupKey === 'naesin' && code !== '내신'
+            ? displayCodeFromCsKey(code, classSettings[code]?.branch)
+            : code;
         const row = {
             id,
             name: student.name || id,
@@ -374,6 +377,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
             notes,
             next,
             classCode: code,
+            classLabel,
             groupKey,
         };
 
@@ -639,11 +643,12 @@ function ClassGroup({ groupKey, classCode, rows, open = false }) {
     const late = countRows(rows, '지각');
     const absent = countRows(rows, '결석');
     const issues = rows.reduce((sum, row) => sum + rowIssueCount(row), 0);
+    const displayCode = rows[0]?.classLabel ?? classCode;
     return (
         <details className="daily-log-class-details" open={open}>
             <summary>
                 <span className="material-symbols-outlined daily-log-class-chev">chevron_right</span>
-                <strong>{classGroupTitle(groupKey, classCode)}</strong>
+                <strong>{classGroupTitle(groupKey, displayCode)}</strong>
                 <span>{rows.length}명 · 지각 {late} · 결석 {absent} · 이슈 {issues}</span>
             </summary>
             <LogTable rows={rows} />
