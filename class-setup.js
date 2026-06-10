@@ -964,7 +964,7 @@ window.submitWizard = async function () {
         showToast(`"${d.classCode}" 반이 생성되었습니다! (${d.students.length - _duplicateStudents.length}명)`, 'success');
 
         // 3초 후 DSC 홈으로 이동
-        setTimeout(() => { window.location.href = '/'; }, 2000);
+        setTimeout(() => { window.location.href = './'; }, 2000);
 
     } catch (err) {
         console.error('[submitWizard]', err);
