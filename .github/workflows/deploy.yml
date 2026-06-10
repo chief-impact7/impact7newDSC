@@ -38,3 +38,11 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           channelId: live
           projectId: impact7db
+
+      - name: Trigger unified hosting deploy
+        if: success()
+        run: |
+          curl -s -X POST https://api.github.com/repos/chief-impact7/impact7-hosting/dispatches \
+            -H "Authorization: Bearer ${{ secrets.HOSTING_DISPATCH_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            -d '{"event_type":"deploy-unified"}'
