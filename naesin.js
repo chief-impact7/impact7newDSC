@@ -7,7 +7,7 @@
  */
 
 import { getDayName, studentShortLabel } from './src/shared/firestore-helpers.js';
-import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
+import { ENROLLABLE_STATUSES, isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { db } from './firebase-config.js';
@@ -1165,7 +1165,7 @@ window.addStudentToNaesin = async function(csKey, studentId) {
     }
 
     if (!isEnrollableStatus(student.status)) {
-        alert(`${student.name || studentId} 학생은 현재 "${student.status || '상태없음'}" 상태입니다.\n내신반 등록은 재원·등원예정·실휴원·가휴원 학생만 가능합니다.`);
+        alert(`${student.name || studentId} 학생은 현재 "${student.status || '상태없음'}" 상태입니다.\n내신반 등록은 ${[...ENROLLABLE_STATUSES].join('·')} 학생만 가능합니다.`);
         return;
     }
 

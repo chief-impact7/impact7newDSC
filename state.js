@@ -3,6 +3,7 @@
 // ES Module에서 let 변수의 외부 재할당이 불가하므로 state 객체로 감싸서 export
 
 import { todayStr } from './src/shared/firestore-helpers.js';
+export { LEVEL_SHORT } from '@impact7/shared/student-label';
 
 // ─── 상수 (Constants) ───────────────────────────────────────────────────────
 export const OX_CYCLE = ['O', '△', 'X', ''];
@@ -26,7 +27,6 @@ export const TEMP_FIELD_LABELS = {
     student_phone: '학생연락처', parent_phone_1: '학부모연락처', memo: '메모',
     temp_date: '예정날짜', temp_time: '예정시간'
 };
-export const LEVEL_SHORT = { '초등': '초', '중등': '중', '고등': '고' };
 export const REGULAR_CLASS_TYPES = ['정규', '내신', '자유학기'];
 // 출결 토글 첫 버튼의 CSS 톤 매핑. key는 표시 라벨(예: '자유'), class_type 데이터 값('자유학기')과는 의도적으로 다름.
 export const DEFAULT_TONE = { '정규':'normal', '특강':'teukang', '내신':'naesin', '자유':'jayu', '비정규':'bijeong' };

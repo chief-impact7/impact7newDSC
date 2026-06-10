@@ -8,6 +8,7 @@ import { todayStr } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditDelete, batchUpdate, batchSet, READ_ONLY, normalizeImpact7Email } from './audit.js';
 import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
+import { imeInputAttrs } from '@impact7/shared/ime-input';
 import { state, DAY_ORDER } from './state.js';
 import { esc, escAttr, showSaveIndicator, showToast } from './ui-utils.js';
 import { matchesBranchFilter, enrollmentCode, getActiveEnrollments, isActiveNaesinBase } from './student-helpers.js';
@@ -103,7 +104,7 @@ export function openClassTempOverrideModal(classCode) {
             <div class="modal-body">
                 <div class="form-field">
                     <label class="field-label">학생 검색</label>
-                    <input type="text" class="field-input" id="ovr-class-student-search" placeholder="학생 이름 검색" oninput="filterClassOverrideStudents()">
+                    <input type="text" class="field-input" id="ovr-class-student-search" placeholder="학생 이름 검색" ${imeInputAttrs('filterClassOverrideStudents()')}>
                 </div>
                 <div id="ovr-class-student-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:4px;"></div>
                 <div class="form-field" style="margin-top:12px;">

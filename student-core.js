@@ -1,6 +1,8 @@
 // student-core.js — Firebase/DOM/state 의존 없는 순수 함수 모음. node:test 가능.
 // state가 필요한 함수는 student-helpers.js에 둔다.
 
+import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
+
 export function normalizeDays(day) {
     if (!day) return [];
     if (Array.isArray(day)) return day.map(d => d.replace('요일', '').trim());
@@ -46,7 +48,8 @@ export function displayCodeFromCsKey(csKey, branch) {
     return branch && csKey.startsWith(branch) ? csKey.slice(branch.length) : csKey;
 }
 
-const STATUS_IMPLIES_NOT_WITHDRAWN = new Set(['재원', '등원예정', '실휴원', '가휴원', '상담']);
+// '상담'은 비원이지만 퇴원은 아님 — isWithdrawnAt 판정은 "재원취급" 여부가 아닌 "퇴원 여부"이므로 상담 포함이 의미상 옳다.
+const STATUS_IMPLIES_NOT_WITHDRAWN = new Set([...ENROLLABLE_STATUSES, '상담']);
 
 export function isWithdrawnAt(s, dateStr) {
     if (s.status === '퇴원') return true;

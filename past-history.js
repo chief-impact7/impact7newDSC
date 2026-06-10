@@ -17,16 +17,13 @@ import { esc } from './ui-utils.js';
 import { enrollmentCode, findStudent } from './student-helpers.js';
 import { currentSchool, studentGrade, studentLevel, todayStr } from './src/shared/firestore-helpers.js';
 import { staffLabel } from '@impact7/shared/staff-label';
-
-// ─── 활성 상태 집합 (분기 기준) ────────────────────────────────────────────
-// firestore-helpers.js의 ACTIVE_STUDENT_STATUSES는 '상담'을 포함하므로
-// 이 뷰의 분기 기준은 별도로 정의 (DB 측 결정사항과 동일).
-export const PAST_VIEW_ACTIVE_STATES = new Set(['재원', '등원예정', '실휴원', '가휴원']);
+import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
+import { formatDateKST } from '@impact7/shared/datetime';
 
 export function isPastViewStudent(student) {
     if (!student) return false;
     const status = student.status || '';
-    return !PAST_VIEW_ACTIVE_STATES.has(status);
+    return !ENROLLABLE_STATUSES.has(status);
 }
 
 // ─── 담당 선생 lookup ──────────────────────────────────────────────────────
@@ -366,14 +363,7 @@ function _firstEnrollmentDate(student) {
     return dates.sort()[0];
 }
 
-function _tsToDateStr(ts) {
-    if (!ts) return '';
-    const dt = typeof ts?.toDate === 'function' ? ts.toDate() :
-               ts instanceof Date ? ts :
-               typeof ts === 'string' ? new Date(ts) : null;
-    if (!dt || isNaN(dt)) return '';
-    return dt.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
-}
+const _tsToDateStr = (ts) => formatDateKST(ts);
 
 function _lastActivityDate(student, logs, leaveRequests) {
     // DB와 통일된 공식:

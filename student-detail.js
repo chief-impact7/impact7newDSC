@@ -10,7 +10,9 @@ import {
 import { db } from './firebase-config.js';
 import { deriveTenure } from '@impact7/shared/history';
 import { deriveLevelPeriod } from '@impact7/shared/enrollment-derivation';
-import { isEnrollableStatus, STATUS_TONE } from '@impact7/shared/enrollment-status';
+import { ENROLLABLE_STATUSES, isEnrollableStatus, STATUS_TONE } from '@impact7/shared/enrollment-status';
+import { formatDateKST } from '@impact7/shared/datetime';
+import { imeInputAttrs } from '@impact7/shared/ime-input';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { state, LEAVE_STATUSES, LEVEL_SHORT } from './state.js';
 import {
@@ -44,8 +46,7 @@ import { renderLeaveRequestCard, renderReturnConsultCard } from './leave-request
 import { renderUnifiedMemoCard } from './role-memo.js';
 import { loadClassHistoryCard } from './class-history.js';
 // 비활성 학생(퇴원·종강·상담 등) 식별용 — 출결현황 탭 라벨을 "수업이력"으로 동적 전환.
-const _DETAIL_ACTIVE_STATES = new Set(['재원', '등원예정', '실휴원', '가휴원']);
-const _isInactiveDetailStudent = (s) => !_DETAIL_ACTIVE_STATES.has(s?.status || '');
+const _isInactiveDetailStudent = (s) => !ENROLLABLE_STATUSES.has(s?.status || '');
 
 // 마스터 status → tone 배지 HTML (@impact7/shared STATUS_TONE 기반, DB와 동일 tone SSoT).
 // 헤더에 출결 배지와 나란히 병기. status 없으면 빈 문자열.
@@ -384,9 +385,8 @@ function _ensureReportInputDefaults() {
     const today = new Date();
     const monthAgo = new Date(today);
     monthAgo.setMonth(monthAgo.getMonth() - 1);
-    const fmt = d => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
-    if (!startEl.value) startEl.value = fmt(monthAgo);
-    if (!endEl.value) endEl.value = fmt(today);
+    if (!startEl.value) startEl.value = formatDateKST(monthAgo);
+    if (!endEl.value) endEl.value = formatDateKST(today);
 }
 
 export function switchDetailTab(tab) {
@@ -1494,7 +1494,7 @@ export function renderClinicInputs(studentId, extraVisit, isReadonly) {
     const v = extraVisit || {};
     const dateOn = isReadonly ? 'readonly' : `onchange="saveExtraVisit('${escAttr(studentId)}', 'date', this.value)"`;
     const timeAttr = isReadonly ? 'disabled' : `onchange="saveExtraVisit('${escAttr(studentId)}', 'time', this.value)"`;
-    const reasonOn = isReadonly ? 'readonly' : `oninput="saveExtraVisit('${escAttr(studentId)}', 'reason', this.value)"`;
+    const reasonOn = isReadonly ? 'readonly' : imeInputAttrs(`saveExtraVisit('${escAttr(studentId)}', 'reason', this.value)`);
     return `<div style="display:flex;flex-direction:column;gap:6px;">
         <div style="display:flex;gap:6px;">
             <input type="date" class="field-input" style="flex:1;padding:4px 8px;font-size:12px;"

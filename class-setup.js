@@ -3,7 +3,7 @@ import {
     collection, getDocs, doc, getDoc, writeBatch, arrayUnion, serverTimestamp
 } from 'firebase/firestore';
 import { auth, db } from './firebase-config.js';
-import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
+import { ENROLLABLE_STATUSES, isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { signInWithGoogle, logout } from './auth.js';
 import {
     currentSchool,
@@ -537,7 +537,7 @@ window.addStudent = function (docId) {
         (wizardData.classType === '내신' || wizardData.classType === '자유학기')
         && !isEnrollableStatus(found.status)
     ) {
-        alert(`${found.name} 학생은 현재 "${found.status || '상태없음'}" 상태입니다.\n${wizardData.classType}반 등록은 재원·등원예정·실휴원·가휴원 학생만 가능합니다.`);
+        alert(`${found.name} 학생은 현재 "${found.status || '상태없음'}" 상태입니다.\n${wizardData.classType}반 등록은 ${[...ENROLLABLE_STATUSES].join('·')} 학생만 가능합니다.`);
         return;
     }
 
@@ -662,7 +662,7 @@ window.submitWizard = async function () {
             if (rejected.length) {
                 alert(
                     `${d.classType}반을 생성할 수 없습니다.\n\n` +
-                    `등록 가능 상태: 재원·등원예정·실휴원·가휴원\n` +
+                    `등록 가능 상태: ${[...ENROLLABLE_STATUSES].join('·')}\n` +
                     `대상 오류: ${rejected.map(s => `${s.name || s.docId} (${s.status || '상태없음'})`).join(', ')}`
                 );
                 return;

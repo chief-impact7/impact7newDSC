@@ -6,6 +6,14 @@
 - 작업 시작 전 반드시 `RULES.md`를 읽는다
 - Firestore 스키마, SECTIONS 배열 구조를 숙지한 상태에서 작업한다
 
+## impact7 검색·생성 우선순위 — shared-first
+
+impact7 에코시스템 공통 로직의 SSoT는 `/Users/jongsooyi/projects/impact7-shared` (`@impact7/shared`)다.
+
+- **검색·설명 시:** shared export map → 관련 shared 모듈 → 로컬 구현 순서로 확인하고, 둘이 다르면 drift로 보고한다.
+- **새 코드·UI/UX 생성 시:** shared 모듈을 먼저 참고해 재사용하고, 같은 기능을 로컬에 재구현하지 않는다. 필요한 순수 함수가 shared에 없으면 shared에 추가하는 방안을 먼저 제안한다.
+- 모듈 목록·공개 API 정본: `impact7-shared/AGENTS.md` "모듈 목록 및 공개 API" — history / enrollment-status / enrollment-derivation / class-move / promote-enroll / student-number / student-label / staff-label / datetime / ime-input / html-escape / phone / branch
+
 ## 작업 스타일
 - 한국어로 응답한다
 - 코드 변경 시 변경된 파일과 라인을 명시한다

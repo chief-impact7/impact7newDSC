@@ -2,25 +2,14 @@
 // daily-ops.js에서 추출한 순수 UI 유틸리티 함수들
 
 import { state, OX_CYCLE } from './state.js';
+export { esc, escAttr } from '@impact7/shared/html-escape';
 
-// ─── HTML Escape ───────────────────────────────────────────────────────────
-export const esc = (str) => {
-    const d = document.createElement('div');
-    d.textContent = str ?? '';
-    return d.innerHTML;
-};
-
-// HTML 엔티티 디코딩 (&amp; → &, &#39; → ', &quot; → " 등)
+// HTML 엔티티 디코딩 (&amp; → &, &#39; → ', &quot; → " 등) — DOM 필요, 로컬 유지.
 export const decodeHtmlEntities = (str) => {
     if (!str) return str;
     const ta = document.createElement('textarea');
     ta.innerHTML = str;
     return ta.value;
-};
-
-// HTML 속성(특히 onclick 내부 문자열 리터럴)에서 안전하게 사용하기 위한 이스케이프
-export const escAttr = (str) => {
-    return esc(str).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
 };
 
 // ─── Time Formatting ───────────────────────────────────────────────────────

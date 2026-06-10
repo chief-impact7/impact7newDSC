@@ -21,6 +21,7 @@ import { generateConsultationTitle } from './consultation-ai.js';
 import { enrollmentCode } from './student-helpers.js';
 import { PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
+import { esc } from './ui-utils.js';
 
 let _deps = {};
 let _activeSubtab = 'input';  // 'input' | 'search'
@@ -32,12 +33,6 @@ export function initConsultationCardDeps(deps) {
 }
 
 const TYPES = ['정기', '휴원', '퇴원', '복귀', '학부모요청', '기타'];
-
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  }[c]));
-}
 
 const TARGETS = ['학생', '학부모'];
 const METHODS = ['전화', '문자', '대면', '기타'];
@@ -77,7 +72,7 @@ function renderInputForm(studentId, readonly) {
         <div class="consult-row">
           <div class="consult-field consult-field-inline">
             <span class="consult-field-label">반명</span>
-            <span class="consult-field-value" id="consult-class-name">${escapeHtml(className || '-')}</span>
+            <span class="consult-field-value" id="consult-class-name">${esc(className || '-')}</span>
           </div>
           <div class="consult-field consult-field-inline">
             <span class="consult-field-label">대상</span>
@@ -87,7 +82,7 @@ function renderInputForm(studentId, readonly) {
         <div class="consult-row">
           <div class="consult-field">
             <label for="consult-date">상담일</label>
-            <input type="date" id="consult-date" value="${today}" onchange="onConsultDateChange('${escapeHtml(studentId)}')" ${dis}>
+            <input type="date" id="consult-date" value="${today}" onchange="onConsultDateChange('${esc(studentId)}')" ${dis}>
           </div>
           <div class="consult-field">
             <label for="consult-method">형태</label>
@@ -106,7 +101,7 @@ function renderInputForm(studentId, readonly) {
       <div class="consult-actions">
         ${readonly ? '<span class="hint">READ-ONLY 모드</span>' : ''}
         <button id="consult-save-btn" class="consult-save"
-          onclick="onSaveConsultation('${escapeHtml(studentId)}')" ${dis}>저장</button>
+          onclick="onSaveConsultation('${esc(studentId)}')" ${dis}>저장</button>
       </div>
     </div>
   `;
@@ -115,7 +110,7 @@ function renderInputForm(studentId, readonly) {
 function renderMarkdown(md) {
   // 단순 변환: 줄바꿈 → <br>, ##/### → h*. 본격 마크다운 처리는 v2.
   if (!md) return '<em>아직 AI 분석 전</em>';
-  return escapeHtml(md)
+  return esc(md)
     .replace(/\n{3,}/g, '\n\n')
     .replace(/\n\n(?=(?:[-*]|\d+\.|\*\*))/g, '\n')
     .replace(/^### (.+)$/gm, '<h5>$1</h5>')
@@ -132,12 +127,12 @@ function renderAiAction(studentId, artifact) {
   const generating = _generatingAiFor === studentId;
   const label = artifact ? 'AI 갱신' : 'AI 생성';
   const generatedAt = formatGeneratedAt(artifact?.generated_at);
-  const latest = artifact?.latest_consultation_date ? `최근 상담 ${escapeHtml(artifact.latest_consultation_date)}` : '';
-  const meta = [generatedAt ? `마지막 생성 ${escapeHtml(generatedAt)}` : '', latest].filter(Boolean).join(' · ');
+  const latest = artifact?.latest_consultation_date ? `최근 상담 ${esc(artifact.latest_consultation_date)}` : '';
+  const meta = [generatedAt ? `마지막 생성 ${esc(generatedAt)}` : '', latest].filter(Boolean).join(' · ');
   return `
     <div class="consult-ai-action">
       <span class="hint">${meta}</span>
-      <button class="consult-ai-btn" onclick="onGenerateConsultationAi('${escapeHtml(studentId)}')" ${generating ? 'disabled' : ''}>
+      <button class="consult-ai-btn" onclick="onGenerateConsultationAi('${esc(studentId)}')" ${generating ? 'disabled' : ''}>
         ${generating ? '생성 중...' : label}
       </button>
     </div>
@@ -154,7 +149,7 @@ function renderAiCollapseButton(kind) {
 }
 
 function renderSummaryCard(summary, studentId = '') {
-  const meta = summary ? `priority: <strong>${escapeHtml(summary.priority || '-')}</strong> · 상담 ${summary.consultation_count ?? 0}건` : '';
+  const meta = summary ? `priority: <strong>${esc(summary.priority || '-')}</strong> · 상담 ${summary.consultation_count ?? 0}건` : '';
   const collapsed = _aiCollapsed.summary === true;
   return `
     <div id="consult-summary-slot" class="card consultation-summary ${collapsed ? 'collapsed' : ''}">
@@ -172,7 +167,7 @@ function renderSummaryCard(summary, studentId = '') {
 
 function renderBriefingCard(briefing, studentId = '') {
   const next = briefing?.next_consultation_scheduled
-    ? `다음 예정: ${escapeHtml(briefing.next_consultation_scheduled)}` : '';
+    ? `다음 예정: ${esc(briefing.next_consultation_scheduled)}` : '';
   const collapsed = _aiCollapsed.briefing === true;
   return `
     <div id="consult-briefing-slot" class="card consultation-briefing ${collapsed ? 'collapsed' : ''}">
@@ -234,8 +229,8 @@ function renderSearchBar(studentId) {
       </div>
       <div class="row">
         <input type="text" id="consult-search-kw" placeholder="키워드 (메모·유형·강사명)">
-        <button id="consult-search-btn" onclick="onSearchConsultations('${escapeHtml(studentId)}')">검색</button>
-        <button id="consult-search-reset" onclick="onResetConsultationSearch('${escapeHtml(studentId)}')">초기화</button>
+        <button id="consult-search-btn" onclick="onSearchConsultations('${esc(studentId)}')">검색</button>
+        <button id="consult-search-reset" onclick="onResetConsultationSearch('${esc(studentId)}')">초기화</button>
       </div>
       <span class="hint" id="consult-search-hint"></span>
     </div>
@@ -260,18 +255,18 @@ function renderHistoryCard(consultations, pinnedIds = [], studentId = '') {
     let rawTitle = c.title || consultationTitleFallback(c.text);
     // 학생 이름은 패널 헤더에 이미 있으므로 제목 앞 이름 중복 제거
     if (name && rawTitle.startsWith(name)) rawTitle = rawTitle.slice(name.length).trim();
-    const title = escapeHtml(rawTitle);
-    const badge = escapeHtml([...new Set([c.consultation_type, c.method, c.target].filter(Boolean))].join('·'));
+    const title = esc(rawTitle);
+    const badge = esc([...new Set([c.consultation_type, c.method, c.target].filter(Boolean))].join('·'));
     return `
     <details class="consult-hist-item${isPinned ? ' pinned' : ''}">
       <summary>
         <button class="pin-toggle${isPinned ? ' active' : ''}" title="${isPinned ? '고정 해제' : '상단 고정'}"
-          onclick="event.preventDefault(); event.stopPropagation(); onTogglePin('${escapeHtml(studentId)}','${escapeHtml(c.id)}')">📌</button>
-        <strong>${escapeHtml(formatHistDate(c.date))}</strong>
+          onclick="event.preventDefault(); event.stopPropagation(); onTogglePin('${esc(studentId)}','${esc(c.id)}')">📌</button>
+        <strong>${esc(formatHistDate(c.date))}</strong>
         <span class="type-badge">${badge}</span>
         <span class="hist-title">${title}</span>
       </summary>
-      <pre class="consultation-text">${escapeHtml(c.text)}</pre>
+      <pre class="consultation-text">${esc(c.text)}</pre>
     </details>`;
   }).join('');
   return `<div class="card consultation-history"><h4>상담 이력 (${consultations.length}건)</h4>${rows}</div>`;
