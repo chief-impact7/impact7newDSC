@@ -632,6 +632,7 @@ onAuthStateChanged(auth, async (user) => {
         state.currentUser = user;
         window._auditUser = normalizeImpact7Email(user.email) || null;
         document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('boot-splash')?.remove();
         document.getElementById('main-screen').style.display = '';
         document.getElementById('user-email').textContent = staffLabel(user.email);
         document.getElementById('user-avatar').textContent = (user.email || 'U')[0].toUpperCase();
@@ -678,6 +679,7 @@ onAuthStateChanged(auth, async (user) => {
     } else {
         state.currentUser = null;
         window._auditUser = null;
+        document.getElementById('boot-splash')?.remove();
         document.getElementById('login-screen').style.display = '';
         document.getElementById('main-screen').style.display = 'none';
     }

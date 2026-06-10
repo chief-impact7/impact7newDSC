@@ -166,6 +166,7 @@ onAuthStateChanged(auth, async (user) => {
         currentUser = user;
         window._auditUser = normalizeImpact7Email(user.email) || null;
         document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('boot-splash')?.remove();
         document.getElementById('main-screen').style.display = 'block';
         document.getElementById('user-email').textContent = staffLabel(user.email);
         const avatar = document.querySelector('.avatar');
@@ -180,6 +181,7 @@ onAuthStateChanged(auth, async (user) => {
             unsubDailyChecks();
             unsubDailyChecks = null;
         }
+        document.getElementById('boot-splash')?.remove();
         document.getElementById('login-screen').style.display = 'flex';
         document.getElementById('main-screen').style.display = 'none';
     }

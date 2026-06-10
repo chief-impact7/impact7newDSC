@@ -62,6 +62,7 @@ onAuthStateChanged(auth, async (user) => {
         currentUser = user;
         window._auditUser = normalizeImpact7Email(email);
         document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('boot-splash')?.remove();
         document.getElementById('main-screen').style.display = '';
         document.getElementById('user-email').textContent = staffLabel(email);
         await Promise.all([loadStudents(), loadTeachers()]);
@@ -71,6 +72,7 @@ onAuthStateChanged(auth, async (user) => {
         if (currentStep === 2) onEnterStep2();
     } else {
         currentUser = null;
+        document.getElementById('boot-splash')?.remove();
         document.getElementById('login-screen').style.display = '';
         document.getElementById('main-screen').style.display = 'none';
     }
