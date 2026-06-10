@@ -19,6 +19,7 @@ import { currentSchool, studentGrade, studentLevel, todayStr } from './src/share
 import { staffLabel } from '@impact7/shared/staff-label';
 import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 import { formatDateKST } from '@impact7/shared/datetime';
+import { groupLeaveCycles } from '@impact7/shared/leave-cycles';
 
 export function isPastViewStudent(student) {
     if (!student) return false;
@@ -40,14 +41,6 @@ function _enrollmentTeacher(code) {
 
 // ─── 날짜 비교 유틸 ────────────────────────────────────────────────────────
 const _isValidDate = (d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}/.test(d);
-
-const _toMs = (d) => {
-    if (!d) return 0;
-    if (typeof d?.toMillis === 'function') return d.toMillis();
-    if (d instanceof Date) return d.getTime();
-    if (typeof d === 'string') return new Date(d).getTime() || 0;
-    return 0;
-};
 
 // ─── history_logs 종강 텍스트 파싱 ─────────────────────────────────────────
 // after 텍스트 예: "종강 처리: HA101 (정규) → 퇴원 (다른 수업 없음)"
@@ -156,26 +149,6 @@ function _renderEnrollmentCard(item) {
 }
 
 // ─── 섹션 B: 휴원/퇴원 사이클 묶음 ─────────────────────────────────────────
-// state.leaveRequests에서 해당 학생의 row를 시간 정렬 후 사이클 단위로 묶는다.
-//
-// 규칙 (간단판):
-//   • '휴원요청' / '퇴원→휴원' → 새 휴원 사이클 시작
-//   • '휴원연장' → 직전 휴원 사이클에 합류 (leave_end_date 갱신)
-//   • '복귀요청' → 직전 휴원 사이클 종료 (return_date)
-//   • '휴원→퇴원' → 직전 휴원 사이클을 퇴원으로 전환 (withdrawal_date)
-//   • '퇴원요청' → 독립 퇴원 사이클
-//   • '재등원요청' → 독립 재등원 항목
-
-function _lrSortKey(r) {
-    // created_at → leave_start_date → withdrawal_date 순으로 우선
-    const c = _toMs(r.created_at);
-    if (c) return c;
-    const ls = _toMs(r.leave_start_date);
-    if (ls) return ls;
-    const w = _toMs(r.withdrawal_date);
-    if (w) return w;
-    return 0;
-}
 
 function _cycleTypeLabel(type) {
     const map = {
@@ -183,155 +156,28 @@ function _cycleTypeLabel(type) {
         leave_to_withdraw: { label: '휴원→퇴원', color: '#dc2626' },
         withdraw: { label: '퇴원', color: '#dc2626' },
         reenroll: { label: '재등원', color: '#16a34a' },
+        other: { label: '기타', color: '#666' },
     };
     return map[type] || { label: type, color: '#666' };
 }
 
-function _buildLeaveCycles(studentId) {
-    const records = (state.leaveRequests || [])
-        .filter(r => r.student_id === studentId && r.status !== 'cancelled' && r.status !== 'rejected')
-        .slice()
-        .sort((a, b) => _lrSortKey(a) - _lrSortKey(b));
-
-    const cycles = [];
-    let openLeave = null; // 현재 열린 휴원 사이클
-
-    for (const r of records) {
-        const t = r.request_type;
-        if (t === '휴원요청' || t === '퇴원→휴원') {
-            // 새 휴원 사이클 시작 (기존 열린 사이클은 그대로 종료된 상태로 push)
-            if (openLeave) cycles.push(openLeave);
-            openLeave = {
-                kind: 'leave',
-                start: r.leave_start_date || '',
-                end: r.leave_end_date || '',
-                returnDate: '',
-                withdrawalDate: '',
-                note: r.consultation_note || '',
-                sub: r.leave_sub_type || '',
-                events: [r],
-            };
-        } else if (t === '휴원연장') {
-            if (!openLeave) {
-                // 직전 사이클이 없으면 새로 시작
-                openLeave = {
-                    kind: 'leave',
-                    start: r.leave_start_date || '',
-                    end: r.leave_end_date || '',
-                    returnDate: '',
-                    withdrawalDate: '',
-                    note: r.consultation_note || '',
-                    sub: r.leave_sub_type || '',
-                    events: [r],
-                };
-            } else {
-                if (r.leave_end_date) openLeave.end = r.leave_end_date;
-                if (r.consultation_note) {
-                    openLeave.note = openLeave.note
-                        ? `${openLeave.note}\n[연장] ${r.consultation_note}`
-                        : `[연장] ${r.consultation_note}`;
-                }
-                openLeave.events.push(r);
-            }
-        } else if (t === '복귀요청' || t === '재등원요청') {
-            if (openLeave) {
-                openLeave.returnDate = r.return_date || '';
-                if (r.consultation_note) {
-                    openLeave.note = openLeave.note
-                        ? `${openLeave.note}\n[복귀] ${r.consultation_note}`
-                        : `[복귀] ${r.consultation_note}`;
-                }
-                openLeave.events.push(r);
-                cycles.push(openLeave);
-                openLeave = null;
-            } else {
-                // 독립 재등원 항목 (휴원 기록이 없을 때)
-                cycles.push({
-                    kind: 'reenroll',
-                    start: r.return_date || '',
-                    end: '',
-                    returnDate: r.return_date || '',
-                    withdrawalDate: '',
-                    note: r.consultation_note || '',
-                    sub: '',
-                    events: [r],
-                });
-            }
-        } else if (t === '휴원→퇴원') {
-            if (openLeave) {
-                openLeave.kind = 'leave_to_withdraw';
-                openLeave.withdrawalDate = r.withdrawal_date || '';
-                if (r.consultation_note) {
-                    openLeave.note = openLeave.note
-                        ? `${openLeave.note}\n[퇴원전환] ${r.consultation_note}`
-                        : `[퇴원전환] ${r.consultation_note}`;
-                }
-                openLeave.events.push(r);
-                cycles.push(openLeave);
-                openLeave = null;
-            } else {
-                cycles.push({
-                    kind: 'leave_to_withdraw',
-                    start: '',
-                    end: '',
-                    returnDate: '',
-                    withdrawalDate: r.withdrawal_date || '',
-                    note: r.consultation_note || '',
-                    sub: '',
-                    events: [r],
-                });
-            }
-        } else if (t === '퇴원요청') {
-            // 진행 중 휴원 사이클이 있으면 휴→퇴로 닫음 (DB와 동일 정책).
-            // 사용자 관점에서 휴원 중 퇴원요청은 1개 사건(같은 사이클의 종료)이므로 묶는다.
-            if (openLeave) {
-                openLeave.kind = 'leave_to_withdraw';
-                openLeave.withdrawalDate = r.withdrawal_date || '';
-                if (r.consultation_note) {
-                    openLeave.note = openLeave.note
-                        ? `${openLeave.note}\n[퇴원전환] ${r.consultation_note}`
-                        : `[퇴원전환] ${r.consultation_note}`;
-                }
-                openLeave.events.push(r);
-                cycles.push(openLeave);
-                openLeave = null;
-            } else {
-                cycles.push({
-                    kind: 'withdraw',
-                    start: '',
-                    end: '',
-                    returnDate: '',
-                    withdrawalDate: r.withdrawal_date || '',
-                    note: r.consultation_note || '',
-                    sub: '',
-                    events: [r],
-                });
-            }
-        }
-        // 그 외 타입은 무시 (안전)
-    }
-
-    if (openLeave) cycles.push(openLeave); // 닫히지 않은 사이클도 포함
-
-    // 최신이 위로 (DB와 동일)
-    return cycles.slice().reverse();
-}
-
 function _renderCycleCard(c) {
-    const t = _cycleTypeLabel(c.kind);
+    const t = _cycleTypeLabel(c.type);
     const badge = `<span class="ph-badge" style="background:${t.color}">${esc(t.label)}</span>`;
-    const sub = c.sub ? `<span class="ph-meta">${esc(c.sub)}</span>` : '';
+    const sub = c.subType ? `<span class="ph-meta">${esc(c.subType)}</span>` : '';
 
     let periodHtml = '';
-    if (c.kind === 'leave') {
+    if (c.type === 'leave') {
         const ret = c.returnDate ? `복귀 ${esc(c.returnDate)}` : '복귀 미확정';
-        periodHtml = `<span class="ph-meta">${esc(c.start || '?')} ~ ${esc(c.end || '?')} · ${ret}</span>`;
-    } else if (c.kind === 'leave_to_withdraw') {
-        periodHtml = `<span class="ph-meta">${esc(c.start || '?')} ~ ${esc(c.end || '?')} · 퇴원 ${esc(c.withdrawalDate || '?')}</span>`;
-    } else if (c.kind === 'withdraw') {
+        periodHtml = `<span class="ph-meta">${esc(c.startDate || '?')} ~ ${esc(c.endDate || '?')} · ${ret}</span>`;
+    } else if (c.type === 'leave_to_withdraw') {
+        periodHtml = `<span class="ph-meta">${esc(c.startDate || '?')} ~ ${esc(c.endDate || '?')} · 퇴원 ${esc(c.withdrawalDate || '?')}</span>`;
+    } else if (c.type === 'withdraw') {
         periodHtml = `<span class="ph-meta">퇴원일 ${esc(c.withdrawalDate || '?')}</span>`;
-    } else if (c.kind === 'reenroll') {
-        periodHtml = `<span class="ph-meta">재등원 ${esc(c.returnDate || c.start || '?')}</span>`;
+    } else if (c.type === 'reenroll') {
+        periodHtml = `<span class="ph-meta">재등원 ${esc(c.returnDate || c.startDate || '?')}</span>`;
+    } else {
+        periodHtml = `<span class="ph-meta">${esc(c.startDate || c.endDate || '?')}</span>`;
     }
 
     const noteHtml = c.note
@@ -452,7 +298,7 @@ export async function renderPastHistory(studentId) {
 
     const closingLogs = _parseClosingLogs(logs);
     const pastEnrolls = _buildPastEnrollments(student, closingLogs);
-    const cycles = _buildLeaveCycles(studentId);
+    const cycles = groupLeaveCycles((state.leaveRequests || []).filter(r => r.student_id === studentId));
 
     // 마지막 활동일 산출용 leave_requests (취소/반려 제외해 사이클 빌드에 쓰인 것과 정합)
     const leaveReqsForStudent = (state.leaveRequests || [])

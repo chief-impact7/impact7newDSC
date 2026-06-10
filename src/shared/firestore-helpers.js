@@ -5,7 +5,9 @@ import {
     currentSchool,
     normalizeRealLevelGrade,
     studentFullLabel,
+    LEVEL_SHORT,
 } from '@impact7/shared/student-label';
+import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 import { db } from '../../firebase-config.js';
 import { enrollmentCode, branchFromStudent } from '../../student-core.js';
 
@@ -326,11 +328,8 @@ export { normalizeDays };
 
 // ─── 학생 상태 ───
 
-// 활성 상태 집합 (등록/검색/목록에서 '실제 학원 등록되어있는' 학생 판정용)
-// 특강만 수강하는 퇴원/종강 학생은 status2='특강'로 별도 식별.
-export const ACTIVE_STUDENT_STATUSES = new Set([
-    '재원', '등원예정', '실휴원', '가휴원', '상담'
-]);
+// 상담은 비원이지만 진단평가 등으로 반 배정·표시 대상이 될 수 있어 포함 (재원 판정에는 사용 금지).
+export const ACTIVE_STUDENT_STATUSES = new Set([...ENROLLABLE_STATUSES, '상담']);
 
 export const PAST_STUDENT_STATUSES = new Set(['퇴원', '종강']);
 
@@ -338,8 +337,6 @@ export const PAST_STUDENT_STATUSES = new Set(['퇴원', '종강']);
 // DB와 동일한 예측 학부 기준 라벨을 재노출. 소비처 8곳은 이 이름으로 계속 import.
 export const studentShortLabel = studentFullLabel;
 export { currentSchool, normalizeRealLevelGrade };
-
-const LEVEL_SHORT = { '초등': '초', '중등': '중', '고등': '고' };
 
 export function studentLevel(student) {
     return normalizeRealLevelGrade(student || {}).level || '';
