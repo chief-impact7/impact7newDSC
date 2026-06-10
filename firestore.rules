@@ -36,6 +36,12 @@ service cloud.firestore {
         && (isDirector()
             || get(/databases/$(database)/documents/HR_users/$(request.auth.uid)).data.permissions.canManagePermissions == true);
     }
+    // 인원현황(학원 기밀): HR_users 권한 보유자만. HR_users 문서가 없으면 get() 실패 → 거부
+    function hasPopulationStatsAccess() {
+      return isLoggedIn()
+        && (isDirector()
+            || get(/databases/$(database)/documents/HR_users/$(request.auth.uid)).data.permissions.get('canViewPopulationStats', false) == true);
+    }
     function isImpact7VerifiedEmail() {
       return isLoggedIn()
         && request.auth.token.email_verified == true
@@ -199,9 +205,11 @@ service cloud.firestore {
     // =========================================================================
     match /daily_stats/{dateId} {
 
-      allow read: if isAuthorized();
+      // 전체 인원현황 스냅샷 — canViewPopulationStats 보유자만 (DB 앱 자동 생성도 권한자 로그인 시에만 동작)
+      allow read: if isAuthorized() && hasPopulationStatsAccess();
 
       allow create: if isAuthorized()
+        && hasPopulationStatsAccess()
         && request.resource.data.keys().hasAll(['date', 'generated_at', 'generated_by', 'total', 'active_total', 'by_status'])
         && request.resource.data.keys().hasOnly([
              'date', 'generated_at', 'generated_by', 'total', 'active_total',
@@ -656,6 +664,7 @@ service cloud.firestore {
           && request.resource.data.permissions is map
           && request.resource.data.assignedBuildings is list
           && request.resource.data.permissions.get('canViewPopulationStats', false) == false
+          && request.resource.data.permissions.get('canViewClassCounts', false) == false
           && request.resource.data.permissions.get('canViewDashboard', false) == false
           && request.resource.data.permissions.get('canViewStudents', false) == false
           && request.resource.data.permissions.get('canEditStudents', false) == false
@@ -680,7 +689,11 @@ service cloud.firestore {
           && request.resource.data.role in ['manager', 'teacher', 'payment', 'staff', 'shortterm']
           && request.resource.data.keys().hasOnly(['email', 'name', 'role', 'permissions', 'assignedBuildings'])
           && request.resource.data.permissions is map
-          && request.resource.data.permissions.get('canManagePermissions', false) == resource.data.permissions.get('canManagePermissions', false);
+          && request.resource.data.permissions.get('canManagePermissions', false) == resource.data.permissions.get('canManagePermissions', false)
+          // 민감 지표(인원현황) 권한은 오너/원장만 부여·회수 가능 — 위임받은 권한 관리자는 변경 불가
+          && (isDirector()
+              || (request.resource.data.permissions.get('canViewPopulationStats', false) == resource.data.permissions.get('canViewPopulationStats', false)
+                  && request.resource.data.permissions.get('canViewClassCounts', false) == resource.data.permissions.get('canViewClassCounts', false)));
       }
 
       allow read: if isLoggedIn() && request.auth.uid == uid;
