@@ -1494,7 +1494,7 @@ export function renderClinicInputs(studentId, extraVisit, isReadonly) {
     const v = extraVisit || {};
     const dateOn = isReadonly ? 'readonly' : `onchange="saveExtraVisit('${escAttr(studentId)}', 'date', this.value)"`;
     const timeAttr = isReadonly ? 'disabled' : `onchange="saveExtraVisit('${escAttr(studentId)}', 'time', this.value)"`;
-    const reasonOn = isReadonly ? 'readonly' : `onchange="saveExtraVisit('${escAttr(studentId)}', 'reason', this.value)"`;
+    const reasonOn = isReadonly ? 'readonly' : `oninput="saveExtraVisit('${escAttr(studentId)}', 'reason', this.value)"`;
     return `<div style="display:flex;flex-direction:column;gap:6px;">
         <div style="display:flex;gap:6px;">
             <input type="date" class="field-input" style="flex:1;padding:4px 8px;font-size:12px;"
