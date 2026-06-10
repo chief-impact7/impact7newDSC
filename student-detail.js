@@ -14,7 +14,8 @@ import { ENROLLABLE_STATUSES, isEnrollableStatus, STATUS_TONE } from '@impact7/s
 import { formatDateKST } from '@impact7/shared/datetime';
 import { imeInputAttrs } from '@impact7/shared/ime-input';
 import { staffLabel } from '@impact7/shared/staff-label';
-import { state, LEAVE_STATUSES, LEVEL_SHORT } from './state.js';
+import { schoolLevelGradeLabel } from '@impact7/shared/student-label';
+import { state, LEAVE_STATUSES } from './state.js';
 import {
     esc, escAttr, formatTime12h, renderTime12hSelect, oxDisplayClass,
     nowTimeStr, showSaveIndicator, showToast, _stripYear
@@ -733,11 +734,8 @@ function renderScoreTable(title, icon, rows, emptyText, columns) {
 
 function externalEventLabel(event) {
     if (event.type === 'school') {
-        const school = event.school || '';
-        const levelRaw = event.level || '';
-        const levelShort = LEVEL_SHORT[levelRaw] || levelRaw;
-        const schoolWithLevel = levelShort && !school.endsWith(levelShort) ? `${school}${levelShort}` : school;
-        return `${event.year || ''} ${schoolWithLevel}${event.grade || ''} ${event.semester || ''}학기 ${event.examName || ''}`.replace(/\s+/g, ' ').trim();
+        const label = schoolLevelGradeLabel({ school: event.school, level: event.level, grade: event.grade });
+        return `${event.year || ''} ${label} ${event.semester || ''}학기 ${event.examName || ''}`.replace(/\s+/g, ' ').trim();
     }
     if (event.type === 'suneung_index') {
         return `${event.year || ''} ${event.month || ''}월 수능인덱스`.replace(/\s+/g, ' ').trim();
