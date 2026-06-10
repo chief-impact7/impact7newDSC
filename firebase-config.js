@@ -1,6 +1,9 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import {
+    getFirestore, connectFirestoreEmulator,
+    initializeFirestore, persistentLocalCache, persistentMultipleTabManager
+} from 'firebase/firestore';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 
 const firebaseConfig = {
@@ -30,7 +33,20 @@ const app = initializeApp(firebaseConfig);
 export { app };
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+let db;
+if (import.meta.env.VITE_USE_EMULATOR === 'true') {
+    db = getFirestore(app);
+} else {
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+        });
+    } catch {
+        db = getFirestore(app);
+    }
+}
+export { db };
 // 공유 LLM 게이트웨이(llmGenerate)가 배포된 리전.
 export const functions = getFunctions(app, 'asia-northeast3');
 

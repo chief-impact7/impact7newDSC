@@ -3,7 +3,7 @@
 // Phase 4-1
 
 import {
-    collection, getDocs, doc, getDoc,
+    collection, getDocs, getDocsFromCache, doc, getDoc,
     query, where, orderBy, limit, serverTimestamp, writeBatch, Timestamp,
     onSnapshot, deleteField
 } from 'firebase/firestore';
@@ -188,27 +188,18 @@ export async function saveClassSettings(classCode, data) {
 
 // ─── Firebase CRUD ──────────────────────────────────────────────────────────
 
-export async function loadStudents() {
-    let snap;
-    try {
-        const [snap1, snap2] = await Promise.all([
-            getDocs(query(collection(db, 'students'), where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원', '상담']))),
-            getDocs(query(collection(db, 'students'), where('status2', '==', '특강')))
-        ]);
-        const seenIds = new Set();
-        const allDocs = [];
-        const dedup = d => { if (!seenIds.has(d.id)) { seenIds.add(d.id); allDocs.push(d); } };
-        snap1.docs.forEach(dedup);
-        snap2.docs.forEach(dedup);
-        snap = allDocs;
-        console.log('[loadStudents] 문서 수:', allDocs.length);
-    } catch (err) {
-        console.error('[loadStudents] 로드 실패:', err.message, err);
-        state.allStudents = [];
-        return;
+function _mergeSnapshots(...snaps) {
+    const seenIds = new Set();
+    const docs = [];
+    for (const snap of snaps) {
+        snap.docs.forEach(d => { if (!seenIds.has(d.id)) { seenIds.add(d.id); docs.push(d); } });
     }
+    return docs;
+}
+
+function _applyStudentDocs(docs) {
     state.allStudents = [];
-    snap.forEach(d => {
+    docs.forEach(d => {
         const data = d.data();
         if (!data.enrollments?.length) {
             let levelSymbol = data.level_symbol || data.level_code || '';
@@ -245,6 +236,27 @@ export async function loadStudents() {
         state.allStudents.push({ docId: d.id, ...data });
     });
     state.allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+}
+
+export async function loadStudents() {
+    const q1 = query(collection(db, 'students'), where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원', '상담']));
+    const q2 = query(collection(db, 'students'), where('status2', '==', '특강'));
+
+    // 캐시 우선: 캐시 결과가 있으면 즉시 반영 후 서버에서 갱신
+    try {
+        const [c1, c2] = await Promise.all([getDocsFromCache(q1), getDocsFromCache(q2)]);
+        if (c1.size + c2.size > 0) _applyStudentDocs(_mergeSnapshots(c1, c2));
+    } catch { /* 캐시 없음 — 서버 로드로 계속 */ }
+
+    try {
+        const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+        const allDocs = _mergeSnapshots(snap1, snap2);
+        console.log('[loadStudents] 문서 수:', allDocs.length);
+        _applyStudentDocs(allDocs);
+    } catch (err) {
+        console.error('[loadStudents] 로드 실패:', err.message, err);
+        if (!state.allStudents.length) state.allStudents = [];
+    }
 }
 
 export async function promoteEnrollPending() {

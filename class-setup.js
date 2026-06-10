@@ -1,6 +1,6 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import {
-    collection, getDocs, doc, getDoc, writeBatch, arrayUnion, serverTimestamp
+    collection, getDocs, getDocsFromCache, doc, getDoc, writeBatch, arrayUnion, serverTimestamp
 } from 'firebase/firestore';
 import { auth, db } from './firebase-config.js';
 import { ENROLLABLE_STATUSES, isEnrollableStatus } from '@impact7/shared/enrollment-status';
@@ -76,14 +76,23 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-async function loadStudents() {
-    const snap = await getDocs(collection(db, 'students'));
+function _applyStudentDocs(snap) {
     allStudents.length = 0;
     snap.forEach(d => {
         const data = d.data();
         allStudents.push({ docId: d.id, ...data });
     });
     allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+}
+
+async function loadStudents() {
+    const col = collection(db, 'students');
+    try {
+        const cached = await getDocsFromCache(col);
+        if (cached.size > 0) _applyStudentDocs(cached);
+    } catch { /* 캐시 없음 */ }
+    const snap = await getDocs(col);
+    _applyStudentDocs(snap);
 }
 
 async function loadTeachers() {
