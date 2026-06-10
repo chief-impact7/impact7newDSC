@@ -5,6 +5,7 @@ import {
 import { auth, db } from './firebase-config.js';
 import { ENROLLABLE_STATUSES, isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { signInWithGoogle, logout } from './auth.js';
+import { fetchPopulationPerms } from './population-perms.js';
 import {
     currentSchool,
     studentGrade,
@@ -27,6 +28,7 @@ import {
     teachersList,
     showToast,
     renderSummary,
+    popPerms,
 } from './class-setup-state.js';
 import { initPlanner } from './class-setup-planner.js';
 
@@ -65,13 +67,18 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('boot-splash')?.remove();
         document.getElementById('main-screen').style.display = '';
         document.getElementById('user-email').textContent = staffLabel(email);
-        await Promise.all([loadStudents(), loadTeachers()]);
+        await Promise.all([
+            loadStudents(),
+            loadTeachers(),
+            fetchPopulationPerms(user.uid).then(p => Object.assign(popPerms, p)),
+        ]);
         bindStudentEventDelegation();
         // 학생 로드 도중 step 2 진입(정규 카드 빠르게 클릭)했을 수 있음 — 빈 데이터로 그려진
         // 정규반 분석/학생 추가 패널을 재렌더해 채워준다.
         if (currentStep === 2) onEnterStep2();
     } else {
         currentUser = null;
+        Object.assign(popPerms, { all: false, classCounts: false });
         document.getElementById('boot-splash')?.remove();
         document.getElementById('login-screen').style.display = '';
         document.getElementById('main-screen').style.display = 'none';

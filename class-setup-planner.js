@@ -14,7 +14,7 @@ import { DAY_ORDER, LEAVE_STATUSES } from './state.js';
 import { uniquePlanningEnrollments } from './class-setup-enrollment.js';
 import { esc } from './ui-utils.js';
 import { enrollmentCode } from './student-core.js';
-import { wizardData, allStudents, showToast } from './class-setup-state.js';
+import { wizardData, allStudents, showToast, popPerms } from './class-setup-state.js';
 
 // mode: '정규' (자유학기 포함) | '내신'
 export function initPlanner(mode) {
@@ -182,12 +182,16 @@ function renderPlannerGroups(grouped, { titleFn = (k) => k, metaFn }) {
             <section class="planner-group">
                 <div class="planner-group-head">
                     <div class="planner-group-title">${esc(titleFn(key))}</div>
-                    <span class="planner-count">${groupRows.length}명</span>
+                    ${popPerms.classCounts ? `<span class="planner-count">${groupRows.length}명</span>` : ''}
                 </div>
                 <div class="planner-student-list">${studentHtml}</div>
             </section>
         `;
     }).join('');
+}
+
+function plannerCountSuffix(built) {
+    return popPerms.classCounts ? ` (${built.studentCount}명, ${built.groupCount}그룹)` : '';
 }
 
 function renderPlanner() {
@@ -197,9 +201,14 @@ function renderPlanner() {
     const stats = document.getElementById('planner-stats');
     const groups = document.getElementById('planner-groups');
     const totalRows = allRows.length;
-    stats.textContent = (mode === '정규')
-        ? `표시 ${rows.length}건 / 정규 등록 ${totalRows}건`
-        : `표시 ${rows.length}명 / 재원생 ${totalRows}명`;
+    // 전체 재원생/등록 총수는 인원현황(기밀) — 권한자만 표시
+    if (popPerms.all) {
+        stats.textContent = (mode === '정규')
+            ? `표시 ${rows.length}건 / 정규 등록 ${totalRows}건`
+            : `표시 ${rows.length}명 / 재원생 ${totalRows}명`;
+    } else {
+        stats.textContent = '';
+    }
 
     if (rows.length === 0) {
         groups.innerHTML = '<div class="planner-empty">조건에 맞는 학생이 없습니다.</div>';
@@ -309,7 +318,7 @@ window.downloadPlanCsv = function () {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    showToast(`${label} CSV 다운로드 (${built.studentCount}명, ${built.groupCount}그룹)`, 'success');
+    showToast(`${label} CSV 다운로드${plannerCountSuffix(built)}`, 'success');
 };
 
 window.downloadPlanXlsx = function () {
@@ -329,7 +338,7 @@ window.downloadPlanXlsx = function () {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, label);
     XLSX.writeFile(wb, `${label.replace(/ /g, '_')}_${todayStr()}.xlsx`);
-    showToast(`${label} Excel 다운로드 (${built.studentCount}명, ${built.groupCount}그룹)`, 'success');
+    showToast(`${label} Excel 다운로드${plannerCountSuffix(built)}`, 'success');
 };
 
 function normalizeText(value, fallback) {

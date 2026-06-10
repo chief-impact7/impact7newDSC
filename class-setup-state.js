@@ -4,6 +4,9 @@
 import { esc } from './ui-utils.js';
 import { staffLabel } from '@impact7/shared/staff-label';
 
+// 인원현황 권한 — class-setup.js가 로그인 시 채움 (all=전체 집계, classCounts=반별 인원)
+export const popPerms = { all: false, classCounts: false };
+
 // 마법사 데이터 — 단일 진실 원천
 export const wizardData = {
     classType: '',       // '정규' | '내신' | '자유학기' | '특강'
