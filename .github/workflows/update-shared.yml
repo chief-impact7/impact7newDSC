@@ -20,12 +20,11 @@ jobs:
           node-version: '24'
           cache: npm
 
-      - name: Bump @impact7/shared in package.json
+      - name: Bump @impact7/shared (package.json + lock 재해석 강제)
+        # 단순 npm install은 git 태그 spec 변경 시 lock의 resolved 커밋을 갱신하지 않음 — 명시적 spec 설치로 강제
         run: |
           VERSION="${{ github.event.client_payload.version }}"
-          sed -i "s|impact7-shared#v[0-9][^\"]*|impact7-shared#${VERSION}|g" package.json
-
-      - run: npm install
+          npm install "@impact7/shared@github:chief-impact7/impact7-shared#${VERSION}"
 
       - name: Commit and push if changed
         run: |
