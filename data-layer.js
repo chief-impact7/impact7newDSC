@@ -878,13 +878,16 @@ export function updateDateDisplay() {
     if (picker) picker.value = state.selectedDate;
 
     // 오늘이 아닌 날짜는 출결 오입력 방지를 위해 날짜 칩 강조 + 배너 표시
+    // 배너는 날짜 민감 카테고리에서만 — 행정·소속 등에서는 경고 피로만 유발
+    const DATE_SENSITIVE_CATEGORIES = ['attendance', 'homework', 'test', 'automation'];
     const today = todayStr();
     const isToday = state.selectedDate === today;
     document.getElementById('date-display')?.classList.toggle('not-today', !isToday);
     const banner = document.getElementById('not-today-banner');
     if (banner) {
-        banner.style.display = isToday ? 'none' : '';
-        if (!isToday) {
+        const showBanner = !isToday && DATE_SENSITIVE_CATEGORIES.includes(state.currentCategory);
+        banner.style.display = showBanner ? '' : 'none';
+        if (showBanner) {
             const rel = state.selectedDate < today ? '과거' : '미래';
             document.getElementById('not-today-banner-text').textContent =
                 `${rel} 날짜 ${state.selectedDate} (${dayName}) 기록을 보고 있습니다`;

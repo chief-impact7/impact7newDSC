@@ -14,7 +14,7 @@ import {
     _getClassesForBranchLevel, _getAllClassCodes, getClassMgmtCount,
     getTeukangClassStudents, getUniqueClassCodes
 } from './class-resolver.js';
-import { _isOlderThan, getStudentDomains, getNextHwStatus, getStudentTestItems } from './data-layer.js';
+import { _isOlderThan, getStudentDomains, getNextHwStatus, getStudentTestItems, updateDateDisplay } from './data-layer.js';
 import { clearVisitCache, getScheduledVisits, getEnrollPendingVisits } from './visit-list-render.js';
 import { resetReturnUpcomingCache, _getReturnUpcomingStudents } from './leave-request.js';
 
@@ -102,6 +102,9 @@ export function setCategory(category) {
         el.classList.toggle('active', el.dataset.category === category);
     });
 
+    // 카테고리에 따라 과거/미래 날짜 배너 표시 여부가 달라지므로 갱신
+    updateDateDisplay();
+
     // L2 서브필터 렌더링
     renderSubFilters();
     updateL1ExpandIcons();
@@ -118,6 +121,41 @@ export function updateL1ExpandIcons() {
         const isActive = el.dataset.category === state.currentCategory;
         icon.textContent = (isActive && state.l2Expanded) ? 'expand_less' : 'expand_more';
     });
+}
+
+// 사이드바 카운트(count/total)의 의미 — getSubFilterCount의 필터별 산식과 짝을 맞춘다
+const COUNT_TOOLTIPS = {
+    scheduled_visit: '미시행 / 전체 일정',
+    pre_arrival: '출결 미입력 / 오늘 대상',
+    enroll_pending: '등원예정 인원',
+    present: '출석 / 오늘 정규',
+    late: '지각 / 오늘 정규',
+    absent: '결석 / 오늘 정규',
+    other: '기타 / 오늘 정규',
+    departure_check: '귀가 완료 / 오늘 정규',
+    naesin: '오늘 내신 인원',
+    teukang: '오늘 특강 인원',
+    sv_absence_makeup: '미시행 / 전체 일정',
+    sv_clinic: '미시행 / 전체 일정',
+    sv_diagnostic: '미시행 / 전체 일정',
+    sv_fail: '미시행 / 전체 일정',
+    absence_ledger: '열린 결석 기록',
+    leave_request: '대기 요청 / 대기+최근 승인',
+    return_upcoming: '7일 이내 복귀 / 전체 예정',
+    hw_1st: '1차 입력 완료 / 오늘 대상',
+    hw_2nd: '2차 대상 / 오늘 대상',
+    hw_next: '입력 시작한 반 / 오늘 수업 반',
+    test_1st: '1차 입력 완료 / 오늘 대상',
+    test_2nd: '2차 대상 / 오늘 대상',
+    auto_hw_missing: '미제출 숙제 인원',
+    auto_retake: '재시 필요 인원',
+    auto_unchecked: '출결 미체크 인원',
+};
+
+function _countBadge(key, count, total) {
+    if (count <= 0 && total <= 0) return '';
+    const tooltip = COUNT_TOOLTIPS[key] ? ` title="${escAttr(COUNT_TOOLTIPS[key])}"` : '';
+    return `<span class="nav-l2-count"${tooltip}>${total > 0 ? `${count}/${total}` : count}</span>`;
 }
 
 export function renderSubFilters() {
@@ -181,9 +219,7 @@ export function renderSubFilters() {
                 ? `<span class="material-symbols-outlined l2-expand-icon">${parentOrChildActive ? 'expand_less' : 'expand_more'}</span>`
                 : '';
             const { count, total } = getSubFilterCount(f.key);
-            const badge = count > 0 || total > 0
-                ? `<span class="nav-l2-count">${total > 0 ? `${count}/${total}` : count}</span>`
-                : '';
+            const badge = _countBadge(f.key, count, total);
             html += `<div class="nav-l2 ${parentClass} ${isExpanded} ${isActive}" data-filter="${f.key}" onclick="setSubFilter('${f.key}')">
                 ${esc(f.label)}
                 ${badge}
@@ -193,9 +229,7 @@ export function renderSubFilters() {
                 for (const child of f.children) {
                     const childActive = state.currentSubFilter.has(child.key) ? 'active' : '';
                     const { count: cc, total: ct } = getSubFilterCount(child.key);
-                    const childBadge = cc > 0 || ct > 0
-                        ? `<span class="nav-l2-count">${ct > 0 ? `${cc}/${ct}` : cc}</span>`
-                        : '';
+                    const childBadge = _countBadge(child.key, cc, ct);
                     html += `<div class="nav-l2 nav-l3 ${childActive}" data-filter="${child.key}" onclick="setSubFilter('${child.key}')">
                         ${esc(child.label)}
                         ${childBadge}

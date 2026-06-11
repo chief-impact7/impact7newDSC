@@ -154,44 +154,52 @@
       "title": "사이드바 카운트 표기 의미 불명확",
       "priority": "P3",
       "category": "ux",
-      "status": "open",
+      "status": "done",
       "description": "'1차 7/168', '비정규 130/130' 등 분자/분모 의미가 라벨·툴팁 없이 숫자만 표시됨.",
       "evidence": "숙제·출결 서브메뉴 확인",
       "location": "사이드바 렌더 모듈",
-      "recommendation": "툴팁 또는 라벨 추가, 완료율에 따른 색상 구분"
+      "recommendation": "툴팁 또는 라벨 추가, 완료율에 따른 색상 구분",
+      "resolvedAt": "2026-06-11",
+      "resolution": "필터별 카운트 의미를 COUNT_TOOLTIPS 맵으로 정의하고 nav-l2-count에 title 툴팁 추가 (filter-nav.js _countBadge). 예: 정규 53/168 → '출결 미입력 / 오늘 대상'. 브라우저에서 title 속성 적용 확인."
     },
     {
       "id": "group-view-verification",
       "title": "그룹 뷰 헤더-소속 매칭 검증 필요",
       "priority": "P3",
       "category": "data",
-      "status": "open",
+      "status": "done",
       "description": "'10단지 46명' 헤더 아래 PX202·FA202 등 다양한 반이 섞여 보임. 그룹핑 기준이 행에 드러나지 않아 올바른지 확인 어려움.",
       "evidence": "출결 그룹 뷰 스크린샷",
       "location": "그룹 뷰 렌더 로직",
-      "recommendation": "그룹핑 기준 확인 후 행에 지점 표시 또는 정렬 보정"
+      "recommendation": "그룹핑 기준 확인 후 행에 지점 표시 또는 정렬 보정",
+      "resolvedAt": "2026-06-11",
+      "resolution": "검증 결과 이슈 아님: 그룹핑은 branchFromStudent(shared SSoT — branch 필드, 없으면 반 번호 첫 자리 1→2단지/2→10단지) 기준으로 일관. 감사 때 본 '10단지 그룹의 PX202'는 202호=10단지로 정상 분류. sticky 그룹 헤더도 기존재."
     },
     {
       "id": "drawer-transition-glitch",
       "title": "모바일 드로어 전환 중 콘텐츠 깨져 보임",
       "priority": "P3",
       "category": "responsive",
-      "status": "open",
+      "status": "done",
       "description": "드로어가 열리는 도중 라벨이 잘린 흰 패널이 비치는 순간이 있음. 열린 후 DOM은 정상. [추가 확인: 열린 후 DOM·rect 정상. Material Symbols 폰트 로딩 전 ligature 미적용이 원인으로 추정 — font-display 또는 preload 검토.]",
       "evidence": "toggleSidebar() 직후 스크린샷에서 잘린 라벨 확인, 이후 DOM 검사 정상",
       "location": "daily-ops.css:1697 드로어 transform 전환",
-      "recommendation": "전환 중 overflow/배경 처리 확인"
+      "recommendation": "전환 중 overflow/배경 처리 확인",
+      "resolvedAt": "2026-06-11",
+      "resolution": "Material Symbols 폰트 링크에 display=block 적용(4개 HTML 통일 — index/dashboard/excel/class-setup). 로딩 중 아이콘 ligature 텍스트(check_circle 등) 노출 방지."
     },
     {
       "id": "banner-on-dateless-views",
       "title": "not-today 배너가 날짜 무관 뷰에도 표시됨",
       "priority": "P3",
       "category": "ux",
-      "status": "open",
+      "status": "done",
       "description": "배너가 공유 list-panel에 있어 반 설정·휴퇴원요청 등 날짜와 무관한 뷰에서도 과거 날짜 경고가 떠서 경고 피로를 유발할 수 있음 (code-review에서 발견).",
       "evidence": "index.html not-today-banner는 모든 카테고리가 공유하는 #list-panel 상단에 위치",
       "location": "index.html not-today-banner, data-layer.js updateDateDisplay",
-      "recommendation": "출결·숙제·테스트 등 날짜 민감 카테고리에서만 배너 표시 (state.currentCategory 조건 추가)"
+      "recommendation": "출결·숙제·테스트 등 날짜 민감 카테고리에서만 배너 표시 (state.currentCategory 조건 추가)",
+      "resolvedAt": "2026-06-11",
+      "resolution": "updateDateDisplay에 DATE_SENSITIVE_CATEGORIES(출결·숙제·테스트·자동화) 게이트 추가, setCategory에서 updateDateDisplay 호출. 어제+출결=표시/행정=숨김/복귀=재표시 검증 완료."
     }
   ]
 }
