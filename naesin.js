@@ -53,12 +53,12 @@ function getNaesinInfo(student, selectedDate, dayName) {
 
     const classDays = Object.keys(cs.schedule || {});
 
-    // 오늘 요일이 반 스케줄에 있는지 확인
-    if (dayName && !classDays.includes(dayName)) return null;
-
-    // 학생 개별 내신 요일이 설정된 경우, 해당 요일만 표시
+    // 요일 판정: 학생 개별 naesin_days가 있으면 그것이 우선 (반 스케줄 밖 요일 override 허용)
     const studentNaesinDays = regularEnroll.naesin_days;
-    if (dayName && studentNaesinDays?.length > 0 && !studentNaesinDays.includes(dayName)) return null;
+    if (dayName) {
+        const effectiveDays = studentNaesinDays?.length > 0 ? studentNaesinDays : classDays;
+        if (!effectiveDays.includes(dayName)) return null;
+    }
 
     return { enrollment: regularEnroll, naesinCode, csKey, classDays, cs };
 }
@@ -307,9 +307,8 @@ export function renderNaesinDetail(studentId) {
     // 학생 개별 내신 요일: naesin_days가 있으면 그것, 없으면 반 전체 요일
     const studentNaesinDays = enrollment.naesin_days?.length > 0 ? enrollment.naesin_days : days;
 
-    // 요일 배지 (반 스케줄에 있는 요일만 표시, 학생 naesin_days 기준 토글)
+    // 요일 배지 (월~일 전체 — 반 스케줄 밖 요일도 학생 개별 override로 추가 가능)
     const dayTogglesHtml = allDays.map(day => {
-        if (!days.includes(day)) return ''; // 반 스케줄에 없는 요일은 표시 안 함
         const isEnrolled = studentNaesinDays.includes(day);
         const isToday  = day === dayName;
         const cls = isToday && isEnrolled ? 'naesin-day-today'
@@ -320,8 +319,8 @@ export function renderNaesinDetail(studentId) {
             title="클릭하여 ${isEnrolled ? '제거' : '추가'}">${_esc(day)}</div>`;
     }).join('');
 
-    // 학생 내신 등록 요일별 시간 목록
-    const enrolledDays = days.filter(d => studentNaesinDays.includes(d));
+    // 학생 내신 등록 요일별 시간 목록 (반 스케줄 밖 요일 포함, 월~일 순 정렬)
+    const enrolledDays = allDays.filter(d => studentNaesinDays.includes(d));
     const timeRowsHtml = enrolledDays.length > 0 ? enrolledDays.map(day => {
         const studentOverride = enrollment.naesin_schedule?.[day];
         const classDefault    = classSched[day];

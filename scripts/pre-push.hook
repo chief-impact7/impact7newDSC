@@ -7,3 +7,11 @@ if [ $? -ne 0 ]; then
     echo "Push 차단: firestore.rules 업데이트 후 다시 push하세요."
     exit 1
 fi
+
+# @impact7/shared spec ↔ lock 정합 검증 (수동 갱신 시 lock 미갱신 drift 차단)
+node scripts/check-shared-lock-sync.mjs
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "Push 차단: shared lock 불일치 — 위 안내의 npm install 명령으로 갱신 후 다시 push하세요."
+    exit 1
+fi
