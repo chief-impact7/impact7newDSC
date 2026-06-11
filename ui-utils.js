@@ -2,7 +2,10 @@
 // daily-ops.js에서 추출한 순수 UI 유틸리티 함수들
 
 import { state, OX_CYCLE } from './state.js';
-export { esc, escAttr } from '@impact7/shared/html-escape';
+// re-export 전용 구문(export {...} from)은 로컬 스코프에 바인딩하지 않는다 —
+// 이 파일 안에서도 esc/escAttr를 쓰므로 반드시 import 후 export로 분리할 것.
+import { esc, escAttr } from '@impact7/shared/html-escape';
+export { esc, escAttr };
 
 // HTML 엔티티 디코딩 (&amp; → &, &#39; → ', &quot; → " 등) — DOM 필요, 로컬 유지.
 export const decodeHtmlEntities = (str) => {
