@@ -686,7 +686,7 @@ service cloud.firestore {
         return canManagePermissions()
           && request.auth.uid != uid
           && !(resource.data.role in ['owner', 'director'])
-          && request.resource.data.role in ['manager', 'teacher', 'payment', 'staff', 'shortterm']
+          && request.resource.data.role in ['operator', 'manager', 'teacher', 'payment', 'staff', 'shortterm']
           && request.resource.data.keys().hasOnly(['email', 'name', 'role', 'permissions', 'assignedBuildings'])
           && request.resource.data.permissions is map
           && request.resource.data.permissions.get('canManagePermissions', false) == resource.data.permissions.get('canManagePermissions', false)
