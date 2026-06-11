@@ -29,7 +29,9 @@ if (import.meta.env.DEV) {
     }
 }
 
-const app = initializeApp(firebaseConfig);
+// 통합 호스팅(같은 origin)에서 앱별 Firestore persistence를 분리하기 위한 고유 앱 이름.
+// [DEFAULT] 공유 시 다른 impact7 앱 탭과 primary lease 충돌로 write가 hang됨.
+const app = initializeApp(firebaseConfig, 'dsc');
 export { app };
 
 export const auth = getAuth(app);

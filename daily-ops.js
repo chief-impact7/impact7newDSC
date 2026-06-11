@@ -651,7 +651,8 @@ onAuthStateChanged(auth, async (user) => {
             await promoteScheduledLeave();
             await loadWithdrawnStudents();
             buildSiblingMap();
-            await trackTeacherLogin(user);
+            // 비차단: write가 서버 ack을 못 받아도 초기 렌더링을 막지 않음 (내부 try-catch 있음)
+            trackTeacherLogin(user);
             await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadUserRole(), loadClassSettings(), loadClassNextHw(state.selectedDate), loadTeachers()]);
             await syncAbsenceRecords();
             await autoCleanupClasses();

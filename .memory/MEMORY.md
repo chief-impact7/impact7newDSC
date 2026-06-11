@@ -26,5 +26,8 @@
 - [feedback_enrollment_integrity_guards.md](feedback_enrollment_integrity_guards.md) — enrollment class_type×코드 정합성 가드는 모든 저장 경로(반편성도우미·DB 모달·DSC 모달·CSV import)에서 강제 (2026-05 263건 사고 재발 방지)
 - [reference_cs_naesin_period_sync.md](reference_cs_naesin_period_sync.md) — Cloud Function `onClassSettingsNaesinPeriodChanged` 가 cs.naesin_end 변경 시 학생 enrollment.end_date 자동 sync (7303749)
 - [feedback_outlier_detection_pattern.md](feedback_outlier_detection_pattern.md) — "한 명만 이상함" 보고 시 같은 csKey·반 멤버 dump해서 형식 불일치 outlier 검출하는 패턴
+- [project_ui_ux_audit_2026-06-11.md](project_ui_ux_audit_2026-06-11.md) — UI/UX 감사 14건 전건 수정 완료. mobile-visible 수명주기 함정·브레이크포인트 768/1100 이원화·openKoreanDatePicker(date-picker.js)·READ-ONLY 검증 패턴
+- [feedback_search_scoped_by_design.md](feedback_search_scoped_by_design.md) — 검색이 활성 필터 안에서 동작하는 건 의도된 사양 (전역 검색 제안 금지, search-scope-banner로 안내)
+- [reference_firebase_named_app_persistence.md](reference_firebase_named_app_persistence.md) — 통합 호스팅 같은-origin Firestore IndexedDB 충돌 사건·진단 기법·named app 분리 (argless getAuth() 금지)
 
 - [codegraph 활용 가이드](reference_codegraph_guide.md) — 인덱스 현황, 도메인별 탐색 쿼리, 주요 모듈 위치
