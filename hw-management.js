@@ -11,9 +11,6 @@ import { enrollmentCode, getActiveEnrollments, matchesBranchFilter, makeDailyRec
 import { getDayName, studentShortLabel } from './src/shared/firestore-helpers.js';
 import { staffLabel } from '@impact7/shared/staff-label';
 
-// 명시적으로 편집 요청된 domain 추적 (pending이지만 폼 표시)
-const _reopenedHwDomains = new Set();
-
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderStudentDetail, renderSubFilters, renderListPanel, saveDailyRecord;
 let getClassDomains, getNextHwStatus, saveClassNextHw;
@@ -66,27 +63,7 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
         `;
     }
 
-    // pending task 영역은 밀린 Task로 이동됐으므로 숨김.
-    // 단, 명시적으로 편집 요청된 영역은 폼을 표시한다.
-    const filteredDomains = failDomains.filter(domain => {
-        const isPending = !!state.hwFailTasks.find(t =>
-            t.student_id === studentId && t.domain === domain
-            && t.source_date === state.selectedDate && t.status === 'pending'
-        );
-        return !isPending || _reopenedHwDomains.has(`${studentId}_${domain}`);
-    });
-
-    if (filteredDomains.length === 0) {
-        return `
-            <div class="detail-card hw-fail-card">
-                <div class="detail-card-title">
-                    <span class="material-symbols-outlined" style="color:var(--success);font-size:18px;">task_alt</span>
-                    ${titleLabel}
-                </div>
-                <div class="detail-card-empty" style="color:var(--text-sec);">모두 처리됨</div>
-            </div>
-        `;
-    }
+    const filteredDomains = failDomains;
 
     const descLabel = is1stOnly
         ? '숙제 1차 미통과 영역에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.'
@@ -218,7 +195,6 @@ export async function reopenHwFailDomain(studentId, domain) {
             cancelled_at: '',
         });
         Object.assign(task, { status: 'pending', completed_by: '', completed_at: '', cancelled_by: '', cancelled_at: '' });
-        _reopenedHwDomains.add(`${studentId}_${domain}`);
         renderStudentDetail(studentId);
         renderListPanel();
         showSaveIndicator('saved');
@@ -253,7 +229,6 @@ export async function selectHwFailType(studentId, domain, type, btnEl) {
 // 처리 유형 초기화
 export async function clearHwFailType(studentId, domain) {
     if (!checkCanEditGrading(studentId)) return;
-    _reopenedHwDomains.delete(`${studentId}_${domain}`);
     const rec = state.dailyRecords[studentId] || {};
     const hwFailAction = { ...(rec.hw_fail_action || {}) };
     delete hwFailAction[domain];
@@ -272,7 +247,6 @@ export async function saveHwFailFields(studentId, domain, btnEl) {
         state.dailyRecords[studentId].hw_fail_action[domain][el.dataset.hwField] = el.value;
     });
     state.dailyRecords[studentId].hw_fail_action[domain].updated_at = new Date().toISOString();
-    _reopenedHwDomains.delete(`${studentId}_${domain}`);
     await saveHwFailAction(studentId, state.dailyRecords[studentId].hw_fail_action, domain);
     const tag = document.getElementById(`hw-fail-saved-${studentId}-${domain}`);
     if (tag) { tag.style.display = ''; setTimeout(() => tag.style.display = 'none', 2000); }

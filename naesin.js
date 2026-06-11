@@ -429,8 +429,11 @@ export function renderNaesinDetail(studentId) {
     const removeHtml = csKey ? _renderRemoveFromClassCard(studentId, csKey, code, 'removeFromNaesin') : '';
 
     // ── 조립 ──
-    document.getElementById('detail-cards').innerHTML =
-        attHtml + schedHtml + memoHtml + clinicHtml + removeHtml;
+    const cardsEl = document.getElementById('detail-cards');
+    if (cardsEl) {
+        cardsEl.style.display = '';
+        cardsEl.innerHTML = attHtml + schedHtml + memoHtml + clinicHtml + removeHtml;
+    }
 
     // 탭 상태 (일일현황 탭만 표시)
     const tabsEl = document.getElementById('detail-tabs');
@@ -809,8 +812,11 @@ export function renderTeukangDetail(studentId) {
         </div>`;
 
     // ── 조립 ──
-    document.getElementById('detail-cards').innerHTML =
-        attHtml + schedHtml + removeHtml + memoHtml + clinicHtml;
+    const cardsEl = document.getElementById('detail-cards');
+    if (cardsEl) {
+        cardsEl.style.display = '';
+        cardsEl.innerHTML = attHtml + schedHtml + removeHtml + memoHtml + clinicHtml;
+    }
 
     // 탭 숨기기
     const tabsEl = document.getElementById('detail-tabs');
@@ -1010,6 +1016,7 @@ function renderNaesinClassDetail(csKey) {
     }).join('');
 
     const cardsContainer = document.getElementById('detail-cards');
+    cardsContainer.style.display = '';
     cardsContainer.innerHTML = `
         <div class="detail-card">
             <div class="detail-card-title">
