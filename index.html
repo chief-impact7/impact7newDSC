@@ -164,6 +164,11 @@
 
             <!-- List Panel -->
             <section class="list-panel" id="list-panel">
+                <div class="not-today-banner" id="not-today-banner" style="display:none;">
+                    <span class="material-symbols-outlined">event_upcoming</span>
+                    <span id="not-today-banner-text"></span>
+                    <button class="not-today-banner-btn" onclick="goToday()">오늘로 이동</button>
+                </div>
                 <div class="panel-header" id="panel-header">
                     <div class="filter-chips" id="filter-chips"></div>
                     <span class="count-chip" id="list-count">0명</span>

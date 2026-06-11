@@ -993,6 +993,8 @@ export function renderStudentDetail(studentId) {
     if (!studentId) {
         document.getElementById('detail-empty').style.display = '';
         document.getElementById('detail-content').style.display = 'none';
+        // 빈 상태에서 좁은 화면 오버레이 클래스가 남으면 리사이즈 시 빈 패널이 화면을 덮는다
+        document.getElementById('detail-panel').classList.remove('mobile-visible');
         return;
     }
 
@@ -1006,6 +1008,7 @@ export function renderStudentDetail(studentId) {
     if (!student) {
         document.getElementById('detail-empty').style.display = '';
         document.getElementById('detail-content').style.display = 'none';
+        document.getElementById('detail-panel').classList.remove('mobile-visible');
         return;
     }
 
@@ -1480,7 +1483,7 @@ export function renderStudentDetail(studentId) {
     // 결석대장 카드 expanded 상태 복원
     _restoreExpandedAbsenceIndices(expandedAbsenceIndices);
 
-    // 모바일에서 패널 보이기
+    // 좁은 화면(<=1100px)에서 패널 표시 — 데스크톱에선 무해
     document.getElementById('detail-panel').classList.add('mobile-visible');
 }
 

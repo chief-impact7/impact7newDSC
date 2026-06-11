@@ -326,9 +326,7 @@ export function renderClassDetail(classCode) {
             ${renderTeukangAddStudentCard(classCode)}
             ${renderClassDeleteCard(classCode, 'teukang')}
         `;
-        if (window.innerWidth <= 768) {
-            document.getElementById('detail-panel').classList.add('mobile-visible');
-        }
+        document.getElementById('detail-panel').classList.add('mobile-visible');
         return;
     }
 
@@ -386,10 +384,8 @@ export function renderClassDetail(classCode) {
         ${renderClassDeleteCard(classCode, isFreeMode ? 'free' : 'regular')}
     `;
 
-    // 모바일에서 디테일 패널 표시
-    if (window.innerWidth <= 768) {
-        document.getElementById('detail-panel').classList.add('mobile-visible');
-    }
+    // 좁은 화면(<=1100px)에서 디테일 패널 표시 — 데스크톱에선 무해
+    document.getElementById('detail-panel').classList.add('mobile-visible');
 }
 
 // ─── 정규반 등원 요일 카드 ──────────────────────────────────────────────────

@@ -7,7 +7,7 @@ import { db } from './firebase-config.js';
 import { todayStr } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditSet, auditAdd } from './audit.js';
 import { state } from './state.js';
-import { esc, escAttr, showSaveIndicator } from './ui-utils.js';
+import { esc, escAttr, showSaveIndicator, showToast } from './ui-utils.js';
 import { findStudent, enrollmentCode } from './student-helpers.js';
 import { schoolSearchTerms } from './school-normalizer.js';
 import { staffLabel } from '@impact7/shared/staff-label';
@@ -45,18 +45,23 @@ export async function loadUserRole() {
 
 export async function selectRole(role) {
     if (!state.currentUser) return;
+    const changed = state.currentRole !== role;
     state.currentRole = role;
     renderRoleSelector();
     updateMemoUI();
 
-    try {
-        await auditSet(doc(db, 'user_settings', state.currentUser.email), {
-            role
-        }, { merge: true });
-    } catch (err) {
-        console.error('롤 저장 실패:', err);
+    if (changed) {
+        showToast(`'${role}' 역할로 전환 — 메모 수신함이 ${role} 기준으로 표시됩니다`);
+        try {
+            await auditSet(doc(db, 'user_settings', state.currentUser.email), {
+                role
+            }, { merge: true });
+        } catch (err) {
+            console.error('롤 저장 실패:', err);
+        }
     }
 
+    // 동일 역할 재클릭도 항상 재조회 — 메모는 one-shot getDocs라 재클릭이 유일한 수동 새로고침
     await loadRoleMemos();
 }
 

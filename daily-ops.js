@@ -616,6 +616,14 @@ window.closeDetail = () => {
     renderListPanel();
 };
 
+// 데스크톱↔오버레이(<=1100px) 경계를 넘을 때 stale 클래스 정리 —
+// 안 하면 데스크톱에서 남은 mobile-visible이 좁은 화면에서 빈 detail 패널(z-index 160)로
+// 리스트와 사이드바 드로어를 덮는다. 768px 경계(모바일↔태블릿)는 양쪽 다 오버레이라 정리 불필요.
+window.matchMedia('(max-width: 1100px)').addEventListener('change', (e) => {
+    document.getElementById('detail-panel')?.classList.remove('mobile-visible');
+    if (!e.matches) window.closeSidebar();
+});
+
 
 // ─── Auth ───────────────────────────────────────────────────────────────────
 

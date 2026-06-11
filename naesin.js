@@ -1056,9 +1056,7 @@ function renderNaesinClassDetail(csKey) {
     const reportEl = document.getElementById('report-tab');
     if (reportEl) reportEl.style.display = 'none';
 
-    if (window.innerWidth <= 768) {
-        document.getElementById('detail-panel').classList.add('mobile-visible');
-    }
+    document.getElementById('detail-panel').classList.add('mobile-visible');
 }
 
 // 내신 반 설정 저장 핸들러

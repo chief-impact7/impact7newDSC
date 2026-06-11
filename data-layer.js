@@ -876,15 +876,29 @@ export function updateDateDisplay() {
     document.getElementById('date-text').textContent = `${state.selectedDate} (${dayName})`;
     const picker = document.getElementById('date-picker');
     if (picker) picker.value = state.selectedDate;
+
+    // 오늘이 아닌 날짜는 출결 오입력 방지를 위해 날짜 칩 강조 + 배너 표시
+    const today = todayStr();
+    const isToday = state.selectedDate === today;
+    document.getElementById('date-display')?.classList.toggle('not-today', !isToday);
+    const banner = document.getElementById('not-today-banner');
+    if (banner) {
+        banner.style.display = isToday ? 'none' : '';
+        if (!isToday) {
+            const rel = state.selectedDate < today ? '과거' : '미래';
+            document.getElementById('not-today-banner-text').textContent =
+                `${rel} 날짜 ${state.selectedDate} (${dayName}) 기록을 보고 있습니다`;
+        }
+    }
 }
 
 export async function reloadForDate() {
+    updateDateDisplay();   // 데이터 로드를 기다리지 않고 날짜 칩/배너 즉시 갱신
     state._visitStatusPending = {};
 
     await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadRoleMemos(), loadClassNextHw(state.selectedDate), loadClassSettings(), loadTeachers()]);
     await syncAbsenceRecords();
     state.selectedNextHwClass = null;
-    updateDateDisplay();
     renderSubFilters();
     renderListPanel();
     if (state.selectedStudentId) renderStudentDetail(state.selectedStudentId);
