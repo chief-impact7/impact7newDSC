@@ -29,5 +29,6 @@
 - [project_ui_ux_audit_2026-06-11.md](project_ui_ux_audit_2026-06-11.md) — UI/UX 감사 14건 전건 수정 완료. mobile-visible 수명주기 함정·브레이크포인트 768/1100 이원화·openKoreanDatePicker(date-picker.js)·READ-ONLY 검증 패턴
 - [feedback_search_scoped_by_design.md](feedback_search_scoped_by_design.md) — 검색이 활성 필터 안에서 동작하는 건 의도된 사양 (전역 검색 제안 금지, search-scope-banner로 안내)
 - [reference_firebase_named_app_persistence.md](reference_firebase_named_app_persistence.md) — 통합 호스팅 같은-origin Firestore IndexedDB 충돌 사건·진단 기법·named app 분리 (argless getAuth() 금지)
+- [feedback_reexport_local_binding.md](feedback_reexport_local_binding.md) — `export {...} from`은 로컬 바인딩 없음, 같은 파일 사용 시 ReferenceError (유지민 상세패널 사고, dist bare-심볼 스캔 진단법)
 
 - [codegraph 활용 가이드](reference_codegraph_guide.md) — 인덱스 현황, 도메인별 탐색 쿼리, 주요 모듈 위치
