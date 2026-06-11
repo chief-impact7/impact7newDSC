@@ -4,6 +4,7 @@ import { auth } from '../../firebase-config.js';
 import { signInWithGoogle, logout } from '../../auth.js';
 import { useStudents, useDashboardData } from './hooks/useFirestore.js';
 import { branchFromStudent, enrollmentCode, todayStr, fetchSemesterSettings, getSemestersForDate, studentGradeKey } from '../shared/firestore-helpers.js';
+import { openKoreanDatePicker } from '../../date-picker.js';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import DailyLogBoard from './components/DailyLogBoard.jsx';
 import GradeFilter from './components/GradeFilter.jsx';
@@ -312,7 +313,7 @@ export default function App() {
                             <button onClick={() => setBaseDate(addDays(normalizedBaseDate, -1))}>
                                 <span className="material-symbols-outlined">chevron_left</span>
                             </button>
-                            <input type="date" value={normalizedBaseDate} onChange={e => setBaseDate(e.target.value)} />
+                            <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, normalizedBaseDate, setBaseDate)}>{normalizedBaseDate}</button>
                             <button onClick={() => setBaseDate(addDays(normalizedBaseDate, 1))}>
                                 <span className="material-symbols-outlined">chevron_right</span>
                             </button>
@@ -330,7 +331,7 @@ export default function App() {
                             <button onClick={() => setBaseDate(addDays(normalizedBaseDate, -7))}>
                                 <span className="material-symbols-outlined">chevron_left</span>
                             </button>
-                            <input type="date" value={normalizedBaseDate} onChange={e => setBaseDate(e.target.value)} />
+                            <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, normalizedBaseDate, setBaseDate)}>{normalizedBaseDate}</button>
                             <button onClick={() => setBaseDate(addDays(normalizedBaseDate, 7))}>
                                 <span className="material-symbols-outlined">chevron_right</span>
                             </button>
@@ -345,9 +346,9 @@ export default function App() {
                 {rangeType === 'custom' && (
                     <div className="dash-filter-group">
                         <label>기간</label>
-                        <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} />
+                        <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, customStart, setCustomStart)}>{customStart || '시작일'}</button>
                         <span>~</span>
-                        <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} />
+                        <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, customEnd, setCustomEnd)}>{customEnd || '종료일'}</button>
                         {dateRangeSwapped && (
                             <span className="dash-date-warning">시작일과 종료일이 바뀌어 자동 보정됩니다</span>
                         )}

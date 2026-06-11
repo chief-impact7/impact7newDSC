@@ -169,13 +169,23 @@ body {
     white-space: nowrap;
 }
 .dash-filter-group select,
-.dash-filter-group input[type="date"] {
+.dash-filter-group input[type="date"],
+.dash-date-btn {
     padding: 6px 10px;
     border: 1px solid var(--border);
     border-radius: 6px;
     font-size: 13px;
     font-family: inherit;
     background: var(--surface);
+}
+
+.dash-date-btn {
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.dash-date-btn:hover {
+    border-color: var(--primary);
 }
 .dash-date-nav {
     display: flex;
@@ -194,7 +204,8 @@ body {
     cursor: pointer;
     padding: 0;
 }
-.dash-date-nav .dash-text-btn {
+.dash-date-nav .dash-text-btn,
+.dash-date-nav .dash-date-btn {
     width: auto;
     min-width: 58px;
     padding: 0 10px;

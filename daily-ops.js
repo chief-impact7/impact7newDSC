@@ -517,12 +517,6 @@ window.cycleTempArrival = cycleTempArrival;
 // updateDateDisplay, reloadForDate, changeDate, openDatePicker, goToday → imported from data-layer.js
 
 document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('date-picker')?.addEventListener('change', (e) => {
-        if (e.target.value) {
-            state.selectedDate = e.target.value;
-            reloadForDate();
-        }
-    });
     initHelpGuide();
 
     // 탭 복귀 시 자동 데이터 갱신 (5분 이상 비활성 후 돌아오면)

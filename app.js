@@ -9,6 +9,7 @@ import { todayStr, getDayName, addDays, PAST_STUDENT_STATUSES, normalizeDays, en
 import { auditUpdate, auditSet, auditAdd, normalizeImpact7Email } from './audit.js';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { getActiveEnrollments } from './student-helpers.js';
+import { openKoreanDatePicker } from './date-picker.js';
 import { loadClassSettings } from './data-layer.js';
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -231,7 +232,6 @@ function setDate(dateStr) {
     selectedDate = dateStr;
     const dayName = getDayName(dateStr);
     document.getElementById('date-text').textContent = `${dateStr} (${dayName})`;
-    document.getElementById('date-picker').value = dateStr;
     loadDailyData();
 }
 
@@ -242,15 +242,8 @@ window.changeDate = (delta) => {
 window.goToday = () => setDate(todayStr());
 
 window.openDatePicker = () => {
-    const picker = document.getElementById('date-picker');
-    picker.showPicker?.() || picker.click();
+    openKoreanDatePicker(document.getElementById('date-display'), selectedDate, setDate);
 };
-
-document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('date-picker')?.addEventListener('change', (e) => {
-        if (e.target.value) setDate(e.target.value);
-    });
-});
 
 // ─── Filters ─────────────────────────────────────────────────────────────────
 function populateClassFilter() {

@@ -13,6 +13,7 @@ import { auditUpdate, auditSet, auditAdd, auditDelete, batchUpdate, batchSet, RE
 import { parseDateKST, toDateStrKST, todayStr, getDayName } from './src/shared/firestore-helpers.js';
 import { state, DEFAULT_DOMAINS, LEAVE_STATUSES } from './state.js';
 import { showSaveIndicator, showToast } from './ui-utils.js';
+import { openKoreanDatePicker } from './date-picker.js';
 import { normalizeDays, enrollmentCode, branchFromStudent, makeDailyRecordId, getActiveEnrollments } from './student-helpers.js';
 import { DEFAULT_HISTORY_LIMIT } from './consultation-filter.js';
 import { createPromoteEnrollPending } from '@impact7/shared/promote-enroll';
@@ -874,8 +875,6 @@ export async function saveImmediately(studentId, updates) {
 export function updateDateDisplay() {
     const dayName = getDayName(state.selectedDate);
     document.getElementById('date-text').textContent = `${state.selectedDate} (${dayName})`;
-    const picker = document.getElementById('date-picker');
-    if (picker) picker.value = state.selectedDate;
 
     // 오늘이 아닌 날짜는 출결 오입력 방지를 위해 날짜 칩 강조 + 배너 표시
     // 배너는 날짜 민감 카테고리에서만 — 행정·소속 등에서는 경고 피로만 유발
@@ -915,8 +914,10 @@ export function changeDate(delta) {
 }
 
 export function openDatePicker() {
-    const picker = document.getElementById('date-picker');
-    picker.showPicker?.() || picker.click();
+    openKoreanDatePicker(document.getElementById('date-display'), state.selectedDate, (dateStr) => {
+        state.selectedDate = dateStr;
+        reloadForDate();
+    });
 }
 
 export function goToday() {
