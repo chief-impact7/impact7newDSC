@@ -223,6 +223,12 @@ body {
   position: relative;
 }
 
+/* 날짜 이동 화살표: 터치 타깃 확보 */
+.date-selector .icon-btn {
+  width: 44px;
+  height: 44px;
+}
+
 .date-display {
   padding: 6px 14px;
   border: 1px solid var(--border);
@@ -285,6 +291,39 @@ body {
 .not-today-banner-btn:hover {
   background: var(--warning);
   color: #fff;
+}
+
+/* 검색 범위 안내 배너 (필터 활성 + 검색 중) */
+.search-scope-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: var(--surface-container);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-sec);
+  font-size: 12px;
+}
+
+.search-scope-banner .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.search-scope-btn {
+  margin-left: auto;
+  padding: 3px 10px;
+  border: 1px solid var(--primary);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.search-scope-btn:hover {
+  background: var(--primary-light);
 }
 
 .user-email {

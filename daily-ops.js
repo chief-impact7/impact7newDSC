@@ -765,6 +765,7 @@ window.handleListItemClick = handleListItemClick;
 window.changeDate = changeDate;
 window.openDatePicker = openDatePicker;
 window.goToday = goToday;
+window.showToast = showToast;
 window.setCategory = setCategory;
 if (import.meta.env?.DEV) { window._debug = { get absenceRecords() { return state.absenceRecords; }, get dailyRecords() { return state.dailyRecords; }, get selectedDate() { return state.selectedDate; }, set selectedDate(v) { state.selectedDate = v; }, get allStudents() { return state.allStudents; } }; }
 window.setSubFilter = setSubFilter;

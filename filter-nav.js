@@ -545,6 +545,19 @@ export function renderFilterChips() {
         ).join('') +
             `<button class="filter-chip-clear-all" onclick="clearAllFilters()" title="모든 필터 해제">&times;</button>`;
     }
+
+    // 필터가 걸린 채 검색 중이면 검색 범위 안내 배너 표시 (검색은 의도적으로 현재 필터 안에서 동작)
+    // 반 필터는 검색 중 적용되지 않으므로(list-view.js) 배너 라벨에서 제외
+    const scopeBanner = document.getElementById('search-scope-banner');
+    if (scopeBanner) {
+        const scopeChips = chips.filter(c => c.onRemove !== 'clearClassCode');
+        const show = !!state.searchQuery?.trim() && scopeChips.length > 0;
+        scopeBanner.style.display = show ? '' : 'none';
+        if (show) {
+            document.getElementById('search-scope-text').textContent =
+                `${scopeChips.map(c => c.label).join(' · ')} 내 검색 결과`;
+        }
+    }
 }
 
 export function removeFilterChip(action) {

@@ -97,21 +97,28 @@ export function renderAbsenceLedgerList() {
         return;
     }
 
-    // 상태별 그룹 정렬
+    // 상태별 그룹 정렬 — 같은 order에 라벨이 둘인 경우(보충입력대기/보충 예정)도 라벨별로 묶는다
     records.sort((a, b) => {
         const ga = _getAbsenceStatusGroup(a);
         const gb = _getAbsenceStatusGroup(b);
         if (ga.order !== gb.order) return ga.order - gb.order;
+        if (ga.label !== gb.label) return ga.label.localeCompare(gb.label);
         return (b.absence_date || '').localeCompare(a.absence_date || '');
     });
 
-    let currentGroup = -1;
+    const groupCounts = {};
+    for (const r of records) {
+        const { label } = _getAbsenceStatusGroup(r);
+        groupCounts[label] = (groupCounts[label] || 0) + 1;
+    }
+
+    let currentLabel = '';
     let html = '';
     for (const r of records) {
         const group = _getAbsenceStatusGroup(r);
-        if (group.order !== currentGroup) {
-            currentGroup = group.order;
-            html += `<div class="visit-source-header" style="margin-top:8px;padding:4px 12px;font-size:11px;font-weight:600;color:var(--text-sec);">${esc(group.label)}</div>`;
+        if (group.label !== currentLabel) {
+            currentLabel = group.label;
+            html += `<div class="visit-source-header" style="margin-top:8px;padding:4px 12px;font-size:11px;font-weight:600;color:var(--text-sec);">${esc(group.label)} ${groupCounts[group.label]}건</div>`;
         }
         const isActive = r.student_id === state.selectedStudentId;
         const validityBadge = _renderValidityBadge(r.reason_valid);
