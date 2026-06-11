@@ -8,7 +8,7 @@ export async function fetchPopulationPerms(uid) {
         const snap = await getDoc(doc(db, 'HR_users', uid));
         if (snap.exists()) {
             const d = snap.data();
-            const all = d.role === 'owner' || d.role === 'director'
+            const all = d.role === 'owner' || d.role === 'principal'
                 || d.permissions?.canViewPopulationStats === true;
             return { all, classCounts: all || d.permissions?.canViewClassCounts === true };
         }
