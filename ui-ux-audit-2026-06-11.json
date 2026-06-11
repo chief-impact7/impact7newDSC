@@ -117,12 +117,13 @@
       "title": "로그북과 메인 앱 디자인 언어 단절",
       "priority": "P2",
       "category": "consistency",
-      "status": "blocked",
+      "status": "done",
       "description": "메인 앱은 녹색·베이지 pill UI, 로그북은 파란·회색의 다른 스타일. 상호 링크 명칭도 비대칭(메인→'로그북', 로그북→'입력 페이지').",
       "evidence": "dashboard.html 스크린샷 비교",
       "location": "src/dashboard/dashboard.css, style.css",
       "recommendation": "컬러 토큰·헤더 구조 공유, 링크 명칭 통일",
-      "resolution": "대시보드 전면 리스킨은 디자인 결정 사항이라 보류 — 컬러 토큰 공유 범위·링크 명칭 통일안에 대한 사용자 결정 대기."
+      "resolution": "컬러 토큰 정합으로 범위 확정(사용자 결정). dashboard.css :root 토큰을 메인 앱(daily-ops.css) 값으로 교체 — primary #1a73e8→#00754A, 배경 #f8f9fa→#f2f0eb(베이지), danger/success/warning/border/text 계열 동일 정합, --sec-attendance도 primary-light 녹색으로. 하드코딩 색 없이 전부 var() 경유라 토큰 교체만으로 전체 반영. 명단 카드 의미 색(퇴원 빨강·결석 보라 등)과 레이아웃은 유지. 브라우저 검증 완료.",
+      "resolvedAt": "2026-06-11"
     },
     {
       "id": "unknown-header-icon",

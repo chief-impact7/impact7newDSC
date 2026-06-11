@@ -1,20 +1,21 @@
 /* ─── 대시보드 전용 스타일 ─── */
 :root {
-    --primary: #1a73e8;
-    --primary-light: #e8f0fe;
-    --danger: #d93025;
-    --success: #188038;
-    --warning: #f9ab00;
-    --bg: #f8f9fa;
+    /* 메인 앱(daily-ops.css) 컬러 토큰과 정합 — 값 출처: DESIGN-starbucks.md */
+    --primary: #00754A;
+    --primary-light: #d4e9e2;
+    --danger: #c82014;
+    --success: #006241;
+    --warning: #e37400;
+    --bg: #f2f0eb;
     --surface: #ffffff;
-    --border: #dadce0;
-    --border-light: #e8eaed;
-    --text: #202124;
-    --text-sec: #5f6368;
-    --text-third: #80868b;
+    --border: #e7e3db;
+    --border-light: #edebe9;
+    --text: rgba(0, 0, 0, 0.87);
+    --text-sec: rgba(0, 0, 0, 0.58);
+    --text-third: rgba(0, 0, 0, 0.42);
     --shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08);
     --shadow-lg: 0 4px 12px rgba(0,0,0,0.15);
-    --sec-attendance: #e8f0fe;
+    --sec-attendance: #d4e9e2;
     --sec-homework: #fce8e6;
     --sec-review-test: #e6f4ea;
     --sec-isc: #fef7e0;
