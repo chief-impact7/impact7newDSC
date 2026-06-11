@@ -28,6 +28,16 @@ impact7-app.web.app 통합 호스팅 이후 /dsc/가 "학생 데이터를 불러
 - 같은 앱 두 탭 + frozen primary 시나리오는 여전히 가능: init 체인의 조건부 write(promote*·backfillStudentNumbers·syncAbsenceRecords·autoCleanupClasses)는 await 유지 중 — 조건 충족일에는 hang 가능
 - HR만 firebase ^11 (나머지 ^12) — persistence 분리로 충돌은 해소됐으나 버전 정렬은 별도 과제
 
+## 2026-06-11 저녁 진화: 두 앱 체제 (SSO 복원)
+named app 단독 분리는 auth 저장 키(`firebase:authUser:{apiKey}:{appName}`)까지
+갈라 원앱 SSO를 깨뜨렸다 → 두 앱 체제로 재설계 (4개 앱 공통, DSC ce22e01):
+- **[DEFAULT] app = auth 전담** — 같은 origin 모든 앱이 세션 공유 (한 번 로그인)
+- **named app('dsc'/'db'/'hr'/'exam') = Firestore/Storage 전담** — persistence 분리 유지
+- `[DEFAULT]` auth → named app의 in-memory auth로 `onIdTokenChanged` +
+  `updateCurrentUser` 미러링. first-mirror Promise 게이트를 `dataAuthReady()`로
+  노출, 각 앱 onAuthStateChanged 콜백 첫 줄에서 await (첫 쿼리 unauthenticated 방지)
+- 미러링 race 없음은 firebase-js-sdk 소스로 확정 (idToken 구독이 authState보다 먼저 발화)
+
 ## 규칙
-- **argless `getAuth()`/`getFirestore()`/`getApp()` 금지** — named app 체제에서는 [DEFAULT]가 없어 throw. 항상 config의 인스턴스를 import
-- 새 impact7 앱 추가 시 반드시 고유 앱 이름 부여
+- **Firestore/Storage/Functions는 반드시 config의 인스턴스를 import** — named app 소속이라 argless 호출은 [DEFAULT](auth 전용)를 잡아 토큰/캐시가 어긋남
+- 새 impact7 앱 추가 시: [DEFAULT]=auth + 고유 이름 dataApp 패턴 복제, `dataAuthReady()` await 필수
