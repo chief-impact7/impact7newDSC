@@ -182,20 +182,16 @@ export function getFilteredStudents() {
 
     const dayName = getDayName(state.selectedDate);
 
-    // 검색어가 있으면 요일 무관, 현재 학기 학생만 (퇴원/종강생은 비원생 검색에서 표시)
-    // 내신 기간 중에는 getActiveEnrollments가 정규를 숨기므로 만료 여부만 직접 확인
-    const today = state.selectedDate || todayStr();
-    const validDateStr = (d) => d && /^\d{4}-/.test(d);
+    // 검색어가 있으면 요일 무관 (퇴원/종강생은 비원생 검색에서 표시)
     let students;
     if (state.searchQuery) {
-        // 검색은 모든 현재학기 학생을 찾을 수 있어야 함 (등원예정 포함).
-        // 평소 출결 목록(비검색)은 아래 getActiveEnrollments가 미래 시작일을 제외하므로
-        // 등원예정 학생은 출결엔 안 뜨고 검색으로만 노출된다.
-        // 재원생만 (상담생은 비원생 섹션에서 _renderPastContacts로 표시)
+        // 검색은 status 기반 — impact7DB 검색과 동일 방식 (drift 금지).
+        // enrollment 만료 여부로 거르지 않는다: 재원인데 enrollment만 만료된 학생
+        // (단기 수강 종료 등)이 검색에서 유령이 되는 것 방지 (김민찬4, 2026-06-11).
+        // 퇴원/종강·상담생은 비원생 섹션(_renderPastContacts)에서 별도 표시.
         students = state.allStudents.filter(s =>
             !PAST_STUDENT_STATUSES.has(s.status) &&
-            s.status !== '상담' &&
-            (s.enrollments || []).some(e => !(validDateStr(e.end_date) && e.end_date < today))
+            s.status !== '상담'
         );
     } else {
         students = state.allStudents.filter(s => {

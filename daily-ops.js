@@ -3,7 +3,7 @@ import {
     collection, getDocs, doc,
     query, where
 } from 'firebase/firestore';
-import { auth, db } from './firebase-config.js';
+import { auth, db, dataAuthReady } from './firebase-config.js';
 import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
 import { initHelpGuide } from './help-guide.js';
 import { todayStr, getDayName, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
@@ -623,6 +623,8 @@ window.matchMedia('(max-width: 1100px)').addEventListener('change', (e) => {
 
 onAuthStateChanged(auth, async (user) => {
     if (user) {
+        // dataApp(Firestore) auth 미러링 완료 보장 — 미완이면 첫 쿼리가 unauthenticated로 거부됨
+        await dataAuthReady();
         const email = user.email || '';
         const allowed = email.endsWith('@impact7.kr') || email.endsWith('@gw.impact7.kr');
         if (!user.emailVerified || !allowed) {
@@ -718,6 +720,15 @@ window.handleLogin = async () => {
         alert(messages[error.code] || `로그인 실패: ${error.code}`);
     }
 };
+// 모듈 로드 완료 — HTML에서 disabled로 시작한 로그인 버튼 활성화
+{
+    const loginBtn = document.getElementById('login-btn');
+    if (loginBtn) {
+        loginBtn.disabled = false;
+        loginBtn.style.opacity = '';
+        loginBtn.style.cursor = '';
+    }
+}
 
 let _searchTimer = null;
 window.handleSearch = (value) => {
