@@ -788,15 +788,24 @@ export async function autoCloseOldRecords() {
     }
 }
 
-export async function loadWithdrawnStudents() {
-    state.withdrawnStudents = [];
-    try {
-        const q = query(collection(db, 'students'), where('status', '==', '퇴원'));
-        const snap = await getDocs(q);
-        snap.forEach(d => state.withdrawnStudents.push({ docId: d.id, ...d.data() }));
-    } catch (err) {
-        console.error('퇴원 학생 로드 실패:', err.message);
-    }
+// 동시 호출 가드: 부팅 지연 로드와 다른 경로(퇴원→휴원 등)가 겹치면 배열이
+// 중간에 리셋·interleave되므로 진행 중인 로드를 공유한다.
+let _withdrawnLoading = null;
+export function loadWithdrawnStudents() {
+    if (_withdrawnLoading) return _withdrawnLoading;
+    _withdrawnLoading = (async () => {
+        state.withdrawnStudents = [];
+        try {
+            const q = query(collection(db, 'students'), where('status', '==', '퇴원'));
+            const snap = await getDocs(q);
+            snap.forEach(d => state.withdrawnStudents.push({ docId: d.id, ...d.data() }));
+        } catch (err) {
+            console.error('퇴원 학생 로드 실패:', err.message);
+        } finally {
+            _withdrawnLoading = null;
+        }
+    })();
+    return _withdrawnLoading;
 }
 
 export function saveDailyRecord(studentId, updates) {

@@ -651,14 +651,10 @@ onAuthStateChanged(auth, async (user) => {
             await backfillStudentNumbers();
             await promoteWithdrawalDate();
             await promoteScheduledLeave();
-            await loadWithdrawnStudents();
             buildSiblingMap();
             // 비차단: write가 서버 ack을 못 받아도 초기 렌더링을 막지 않음 (내부 try-catch 있음)
             trackTeacherLogin(user);
             await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadUserRole(), loadClassSettings(), loadClassNextHw(state.selectedDate), loadTeachers()]);
-            await syncAbsenceRecords();
-            await autoCleanupClasses();
-            await loadRoleMemos().catch(() => {});
         } catch (err) {
             console.error('[init] 데이터 로드 중 오류:', err);
         }
@@ -669,6 +665,23 @@ onAuthStateChanged(auth, async (user) => {
         renderSubFilters();
         updateL1ExpandIcons();
         renderListPanel();
+
+        // ── 첫 렌더 후 지연 로드: 퇴원생(1.5만+건, getDocs라 매 부팅 풀 다운로드)이
+        //    첫 화면을 수십 초 막던 병목. 비원생 검색·결석대장 필터에만 필요하므로 뒤로.
+        (async () => {
+            try {
+                await loadWithdrawnStudents();
+                // absence 리스너가 withdrawn보다 먼저 채워졌으므로 퇴원생 항목 사후 제거
+                const withdrawnIds = new Set(state.withdrawnStudents.map(s => s.docId));
+                state.absenceRecords = state.absenceRecords.filter(r => !withdrawnIds.has(r.student_id));
+                await syncAbsenceRecords();
+                await autoCleanupClasses();
+                await loadRoleMemos().catch(() => {});
+                renderListPanel();
+            } catch (err) {
+                console.error('[init-deferred] 후속 로드 중 오류:', err);
+            }
+        })();
 
         // Restore group view button state
         if (state.groupViewMode !== 'none') {
