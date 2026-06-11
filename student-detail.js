@@ -1012,16 +1012,14 @@ export function renderStudentDetail(studentId) {
         return;
     }
 
-    // 특강 모드: 특강 전용 상세 패널
+    // 특강 모드: 특강 전용 상세 패널 (반 비소속 학생이면 false 반환 → 표준 상세로 계속)
     if (state._classMgmtMode === 'teukang' && state.selectedClassCode) {
-        if (window.renderTeukangDetail) {
-            window.renderTeukangDetail(studentId);
-            return;
-        }
+        if (window.renderTeukangDetail?.(studentId)) return;
     }
 
     // 내신 모드: naesin.js로 위임 (간소화된 상세 패널)
-    if ((state.currentCategory === 'attendance' && state.currentSubFilter.has('naesin')) ||
+    // 특강 모드에서 폴백된 학생은 잔존 naesin 서브필터에 걸리지 않고 표준 상세로 가야 함
+    if ((state.currentCategory === 'attendance' && state.currentSubFilter.has('naesin') && state._classMgmtMode !== 'teukang') ||
         (state._classMgmtMode === 'naesin' && state.selectedClassCode && _isNaesinClassCode(state.selectedClassCode))) {
         if (window.renderNaesinDetail) {
             window.renderNaesinDetail(studentId);

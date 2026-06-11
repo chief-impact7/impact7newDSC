@@ -633,20 +633,18 @@ function _findTeukangEnrollment(student, classCode) {
     );
 }
 
+// 반환: 특강 패널을 그렸으면 true. false면 호출 측(renderStudentDetail)이
+// 표준 상세를 이어 그린다 — 여기서 조용히 끝내면 이전 학생 패널이 잔존한다.
 export function renderTeukangDetail(studentId) {
     const { allStudents, selectedDate, classSettings, dailyRecords } = _state();
     const student = allStudents?.find(s => s.docId === studentId);
-    if (!student) return;
+    if (!student) return false;
 
     const classCode = window.selectedClassCode;
-    if (!classCode) return;
+    if (!classCode) return false;
 
     const enrollment = _findTeukangEnrollment(student, classCode);
-    if (!enrollment) {
-        // 이 반 소속이 아닌 학생이면 일반 상세로 폴백
-        if (window._renderStudentDetailStandard) window._renderStudentDetailStandard(studentId);
-        return;
-    }
+    if (!enrollment) return false;
 
     const cs = classSettings?.[classCode] || {};
     const classSchedule = cs.schedule || {};
@@ -823,6 +821,7 @@ export function renderTeukangDetail(studentId) {
     if (tabsEl) tabsEl.style.display = 'none';
     const reportEl = document.getElementById('report-tab');
     if (reportEl) reportEl.style.display = 'none';
+    return true;
 }
 
 // ─── 특강 등원요일 토글 ──────────────────────────────────────────────────────
