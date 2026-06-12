@@ -137,12 +137,17 @@ export function renderLeaveRequestList() {
     container.innerHTML = html;
 }
 
-export function selectLeaveRequest(docId) {
+export async function selectLeaveRequest(docId) {
     _selectedLeaveRequestId = docId;
     const r = state.leaveRequests.find(lr => lr.docId === docId);
     if (r) {
         state.selectedStudentId = r.student_id;
         renderLeaveRequestList();
+        // 퇴원 학생 요청(퇴원→휴원·재등원 등): 퇴원생 미적재면 lazy-load 후 렌더
+        // (withdrawnStudents는 부팅 시 로드하지 않으므로 여기서 보장)
+        if (!findStudent(r.student_id)) {
+            await loadWithdrawnStudents();
+        }
         renderStudentDetail(r.student_id);
     }
 }
@@ -542,8 +547,8 @@ export function onLeaveRequestTypeChange() {
     const subWrap = document.getElementById('lr-sub-type-wrap');
     subWrap.style.display = _isLeaveSubType(type) ? '' : 'none';
     _renderLeaveRequestDateFields(type);
-    // 퇴원→휴원 선택 시 퇴원 학생 lazy-load
-    if (type === '퇴원→휴원' && state.withdrawnStudents.length === 0) {
+    // 퇴원→휴원 선택 시 퇴원 학생 lazy-load (검색의 부분 push와 구분해 전체 로드 기준)
+    if (type === '퇴원→휴원' && !state._withdrawnFullyLoaded) {
         loadWithdrawnStudents();
     }
     // 검색 초기화

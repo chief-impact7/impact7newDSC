@@ -4,7 +4,7 @@
 
 import {
     collection, getDocs, getDocsFromCache, doc, getDoc,
-    query, where, orderBy, limit, serverTimestamp, writeBatch, Timestamp,
+    query, where, orderBy, limit, startAfter, documentId, serverTimestamp, writeBatch, Timestamp,
     onSnapshot, deleteField
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
@@ -533,8 +533,10 @@ export function loadAbsenceRecords() {
     return _listenCollection('absence_records', q, (d) => {
         const data = { docId: d.id, ...d.data() };
         if (data.absence_date < cutoffStr) return null;
-        const withdrawnIds = new Set(state.withdrawnStudents.map(s => s.docId));
-        if (withdrawnIds.has(data.student_id)) return null;
+        // 비재원(퇴원·종강) 제외 — allStudents 부재 기준.
+        // withdrawnStudents가 아니라 allStudents를 보는 이유: 퇴원생 로드는 idle 지연이라
+        // 타이밍에 의존하면 안 되고, live 조회라 학생 증감도 즉시 반영된다.
+        if (!state.allStudents.some(s => s.docId === data.student_id)) return null;
         return data;
     }, (data) => { state.absenceRecords = data; });
 }
@@ -788,17 +790,45 @@ export async function autoCloseOldRecords() {
     }
 }
 
-// 동시 호출 가드: 부팅 지연 로드와 다른 경로(퇴원→휴원 등)가 겹치면 배열이
-// 중간에 리셋·interleave되므로 진행 중인 로드를 공유한다.
+// 퇴원생 전체 로드 (1.5만+건 — 시스템 전반이 비원생 포함 전제라 전체 적재 필요).
+// 첫 조작(학생 클릭) 응답성을 지키기 위해:
+//  1) IndexedDB 캐시를 먼저 통째로 적용 — 재방문 시 네트워크 전에 기능 가용
+//  2) 서버 갱신은 청크 분할(2,500건 + 사이마다 yield)로 메인스레드 블로킹 분산
+// 동시 호출 가드: 진행 중 로드를 공유해 배열 리셋·interleave 방지.
+const WITHDRAWN_CHUNK = 2500;
 let _withdrawnLoading = null;
 export function loadWithdrawnStudents() {
     if (_withdrawnLoading) return _withdrawnLoading;
     _withdrawnLoading = (async () => {
-        state.withdrawnStudents = [];
+        const baseQ = query(collection(db, 'students'), where('status', '==', '퇴원'));
         try {
-            const q = query(collection(db, 'students'), where('status', '==', '퇴원'));
-            const snap = await getDocs(q);
-            snap.forEach(d => state.withdrawnStudents.push({ docId: d.id, ...d.data() }));
+            try {
+                const cached = await getDocsFromCache(baseQ);
+                if (cached.size > 0) {
+                    // 1.5만 건 d.data() 역직렬화도 한 방이면 메인스레드를 수백 ms 막는다 — 분할
+                    const arr = [];
+                    for (let i = 0; i < cached.docs.length; i += WITHDRAWN_CHUNK) {
+                        cached.docs.slice(i, i + WITHDRAWN_CHUNK).forEach(d => arr.push({ docId: d.id, ...d.data() }));
+                        if (i + WITHDRAWN_CHUNK < cached.docs.length) await new Promise(r => setTimeout(r, 50));
+                    }
+                    state.withdrawnStudents = arr;
+                    state._withdrawnFullyLoaded = true;
+                }
+            } catch { /* 캐시 없음 — 서버 로드로 계속 */ }
+
+            const fresh = [];
+            let cursor = null;
+            for (;;) {
+                const parts = [where('status', '==', '퇴원'), orderBy(documentId()), limit(WITHDRAWN_CHUNK)];
+                if (cursor) parts.push(startAfter(cursor));
+                const snap = await getDocs(query(collection(db, 'students'), ...parts));
+                snap.forEach(d => fresh.push({ docId: d.id, ...d.data() }));
+                if (snap.size < WITHDRAWN_CHUNK) break;
+                cursor = snap.docs[snap.docs.length - 1];
+                await new Promise(r => setTimeout(r, 50));
+            }
+            state.withdrawnStudents = fresh;
+            state._withdrawnFullyLoaded = true;
         } catch (err) {
             console.error('퇴원 학생 로드 실패:', err.message);
         } finally {
