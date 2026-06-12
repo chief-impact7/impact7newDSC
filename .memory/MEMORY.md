@@ -32,3 +32,4 @@
 - [feedback_reexport_local_binding.md](feedback_reexport_local_binding.md) — `export {...} from`은 로컬 바인딩 없음, 같은 파일 사용 시 ReferenceError (유지민 상세패널 사고, dist bare-심볼 스캔 진단법)
 
 - [codegraph 활용 가이드](reference_codegraph_guide.md) — 인덱스 현황, 도메인별 탐색 쿼리, 주요 모듈 위치
+- [feedback_scheduled_leave_restore.md](feedback_scheduled_leave_restore.md) — 예약 휴원 복원 시 scheduled_leave_status 필수 (김서은 발효 불발 사고) + 휴원·퇴원 전수 감사는 check-leave-period-consistency.mjs 재사용
