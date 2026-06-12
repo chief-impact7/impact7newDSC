@@ -2,13 +2,13 @@
 // daily-ops.js에서 추출한 재예약 모달 (밀린 Task 재지정) 로직
 // Step 2
 
-import { arrayUnion, doc } from 'firebase/firestore';
+import { arrayUnion, doc, writeBatch } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { state } from './state.js';
 import {
     esc, formatTime12h, renderTime12hOptions, showSaveIndicator, _stripYear
 } from './ui-utils.js';
-import { auditUpdate } from './audit.js';
+import { auditUpdate, batchUpdate } from './audit.js';
 import { staffLabel } from '@impact7/shared/staff-label';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
@@ -32,6 +32,30 @@ function setRescheduleTime(value) {
     el.value = value || '16:00';
 }
 
+// 같은 학생·같은 날짜의 pending task 수집 (hw/test 공통) — 묶음 재지정 대상
+function _pendingTasksOn(studentId, date) {
+    if (!date) return [];
+    const pick = (arr, col) => arr
+        .filter(t => t.student_id === studentId && t.status === 'pending' && t.scheduled_date === date)
+        .map(t => ({ collection: col, task: t }));
+    return [...pick(state.hwFailTasks, 'hw_fail_tasks'), ...pick(state.testFailTasks, 'test_fail_tasks')];
+}
+
+// 단건 모달의 "같은 날 함께 재지정" 체크박스 — 같은 날 task가 2건 이상일 때만 노출
+function _setBulkRow(count, date) {
+    const row = document.getElementById('reschedule-bulk-row');
+    const check = document.getElementById('reschedule-bulk-check');
+    if (!row || !check) return;
+    check.checked = false;
+    if (count > 1) {
+        document.getElementById('reschedule-bulk-label').textContent =
+            `같은 날(${_stripYear(date)}) 밀린 task ${count}건 모두 재지정`;
+        row.style.display = '';
+    } else {
+        row.style.display = 'none';
+    }
+}
+
 export function openRescheduleModal(collection, docId, studentId) {
     const dateLabel = document.getElementById('reschedule-date-label');
     const timeField = document.getElementById('reschedule-time-field');
@@ -48,6 +72,7 @@ export function openRescheduleModal(collection, docId, studentId) {
         document.getElementById('reschedule-date').value = '';
         setRescheduleTime(r.makeup_time || '16:00');
         document.getElementById('reschedule-reason').value = '';
+        _setBulkRow(0);
         document.getElementById('reschedule-modal').style.display = 'flex';
         return;
     }
@@ -55,7 +80,8 @@ export function openRescheduleModal(collection, docId, studentId) {
     const arr = collection === 'test_fail_tasks' ? state.testFailTasks : state.hwFailTasks;
     const t = arr.find(x => x.docId === docId);
     if (!t) return;
-    _rescheduleTarget = { collection, docId, studentId, taskType: t.type };
+    _rescheduleTarget = { collection, docId, studentId, taskType: t.type, date: t.scheduled_date };
+    _setBulkRow(_pendingTasksOn(studentId, t.scheduled_date).length, t.scheduled_date);
 
     if (t.type === '대체숙제') {
         dateLabel.textContent = '새 제출기한';
@@ -75,13 +101,100 @@ export function openRescheduleModal(collection, docId, studentId) {
     document.getElementById('reschedule-modal').style.display = 'flex';
 }
 
+// 묶음 재지정 진입 (밀린 Task 카드의 날짜 그룹 헤더 버튼)
+export function openBulkRescheduleModal(studentId, date) {
+    const items = _pendingTasksOn(studentId, date);
+    if (items.length === 0) return;
+    _rescheduleTarget = { bulk: true, studentId, items };
+
+    document.getElementById('reschedule-date-label').textContent = '새 날짜';
+    // 등원 task가 하나라도 있으면 시간 필드 노출, 대체숙제만이면 날짜만
+    const firstVisit = items.find(({ task }) => task.type !== '대체숙제');
+    document.getElementById('reschedule-time-field').style.display = firstVisit ? '' : 'none';
+    setRescheduleTime(firstVisit?.task.scheduled_time || '16:00');
+    document.getElementById('reschedule-prev-info').innerHTML =
+        `<strong>묶음 재지정:</strong> ${esc(_stripYear(date))} 밀린 task ${items.length}건`;
+    _setBulkRow(0); // 이미 묶음 진입 — 체크박스 불필요
+    document.getElementById('reschedule-date').value = '';
+    document.getElementById('reschedule-reason').value = '';
+    document.getElementById('reschedule-modal').style.display = 'flex';
+}
+
+// 묶음 저장 — batch 원자 처리, reschedule_history는 task별 개별 기록.
+// 대체숙제는 의미가 "제출기한"이라 날짜만 변경하고 시간은 건드리지 않는다.
+async function _saveBulkReschedule(items, newDate, newTime, reason, studentId) {
+    const by = staffLabel(state.currentUser?.email);
+    const at = new Date().toISOString();
+    showSaveIndicator('saving');
+    try {
+        const batch = writeBatch(db);
+        const applyLocal = [];
+        for (const { collection: col, task: t } of items) {
+            const isAlt = t.type === '대체숙제';
+            const entry = {
+                prev_date: t.scheduled_date || '',
+                prev_time: t.scheduled_time || '',
+                new_date: newDate,
+                new_time: isAlt ? (t.scheduled_time || '') : (newTime || ''),
+                rescheduled_by: by,
+                rescheduled_at: at,
+            };
+            if (reason) entry.reason = reason;
+            const update = { scheduled_date: newDate, reschedule_history: arrayUnion(entry) };
+            if (!isAlt) update.scheduled_time = newTime || '';
+            batchUpdate(batch, doc(db, col, t.docId), update);
+
+            applyLocal.push(() => {
+                t.scheduled_date = newDate;
+                if (!isAlt) t.scheduled_time = newTime || '';
+                if (!t.reschedule_history) t.reschedule_history = [];
+                t.reschedule_history.push(entry);
+                const rec = state.dailyRecords[t.student_id];
+                const action = col === 'hw_fail_tasks' ? rec?.hw_fail_action?.[t.domain] : rec?.test_fail_action?.[t.domain];
+                if (action) {
+                    action.scheduled_date = newDate;
+                    if (!isAlt) action.scheduled_time = newTime || '';
+                }
+            });
+        }
+        await batch.commit();
+        applyLocal.forEach(fn => fn());
+
+        document.getElementById('reschedule-modal').style.display = 'none';
+        _rescheduleTarget = null;
+        state._scheduledVisitsCache = null;
+        _subFilterBaseRef.clear();
+        renderSubFilters();
+        renderListPanel();
+        if (studentId) renderStudentDetail(studentId);
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('묶음 재지정 저장 실패:', err);
+        showSaveIndicator('error');
+    }
+}
+
 export async function saveReschedule() {
     if (!_rescheduleTarget) return;
-    const { collection: col, docId, studentId } = _rescheduleTarget;
     const newDate = document.getElementById('reschedule-date').value;
     const newTime = document.getElementById('reschedule-time').value;
     const reason = document.getElementById('reschedule-reason').value.trim();
     if (!newDate) { alert('새 날짜를 입력하세요.'); return; }
+
+    // 묶음 경로: 그룹 헤더 진입(bulk) 또는 단건 모달의 "같은 날 함께" 체크
+    const bulkChecked = document.getElementById('reschedule-bulk-check')?.checked;
+    if (_rescheduleTarget.bulk || bulkChecked) {
+        const { studentId } = _rescheduleTarget;
+        const items = _rescheduleTarget.bulk
+            ? _rescheduleTarget.items
+            : _pendingTasksOn(studentId, _rescheduleTarget.date);
+        if (items.length > 0) {
+            await _saveBulkReschedule(items, newDate, newTime, reason, studentId);
+            return;
+        }
+    }
+
+    const { collection: col, docId, studentId } = _rescheduleTarget;
 
     // 결석대장 재예약 분기
     if (col === 'absence_records') {
@@ -115,6 +228,7 @@ export async function saveReschedule() {
 
             document.getElementById('reschedule-modal').style.display = 'none';
             _rescheduleTarget = null;
+            state._scheduledVisitsCache = null;
             renderStudentDetail(studentId);
             renderListPanel();
             showSaveIndicator('saved');

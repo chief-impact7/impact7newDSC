@@ -635,6 +635,12 @@
                         <label class="field-label">새 시간</label>
                         <select id="reschedule-time" class="field-input time12-select"></select>
                     </div>
+                    <div class="form-field" id="reschedule-bulk-row" style="display:none;">
+                        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+                            <input type="checkbox" id="reschedule-bulk-check" style="width:16px;height:16px;">
+                            <span id="reschedule-bulk-label"></span>
+                        </label>
+                    </div>
                     <div class="form-field">
                         <label class="field-label">사유 (선택)</label>
                         <input type="text" id="reschedule-reason" class="field-input" placeholder="예: 미등원, 일정 변경 등">

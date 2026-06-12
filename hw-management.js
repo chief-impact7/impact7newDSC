@@ -363,12 +363,33 @@ export async function saveHwFailAction(studentId, hwFailAction, onlyDomain) {
 export function renderPendingTasksCard(studentId, tasks) {
     if (tasks.length === 0) return '';
 
+    // 날짜 그룹 우선 정렬 (같은 날 묶음 재지정 단위), 그룹 내에선 재지정된 task를 뒤로
     const sortedTasks = [...tasks].sort((a, b) => {
+        const dateCmp = (a.scheduled_date || '9999').localeCompare(b.scheduled_date || '9999');
+        if (dateCmp !== 0) return dateCmp;
         const aRescheduled = Array.isArray(a.reschedule_history) && a.reschedule_history.length > 0;
         const bRescheduled = Array.isArray(b.reschedule_history) && b.reschedule_history.length > 0;
         if (aRescheduled !== bRescheduled) return aRescheduled ? 1 : -1;
-        return (a.scheduled_date || '').localeCompare(b.scheduled_date || '') || (a.scheduled_time || '').localeCompare(b.scheduled_time || '');
+        return (a.scheduled_time || '').localeCompare(b.scheduled_time || '');
     });
+
+    const groupCounts = {};
+    sortedTasks.forEach(t => {
+        const k = t.scheduled_date || '';
+        groupCounts[k] = (groupCounts[k] || 0) + 1;
+    });
+    const groupHeader = (dateKey) => {
+        const count = groupCounts[dateKey];
+        const bulkBtn = dateKey && count >= 2
+            ? `<button class="hw-fail-type-btn" style="background:#7c3aed;border-color:#7c3aed;color:#fff;font-size:11px;padding:2px 8px;"
+                    onclick="openBulkRescheduleModal('${escAttr(studentId)}', '${escAttr(dateKey)}')">
+                    <span class="material-symbols-outlined" style="font-size:13px;">event</span>묶음 재지정
+                </button>`
+            : '';
+        return `<div style="display:flex;align-items:center;justify-content:space-between;margin:8px 0 2px;font-size:12px;font-weight:600;color:var(--text-sec);">
+            <span>${dateKey ? esc(_stripYear(dateKey)) : '날짜 미정'} · ${count}건</span>${bulkBtn}
+        </div>`;
+    };
 
     const taskRows = sortedTasks.map((t, idx) => {
         const isTest = t.source === 'test';
@@ -404,7 +425,11 @@ export function renderPendingTasksCard(studentId, tasks) {
         // 재지정 이력
         const historyHtml = _renderRescheduleHistory(t.reschedule_history);
 
+        const dateKey = t.scheduled_date || '';
+        const header = (idx === 0 || (sortedTasks[idx - 1].scheduled_date || '') !== dateKey) ? groupHeader(dateKey) : '';
+
         return `
+            ${header}
             <div class="${rowClass}" data-task-idx="${idx}">
                 <div class="pending-task-summary" onclick="this.parentElement.classList.toggle('expanded')">
                     <span>${summary}</span>

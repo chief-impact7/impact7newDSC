@@ -141,7 +141,7 @@ import {
 } from './role-memo.js';
 import {
     initRescheduleModalDeps,
-    openRescheduleModal, saveReschedule
+    openRescheduleModal, openBulkRescheduleModal, saveReschedule
 } from './reschedule-modal.js';
 import {
     initVisitRenderDeps,
@@ -356,6 +356,7 @@ initScheduledVisitsDeps({ renderSubFilters, renderListPanel, renderStudentDetail
 // reschedule-modal.js 의존성 주입 + window 노출
 initRescheduleModalDeps({ renderSubFilters, renderListPanel, renderStudentDetail, _subFilterBaseRef });
 window.openRescheduleModal = openRescheduleModal;
+window.openBulkRescheduleModal = openBulkRescheduleModal;
 window.saveReschedule = saveReschedule;
 
 // student-detail.js 의존성 주입
