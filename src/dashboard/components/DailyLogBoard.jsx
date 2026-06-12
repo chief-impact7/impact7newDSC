@@ -336,6 +336,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
             rec.note_class_to_study && `강의실→학습실: ${rec.note_class_to_study}`,
             rec.note_to_parent && `학원→부모님: ${rec.note_to_parent}`,
             rec.naesin_memo,
+            ...(Array.isArray(student.memo) ? student.memo.filter(m => m?.date === date).map(m => m.text) : []),
             attendance.reason,
             ...studentAbsences.map(a => a.consultation_note || a.reason || '').filter(Boolean),
         ].filter(Boolean).join(' / ');

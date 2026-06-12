@@ -6,15 +6,15 @@
  *   - src/shared/firestore-helpers.js의 getDayName
  */
 
-import { getDayName, studentShortLabel } from './src/shared/firestore-helpers.js';
+import { getDayName, studentShortLabel, todayStr } from './src/shared/firestore-helpers.js';
 import { ENROLLABLE_STATUSES, isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { staffLabel } from '@impact7/shared/staff-label';
-import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { db } from './firebase-config.js';
 import { doc, getDoc, getDocFromServer } from 'firebase/firestore';
-import { auditUpdate, auditSet, normalizeImpact7Email } from './audit.js';
+import { auditUpdate, auditSet } from './audit.js';
 import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt, isActiveNaesinBase, resolveNaesinCsKey } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
+import { renderUnifiedMemoCard } from './role-memo.js';
 import { renderClassDeleteCard, applyClassDetailTabMode } from './class-detail.js';
 import { cancelStudentPendingTasks } from './data-layer.js';
 import { recordTeacherChange } from './teacher-history.js';
@@ -225,6 +225,40 @@ function _renderRemoveFromClassCard(studentId, key, displayLabel, handlerName) {
         </div>`;
 }
 
+// 내신/특강 공용: 클리닉 카드 — 표준 상세패널과 동일하게 편집 input + ×(취소) 제공
+function _renderClinicCard(studentId, extraVisit, selectedDate) {
+    const isPending = window.state?._pendingClinicStudentId === studentId;
+    const hasData = !!extraVisit?.date;
+    const hasClinic = hasData || isPending;
+    const isPastDate = selectedDate < todayStr();
+
+    const isDone = extraVisit?.status === '완료';
+    const statusHtml = hasData
+        ? `<span class="naesin-clinic-status ${isDone ? 'clinic-done' : 'clinic-pending'}">${isDone ? '완료' : '예정'}</span>`
+        : '';
+    const bodyHtml = hasClinic
+        ? (window.renderClinicInputs?.(studentId, hasData ? extraVisit : null, isPastDate) || '')
+        : '<div class="detail-card-empty">클리닉 예정 없음</div>';
+    const buttonsHtml = isPastDate ? '' : `
+        <span style="display:flex;gap:2px;align-items:center;">
+            ${hasClinic ? `<div class="card-add-btn" style="color:var(--danger);" onclick="window.clearExtraVisit('${_escAttr(studentId)}')">×</div>` : ''}
+            <div class="card-add-btn" onclick="window.openNaesinClinic('${_escAttr(studentId)}')">+</div>
+        </span>`;
+
+    return `
+        <div class="detail-card">
+            <div class="detail-card-title detail-card-title-row">
+                <span style="display:flex;align-items:center;gap:6px;">
+                    <span class="material-symbols-outlined">schedule</span>
+                    클리닉
+                    ${statusHtml}
+                </span>
+                ${buttonsHtml}
+            </div>
+            ${bodyHtml}
+        </div>`;
+}
+
 // ─── 상세패널 렌더링 ──────────────────────────────────────────────────────────
 
 /**
@@ -361,68 +395,11 @@ export function renderNaesinDetail(studentId) {
             ${schedSummary ? `<div class="naesin-schedule-footer">반 기본: ${_esc(schedSummary)}</div>` : ''}
         </div>`;
 
-    // ── Section 4: 메모 ──
-    const memo    = rec?.naesin_memo || '';
-    const memoBy  = rec?.naesin_memo_by || '';
-    const memoAt  = rec?.naesin_memo_at || '';
-    const memoAtStr = formatDateTimeKST(memoAt);
-
-    const memoDisplayHtml = memo
-        ? `<div class="naesin-memo-item">${_esc(memo)}</div>
-           <div class="naesin-memo-meta">${_esc(staffLabel(memoBy))} ${_esc(memoAtStr)}</div>`
-        : `<div class="naesin-memo-empty">메모 없음</div>`;
-
-    const memoHtml = `
-        <div class="detail-card">
-            <div class="detail-card-title detail-card-title-row">
-                <span style="display:flex;align-items:center;gap:6px;">
-                    <span class="material-symbols-outlined">sticky_note_2</span>
-                    메모
-                </span>
-                <div class="card-add-btn" onclick="window.toggleNaesinMemoInput('${_escAttr(studentId)}')">+</div>
-            </div>
-            ${memoDisplayHtml}
-            <div id="naesin-memo-input-area-${_escAttr(studentId)}" style="display:none;margin-top:8px;">
-                <textarea id="naesin-memo-textarea-${_escAttr(studentId)}" class="naesin-memo-input"
-                    placeholder="메모를 입력하세요...">${_esc(memo)}</textarea>
-                <button class="naesin-memo-submit" onclick="window.saveNaesinMemo('${_escAttr(studentId)}')">저장</button>
-            </div>
-        </div>`;
+    // ── Section 4: 메모 ── (표준 상세패널과 동일한 통합 메모 카드)
+    const memoHtml = renderUnifiedMemoCard(studentId);
 
     // ── Section 5: 클리닉 ──
-    const extraVisit = rec?.extra_visit;
-    const isPendingClinic = window.state?._pendingClinicStudentId === studentId;
-    const hasData = !!extraVisit?.date;
-    const hasClinic = hasData || isPendingClinic;
-    let clinicBodyHtml = '';
-    if (hasClinic) {
-        if (hasData) {
-            const cvDate = extraVisit.date || '';
-            const cvTime = extraVisit.time || '';
-            const cvReason = extraVisit.reason || '';
-            const isDone = extraVisit.status === '완료';
-            clinicBodyHtml = `
-                <div class="naesin-clinic-item">
-                    <span class="naesin-clinic-status ${isDone ? 'clinic-done' : 'clinic-pending'}">${isDone ? '완료' : '예정'}</span>
-                    <span>${_esc(cvDate)} ${_esc(cvTime)}</span>
-                    ${cvReason ? `<span class="naesin-time-label">· ${_esc(cvReason)}</span>` : ''}
-                </div>`;
-        } else {
-            clinicBodyHtml = window.renderClinicInputs?.(studentId, null, false) || '';
-        }
-    }
-
-    const clinicHtml = `
-        <div class="detail-card">
-            <div class="detail-card-title detail-card-title-row">
-                <span style="display:flex;align-items:center;gap:6px;">
-                    <span class="material-symbols-outlined">schedule</span>
-                    클리닉
-                </span>
-                <div class="card-add-btn" onclick="window.openNaesinClinic('${_escAttr(studentId)}')">+</div>
-            </div>
-            ${clinicBodyHtml || '<div class="detail-card-empty">클리닉 예정 없음</div>'}
-        </div>`;
+    const clinicHtml = _renderClinicCard(studentId, rec?.extra_visit, selectedDate);
 
     // ── 반에서 제거 카드 (내신 활성 학생일 때만) ──
     const removeHtml = csKey ? _renderRemoveFromClassCard(studentId, csKey, code, 'removeFromNaesin') : '';
@@ -440,28 +417,6 @@ export function renderNaesinDetail(studentId) {
     const reportEl = document.getElementById('report-tab');
     if (reportEl) reportEl.style.display = 'none';
 }
-
-// ─── 메모 입력 토글 ──────────────────────────────────────────────────────────
-window.toggleNaesinMemoInput = function(studentId) {
-    const area = document.getElementById(`naesin-memo-input-area-${studentId}`);
-    if (!area) return;
-    area.style.display = area.style.display === 'none' ? '' : 'none';
-};
-
-// ─── 메모 저장 ───────────────────────────────────────────────────────────────
-window.saveNaesinMemo = function(studentId) {
-    const ta = document.getElementById(`naesin-memo-textarea-${studentId}`);
-    if (!ta) return;
-    const { currentUser } = _state();
-    const memoText = ta.value.trim();
-    window.saveDailyRecord(studentId, {
-        naesin_memo:    memoText,
-        naesin_memo_by: normalizeImpact7Email(currentUser?.email || ''),
-        naesin_memo_at: new Date(),
-    });
-    // 재렌더
-    if (window.renderNaesinDetail) window.renderNaesinDetail(studentId);
-};
 
 // ─── 클리닉 추가 ─────────────────────────────────────────────────────────────
 // + 버튼: 저장 없이 빈 input 노출 (사용자가 날짜 선택 후 저장)
@@ -752,61 +707,11 @@ export function renderTeukangDetail(studentId) {
     // ── 반에서 제거 카드 ──
     const removeHtml = _renderRemoveFromClassCard(studentId, classCode, classCode, 'removeFromTeukang');
 
-    // ── 메모 카드 ──
-    const memo = rec?.naesin_memo || '';
-    const memoBy = rec?.naesin_memo_by || '';
-    const memoAt = rec?.naesin_memo_at || '';
-    const memoAtStr = formatDateTimeKST(memoAt);
-    const memoDisplayHtml = memo
-        ? `<div class="naesin-memo-item">${_esc(memo)}</div>
-           <div class="naesin-memo-meta">${_esc(staffLabel(memoBy))} ${_esc(memoAtStr)}</div>`
-        : `<div class="naesin-memo-empty">메모 없음</div>`;
-    const memoHtml = `
-        <div class="detail-card">
-            <div class="detail-card-title detail-card-title-row">
-                <span style="display:flex;align-items:center;gap:6px;">
-                    <span class="material-symbols-outlined">sticky_note_2</span>
-                    메모
-                </span>
-                <div class="card-add-btn" onclick="window.toggleNaesinMemoInput('${_escAttr(studentId)}')">+</div>
-            </div>
-            ${memoDisplayHtml}
-            <div id="naesin-memo-input-area-${_escAttr(studentId)}" style="display:none;margin-top:8px;">
-                <textarea id="naesin-memo-textarea-${_escAttr(studentId)}" class="naesin-memo-input"
-                    placeholder="메모를 입력하세요...">${_esc(memo)}</textarea>
-                <button class="naesin-memo-submit" onclick="window.saveNaesinMemo('${_escAttr(studentId)}')">저장</button>
-            </div>
-        </div>`;
+    // ── 메모 카드 ── (표준 상세패널과 동일한 통합 메모 카드)
+    const memoHtml = renderUnifiedMemoCard(studentId);
 
     // ── 클리닉 카드 ──
-    const extraVisit = rec?.extra_visit;
-    const isPending = window.state?._pendingClinicStudentId === studentId;
-    const hasClinic = (!!extraVisit && (extraVisit.date === selectedDate || !extraVisit.date)) || isPending;
-    let clinicBodyHtml = '';
-    if (hasClinic) {
-        const cvDate = extraVisit?.date || '';
-        const cvTime = extraVisit?.time || '';
-        const cvReason = extraVisit?.reason || '';
-        const isDone = extraVisit?.status === '완료';
-        const hasData = !!cvDate;
-        clinicBodyHtml = hasData ? `
-            <div class="naesin-clinic-item">
-                <span class="naesin-clinic-status ${isDone ? 'clinic-done' : 'clinic-pending'}">${isDone ? '완료' : '예정'}</span>
-                <span>${_esc(cvDate)} ${_esc(cvTime)}</span>
-                ${cvReason ? `<span class="naesin-time-label">· ${_esc(cvReason)}</span>` : ''}
-            </div>` : (window.renderClinicInputs?.(studentId, null, false) || '');
-    }
-    const clinicHtml = `
-        <div class="detail-card">
-            <div class="detail-card-title detail-card-title-row">
-                <span style="display:flex;align-items:center;gap:6px;">
-                    <span class="material-symbols-outlined">schedule</span>
-                    클리닉
-                </span>
-                <div class="card-add-btn" onclick="window.openNaesinClinic('${_escAttr(studentId)}')">+</div>
-            </div>
-            ${clinicBodyHtml || '<div class="detail-card-empty">클리닉 예정 없음</div>'}
-        </div>`;
+    const clinicHtml = _renderClinicCard(studentId, rec?.extra_visit, selectedDate);
 
     // ── 조립 ──
     const cardsEl = document.getElementById('detail-cards');

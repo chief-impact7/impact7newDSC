@@ -943,13 +943,6 @@ body {
 .card-add-btn { width: 24px; height: 24px; border-radius: 6px; border: 1.5px solid var(--border); background: var(--surface); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; color: var(--text-sec); line-height: 1; }
 .card-add-btn:hover { border-color: var(--primary); color: var(--primary); }
 
-.naesin-memo-item { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
-.naesin-memo-meta { font-size: 11px; color: var(--text-sec); margin-top: 4px; }
-.naesin-memo-empty { font-size: 13px; color: var(--text-sec); padding: 8px 0; }
-.naesin-memo-input { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; resize: vertical; min-height: 60px; font-family: inherit; }
-.naesin-memo-submit { margin-top: 6px; padding: 6px 14px; background: var(--primary); color: #fff; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
-
-.naesin-clinic-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; }
 .naesin-clinic-status { padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
 .clinic-pending { background: #fef3c7; color: #92400e; }
 .clinic-done { background: #dcfce7; color: #166534; }

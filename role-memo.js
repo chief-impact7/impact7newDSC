@@ -516,6 +516,11 @@ export function renderUnifiedMemoCard(studentId) {
         displayItems.push({ text: rec.note, pinned: false, _source: 'daily', created_by: '', created_at: state.selectedDate });
     }
 
+    // 4) 기존 daily_records.naesin_memo (레거시 — 구 내신 패널 전용 필드, 통합 후 읽기 전용 표시)
+    if (rec.naesin_memo) {
+        displayItems.push({ text: rec.naesin_memo, pinned: false, _source: 'naesin', created_by: rec.naesin_memo_by || '', created_at: '' });
+    }
+
     let listHtml = '';
     if (displayItems.length === 0) {
         listHtml = '<div class="detail-card-empty" style="font-size:12px;color:var(--text-sec);">메모 없음</div>';
@@ -527,11 +532,13 @@ export function renderUnifiedMemoCard(studentId) {
             const dateLabel = m._source === 'pin' && m.date && m.date !== state.selectedDate ? m.date : '';
             const meta = [byStr, dateLabel || m.created_at || ''].filter(Boolean).join(' · ');
 
-            if (m._source === 'daily') {
+            if (m._source === 'daily' || m._source === 'naesin') {
+                const label = m._source === 'naesin' ? '내신 메모 (레거시)' : '오늘 메모 (레거시)';
+                const legacyMeta = [label, byStr].filter(Boolean).join(' · ');
                 return `<div class="student-memo-item">
                     <div class="student-memo-content">${esc(m.text)}</div>
                     <div class="student-memo-bottom">
-                        <span class="student-memo-meta" style="color:var(--text-sec);font-style:italic;">오늘 메모 (레거시)</span>
+                        <span class="student-memo-meta" style="color:var(--text-sec);font-style:italic;">${esc(legacyMeta)}</span>
                     </div>
                 </div>`;
             }
