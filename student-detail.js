@@ -1488,6 +1488,10 @@ export function renderStudentDetail(studentId) {
 // ─── 클리닉 저장 ────────────────────────────────────────────────────────────
 // + 버튼 클릭 시 오늘 날짜를 바로 박지 않도록 pending 플래그(state) 사용
 
+// 시간 select가 기본으로 표시하는 값 — 변경 없인 onchange가 안 와서 저장이 누락되므로
+// saveExtraVisit이 이 값을 실제 저장값으로 보정한다 (표시값 = 저장값 보장)
+const DEFAULT_CLINIC_TIME = '16:00';
+
 // 클리닉 date/time/reason input 렌더 헬퍼 (daily-ops + naesin/teukang 공용)
 export function renderClinicInputs(studentId, extraVisit, isReadonly) {
     const v = extraVisit || {};
@@ -1499,7 +1503,7 @@ export function renderClinicInputs(studentId, extraVisit, isReadonly) {
             <input type="date" class="field-input" style="flex:1;padding:4px 8px;font-size:12px;"
                 value="${escAttr(v.date || '')}" ${dateOn}>
             ${renderTime12hSelect({
-                value: v.time || '16:00',
+                value: v.time || DEFAULT_CLINIC_TIME,
                 dataAttr: timeAttr,
                 style: 'width:105px;padding:4px 8px;font-size:12px;',
             })}
@@ -1534,6 +1538,7 @@ export async function saveExtraVisit(studentId, field, value) {
     const rec = state.dailyRecords[studentId] || {};
     const extraVisit = { ...(rec.extra_visit || {}) };
     extraVisit[field] = value;
+    if (extraVisit.date && !extraVisit.time) extraVisit.time = DEFAULT_CLINIC_TIME;
     const conflict = getClinicTimeConflict(studentId, extraVisit);
     if ((field === 'date' || field === 'time') && conflict) {
         const ok = confirm(`${conflict}과 클리닉 시간이 같습니다. 그래도 클리닉을 저장할까요?`);

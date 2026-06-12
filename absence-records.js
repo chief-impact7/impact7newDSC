@@ -159,10 +159,14 @@ export async function updateAbsenceField(docId, field, value, studentId) {
     if (!r) return;
     showSaveIndicator('saving');
     try {
-        await auditUpdate(doc(db, 'absence_records', docId), {
-            [field]: value
-        });
-        r[field] = value;
+        const update = { [field]: value };
+        // 시간 select는 기본값(16:00)을 표시만 하고 변경 없인 onchange가 안 온다 —
+        // 보충일이 잡히면 화면에 보이는 기본 시간을 실제로 저장 (클리닉 시간 미반영 사고와 동일 클래스)
+        if (field === 'makeup_date' && value && value !== 'undecided' && !r.makeup_time) {
+            update.makeup_time = '16:00';
+        }
+        await auditUpdate(doc(db, 'absence_records', docId), update);
+        Object.assign(r, update);
         state._scheduledVisitsCache = null;
         renderStudentDetail(studentId);
         renderListPanel();
