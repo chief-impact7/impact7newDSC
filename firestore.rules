@@ -1184,6 +1184,24 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // === DSC 메시지 발송 — 서버(Functions Admin SDK)만 쓰기 ===
+
+    // 출결 체크인 이벤트/멱등 앵커 — 서버 전용, 클라 접근 전면 차단
+    match /attendance_checkins/{id} {
+      allow read, write: if false;
+    }
+
+    // 메시지 발송 큐 — 서버 전용(발송용 평문 번호 보유). 대시보드는 집계 callable 경유(T10).
+    match /message_queue/{id} {
+      allow read, write: if false;
+    }
+
+    // 메시지 발송 로그 — 대시보드 read 허용, 쓰기는 Admin SDK 전용
+    match /message_logs/{id} {
+      allow read: if isAuthorized();
+      allow write: if false;
+    }
+
     // =========================================================================
     // 기본 거부: 위에 매칭되지 않는 모든 경로 차단
     // =========================================================================

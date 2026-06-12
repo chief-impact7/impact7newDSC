@@ -12,6 +12,7 @@ export default defineConfig({
                 excel: resolve(__dirname, 'excel.html'),
                 dashboard: resolve(__dirname, 'dashboard.html'),
                 classSetup: resolve(__dirname, 'class-setup.html'),
+                checkin: resolve(__dirname, 'checkin.html'),
             },
         },
     },

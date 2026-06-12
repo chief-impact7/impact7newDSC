@@ -287,6 +287,9 @@ export async function fetchDashboardDailyLogData(date) {
     };
 }
 
+// 참고: 발송 현황은 message_queue 직접 read를 쓰지 않는다 — 평문 번호 노출 차단을 위해
+// getMessageDeliveryStatus callable(서버 집계+마스킹)을 useMessageDelivery에서 호출한다.
+
 // ─── 유틸 ───
 
 function normalizeDays(day) {

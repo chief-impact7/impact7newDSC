@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../../firebase-config.js';
+import { auth, dataAuthReady } from '../../firebase-config.js';
 import { signInWithGoogle, logout } from '../../auth.js';
-import { useStudents, useDashboardData } from './hooks/useFirestore.js';
+import { useStudents, useDashboardData, useMessageDelivery } from './hooks/useFirestore.js';
 import { branchFromStudent, enrollmentCode, todayStr, fetchSemesterSettings, getSemestersForDate, studentGradeKey } from '../shared/firestore-helpers.js';
 import { openKoreanDatePicker } from '../../date-picker.js';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import DailyLogBoard from './components/DailyLogBoard.jsx';
 import GradeFilter from './components/GradeFilter.jsx';
 import PeriodLogBoard from './components/PeriodLogBoard.jsx';
+import MessageDeliverySummary from './components/MessageDeliverySummary.jsx';
 
 const pad2 = (value) => String(value).padStart(2, '0');
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})/;
@@ -100,7 +101,7 @@ export default function App() {
 
     // 인증 상태
     useEffect(() => {
-        const unsub = onAuthStateChanged(auth, (u) => {
+        const unsub = onAuthStateChanged(auth, async (u) => {
             if (u) {
                 const email = u.email || '';
                 const allowed = email.endsWith('@gw.impact7.kr') || email.endsWith('@impact7.kr');
@@ -109,6 +110,9 @@ export default function App() {
                     logout().catch(err => console.error('[dashboard logout]', err));
                     setUser(null);
                 } else {
+                    // dataApp(Firestore/Functions) 토큰 미러링 완료 후 user 설정 —
+                    // getMessageDeliveryStatus callable이 토큰 없이 발사되는 것 방지.
+                    await dataAuthReady();
                     setLoginError('');
                     setUser(u);
                 }
@@ -137,6 +141,7 @@ export default function App() {
     // 데이터 로드
     const { students, loading: studentsLoading, error } = useStudents(user);
     const { checks, dailyRecords, postponed, dailyLog, loading: dataLoading, error: dashError } = useDashboardData(user, startDate, endDate);
+    const { data: msgDelivery, loading: msgLoading, reload: reloadMsg } = useMessageDelivery(user);
 
     // 선택 날짜 기준 학기 감지
     const currentSemesters = useMemo(() =>
@@ -380,6 +385,15 @@ export default function App() {
                 {loading && <span className="dash-loading-indicator">로딩 중...</span>}
             </div>
 
+            <ErrorBoundary>
+                <MessageDeliverySummary
+                    data={msgDelivery}
+                    students={students}
+                    loading={msgLoading}
+                    onReload={reloadMsg}
+                />
+            </ErrorBoundary>
+
             {rangeType === 'day' ? (
                 loading ? (
                     <div className="dash-grid">
@@ -411,18 +425,16 @@ export default function App() {
                             <SkeletonCard />
                         </div>
                     ) : (
-                        <>
-                            <ErrorBoundary>
-                                <PeriodLogBoard
-                                    checks={filteredChecks}
-                                    dailyRecords={filteredDailyRecords}
-                                    students={students}
-                                    postponed={filteredPostponed}
-                                    startDate={startDate}
-                                    endDate={endDate}
-                                />
-                            </ErrorBoundary>
-                        </>
+                        <ErrorBoundary>
+                            <PeriodLogBoard
+                                checks={filteredChecks}
+                                dailyRecords={filteredDailyRecords}
+                                students={students}
+                                postponed={filteredPostponed}
+                                startDate={startDate}
+                                endDate={endDate}
+                            />
+                        </ErrorBoundary>
                     )}
                 </div>
             )}

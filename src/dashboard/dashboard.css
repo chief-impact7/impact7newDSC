@@ -1265,3 +1265,83 @@ body {
 .dash-grade-option:hover {
     background: var(--surface, #f1f3f4);
 }
+
+/* ─── 발송 현황 (출결 알림) ─── */
+.msg-delivery .dash-stat-value.msg-pending { color: var(--text-sec); }
+.msg-delivery .dash-stat-value.msg-processing { color: var(--primary); }
+.msg-delivery .dash-stat-value.msg-retry { color: var(--warning); }
+.msg-delivery .dash-stat-value.msg-failed { color: var(--danger); }
+.msg-delivery .dash-stat-value.msg-sent { color: var(--success); }
+
+.msg-delivery-channels {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin: 6px 0 14px;
+}
+.msg-channel-chart { flex: 1 1 220px; min-width: 220px; }
+.msg-channel-legend {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    flex: 1 1 180px;
+    font-size: 13px;
+    color: var(--text);
+}
+.msg-channel-legend li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+}
+.msg-channel-legend li strong { margin-left: auto; }
+.msg-channel-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.msg-channel-total {
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border, #e7e7e7);
+    color: var(--text-sec);
+}
+
+.msg-retry-error {
+    color: var(--danger);
+    font-size: 13px;
+    margin: 4px 0;
+}
+.msg-failure-list {
+    border-top: 1px solid var(--border, #e7e7e7);
+    margin-top: 8px;
+    padding-top: 8px;
+}
+.msg-failure-head {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-sec);
+    margin-bottom: 8px;
+}
+.msg-failure-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--bg);
+}
+.msg-failure-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.msg-failure-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.msg-failure-meta { font-size: 12px; color: var(--text-sec); }
+.msg-failure-side { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.msg-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 12px;
+}
+.msg-badge.msg-retry { background: #fff3e0; color: #b26a00; }
+.msg-badge.msg-failed { background: #fce8e6; color: var(--danger); }
