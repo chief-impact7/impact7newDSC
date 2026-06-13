@@ -1016,6 +1016,29 @@ export async function generateStudentReportAi(studentId) {
   return res.data;
 }
 
+// ─── AI 자동화 설정 (automation_settings/student_report_ai) ───────────────────
+// director 등급 이상만 read/write 가능 (rules: canRunAiBatch). 문서 없으면 null → UI 기본값.
+const AI_AUTO_DOC = ['automation_settings', 'student_report_ai'];
+
+export async function getAiAutomationSettings() {
+  const snap = await getDoc(doc(db, ...AI_AUTO_DOC));
+  return snap.exists() ? snap.data() : null;
+}
+
+// 클라가 patch하는 필드는 enabled/interval/run_day/run_hour/skip_within_days 뿐.
+// updated_by/updated_at은 auditSet이 자동 추가. last_run_*/running/progress_*는 함수가 갱신하므로 보내지 않는다.
+export async function saveAiAutomationSettings(patch) {
+  await auditSet(doc(db, ...AI_AUTO_DOC), patch, { merge: true });
+}
+
+// 수동 '지금 일괄 생성' — 서버측 권한 게이트(HR_users.role). opts.limit으로 샘플 N명.
+// 콜러블 기본 클라 timeout(70s)은 일괄 실행에 짧다 → 10분으로 확장(진행률은 config 폴링으로 별도 표시).
+export async function runStudentReportBatchNow(opts = {}) {
+  const callable = httpsCallable(functions, 'runStudentReportBatchNow', { timeout: 600000 });
+  const res = await callable(opts);
+  return res.data;
+}
+
 export async function listStudentConsultations(studentId, limitCount = 10) {
   const q = query(
     collection(db, 'consultations'),

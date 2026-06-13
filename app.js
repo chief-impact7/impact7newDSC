@@ -11,6 +11,9 @@ import { staffLabel } from '@impact7/shared/staff-label';
 import { getActiveEnrollments } from './student-helpers.js';
 import { openKoreanDatePicker } from './date-picker.js';
 import { loadClassSettings } from './data-layer.js';
+import { state } from './state.js';
+import { fetchAiBatchPerm } from './population-perms.js';
+import './ai-automation-settings.js'; // window.openAiAutomationSettings 등록 (side-effect import)
 
 // ─── State ───────────────────────────────────────────────────────────────────
 let currentUser = null;
@@ -174,10 +177,20 @@ onAuthStateChanged(auth, async (user) => {
         avatar.textContent = user.email[0].toUpperCase();
         avatar.title = `${normalizeImpact7Email(user.email)} (클릭: 로그아웃)`;
 
+        // AI 일괄 생성 권한(HR_users.role) 로드 → 헤더 기어 노출 토글. 실패해도 부팅을 막지 않는다.
+        fetchAiBatchPerm(user.uid).then((can) => {
+            state.canRunAiBatch = can;
+            const gear = document.getElementById('ai-automation-gear');
+            if (gear) gear.style.display = can ? '' : 'none';
+        });
+
         await Promise.all([loadAllStudents(), loadClassSettings(true)]);
         setDate(todayStr());
     } else {
         currentUser = null;
+        state.canRunAiBatch = false;
+        const gear = document.getElementById('ai-automation-gear');
+        if (gear) gear.style.display = 'none';
         if (unsubDailyChecks) {
             unsubDailyChecks();
             unsubDailyChecks = null;

@@ -55,6 +55,7 @@ export const state = {
     saveTimers: {},
     searchQuery: '',
     currentRole: null,
+    canRunAiBatch: false,
     roleMemos: [],
     memoTab: 'inbox',
     classSettings: {},

@@ -1,0 +1,480 @@
+From b0f192e9b76b4c5de3db491d0379847eec6b9b08 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 13 Jun 2026 14:02:22 +0000
+Subject: [PATCH] =?UTF-8?q?AI=20=EC=A2=85=ED=95=A9=EC=83=81=ED=83=9C=20?=
+ =?UTF-8?q?=EC=9D=BC=EA=B4=84=20=EC=83=9D=EC=84=B1=20=EC=84=A4=EC=A0=95=20?=
+ =?UTF-8?q?UI=20+=20=EA=B6=8C=ED=95=9C=20=EA=B2=8C=EC=9D=B4=ED=8A=B8=20(DS?=
+ =?UTF-8?q?C)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- 헤더 기어 → 설정 모달(ai-automation-settings.js): 자동 생성 토글, 주기/실행일/시각,
+  skip_within_days, 마지막 실행 실비 표시, '지금 일괄 생성'(샘플 N) + 진행률 폴링
+- population-perms: fetchAiBatchPerm(uid) (HR_users.role in owner/principal/director)
+- app.js: 로그인 시 권한 로드 → 기어 노출 토글
+- data-layer: automation_settings read/write + runStudentReportBatchNow 콜러블 래퍼
+- firestore.rules: canRunAiBatch() + automation_settings 화이트리스트
+
+functions-shared 스케줄러/콜러블과 rules 4레포 동기화/배포는 impact7DB에서 별도 진행.
+
+https://claude.ai/code/session_01Xfc1qUvNimWEPu6zDSa3Ld
+---
+ ai-automation-settings.js | 275 ++++++++++++++++++++++++++++++++++++++
+ app.js                    |  13 ++
+ data-layer.js             |  23 ++++
+ firestore.rules           |  29 ++++
+ index.html                |   3 +
+ population-perms.js       |  14 ++
+ state.js                  |   1 +
+ 7 files changed, 358 insertions(+)
+ create mode 100644 ai-automation-settings.js
+
+diff --git a/ai-automation-settings.js b/ai-automation-settings.js
+new file mode 100644
+index 0000000..03318a3
+--- /dev/null
++++ b/ai-automation-settings.js
+@@ -0,0 +1,275 @@
++// ─── AI 자동 생성 설정 ────────────────────────────────────────────────────────
++// 학생 AI 종합상태 일괄 생성(스케줄 + 수동)의 설정 모달.
++// director 등급 이상(state.canRunAiBatch)만 진입 가능. config 문서: automation_settings/student_report_ai.
++// Cloud Function(onScheduleStudentReportAi / runStudentReportBatchNow)이 별도 레포(impact7DB)에서
++// 배포돼야 실제 실행이 동작한다. 미배포 상태에서도 모달은 열리고 설정 저장은 가능하다.
++
++import { state } from './state.js';
++import {
++  getAiAutomationSettings,
++  saveAiAutomationSettings,
++  runStudentReportBatchNow,
++} from './data-layer.js';
++import { esc, escAttr, showToast } from './ui-utils.js';
++import { formatDateTimeKST } from '@impact7/shared/datetime';
++
++const DEFAULTS = {
++  enabled: false,
++  interval: 'monthly',   // 'monthly' | 'weekly'
++  run_day: 1,            // monthly: 1~28(일), weekly: 0(일)~6(토)
++  run_hour: 3,           // 0~23 (KST)
++  skip_within_days: 14,
++};
++
++const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
++
++let _pollTimer = null;
++let _running = false;
++
++function stopPolling() {
++  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
++}
++
++function cfgValue(cfg, key) {
++  const v = cfg?.[key];
++  return v === undefined || v === null ? DEFAULTS[key] : v;
++}
++
++function fmtCost(usd) {
++  if (usd == null) return '—';
++  const krw = Math.round(Number(usd) * 1400); // 대략 환산(표시용)
++  return `$${Number(usd).toFixed(2)} (약 ${krw.toLocaleString('ko-KR')}원)`;
++}
++
++function lastRunHtml(cfg) {
++  if (!cfg?.last_run_at) {
++    return '<div class="aias-lastrun-empty">아직 일괄 실행 기록이 없습니다.</div>';
++  }
++  const when = (() => {
++    try { return formatDateTimeKST(cfg.last_run_at); } catch { return String(cfg.last_run_at); }
++  })();
++  const status = cfg.last_run_status ? esc(String(cfg.last_run_status)) : '완료';
++  return `
++    <div class="aias-lastrun">
++      <div><strong>마지막 실행</strong> ${esc(when)} <span class="aias-muted">(${status})</span></div>
++      <div>생성 ${esc(String(cfg.last_run_generated ?? 0))}건 · skip ${esc(String(cfg.last_run_skipped ?? 0))}건</div>
++      <div>토큰 ${esc(Number(cfg.last_run_total_tokens ?? 0).toLocaleString('ko-KR'))} · 실비 ${esc(fmtCost(cfg.last_run_cost_usd))}</div>
++    </div>`;
++}
++
++function dayFieldHtml(cfg) {
++  const interval = cfgValue(cfg, 'interval');
++  const day = cfgValue(cfg, 'run_day');
++  if (interval === 'weekly') {
++    const opts = WEEKDAYS.map((label, i) =>
++      `<option value="${i}" ${i === Number(day) ? 'selected' : ''}>${label}요일</option>`).join('');
++    return `<select class="field-input" id="aias-run-day">${opts}</select>`;
++  }
++  // monthly: 1~28일
++  const opts = Array.from({ length: 28 }, (_, i) => i + 1).map(d =>
++    `<option value="${d}" ${d === Number(day) ? 'selected' : ''}>${d}일</option>`).join('');
++  return `<select class="field-input" id="aias-run-day">${opts}</select>`;
++}
++
++function modalHtml(cfg) {
++  const enabled = cfgValue(cfg, 'enabled');
++  const interval = cfgValue(cfg, 'interval');
++  const hour = cfgValue(cfg, 'run_hour');
++  const skip = cfgValue(cfg, 'skip_within_days');
++  const hourOpts = Array.from({ length: 24 }, (_, h) =>
++    `<option value="${h}" ${h === Number(hour) ? 'selected' : ''}>${String(h).padStart(2, '0')}시</option>`).join('');
++  return `
++    <div class="modal-content aias-modal">
++      <div class="modal-header">
++        <h3>AI 자동 생성 설정 — 학생 종합상태</h3>
++        <button class="modal-close" onclick="closeAiAutomationSettings()">
++          <span class="material-symbols-outlined">close</span>
++        </button>
++      </div>
++      <div class="modal-body">
++        <div class="form-field aias-toggle-row">
++          <label class="field-label" for="aias-enabled">정기 자동 생성 사용</label>
++          <input type="checkbox" id="aias-enabled" ${enabled ? 'checked' : ''}>
++        </div>
++        <div class="form-field">
++          <label class="field-label">주기</label>
++          <select class="field-input" id="aias-interval" onchange="onAiAutomationIntervalChange()">
++            <option value="monthly" ${interval === 'monthly' ? 'selected' : ''}>매월 1회</option>
++            <option value="weekly" ${interval === 'weekly' ? 'selected' : ''}>매주 1회</option>
++          </select>
++        </div>
++        <div class="form-field">
++          <label class="field-label">실행일</label>
++          <div id="aias-run-day-wrap">${dayFieldHtml(cfg)}</div>
++        </div>
++        <div class="form-field">
++          <label class="field-label">실행 시각 (KST)</label>
++          <select class="field-input" id="aias-run-hour">${hourOpts}</select>
++        </div>
++        <div class="form-field">
++          <label class="field-label">최근 N일 내 생성분 skip</label>
++          <input type="number" class="field-input" id="aias-skip-days" min="0" max="90" value="${escAttr(String(skip))}">
++          <div class="aias-muted" style="margin-top:4px;">이미 분석된 학생은 N일 동안 다시 생성하지 않아 비용을 줄입니다.</div>
++        </div>
++
++        <hr style="border:none;border-top:1px solid var(--border, #e5e7eb);margin:16px 0;">
++
++        ${lastRunHtml(cfg)}
++
++        <div class="aias-manual">
++          <div class="aias-muted" style="margin-bottom:8px;">
++            전체 재원생(약 350명) 1회 실행 시 실비가 발생합니다. 먼저 샘플로 토큰·비용을 실측하세요.
++          </div>
++          <div class="form-field aias-sample-row">
++            <label class="field-label" for="aias-sample-limit">샘플 인원(0 = 전체)</label>
++            <input type="number" class="field-input" id="aias-sample-limit" min="0" max="500" value="3" style="max-width:120px;">
++          </div>
++          <div id="aias-progress" class="aias-progress" style="display:none;"></div>
++        </div>
++      </div>
++      <div class="modal-footer">
++        <button class="btn-primary" id="aias-run-btn" onclick="runAiAutomationNow()">지금 일괄 생성</button>
++        <button class="btn-primary" id="aias-save-btn" onclick="saveAiAutomationSettingsUI()">설정 저장</button>
++      </div>
++    </div>`;
++}
++
++function getOverlay() {
++  return document.getElementById('aias-overlay');
++}
++
++window.openAiAutomationSettings = async function () {
++  if (!state.canRunAiBatch) {
++    showToast('AI 자동 생성 설정 권한이 없습니다 (director 등급 이상).');
++    return;
++  }
++  if (getOverlay()) return;
++  const overlay = document.createElement('div');
++  overlay.id = 'aias-overlay';
++  overlay.className = 'modal-overlay';
++  overlay.onclick = (e) => { if (e.target === overlay) window.closeAiAutomationSettings(); };
++  overlay.innerHTML = '<div class="modal-content"><div class="modal-body">불러오는 중...</div></div>';
++  document.body.appendChild(overlay);
++
++  const cfg = await getAiAutomationSettings().catch((err) => {
++    console.warn('[ai-automation] 설정 로드 실패:', err?.code || err?.message);
++    return null;
++  });
++  if (!getOverlay()) return; // 그 사이 닫힘
++  overlay.innerHTML = modalHtml(cfg);
++};
++
++window.closeAiAutomationSettings = function () {
++  stopPolling();
++  _running = false;
++  getOverlay()?.remove();
++};
++
++// 주기 변경 시 실행일 입력(월=일자 / 주=요일)을 다시 렌더.
++window.onAiAutomationIntervalChange = function () {
++  const wrap = document.getElementById('aias-run-day-wrap');
++  if (!wrap) return;
++  const interval = document.getElementById('aias-interval')?.value || 'monthly';
++  wrap.innerHTML = dayFieldHtml({ interval, run_day: DEFAULTS.run_day });
++};
++
++function readForm() {
++  const interval = document.getElementById('aias-interval')?.value || 'monthly';
++  const skip = parseInt(document.getElementById('aias-skip-days')?.value, 10);
++  return {
++    enabled: !!document.getElementById('aias-enabled')?.checked,
++    interval,
++    run_day: parseInt(document.getElementById('aias-run-day')?.value, 10) || 0,
++    run_hour: parseInt(document.getElementById('aias-run-hour')?.value, 10) || 0,
++    skip_within_days: Number.isFinite(skip) ? skip : DEFAULTS.skip_within_days,
++  };
++}
++
++window.saveAiAutomationSettingsUI = async function () {
++  const btn = document.getElementById('aias-save-btn');
++  if (btn) btn.disabled = true;
++  try {
++    await saveAiAutomationSettings(readForm());
++    showToast('AI 자동 생성 설정을 저장했습니다.');
++  } catch (err) {
++    showToast('설정 저장 실패: ' + (err?.message || err));
++    console.error('[ai-automation] 저장 실패:', err);
++  } finally {
++    if (btn) btn.disabled = false;
++  }
++};
++
++function renderProgress(cfg) {
++  const el = document.getElementById('aias-progress');
++  if (!el) return;
++  if (cfg?.running) {
++    const done = cfg.progress_done ?? 0;
++    const total = cfg.progress_total ?? 0;
++    el.style.display = '';
++    el.textContent = total > 0 ? `진행 중... ${done}/${total}` : '진행 중...';
++  }
++}
++
++function startPolling() {
++  stopPolling();
++  _pollTimer = setInterval(async () => {
++    const cfg = await getAiAutomationSettings().catch(() => null);
++    renderProgress(cfg);
++    if (cfg && cfg.running === false) {
++      // 실행 종료 감지. 폴링은 중단하되, 수동 실행 중(_running)이면 모달 갱신은 callable await의
++      // finally가 처리하도록 양보한다(실행 중 버튼이 조기에 다시 활성화되는 것 방지).
++      stopPolling();
++      if (!_running) refreshAfterRun(cfg);
++    }
++  }, 3000);
++}
++
++// cfg가 주어지면 재조회 없이 그대로 렌더(폴링이 방금 읽은 값 재사용).
++async function refreshAfterRun(cfg) {
++  if (!getOverlay()) return;
++  const data = cfg !== undefined ? cfg : await getAiAutomationSettings().catch(() => null);
++  const overlay = getOverlay();
++  if (overlay) overlay.innerHTML = modalHtml(data);
++}
++
++window.runAiAutomationNow = async function () {
++  if (_running) return;
++  const limitRaw = parseInt(document.getElementById('aias-sample-limit')?.value, 10);
++  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 0;
++  const confirmMsg = limit > 0
++    ? `샘플 ${limit}명에 대해 AI 종합상태를 생성합니다. 실비가 발생합니다. 진행할까요?`
++    : '전체 재원생에 대해 AI 종합상태를 생성합니다. 실비가 발생합니다. 진행할까요?';
++  if (!window.confirm(confirmMsg)) return;
++
++  const runBtn = document.getElementById('aias-run-btn');
++  const saveBtn = document.getElementById('aias-save-btn');
++  if (runBtn) { runBtn.disabled = true; runBtn.textContent = '실행 중...'; }
++  if (saveBtn) saveBtn.disabled = true;
++  const progressEl = document.getElementById('aias-progress');
++  if (progressEl) { progressEl.style.display = ''; progressEl.textContent = '시작 중...'; }
++
++  _running = true;
++  startPolling();
++  try {
++    const res = await runStudentReportBatchNow(limit > 0 ? { limit } : {});
++    const generated = res?.generated ?? 0;
++    const skipped = res?.skipped ?? 0;
++    showToast(`일괄 생성 완료 — 생성 ${generated}건 / skip ${skipped}건`);
++  } catch (err) {
++    const code = err?.code || '';
++    if (code === 'functions/not-found' || code === 'functions/internal') {
++      showToast('일괄 생성 함수가 아직 배포되지 않았습니다. (impact7DB 배포 필요)');
++    } else if (code === 'functions/permission-denied') {
++      showToast('실행 권한이 없습니다 (director 등급 이상).');
++    } else if (code === 'functions/deadline-exceeded') {
++      showToast('실행이 길어 클라이언트 대기를 종료했습니다 — 잠시 후 마지막 실행 정보를 확인하세요.');
++    } else {
++      showToast('일괄 생성 실패: ' + (err?.message || err));
++    }
++    console.error('[ai-automation] 일괄 생성 실패:', err);
++  } finally {
++    _running = false;
++    stopPolling();
++    await refreshAfterRun();
++  }
++};
+diff --git a/app.js b/app.js
+index 59bddd9..8458568 100644
+--- a/app.js
++++ b/app.js
+@@ -11,6 +11,9 @@ import { staffLabel } from '@impact7/shared/staff-label';
+ import { getActiveEnrollments } from './student-helpers.js';
+ import { openKoreanDatePicker } from './date-picker.js';
+ import { loadClassSettings } from './data-layer.js';
++import { state } from './state.js';
++import { fetchAiBatchPerm } from './population-perms.js';
++import './ai-automation-settings.js'; // window.openAiAutomationSettings 등록 (side-effect import)
+ 
+ // ─── State ───────────────────────────────────────────────────────────────────
+ let currentUser = null;
+@@ -174,10 +177,20 @@ onAuthStateChanged(auth, async (user) => {
+         avatar.textContent = user.email[0].toUpperCase();
+         avatar.title = `${normalizeImpact7Email(user.email)} (클릭: 로그아웃)`;
+ 
++        // AI 일괄 생성 권한(HR_users.role) 로드 → 헤더 기어 노출 토글. 실패해도 부팅을 막지 않는다.
++        fetchAiBatchPerm(user.uid).then((can) => {
++            state.canRunAiBatch = can;
++            const gear = document.getElementById('ai-automation-gear');
++            if (gear) gear.style.display = can ? '' : 'none';
++        });
++
+         await Promise.all([loadAllStudents(), loadClassSettings(true)]);
+         setDate(todayStr());
+     } else {
+         currentUser = null;
++        state.canRunAiBatch = false;
++        const gear = document.getElementById('ai-automation-gear');
++        if (gear) gear.style.display = 'none';
+         if (unsubDailyChecks) {
+             unsubDailyChecks();
+             unsubDailyChecks = null;
+diff --git a/data-layer.js b/data-layer.js
+index b760c58..819d6e5 100644
+--- a/data-layer.js
++++ b/data-layer.js
+@@ -1016,6 +1016,29 @@ export async function generateStudentReportAi(studentId) {
+   return res.data;
+ }
+ 
++// ─── AI 자동화 설정 (automation_settings/student_report_ai) ───────────────────
++// director 등급 이상만 read/write 가능 (rules: canRunAiBatch). 문서 없으면 null → UI 기본값.
++const AI_AUTO_DOC = ['automation_settings', 'student_report_ai'];
++
++export async function getAiAutomationSettings() {
++  const snap = await getDoc(doc(db, ...AI_AUTO_DOC));
++  return snap.exists() ? snap.data() : null;
++}
++
++// 클라가 patch하는 필드는 enabled/interval/run_day/run_hour/skip_within_days 뿐.
++// updated_by/updated_at은 auditSet이 자동 추가. last_run_*/running/progress_*는 함수가 갱신하므로 보내지 않는다.
++export async function saveAiAutomationSettings(patch) {
++  await auditSet(doc(db, ...AI_AUTO_DOC), patch, { merge: true });
++}
++
++// 수동 '지금 일괄 생성' — 서버측 권한 게이트(HR_users.role). opts.limit으로 샘플 N명.
++// 콜러블 기본 클라 timeout(70s)은 일괄 실행에 짧다 → 10분으로 확장(진행률은 config 폴링으로 별도 표시).
++export async function runStudentReportBatchNow(opts = {}) {
++  const callable = httpsCallable(functions, 'runStudentReportBatchNow', { timeout: 600000 });
++  const res = await callable(opts);
++  return res.data;
++}
++
+ export async function listStudentConsultations(studentId, limitCount = 10) {
+   const q = query(
+     collection(db, 'consultations'),
+diff --git a/firestore.rules b/firestore.rules
+index f4f6385..d2144b8 100644
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -31,6 +31,8 @@ service cloud.firestore {
+     function isDirector() { return isLoggedIn() && getUserRole() in ['owner', 'principal']; }
+     function isStaff() { return isLoggedIn() && getUserRole() == 'staff'; }
+     function isShortTerm() { return isLoggedIn() && getUserRole() == 'shortterm'; }
++    // AI 일괄 생성(비용 발생) 권한: director 등급 이상. isDirector는 'director' role을 포함하지 않으므로 별도 헬퍼.
++    function canRunAiBatch() { return isLoggedIn() && getUserRole() in ['owner', 'principal', 'director']; }
+     function canManagePermissions() {
+       return isLoggedIn()
+         && (isDirector()
+@@ -388,6 +390,33 @@ service cloud.firestore {
+       allow delete: if isAuthorized();
+     }
+ 
++    // =========================================================================
++    // [DSC] 자동화 설정 (AI 일괄 생성 등) — director 등급 이상만. 비용 발생 작업 통제.
++    // 클라(설정 UI)는 enabled/interval/run_day/run_hour/skip_within_days만 patch한다.
++    // last_run_*/running/progress_* 는 Cloud Function이 admin SDK로 갱신(rules 우회)하지만,
++    // merge update 시 request.resource.data에 기존 함수 필드가 포함되므로 hasOnly 통과를 위해 허용 목록에 둔다.
++    // =========================================================================
++    match /automation_settings/{docId} {
++
++      function hasOnlyAutomationFields() {
++        return request.resource.data.keys().hasOnly([
++          'enabled', 'interval', 'run_day', 'run_hour', 'skip_within_days',
++          'updated_by', 'updated_at',
++          'last_run_at', 'last_run_status', 'last_run_generated', 'last_run_skipped',
++          'last_run_total_tokens', 'last_run_cost_usd',
++          'running', 'progress_done', 'progress_total'
++        ]);
++      }
++
++      allow read: if canRunAiBatch();
++
++      allow create, update: if canRunAiBatch()
++        && hasOnlyAutomationFields()
++        && withinFieldLimit(20);
++
++      allow delete: if false;
++    }
++
+     // =========================================================================
+     // [DSC] 강사 배정 변경 이력 (append-only — 강사 재등원율 등 분석용, 도입 이후만 누적)
+     // class_settings.teacher는 현재값만 보존하므로, 변경 시점을 별도 기록한다.
+diff --git a/index.html b/index.html
+index d61675a..035c025 100644
+--- a/index.html
++++ b/index.html
+@@ -75,6 +75,9 @@
+                 <button class="icon-btn" title="사용 가이드" aria-label="사용 가이드">
+                     <span class="material-symbols-outlined">help</span>
+                 </button>
++                <button class="icon-btn" id="ai-automation-gear" style="display:none;" title="AI 자동 생성 설정" aria-label="AI 자동 생성 설정" onclick="openAiAutomationSettings()">
++                    <span class="material-symbols-outlined">settings</span>
++                </button>
+                 <span id="user-email" class="user-email"></span>
+                 <button class="avatar" id="user-avatar" onclick="handleLogin()" title="로그아웃">G</button>
+             </div>
+diff --git a/population-perms.js b/population-perms.js
+index 7e11d59..d21bb5e 100644
+--- a/population-perms.js
++++ b/population-perms.js
+@@ -17,3 +17,17 @@ export async function fetchPopulationPerms(uid) {
+     }
+     return { all: false, classCounts: false };
+ }
++
++// AI 일괄 생성(비용 발생) 권한 — HR_users/{uid}.role 이 owner/principal/director 일 때만 true.
++// state.currentRole(user_settings의 자유텍스트 role)과는 무관 — HR_users.role을 직접 읽는다.
++export async function fetchAiBatchPerm(uid) {
++    try {
++        const snap = await getDoc(doc(db, 'HR_users', uid));
++        if (snap.exists()) {
++            return ['owner', 'principal', 'director'].includes(snap.data().role);
++        }
++    } catch (e) {
++        console.warn('[PERMS] ai batch perm load failed:', e.code || e.message);
++    }
++    return false;
++}
+diff --git a/state.js b/state.js
+index dd07de6..b2918db 100644
+--- a/state.js
++++ b/state.js
+@@ -55,6 +55,7 @@ export const state = {
+     saveTimers: {},
+     searchQuery: '',
+     currentRole: null,
++    canRunAiBatch: false,
+     roleMemos: [],
+     memoTab: 'inbox',
+     classSettings: {},
+-- 
+2.43.0
+
