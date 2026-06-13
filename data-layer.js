@@ -1004,19 +1004,14 @@ export async function getStudentBriefing(studentId) {
   return snap.exists() ? snap.data() : null;
 }
 
-export async function generateStudentConsultationAi(studentId) {
-  const callable = httpsCallable(functions, 'generateStudentConsultationAi');
-  const res = await callable({ studentId });
-  return res.data;
-}
-
 export async function getStudentStatusSummary(studentId) {
   const snap = await getDoc(doc(db, 'student_status_summaries', studentId));
   return snap.exists() ? snap.data() : null;
 }
 
-export async function generateStudentStatusAi(studentId) {
-  const callable = httpsCallable(functions, 'generateStudentStatusAi');
+// 종합상태·상담요약·브리핑을 단일 호출로 생성 → 3개 컬렉션 갱신.
+export async function generateStudentReportAi(studentId) {
+  const callable = httpsCallable(functions, 'generateStudentReportAi');
   const res = await callable({ studentId });
   return res.data;
 }

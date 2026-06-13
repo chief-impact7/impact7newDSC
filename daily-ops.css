@@ -4190,6 +4190,16 @@ textarea.field-input {
   margin: 8px 0;
 }
 .status-ai-action .hint { font-size: .75rem; color: rgba(0,0,0,.5); }
+.status-gap-warning {
+  display: flex; align-items: center; gap: 6px;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fef7e0;
+  color: #b06000;
+  font-size: .82rem; font-weight: 600;
+}
+.status-gap-warning .material-symbols-outlined { font-size: 18px; }
 .status-ai-btn {
   border: 1px solid var(--primary, #00754A);
   border-radius: 8px;

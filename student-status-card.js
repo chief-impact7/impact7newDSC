@@ -1,7 +1,7 @@
 // 학생 상세의 종합 상태 카드: Firebase 출결·숙제·테스트·상담을 Gemini로 종합한 요약.
-// generateStudentStatusAi(Cloud Function) → student_status_summaries 결과를 렌더.
+// generateStudentReportAi(통합 Cloud Function)로 생성 → student_status_summaries 결과를 렌더.
 
-import { getStudentStatusSummary, generateStudentStatusAi } from './data-layer.js';
+import { getStudentStatusSummary, generateStudentReportAi } from './data-layer.js';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { esc, showToast } from './ui-utils.js';
 
@@ -57,12 +57,23 @@ function renderAction(studentId, artifact) {
   `;
 }
 
+// 상담 공백 경고: 최근 상담 후 30일 초과(또는 상담 기록 없음)면 배너 표시.
+function renderGapWarning(artifact) {
+  if (!artifact?.consultation_gap_warning) return '';
+  const days = artifact.consultation_gap_days;
+  const msg = (days == null)
+    ? '상담 기록 없음 — 첫 상담 필요'
+    : `최근 상담 후 ${days}일 경과 — 상담 공백 주의`;
+  return `<div class="status-gap-warning"><span class="material-symbols-outlined">warning</span>${esc(msg)}</div>`;
+}
+
 function renderCardBody(studentId, artifact) {
   if (!artifact) {
     return `${renderAction(studentId, null)}<div class="markdown status-ai-body"><em>아직 AI 분석 전입니다. [AI 생성]을 눌러 최근 3개월 종합 상태를 분석하세요.</em></div>`;
   }
   return `
     ${renderAction(studentId, artifact)}
+    ${renderGapWarning(artifact)}
     <div class="status-stats">
       ${renderStat('수업', artifact.daily_record_count)}
       ${renderStat('결석', artifact.absence_count)}
@@ -120,7 +131,7 @@ window.onGenerateStudentStatusAi = async function (studentId) {
   _generatingFor = studentId;
   if (mountEl) mountEl.innerHTML = cardHtml(studentId, null);
   try {
-    await generateStudentStatusAi(studentId);
+    await generateStudentReportAi(studentId);
     showToast('AI 종합 분석 완료');
   } catch (err) {
     showToast('AI 생성 실패: ' + (err?.message || err));
