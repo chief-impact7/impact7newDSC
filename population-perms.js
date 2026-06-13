@@ -1,10 +1,11 @@
 // 인원현황 권한 (학원 기밀) — SSoT는 HR_users(impact7HR 임팩트7설정-권한설정).
 // all = 전체 집계(재원생 총원 등), classCounts = 반별 인원. 문서가 없거나 읽기 거부면 차단.
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from './firebase-config.js';
+import { db, dataAuthReady } from './firebase-config.js';
 
 export async function fetchPopulationPerms(uid) {
     try {
+        await dataAuthReady(); // dataApp auth 미러 완료 전 읽으면 unauthenticated로 거부됨
         const snap = await getDoc(doc(db, 'HR_users', uid));
         if (snap.exists()) {
             const d = snap.data();
@@ -22,6 +23,7 @@ export async function fetchPopulationPerms(uid) {
 // state.currentRole(user_settings의 자유텍스트 role)과는 무관 — HR_users.role을 직접 읽는다.
 export async function fetchAiBatchPerm(uid) {
     try {
+        await dataAuthReady(); // dataApp auth 미러 완료 전 읽으면 unauthenticated로 거부됨
         const snap = await getDoc(doc(db, 'HR_users', uid));
         if (snap.exists()) {
             return ['owner', 'principal', 'director'].includes(snap.data().role);
