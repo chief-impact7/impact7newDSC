@@ -6,6 +6,8 @@ import {
 import { auth, db, dataAuthReady } from './firebase-config.js';
 import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
 import { initHelpGuide } from './help-guide.js';
+import { fetchAiBatchPerm } from './population-perms.js';
+import './ai-automation-settings.js'; // window.openAiAutomationSettings 등록 (side-effect import)
 import { todayStr, getDayName, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { auditUpdate, auditSet, normalizeImpact7Email } from './audit.js';
@@ -644,6 +646,13 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('user-avatar').textContent = (user.email || 'U')[0].toUpperCase();
         document.getElementById('user-avatar').title = `${normalizeImpact7Email(user.email)} (클릭: 로그아웃)`;
 
+        // AI 일괄 생성 권한(HR_users.role) 로드 → 헤더 기어 노출 토글. 실패해도 부팅을 막지 않는다.
+        fetchAiBatchPerm(user.uid).then((can) => {
+            state.canRunAiBatch = can;
+            const gear = document.getElementById('ai-automation-gear');
+            if (gear) gear.style.display = can ? '' : 'none';
+        });
+
         // 날짜/UI는 데이터 로드 실패와 무관하게 반드시 표시
         updateDateDisplay();
 
@@ -698,6 +707,9 @@ onAuthStateChanged(auth, async (user) => {
     } else {
         state.currentUser = null;
         window._auditUser = null;
+        state.canRunAiBatch = false;
+        const gear = document.getElementById('ai-automation-gear');
+        if (gear) gear.style.display = 'none';
         document.getElementById('boot-splash')?.remove();
         document.getElementById('login-screen').style.display = '';
         document.getElementById('main-screen').style.display = 'none';
