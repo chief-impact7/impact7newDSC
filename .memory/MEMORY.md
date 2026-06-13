@@ -33,3 +33,4 @@
 
 - [codegraph 활용 가이드](reference_codegraph_guide.md) — 인덱스 현황, 도메인별 탐색 쿼리, 주요 모듈 위치
 - [feedback_scheduled_leave_restore.md](feedback_scheduled_leave_restore.md) — 예약 휴원 복원 시 scheduled_leave_status 필수 (김서은 발효 불발 사고) + 휴원·퇴원 전수 감사는 check-leave-period-consistency.mjs 재사용
+- [project_temp_att_level_missing.md](project_temp_att_level_missing.md) — temp_attendance "저장 실패"는 payload 아닌 필수필드(school/level/grade/branch) 공백 의심. 신청서는 newtest/cloudrun(admin write, rules 우회). dscLevelFromApplication 학교명 fallback + validateApplicationGrade 제출차단

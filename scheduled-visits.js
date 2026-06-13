@@ -289,6 +289,7 @@ export async function saveDiagnosticReschedule() {
             temp_arrival: deleteField(),
             cancel_reason: deleteField(),
         });
+        delete state._visitStatusPending[_diagnosticActionDocId];
         const ta = state.tempAttendances.find(t => t.docId === _diagnosticActionDocId);
         if (ta) { Object.assign(ta, { temp_date: newDate, temp_time: newTime || '', visit_status: 'pending' }); delete ta.temp_arrival; delete ta.cancel_reason; }
         _closeDiagnosticModal();
@@ -309,10 +310,12 @@ export async function confirmDiagnosticCancel() {
             visit_status: '기타',
             completed_by: completedBy,
             completed_at: completedAt,
-            cancel_reason: '시험취소'
+            cancel_reason: '시험취소',
+            temp_arrival: deleteField(),
         });
+        delete state._visitStatusPending[_diagnosticActionDocId];
         const ta = state.tempAttendances.find(t => t.docId === _diagnosticActionDocId);
-        if (ta) Object.assign(ta, { visit_status: '기타', completed_by: completedBy, completed_at: completedAt, cancel_reason: '시험취소' });
+        if (ta) { Object.assign(ta, { visit_status: '기타', completed_by: completedBy, completed_at: completedAt, cancel_reason: '시험취소' }); delete ta.temp_arrival; }
         _closeDiagnosticModal();
         showSaveIndicator('saved');
     } catch (err) {
