@@ -17,3 +17,17 @@ export async function fetchPopulationPerms(uid) {
     }
     return { all: false, classCounts: false };
 }
+
+// AI 일괄 생성(비용 발생) 권한 — HR_users/{uid}.role 이 owner/principal/director 일 때만 true.
+// state.currentRole(user_settings의 자유텍스트 role)과는 무관 — HR_users.role을 직접 읽는다.
+export async function fetchAiBatchPerm(uid) {
+    try {
+        const snap = await getDoc(doc(db, 'HR_users', uid));
+        if (snap.exists()) {
+            return ['owner', 'principal', 'director'].includes(snap.data().role);
+        }
+    } catch (e) {
+        console.warn('[PERMS] ai batch perm load failed:', e.code || e.message);
+    }
+    return false;
+}

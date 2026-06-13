@@ -31,6 +31,8 @@ service cloud.firestore {
     function isDirector() { return isLoggedIn() && getUserRole() in ['owner', 'principal']; }
     function isStaff() { return isLoggedIn() && getUserRole() == 'staff'; }
     function isShortTerm() { return isLoggedIn() && getUserRole() == 'shortterm'; }
+    // AI 일괄 생성(비용 발생) 권한: director 등급 이상. isDirector는 'director' role을 포함하지 않으므로 별도 헬퍼.
+    function canRunAiBatch() { return isLoggedIn() && getUserRole() in ['owner', 'principal', 'director']; }
     function canManagePermissions() {
       return isLoggedIn()
         && (isDirector()
@@ -386,6 +388,33 @@ service cloud.firestore {
         && withinFieldLimit(20);
 
       allow delete: if isAuthorized();
+    }
+
+    // =========================================================================
+    // [DSC] 자동화 설정 (AI 일괄 생성 등) — director 등급 이상만. 비용 발생 작업 통제.
+    // 클라(설정 UI)는 enabled/interval/run_day/run_hour/skip_within_days만 patch한다.
+    // last_run_*/running/progress_* 는 Cloud Function이 admin SDK로 갱신(rules 우회)하지만,
+    // merge update 시 request.resource.data에 기존 함수 필드가 포함되므로 hasOnly 통과를 위해 허용 목록에 둔다.
+    // =========================================================================
+    match /automation_settings/{docId} {
+
+      function hasOnlyAutomationFields() {
+        return request.resource.data.keys().hasOnly([
+          'enabled', 'interval', 'run_day', 'run_hour', 'skip_within_days',
+          'updated_by', 'updated_at',
+          'last_run_at', 'last_run_status', 'last_run_generated', 'last_run_skipped',
+          'last_run_total_tokens', 'last_run_cost_usd',
+          'running', 'progress_done', 'progress_total'
+        ]);
+      }
+
+      allow read: if canRunAiBatch();
+
+      allow create, update: if canRunAiBatch()
+        && hasOnlyAutomationFields()
+        && withinFieldLimit(20);
+
+      allow delete: if false;
     }
 
     // =========================================================================
