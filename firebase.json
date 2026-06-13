@@ -5,10 +5,10 @@
   },
   "hosting": {
     "site": "impact7dsc",
-    "public": "dist",
+    "public": "_redirect",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [
-      { "source": "**", "destination": "/index.html" }
+    "redirects": [
+      { "source": "**", "destination": "https://impact7-app.web.app/dsc", "type": 301 }
     ]
   },
   "emulators": {

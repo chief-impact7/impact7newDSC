@@ -4,43 +4,14 @@ on:
   push:
     branches: [master]
 
+# 배포는 통합 호스팅(impact7-hosting)이 전담한다. 각 앱은 빌드·자체 배포를 하지 않고
+# 통합 재빌드만 트리거한다. 자체 site(impact7dsc)는 impact7-app/dsc로 redirect만 하므로
+# 수동 `firebase deploy`로 자체 site만 갱신돼 통합과 불일치하던 함정이 구조적으로 사라진다.
 jobs:
-  deploy:
+  trigger-unified:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-
-      - run: npm ci
-
-      - name: Create .env
-        run: |
-          echo "VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY }}" >> .env
-          echo "VITE_FIREBASE_AUTH_DOMAIN=${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}" >> .env
-          echo "VITE_FIREBASE_PROJECT_ID=${{ secrets.VITE_FIREBASE_PROJECT_ID }}" >> .env
-          echo "VITE_FIREBASE_STORAGE_BUCKET=${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}" >> .env
-          echo "VITE_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}" >> .env
-          echo "VITE_FIREBASE_APP_ID=${{ secrets.VITE_FIREBASE_APP_ID }}" >> .env
-          echo "VITE_GOOGLE_CLIENT_ID=${{ secrets.VITE_GOOGLE_CLIENT_ID }}" >> .env
-
-      - run: npm run build
-
-      - uses: FirebaseExtended/action-hosting-deploy@v0
-        # v0 릴리스가 아직 node20 런타임이라 node24로 강제 (2026-06-16 GitHub 기본 전환 시 제거 가능)
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-        with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          channelId: live
-          projectId: impact7db
-
       - name: Trigger unified hosting deploy
-        if: success()
         run: |
           curl -s -X POST https://api.github.com/repos/chief-impact7/impact7-hosting/dispatches \
             -H "Authorization: Bearer ${{ secrets.HOSTING_DISPATCH_TOKEN }}" \
