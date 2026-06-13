@@ -19,6 +19,22 @@ impact7 에코시스템 공통 로직의 SSoT는 `/Users/jongsooyi/projects/impa
 - 코드 변경 시 변경된 파일과 라인을 명시한다
 - 큰 변경은 사전에 계획(plan)을 세운 뒤 사용자 승인 후 진행한다
 
+## 페이지·entry 구조 (멀티페이지 — ⚠️ 중요)
+
+DSC는 멀티페이지 앱이다. 각 `*.html`이 **독립 entry js**를 로드하므로, 전역 로직을 잘못된 파일에 넣으면 그 페이지에서 **실행조차 안 된다**.
+
+| 페이지 | entry js |
+|--------|----------|
+| `index.html` (메인) | `app.js` + `naesin.js` |
+| `excel.html` | `excel.js` |
+| `dashboard.html` | `src/dashboard/main.jsx` |
+| `class-setup.html` | `class-setup.js` |
+| `checkin.html` | `checkin.js` |
+
+- 전역 로직(로그인·헤더 버튼·권한·gear 등)은 메인 entry **`app.js`**에 둔다 (impact7DB와 동일하게 app.js=메인).
+- 코드 추가 전 대상 페이지의 `<script type="module" src>`로 entry를 반드시 확인한다.
+- **2026-06 교훈**: AI 자동화 gear가 구 entry였던 옛 `app.js`(당시 excel.html 전용)에 들어가 메인(daily-ops.js)에서 작동하지 않았다. 이후 daily-ops.js를 `app.js`로, 옛 app.js를 `excel.js`로 일원화해 해소. **구 entry 파일을 안 지우면 이후 작업이 계속 헛다리를 짚는다.**
+
 ## 파일 수정 우선순위
 1. 기존 파일 수정 우선 (새 파일 생성 최소화)
 2. `app.js`가 너무 커지면 모듈 분리 가능 (예: `render.js`, `firestore.js`)
