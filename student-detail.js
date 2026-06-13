@@ -1089,9 +1089,16 @@ export function renderStudentDetail(studentId) {
         tagText = showTime ? `${displayStatus} ${formatTime12h(arrivalTime)}` : displayStatus;
     }
 
-    const hasSibling = state.siblingMap[studentId]?.size > 0;
-    const siblingNames = hasSibling ? [...new Set([...state.siblingMap[studentId]].map(sid => state.allStudents.find(x => x.docId === sid)?.name).filter(Boolean))].join(', ') : '';
-    const siblingHtml = hasSibling ? `<span class="tag tag-sibling"><span class="material-symbols-outlined" style="font-size:13px;">group</span> ${esc(siblingNames)}</span>` : '';
+    const siblings = state.siblingMap[studentId]?.size > 0
+        ? [...state.siblingMap[studentId]]
+            .map(sid => ({ id: sid, name: state.allStudents.find(x => x.docId === sid)?.name }))
+            .filter(s => s.name)
+        : [];
+    const siblingHtml = siblings.length
+        ? `<span class="tag tag-sibling"><span class="material-symbols-outlined" style="font-size:13px;">group</span> ${
+            siblings.map(s => `<span style="cursor:pointer;text-decoration:underline;" onclick="event.stopPropagation();selectStudent('${escAttr(s.id)}')">${esc(s.name)}</span>`).join(', ')
+          }</span>`
+        : '';
 
     // 마스터 status tone 배지를 맨 앞에 병기. 보조 배지(tag-status)는 tagText 있을 때만 렌더.
     const masterStatusHtml = statusToneBadgeHtml(student.status || '');
@@ -1148,8 +1155,8 @@ export function renderStudentDetail(studentId) {
                 <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">schedule</span>
                 등원 일정
             </div>
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--text-sec);">
-                <span style="min-width:48px;">레벨기간</span>
+            <div class="next-hw-detail-row">
+                <span class="next-hw-detail-label">레벨기간</span>
                 <span id="detail-level-period">${levelPeriodHtml}</span>
             </div>
             ${semesterEnrollments.map(e => {
@@ -1167,14 +1174,11 @@ export function renderStudentDetail(studentId) {
                 // 시작 전(start_date 미래) enrollment는 요일이 맞아도 "오늘"로 표시하지 않음
                 const notStarted = /^\d{4}-/.test(e.start_date || '') && e.start_date > state.selectedDate;
                 const isToday = !notStarted && (e.day || []).includes(dayNameForDetail);
-                const periodStr = ct !== '정규' && e.end_date ? ` ~${e.end_date.slice(5)}` : '';
-                return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;${isToday ? 'font-weight:600;' : 'opacity:0.7;'}">
-                    <span style="font-size:13px;min-width:40px;">${esc(code)}</span>
+                return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;${isToday ? 'font-weight:600;color:var(--primary);' : 'opacity:0.7;'}">
+                    <span style="font-size:13px;white-space:nowrap;">${esc(code)}</span>
                     ${ct !== '정규' ? `<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:${ct === '내신' ? 'var(--warning)' : 'var(--info)'};color:#fff;">${esc(ct)}</span>` : ''}
-                    <span style="font-size:12px;min-width:50px;color:var(--text-sec);">${esc(days)}</span>
-                    <span style="font-size:13px;">${displayTime ? esc(formatTime12h(displayTime)) : '-'}</span>
-                    ${periodStr ? `<span style="font-size:10px;color:var(--text-sec);">${esc(periodStr)}</span>` : ''}
-                    ${isToday ? '<span style="font-size:10px;color:var(--primary);font-weight:600;">오늘</span>' : ''}
+                    <span style="font-size:12px;color:var(--text-sec);white-space:nowrap;">${esc(days)}</span>
+                    <span style="font-size:13px;white-space:nowrap;">${displayTime ? esc(formatTime12h(displayTime)) : '-'}</span>
                     ${idx >= 0 ? `<span class="material-symbols-outlined" style="font-size:14px;color:var(--text-sec);cursor:pointer;margin-left:auto;" onclick="openEnrollmentModal('${escAttr(studentId)}', ${idx})">edit</span>` : ''}
                 </div>`;
             }).join('')}
@@ -1274,7 +1278,7 @@ export function renderStudentDetail(studentId) {
                                 const hasAny = filtered.some(t => data[t]);
                                 if (!hasAny) return '';
                                 return `<div style="margin-bottom:6px;">
-                                    <span style="font-size:10px;color:var(--text-sec);">${esc(secName)}</span>
+                                    <div class="detail-round-label">${esc(secName)}</div>
                                     <div class="hw-domain-group" style="margin-bottom:2px;">
                                         ${filtered.map(t => {
                                             const val = data[t] || '';
@@ -1321,7 +1325,7 @@ export function renderStudentDetail(studentId) {
                         const displayText = !val ? '미입력' : isNone ? '숙제 없음' : val;
                         const color = !val ? 'var(--outline)' : isNone ? 'var(--text-sec)' : 'var(--text-main)';
                         return `<div class="next-hw-detail-row" style="margin-bottom:4px;cursor:pointer;" onclick="openPersonalNextHwModal('${escAttr(studentId)}', '${escAttr(cc)}', '${escAttr(d)}')">
-                            <span class="next-hw-detail-label" style="min-width:40px;">${esc(d)}</span>
+                            <span class="next-hw-detail-label">${esc(d)}</span>
                             <span style="font-size:13px;color:${color};flex:1;">${esc(displayText)}</span>
                             ${hasPersonal ? '<span style="font-size:10px;color:var(--primary);">개인</span>' : ''}
                             <span class="material-symbols-outlined" style="font-size:14px;color:var(--outline);">edit</span>
@@ -1345,7 +1349,7 @@ export function renderStudentDetail(studentId) {
         </span>`;
     const extraVisitHtml = `
         <div class="detail-card">
-            <div class="detail-card-title" style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="detail-card-title detail-card-title-row">
                 <span style="display:flex;align-items:center;gap:6px;">
                     <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">schedule</span>
                     클리닉
