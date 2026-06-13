@@ -37,7 +37,7 @@ import {
 import { initExportReportDeps, exportDailyReport } from './export-report.js';
 import {
     initDiagnosticDeps, setupTempAutofillListeners,
-    renderTempAttendanceDetail, deleteTempAttendance,
+    renderTempAttendanceDetail, deleteTempAttendance, cancelTempAttendance,
     openTempAttendanceModal, openTempAttendanceForEdit, saveTempAttendance,
     openContactAsTemp
 } from './diagnostic.js';
@@ -219,6 +219,7 @@ initDiagnosticDeps({ renderSubFilters, renderListPanel, loadTempAttendances });
 setupTempAutofillListeners();
 window.renderTempAttendanceDetail = renderTempAttendanceDetail;
 window.deleteTempAttendance = deleteTempAttendance;
+window.cancelTempAttendance = cancelTempAttendance;
 window.openTempAttendanceModal = openTempAttendanceModal;
 window.openTempAttendanceForEdit = openTempAttendanceForEdit;
 window.saveTempAttendance = saveTempAttendance;

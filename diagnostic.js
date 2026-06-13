@@ -1,13 +1,14 @@
 // ─── 진단평가 모달 + CRUD ─────────────────────────────────────────────────
 // daily-ops.js에서 분리 (Phase 2-3)
 
-import { collection, doc, getDoc, getDocs, query, where, serverTimestamp, arrayUnion } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, where, serverTimestamp, arrayUnion, deleteField } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { state, TEMP_FIELD_LABELS } from './state.js';
 import { esc, formatTime12h, nowTimeStr, showSaveIndicator, stripEmailDomain, _fmtTs } from './ui-utils.js';
 import { auditDelete, auditUpdate, auditSet, auditAdd } from './audit.js';
 import { todayStr } from './src/shared/firestore-helpers.js';
-import { SCHOOL_FIELD } from '@impact7/shared/student-label';
+import { SCHOOL_FIELD, schoolLevelGradeLabel } from '@impact7/shared/student-label';
+import { staffLabel } from '@impact7/shared/staff-label';
 
 const _normalizePhone = (phone) => (phone || '').replace(/\D/g, '').replace(/^0(?=\d{10}$)/, '');
 
@@ -60,11 +61,10 @@ export function renderTempAttendanceDetail(docId) {
 
     const createdById = stripEmailDomain(ta.created_by);
 
+    const schoolLabel = schoolLevelGradeLabel({ school: ta.school, level: ta.level, grade: ta.grade });
     const infoRows = [
         { icon: 'apartment', label: '소속', value: ta.branch },
-        { icon: 'school', label: '학교', value: ta.school },
-        { icon: 'bar_chart', label: '학부', value: ta.level },
-        { icon: 'grade', label: '학년', value: ta.grade },
+        { icon: 'school', label: '학교', value: schoolLabel },
         { icon: 'phone_android', label: '학생 전화', value: ta.student_phone },
         { icon: 'phone', label: '학부모 전화', value: ta.parent_phone_1 },
         { icon: 'calendar_today', label: '예정 날짜', value: ta.temp_date },
@@ -112,8 +112,8 @@ export function renderTempAttendanceDetail(docId) {
 
     cardsContainer.innerHTML = `
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px;">
-            <button class="btn btn-secondary" style="font-size:13px;padding:6px 14px;color:#dc2626;border-color:#dc2626;" onclick="deleteTempAttendance('${docId}')">
-                <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">delete</span> 삭제
+            <button class="btn btn-secondary" style="font-size:13px;padding:6px 14px;color:#dc2626;border-color:#dc2626;" onclick="cancelTempAttendance('${docId}')">
+                <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">cancel</span> 취소
             </button>
             <button class="btn btn-secondary" style="font-size:13px;padding:6px 14px;" onclick="openTempAttendanceForEdit('${docId}')">
                 <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">edit</span> 수정
@@ -134,6 +134,32 @@ export function renderTempAttendanceDetail(docId) {
         ${memoHtml}
         ${editHistoryHtml}
     `;
+}
+
+export async function cancelTempAttendance(docId) {
+    const ta = state.tempAttendances.find(t => t.docId === docId);
+    if (!ta) return;
+    if (!confirm(`"${ta.name}" 진단평가 예약을 취소하시겠습니까?\n취소 후에도 기록은 남습니다.`)) return;
+    try {
+        const cancelledBy = staffLabel(state.currentUser?.email);
+        const cancelledAt = new Date().toISOString();
+        await auditUpdate(doc(db, 'temp_attendance', docId), {
+            visit_status: '기타',
+            cancel_reason: '예약취소',
+            completed_by: cancelledBy,
+            completed_at: cancelledAt,
+            temp_arrival: deleteField(),
+        });
+        delete state._visitStatusPending[docId];
+        Object.assign(ta, { visit_status: '기타', cancel_reason: '예약취소', completed_by: cancelledBy, completed_at: cancelledAt });
+        delete ta.temp_arrival;
+        renderSubFilters();
+        renderListPanel();
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('진단평가 취소 실패:', err);
+        alert(`취소 실패: ${err.message || err}`);
+    }
 }
 
 export async function deleteTempAttendance(docId) {

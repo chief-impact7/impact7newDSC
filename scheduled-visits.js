@@ -82,9 +82,9 @@ export async function resetScheduledVisit(source, docId, studentId) {
     showSaveIndicator('saving');
     try {
         if (source === 'temp') {
-            await auditUpdate(doc(db, 'temp_attendance', docId), { visit_status: 'pending', temp_arrival: deleteField(), completed_by: deleteField(), completed_at: deleteField() });
+            await auditUpdate(doc(db, 'temp_attendance', docId), { visit_status: 'pending', temp_arrival: deleteField(), completed_by: deleteField(), completed_at: deleteField(), cancel_reason: deleteField() });
             const ta = state.tempAttendances.find(t => t.docId === docId);
-            if (ta) { ta.visit_status = 'pending'; delete ta.temp_arrival; delete ta.completed_by; delete ta.completed_at; }
+            if (ta) { ta.visit_status = 'pending'; delete ta.temp_arrival; delete ta.completed_by; delete ta.completed_at; delete ta.cancel_reason; }
         } else if (source === 'hw_fail') {
             await auditUpdate(doc(db, 'hw_fail_tasks', docId), {
                 status: 'pending',
@@ -183,7 +183,7 @@ export async function confirmVisitStatus(docId) {
     } else if (nextStatus === '미완료' && (source === 'hw_fail' || source === 'test_fail')) {
         // 미완료 확인 → 재지정 모달 열기
         rescheduleVisit(source, docId);
-    } else if (nextStatus === '미완료' && source === 'temp') {
+    } else if ((nextStatus === '미완료' || nextStatus === '기타') && source === 'temp') {
         // 진단평가 미시행 확인 → 재지정/시험취소 선택
         _showDiagnosticActionModal(docId);
     } else if (nextStatus === '완료') {
@@ -196,11 +196,7 @@ export async function confirmVisitStatus(docId) {
             const completedAt = new Date().toISOString();
             const statusPayload = { completed_by: completedBy, completed_at: completedAt };
 
-            if (source === 'temp') {
-                await auditUpdate(doc(db, 'temp_attendance', docId), { visit_status: '기타', ...statusPayload });
-                const ta = state.tempAttendances.find(t => t.docId === docId);
-                if (ta) Object.assign(ta, { visit_status: '기타', ...statusPayload });
-            } else if (source === 'hw_fail') {
+            if (source === 'hw_fail') {
                 await auditUpdate(doc(db, 'hw_fail_tasks', docId), { status: '기타', ...statusPayload });
                 const t = state.hwFailTasks.find(t => t.docId === docId);
                 if (t) Object.assign(t, { status: '기타', ...statusPayload });
@@ -285,9 +281,10 @@ export async function saveDiagnosticReschedule() {
             temp_time: newTime || '',
             visit_status: 'pending',
             temp_arrival: deleteField(),
+            cancel_reason: deleteField(),
         });
         const ta = state.tempAttendances.find(t => t.docId === _diagnosticActionDocId);
-        if (ta) { Object.assign(ta, { temp_date: newDate, temp_time: newTime || '', visit_status: 'pending' }); delete ta.temp_arrival; }
+        if (ta) { Object.assign(ta, { temp_date: newDate, temp_time: newTime || '', visit_status: 'pending' }); delete ta.temp_arrival; delete ta.cancel_reason; }
         _closeDiagnosticModal();
         showSaveIndicator('saved');
     } catch (err) {
