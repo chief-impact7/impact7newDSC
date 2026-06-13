@@ -1165,6 +1165,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // 학생 종합 상태 AI 요약 (서버 전용 쓰기, 클라이언트 읽기만)
+    match /student_status_summaries/{studentId} {
+      allow read: if isAuthorized();
+      allow write: if false;
+    }
+
     // 상담 고정(pin) — 24h window 없는 별도 컬렉션 (consultations는 안 건드림)
     match /consultation_pins/{cid} {
       allow read: if isAuthorized();

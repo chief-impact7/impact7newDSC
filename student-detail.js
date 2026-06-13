@@ -1404,6 +1404,9 @@ export function renderStudentDetail(studentId) {
     }
 
     cardsContainer.innerHTML = isWithdrawn ? withdrawnHtml : `
+        <!-- AI 종합 상태 카드 (비동기 마운트) -->
+        <div id="student-status-mount" data-student-id="${escAttr(studentId)}"></div>
+
         <!-- 복귀상담 카드 (복귀예정 뷰) -->
         ${renderReturnConsultCard(studentId)}
 
@@ -1449,6 +1452,20 @@ export function renderStudentDetail(studentId) {
 
     // 재원기간 — 헤더에 비동기로 채움 (history_logs deriveTenure, DB와 동일 로직)
     if (document.getElementById('detail-header-tenure')) fillTenure(studentId, student);
+
+    // AI 종합 상태 카드 — 비동기 마운트 (퇴원 뷰 제외)
+    if (!isWithdrawn) {
+        const statusMount = document.getElementById('student-status-mount');
+        if (statusMount) {
+            import('./student-status-card.js').then(({ renderStudentStatusCard, initStudentStatusCardDeps }) => {
+                initStudentStatusCardDeps({ readonly: window.READ_ONLY === true });
+                // stale 방지: 그 사이 다른 학생으로 바뀌었으면 스킵
+                if (statusMount.dataset.studentId === studentId) {
+                    renderStudentStatusCard(studentId, statusMount);
+                }
+            });
+        }
+    }
 
     // 탭 상태 복원 — 학생 모드: 출결현황/성적 탭 노출.
     // 비활성 학생(퇴원/종강/상담 등)은 출결 의미가 약하므로 라벨을 "수업이력"으로 전환.

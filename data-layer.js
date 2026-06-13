@@ -1010,6 +1010,17 @@ export async function generateStudentConsultationAi(studentId) {
   return res.data;
 }
 
+export async function getStudentStatusSummary(studentId) {
+  const snap = await getDoc(doc(db, 'student_status_summaries', studentId));
+  return snap.exists() ? snap.data() : null;
+}
+
+export async function generateStudentStatusAi(studentId) {
+  const callable = httpsCallable(functions, 'generateStudentStatusAi');
+  const res = await callable({ studentId });
+  return res.data;
+}
+
 export async function listStudentConsultations(studentId, limitCount = 10) {
   const q = query(
     collection(db, 'consultations'),

@@ -4154,6 +4154,78 @@ textarea.field-input {
   line-height: 1.2;
 }
 
+/* ── AI 종합 상태 카드 (student-status-card.js) ─────────────────────── */
+.student-status-card .status-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.status-tone-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: .72rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+.status-tone-badge.tone-good    { background: #d4e9e2; color: #006241; }
+.status-tone-badge.tone-caution { background: #fef7e0; color: #b06000; }
+.status-tone-badge.tone-risk    { background: #fce8e6; color: #c5221f; }
+.status-collapse-btn {
+  width: 28px; height: 28px;
+  border: 1px solid var(--border, #e7e3db);
+  border-radius: 8px;
+  background: #fff;
+  color: rgba(0,0,0,.6);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0;
+}
+.status-collapse-btn .material-symbols-outlined { font-size: 20px; }
+.student-status-card.collapsed { padding-bottom: 8px; }
+.status-ai-action {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap; justify-content: space-between;
+  margin: 8px 0;
+}
+.status-ai-action .hint { font-size: .75rem; color: rgba(0,0,0,.5); }
+.status-ai-btn {
+  border: 1px solid var(--primary, #00754A);
+  border-radius: 8px;
+  background: var(--primary, #00754A);
+  color: #fff;
+  padding: 6px 10px;
+  font-size: .82rem; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+}
+.status-ai-btn:disabled { opacity: .65; cursor: wait; }
+.status-stats {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin: 8px 0;
+}
+.status-stat {
+  display: flex; flex-direction: column; align-items: center;
+  min-width: 56px; padding: 6px 8px;
+  border: 1px solid var(--border, #e7e3db);
+  border-radius: 8px; background: #fafafa;
+}
+.status-stat-label { font-size: .68rem; color: rgba(0,0,0,.5); }
+.status-stat-val { font-size: 1rem; font-weight: 700; color: var(--text-main, #1a1a1a); }
+.status-ai-body { line-height: 1.4; margin: 6px 0; }
+.status-ai-body h3, .status-ai-body h4, .status-ai-body h5 {
+  margin: 6px 0 3px; padding: 0; border-bottom: none;
+  color: var(--text-main); font-size: .92rem; line-height: 1.25;
+}
+.status-ai-body h3:first-child, .status-ai-body h4:first-child, .status-ai-body h5:first-child {
+  margin-top: 0;
+}
+.status-list { margin: 8px 0; font-size: .85rem; }
+.status-list ul { margin: 4px 0 0; padding-left: 18px; }
+.status-list li { margin: 2px 0; line-height: 1.35; }
+.status-comment { font-size: .82rem; margin: 4px 0; color: rgba(0,0,0,.7); }
+.status-comment strong { color: var(--primary, #00754A); margin-right: 4px; }
+
 /* 입력폼: 라벨(위) + 컨트롤(아래) 일관 필드. 행 단위 가로 배치 */
 .consult-form-grid {
   display: flex; flex-direction: column; gap: 14px; margin-bottom: 16px;
