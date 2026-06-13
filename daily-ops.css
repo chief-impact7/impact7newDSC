@@ -4330,3 +4330,28 @@ textarea.field-input {
   white-space: pre-wrap; background: var(--surface, #f2f0eb); border-radius: 8px;
   padding: 10px 12px; margin: 8px 0 4px; font-size: 12px; font-family: inherit; line-height: 1.6;
 }
+
+/* ─── AI 자동 생성 설정 모달 (ai-automation-settings.js) ─────────────────────── */
+.aias-modal { max-width: 460px; }
+.aias-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.aias-toggle-row input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+.aias-muted { color: rgba(0,0,0,.55); font-size: 12px; }
+.aias-lastrun {
+  background: var(--surface, #f2f0eb); border-radius: 8px; padding: 10px 12px;
+  font-size: 12px; line-height: 1.7; display: flex; flex-direction: column; gap: 2px;
+}
+.aias-lastrun strong { font-weight: 600; }
+.aias-lastrun-empty { color: rgba(0,0,0,.45); font-size: 12px; padding: 6px 0; }
+.aias-progress {
+  background: var(--surface, #f2f0eb); border-radius: 8px; padding: 12px;
+  margin-bottom: 12px;
+}
+.aias-progress-label { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.aias-progress-track {
+  width: 100%; height: 8px; background: var(--border, #e7e3db);
+  border-radius: 99px; overflow: hidden;
+}
+.aias-progress-bar {
+  height: 100%; background: var(--accent, #2f7d6b); border-radius: 99px;
+  transition: width .4s ease;
+}

@@ -404,7 +404,10 @@ service cloud.firestore {
           'updated_by', 'updated_at',
           'last_run_at', 'last_run_status', 'last_run_generated', 'last_run_skipped',
           'last_run_total_tokens', 'last_run_cost_usd',
-          'running', 'progress_done', 'progress_total'
+          'progress_done', 'progress_total',
+          'batch_active', 'chunk_lock', 'run_started_at', 'run_pending_ids',
+          'run_generated', 'run_skipped', 'run_prompt_tokens', 'run_candidate_tokens',
+          'run_total_tokens', 'run_trigger', 'run_actor'
         ]);
       }
 
@@ -412,7 +415,7 @@ service cloud.firestore {
 
       allow create, update: if canRunAiBatch()
         && hasOnlyAutomationFields()
-        && withinFieldLimit(20);
+        && withinFieldLimit(30);
 
       allow delete: if false;
     }
