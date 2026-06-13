@@ -136,8 +136,14 @@ export function cycleVisitStatus(source, docId, studentId) {
         currentStatus = state.dailyRecords[docId]?.extra_visit?.visit_status || 'pending';
     }
 
-    // 다음 상태로 토글 (미등원 시 '완료' 건너뜀)
+    // 진단평가 미등원: 사이클 없이 모달 직접 표시
     const attended = _isVisitAttended(source, docId, studentId);
+    if (source === 'temp' && !attended) {
+        _showDiagnosticActionModal(docId);
+        return;
+    }
+
+    // 다음 상태로 토글 (미등원 시 '완료' 건너뜀)
     let nextIdx = (VISIT_STATUS_CYCLE.indexOf(currentStatus) + 1) % VISIT_STATUS_CYCLE.length;
     let nextStatus = VISIT_STATUS_CYCLE[nextIdx];
     if (!attended && nextStatus === '완료') {
