@@ -4211,16 +4211,16 @@ textarea.field-input {
 }
 .status-ai-btn:disabled { opacity: .65; cursor: wait; }
 .status-stats {
-  display: flex; flex-wrap: wrap; gap: 8px;
+  display: flex; flex-wrap: nowrap; gap: 6px;
   margin: 8px 0;
 }
 .status-stat {
   display: flex; flex-direction: column; align-items: center;
-  min-width: 56px; padding: 6px 8px;
+  flex: 1; min-width: 0; padding: 6px 4px;
   border: 1px solid var(--border, #e7e3db);
   border-radius: 8px; background: #fafafa;
 }
-.status-stat-label { font-size: .68rem; color: rgba(0,0,0,.5); }
+.status-stat-label { font-size: .68rem; color: rgba(0,0,0,.5); white-space: nowrap; }
 .status-stat-val { font-size: 1rem; font-weight: 700; color: var(--text-main, #1a1a1a); }
 .status-ai-body { line-height: 1.4; margin: 6px 0; }
 .status-ai-body h3, .status-ai-body h4, .status-ai-body h5 {
