@@ -1,15 +1,15 @@
 import React, { useMemo } from 'react';
 import { getDayName, studentGradeKey, studentShortLabel } from '../../shared/firestore-helpers.js';
-import { branchFromStudent, resolveNaesinCsKey, displayCodeFromCsKey } from '../../../student-helpers.js';
+import { branchFromStudent, resolveNaesinCsKey, displayCodeFromCsKey, isOnLeaveAt } from '../../../student-helpers.js';
+import { applyNaesinFreeDerivation } from '@impact7/shared/enrollment-derivation';
 import { staffLabel } from '@impact7/shared/staff-label';
 
 const ACTIVE_STATUSES = new Set(['재원', '등원예정', '실휴원', '가휴원', '상담']);
 const ATTENDED_STATUSES = new Set(['출석', '지각', '조퇴']);
 const DEFAULT_ATTENDANCE_LABELS = new Set(['정규', '특강', '내신', '자유', '자유학기', '비정규', '미확인']);
-const REGULAR_CLASS_TYPES = new Set(['정규', '자유학기', undefined, null, '']);
 const WITHDRAW_REQUEST_TYPES = new Set(['퇴원요청', '휴원→퇴원']);
 const LEAVE_REQUEST_TYPES = new Set(['휴원요청', '퇴원→휴원', '휴원연장']);
-const GROUP_ORDER = ['diagnostic', 'regular', 'irregular', 'naesin', 'free', 'special'];
+const GROUP_ORDER = ['diagnostic', 'regular', 'irregular', 'naesin', 'free', 'special', 'leave'];
 const OPTIONAL_GROUPS = GROUP_ORDER.filter(key => !['diagnostic', 'regular'].includes(key));
 const GROUP_LABELS = {
     diagnostic: '진단평가',
@@ -18,6 +18,7 @@ const GROUP_LABELS = {
     naesin: '내신',
     free: '자유학기',
     special: '특강',
+    leave: '휴원중',
 };
 
 const classCode = (enrollment) => `${enrollment?.level_symbol || ''}${enrollment?.class_number || ''}`;
@@ -52,100 +53,6 @@ function isWithdrawnAt(student, date) {
     if (student.status === '퇴원' || student.status === '종강') return true;
     if (ACTIVE_STATUSES.has(student.status || '')) return false;
     return student.withdrawal_date ? student.withdrawal_date <= date : false;
-}
-
-function currentEnrollments(student, date) {
-    return (student.enrollments || []).filter(e => !validDate(e.end_date) || e.end_date >= date);
-}
-
-function regularEnrollment(enrollments) {
-    return enrollments.find(e => REGULAR_CLASS_TYPES.has(e.class_type) && e.class_number);
-}
-
-function resolveNaesinKey(student, enrollment) {
-    return resolveNaesinCsKey(student, enrollment) || '';
-}
-
-function hasExplicitNaesin(enrollments, date) {
-    return enrollments.some(e => e.class_type === '내신' && (!validDate(e.start_date) || e.start_date <= date));
-}
-
-function hasAutoNaesin(student, enrollment, date, classSettings) {
-    const key = resolveNaesinKey(student, enrollment);
-    const cs = key ? classSettings[key] : null;
-    return !!(cs?.naesin_start && cs?.naesin_end && cs.naesin_start <= date && cs.naesin_end >= date);
-}
-
-function virtualNaesinEnrollment(student, enrollment, date, classSettings) {
-    const key = resolveNaesinKey(student, enrollment);
-    const cs = key ? classSettings[key] : null;
-    if (!cs?.naesin_start || !cs?.naesin_end || cs.naesin_start > date || cs.naesin_end < date) return null;
-    return {
-        class_type: '내신',
-        level_symbol: '',
-        class_number: key,
-        day: Object.keys(cs.schedule || {}),
-        schedule: cs.schedule || {},
-    };
-}
-
-function virtualFreeEnrollment(enrollment, date, classSettings) {
-    const code = classCode(enrollment);
-    const cs = code ? classSettings[code] : null;
-    if (!cs?.free_start || !cs?.free_end || cs.free_start > date || cs.free_end < date) return null;
-    return {
-        class_type: '자유학기',
-        level_symbol: enrollment?.level_symbol || '',
-        class_number: enrollment?.class_number || '',
-        day: Object.keys(cs.free_schedule || {}),
-        schedule: cs.free_schedule || {},
-    };
-}
-
-function activeEnrollments(student, date, classSettings) {
-    const current = currentEnrollments(student, date);
-    if (!current.length) return [];
-
-    const regular = regularEnrollment(current);
-    const virtualNaesin = virtualNaesinEnrollment(student, regular, date, classSettings);
-    if (hasExplicitNaesin(current, date) || virtualNaesin) {
-        const nonRegular = current.filter(e => (e.class_type || '정규') !== '정규');
-        return virtualNaesin ? [virtualNaesin, ...nonRegular] : nonRegular;
-    }
-
-    const virtualFree = virtualFreeEnrollment(regular, date, classSettings);
-    if (virtualFree) {
-        const code = classCode(virtualFree);
-        return [
-            virtualFree,
-            ...current.filter(e => !['정규', '자유학기'].includes(e.class_type || '정규') || classCode(e) !== code)
-                .filter(e => e !== virtualFree),
-        ];
-    }
-
-    const activeFreeCodes = new Set(current
-        .filter(e => e.class_type === '자유학기' && (!validDate(e.start_date) || e.start_date <= date))
-        .map(classCode));
-    if (activeFreeCodes.size) {
-        return current.filter(e => (e.class_type || '정규') !== '정규' || !activeFreeCodes.has(classCode(e)));
-    }
-    return current;
-}
-
-function isNaesinActive(student, date, classSettings) {
-    const current = currentEnrollments(student, date);
-    return hasExplicitNaesin(current, date)
-        || hasAutoNaesin(student, regularEnrollment(current), date, classSettings);
-}
-
-function isFreeActive(student, date, classSettings) {
-    const current = currentEnrollments(student, date);
-    return current.some(e => {
-        const code = classCode(e);
-        const cs = classSettings[code];
-        if (e.class_type === '자유학기' && (!validDate(e.start_date) || e.start_date <= date)) return true;
-        return !!(cs?.free_start && cs?.free_end && cs.free_start <= date && cs.free_end >= date);
-    });
 }
 
 function startTime(enrollment, dayName, classSettings) {
@@ -279,6 +186,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
         naesin: [],
         free: [],
         special: [],
+        leave: [],
     };
 
     students.forEach(student => {
@@ -287,8 +195,45 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
         if (branchFilter && branchFromStudent(student) !== branchFilter) return;
         if (gradeFilter?.size && !gradeFilter.has(studentGradeKey(student))) return;
 
-        const enrolls = activeEnrollments(student, date, classSettings);
+        // 내신/자유학기 파생은 DSC·shared와 동일한 SSoT(applyNaesinFreeDerivation)로만 — 자체 재구현 금지(drift 방지).
+        // 반환 [0]이 대표(내신 > 자유학기 > 정규 순). 분류·대표코드 모두 이 결과로 결정한다.
+        const current = (student.enrollments || []).filter(e => {
+            if (validDate(e.start_date) && e.start_date > date) return false;
+            if (validDate(e.end_date) && e.end_date < date) return false;
+            return true;
+        });
+        const enrolls = applyNaesinFreeDerivation(current, {
+            classSettings,
+            dateStr: date,
+            resolveNaesinCsKey: (re) => resolveNaesinCsKey(student, re),
+            enrollmentCode: classCode,
+        });
         const todayEnrolls = enrolls.filter(e => normalizedDays(e.day).includes(dayName));
+
+        // 휴원중: 정규/자유 등에 섞이지 않게 별도 '휴원중' 그룹으로 분리
+        if (isOnLeaveAt(student, date)) {
+            const primary = todayEnrolls[0] || enrolls[0] || {};
+            const leaveCode = classCode(primary) || '미지정';
+            if (classFilter && leaveCode !== classFilter) return; // 반 필터 시 사이드 휴원명단과 동작 일치
+            groups.leave.push({
+                id,
+                name: student.name || id,
+                meta: [studentShortLabel(student), branchFromStudent(student)].filter(Boolean).join(' · '),
+                time: '',
+                attendance: student.status,
+                attendanceMeta: (student.pause_start_date && student.pause_end_date)
+                    ? `${fmtDate(student.pause_start_date)} ~ ${fmtDate(student.pause_end_date)}` : '',
+                homework: [],
+                tests: [],
+                notes: student.scheduled_leave_status ? `예약 ${student.scheduled_leave_status}` : '',
+                next: '',
+                classCode: leaveCode,
+                classLabel: leaveCode,
+                groupKey: 'leave',
+            });
+            return;
+        }
+
         const rec = records.get(id) || {};
         const studentHwTasks = hwTasks.get(id) || [];
         const studentTestTasks = testTasks.get(id) || [];
@@ -300,18 +245,16 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
             || studentAbsences.some(a => a.resolution === '보충' && a.makeup_date === date && a.status !== 'closed' && a.makeup_status !== '미등원');
         if (!todayEnrolls.length && !hasVisitTask) return;
 
-        const naesin = isNaesinActive(student, date, classSettings);
-        const free = isFreeActive(student, date, classSettings);
-        const special = todayEnrolls.length > 0 && todayEnrolls.every(e => e.class_type === '특강');
+        const primaryEnroll = todayEnrolls[0] || enrolls[0] || {};
+        const ct = primaryEnroll.class_type;
         let groupKey = 'regular';
         if (!todayEnrolls.length && hasVisitTask) groupKey = 'irregular';
-        else if (naesin) groupKey = 'naesin';
-        else if (free) groupKey = 'free';
-        else if (special) groupKey = 'special';
+        else if (ct === '내신') groupKey = 'naesin';
+        else if (ct === '자유학기') groupKey = 'free';
+        else if (todayEnrolls.length > 0 && todayEnrolls.every(e => e.class_type === '특강')) groupKey = 'special';
 
-        const primaryEnroll = todayEnrolls[0] || enrolls[0] || {};
         const code = groupKey === 'naesin'
-            ? (classCode(primaryEnroll) || resolveNaesinKey(student, regularEnrollment(currentEnrollments(student, date))) || '내신')
+            ? (classCode(primaryEnroll) || '내신')
             : (classCode(primaryEnroll) || (groupKey === 'irregular' ? '비정규' : '미지정'));
         if (classFilter && code !== classFilter && groupKey !== 'diagnostic') return;
 
@@ -391,7 +334,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
     });
 
     Object.values(groups.regular).forEach(rows => rows.sort(sortRows));
-    ['irregular', 'naesin', 'free', 'special'].forEach(key => groups[key].sort(sortRows));
+    ['irregular', 'naesin', 'free', 'special', 'leave'].forEach(key => groups[key].sort(sortRows));
 
     const withdrawalRows = buildLeaveRows({
         requests: leaveRequests,
@@ -512,6 +455,7 @@ function buildSummary(groups) {
         naesin: groups.naesin.length,
         free: groups.free.length,
         special: groups.special.length,
+        leave: groups.leave.length,
     };
 }
 
@@ -744,7 +688,7 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                 <SummaryCard icon="pending_actions" label="미입력" value={data.summary.pending} note="출결 미기록 학생" />
                 <SummaryCard icon="assignment_late" label="학습 이슈" value={data.summary.issues} note="숙제/테스트/후속조치" />
                 <SummaryCard icon="logout" label="퇴원" value={data.summary.withdrawals} note="승인일 기준" />
-                <SummaryCard icon="pause_circle" label="휴원" value={data.summary.leaves} note="승인일 기준" />
+                <SummaryCard icon="pause_circle" label="휴원중" value={data.summary.leave} note="현재 휴원(가/실휴원) 학생 수" />
             </div>
 
             <div className="daily-log-work-area">
