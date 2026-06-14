@@ -295,6 +295,17 @@ export function openEnrollmentModal(studentId, enrollIdx) {
     document.getElementById('enroll-start-date').value = enroll.start_date || '';
     document.getElementById('enroll-end-date').value = enroll.end_date || '';
 
+    // 정규는 종료일 입력 불가 — 정규 종료는 status(퇴원/종강)로만. 특강만 종료일 활성.
+    const typeEl = document.getElementById('enroll-class-type');
+    const endEl = document.getElementById('enroll-end-date');
+    const syncEndDisabled = () => {
+        const isRegular = typeEl.value === '정규';
+        endEl.disabled = isRegular;
+        if (isRegular) endEl.value = '';
+    };
+    typeEl.onchange = syncEndDisabled;
+    syncEndDisabled();
+
     // 요일 버튼 초기화
     const days = enroll.day || [];
     document.querySelectorAll('#enroll-days .day-btn').forEach(btn => {
@@ -375,7 +386,8 @@ export async function saveEnrollment() {
     };
     if (startDate) updated.start_date = startDate;
     else delete updated.start_date;
-    if (endDate) updated.end_date = endDate;
+    // 정규는 end_date를 박지 않는다 — 정규 종료는 status(퇴원/종강)로만. (자유학기·특강은 기간제라 유지)
+    if (endDate && classType !== '정규') updated.end_date = endDate;
     else delete updated.end_date;
 
     enrollments[enrollIdx] = updated;

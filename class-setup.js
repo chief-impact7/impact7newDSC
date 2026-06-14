@@ -770,13 +770,6 @@ window.submitWizard = async function () {
             }
         }
 
-        // 정규 enrollment 추가 시 옛 정규 enrollment의 자동 종료일(새 학기 start_date - 1).
-        const yesterdayOf = (dateStr) => {
-            const dt = new Date(dateStr + 'T00:00:00Z');
-            dt.setUTCDate(dt.getUTCDate() - 1);
-            return dt.toISOString().slice(0, 10);
-        };
-
         // class_settings + 학생 enrollment를 한 batch에 묶어 부분 실패 시 데이터 불일치를 방지.
         const batch = writeBatch(db);
         batchSet(batch, doc(db, 'class_settings', d.classCode), classSettingsData, { merge: true });
@@ -921,26 +914,29 @@ window.submitWizard = async function () {
                 batchUpdate(batch, studentRef, { enrollments: updated });
                 _pushFormationLog(batch, student.docId, '—', `추가: ${d.classCode} (자유학기) 누적`);
             } else if (d.classType === '정규') {
-                // 신학기 정규 enrollment 추가 시 옛 정규 enrollment를 강제 종료
-                // (end_date 미설정 + 같은 class_type='정규'인 항목에 end_date=새 start_date - 1 설정).
-                // 자유학기/내신은 정규의 일시 전환이라 종료하지 않는다.
-                const closeDate = yesterdayOf(newEnrollment.start_date);
+                // 정규는 end_date를 박지 않는다 — 정규 종료는 status(퇴원/종강)로만.
+                // 기존 활성 정규가 있으면 in-place로 반 변경(코드·요일·시작일 갱신, override/semester 보존).
+                // 없으면 새 정규를 추가한다.
                 const oldReg = existing.find(e => e.class_type === '정규' && !e.end_date);
                 const oldCode = oldReg ? `${oldReg.level_symbol || ''}${oldReg.class_number || ''}` : '';
-                const updated = existing.map(e =>
-                    (e.class_type === '정규' && !e.end_date)
-                        ? { ...e, end_date: closeDate }
-                        : e
-                );
-                updated.push(newEnrollment);
+                const newCode = d.classCode;
+                const updated = oldReg
+                    ? existing.map(e => e === oldReg
+                        ? { ...e,
+                            level_symbol: newEnrollment.level_symbol,
+                            class_number: newEnrollment.class_number,
+                            day: newEnrollment.day,
+                            start_date: newEnrollment.start_date }
+                        : e)
+                    : [...existing, newEnrollment];
                 batchUpdate(batch, studentRef, { enrollments: updated });
                 // 수업이력 로그 — DB와 동일 형식으로 공유 분류기가 전반/수업추가로 인식
-                const newCode = d.classCode;
                 if (oldCode && oldCode !== newCode) {
                     _pushFormationLog(batch, student.docId,
                         `상태:${student.status || ''}, 반:${oldCode}`,
                         `상태:${student.status || ''}, 반:${newCode}`);
                 } else if (!oldCode) {
+                    // '추가:'+'누적' 토큰은 @impact7/shared history-classifier의 수업추가 시그니처 — 빼면 이력에서 숨김
                     _pushFormationLog(batch, student.docId, '—',
                         `추가: ${newCode} (정규), 총 ${updated.length}개 누적`);
                 }
