@@ -1,10 +1,9 @@
 import React, { useMemo } from 'react';
 import { getDayName, studentGradeKey, studentShortLabel } from '../../shared/firestore-helpers.js';
-import { branchFromStudent, resolveNaesinCsKey, displayCodeFromCsKey, isOnLeaveAt } from '../../../student-helpers.js';
+import { branchFromStudent, resolveNaesinCsKey, displayCodeFromCsKey, isOnLeaveAt, isWithdrawnAt } from '../../../student-helpers.js';
 import { applyNaesinFreeDerivation } from '@impact7/shared/enrollment-derivation';
 import { staffLabel } from '@impact7/shared/staff-label';
 
-const ACTIVE_STATUSES = new Set(['재원', '등원예정', '실휴원', '가휴원', '상담']);
 const ATTENDED_STATUSES = new Set(['출석', '지각', '조퇴']);
 const DEFAULT_ATTENDANCE_LABELS = new Set(['정규', '특강', '내신', '자유', '자유학기', '비정규', '미확인']);
 const WITHDRAW_REQUEST_TYPES = new Set(['퇴원요청', '휴원→퇴원']);
@@ -48,12 +47,6 @@ const teacherNamesForClasses = (classSettings, codes) => {
     const names = codes.map(code => teacherNameForClass(classSettings, code)).filter(Boolean);
     return [...new Set(names)].join(', ');
 };
-
-function isWithdrawnAt(student, date) {
-    if (student.status === '퇴원' || student.status === '종강') return true;
-    if (ACTIVE_STATUSES.has(student.status || '')) return false;
-    return student.withdrawal_date ? student.withdrawal_date <= date : false;
-}
 
 function startTime(enrollment, dayName, classSettings) {
     const code = classCode(enrollment);
