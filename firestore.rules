@@ -1079,16 +1079,6 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // [Exam] 정답표 — exams 와 분리된 재사용 가능한 엔티티
-    // =========================================================================
-    match /answer_keys/{keyId} {
-      allow read: if isAuthorized();
-      allow create: if isAuthorized();
-      allow update: if isAuthorized();
-      allow delete: if false;
-    }
-
-    // =========================================================================
     // [Exam] 채점 결과
     // =========================================================================
     match /results/{examId} {
@@ -1127,6 +1117,14 @@ service cloud.firestore {
     match /exam_templates/{templateId} {
       allow read: if isAuthorized();
       allow write: if isAuthorized();
+    }
+
+    // =========================================================================
+    // [Exam] 비동기 검수/OCR job — 워커(Admin SDK)가 write, 생성자만 read
+    // =========================================================================
+    match /exam_review_jobs/{jobId} {
+      allow read: if isAuthorized() && resource.data.createdBy == request.auth.uid;
+      allow write: if false;
     }
 
     // =========================================================================
