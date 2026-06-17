@@ -5,6 +5,7 @@ import { signInWithGoogle, logout } from '../../auth.js';
 import { useStudents, useMessageDelivery } from '../dashboard/hooks/useFirestore.js';
 import MessageDeliverySummary from '../dashboard/components/MessageDeliverySummary.jsx';
 import DirectSmsCard from './components/DirectSmsCard.jsx';
+import BulkSendCard from './components/BulkSendCard.jsx';
 import ErrorBoundary from '../dashboard/components/ErrorBoundary.jsx';
 
 export default function App() {
@@ -69,7 +70,7 @@ export default function App() {
             <MessageDeliverySummary data={msgDelivery} students={students} loading={msgLoading} onReload={reloadMsg} />
           </ErrorBoundary>
         </section>
-        {/* ②대용량 발송: Plan 2 */}
+        <BulkSendCard students={students} />
         <DirectSmsCard />
       </div>
     </div>
