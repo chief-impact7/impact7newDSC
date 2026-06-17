@@ -1038,6 +1038,13 @@ export async function sendDirectMessage(payload) {
   return res.data;
 }
 
+// 정보성 대용량 발송(메시지 센터 ②블록, 직원 권한).
+export async function createBulkMessage(payload) {
+  const callable = httpsCallable(functions, 'createBulkMessage');
+  const res = await callable(payload);
+  return res.data;
+}
+
 // 학생별 발송 내역(message_logs 최신순).
 export async function getStudentMessages(studentId) {
   const callable = httpsCallable(functions, 'getStudentMessages');
