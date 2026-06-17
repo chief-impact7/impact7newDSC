@@ -29,6 +29,14 @@ const RECIPIENT_OPTIONS = [
   { field: 'other', label: '기타', key: 'other_phone' },
 ];
 
+// 등하원 빠른 발송 — 현재 시각으로 즉시 알림톡(parent_notice 템플릿 arrival/departure/out/return).
+const QUICK_ACTIONS = [
+  { key: 'arrival', label: '등원' },
+  { key: 'departure', label: '귀가' },
+  { key: 'out', label: '외출' },
+  { key: 'return', label: '귀원' },
+];
+
 const PROMO_PLACEHOLDER = '(광고)[임팩트세븐학원]\n\n안내 내용을 입력하세요.\n\n무료수신거부 080-000-0000';
 
 // deps: { getStudent(id) → {name, student_phone, parent_phone_*, other_phone}, toast(msg, type), readonly }
@@ -42,6 +50,15 @@ function formatPhone(v) {
   if (d.length === 11) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
   if (d.length === 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
   return d;
+}
+
+// 현재 시각(KST 가정 — DSC 사용자 브라우저)을 '오전/오후 h:mm'으로. 등하원 #{시각} 변수값.
+function nowTimeKST() {
+  const d = new Date();
+  const h = d.getHours();
+  const ap = h < 12 ? '오전' : '오후';
+  const h12 = h % 12 || 12;
+  return `${ap} ${h12}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 export function renderMessageTab(studentId) {
@@ -102,12 +119,19 @@ function renderForm(studentId, hasRecipient, readonly) {
   if (_mode === 'notice') {
     const opts = Object.entries(NOTICE_TEMPLATES)
       .map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join('');
+    const quickBtns = QUICK_ACTIONS.map((q) =>
+      `<button type="button" class="btn msg-quick" data-key="${escAttr(q.key)}" style="background:#006241;color:#fff;" ${dis}>${esc(q.label)}</button>`,
+    ).join('');
     form.innerHTML = `
+      <div style="margin-bottom:6px;color:#555;">등하원 빠른 발송 (현재 시각)</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">${quickBtns}</div>
+      <hr style="border:none;border-top:1px solid #eee;margin:0 0 14px;">
       <label style="display:block;margin-bottom:6px;">안내 종류</label>
       <select id="msg-template" class="field-input" style="margin-bottom:12px;">${opts}</select>
       <div id="msg-vars"></div>
       <button type="button" id="msg-send" class="btn btn-primary" style="margin-top:12px;" ${dis}>알림톡 발송</button>
     `;
+    form.querySelectorAll('.msg-quick').forEach((b) => b.addEventListener('click', () => sendQuick(studentId, b.dataset.key)));
     const sel = document.getElementById('msg-template');
     const renderVars = () => {
       const def = NOTICE_TEMPLATES[sel.value];
@@ -127,6 +151,20 @@ function renderForm(studentId, hasRecipient, readonly) {
     `;
     document.getElementById('msg-send').addEventListener('click', () => sendPromo(studentId));
   }
+}
+
+// 등하원 빠른 발송 — 현재 시각으로 즉시. 의도적 반복(등원→귀가 등)이 가능하므로 멱등키는 매번 새로 발급(더블클릭만 _sending으로 차단).
+async function sendQuick(studentId, templateKey) {
+  if (_sending) return;
+  await doSend(
+    () => sendParentNotice({
+      studentId, templateKey,
+      variables: { 시각: nowTimeKST() },
+      recipientField: _recipientField,
+      requestId: `${templateKey}_${studentId}_${Date.now()}`,
+    }),
+    '알림톡 발송을 요청했습니다.',
+  );
 }
 
 async function sendNotice(studentId, sel) {
