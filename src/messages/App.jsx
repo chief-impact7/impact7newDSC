@@ -5,6 +5,7 @@ import { signInWithGoogle, logout } from '../../auth.js';
 import { useStudents, useMessageDelivery } from '../dashboard/hooks/useFirestore.js';
 import MessageDeliverySummary from '../dashboard/components/MessageDeliverySummary.jsx';
 import DirectSmsCard from './components/DirectSmsCard.jsx';
+import ErrorBoundary from '../dashboard/components/ErrorBoundary.jsx';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -57,14 +58,16 @@ export default function App() {
         <div className="dash-header-right">
           <span className="dash-user-email">{(user.email || '').replace(/@gw\.impact7\.kr$/i, '@impact7.kr')}</span>
           <button className="dash-avatar" onClick={() => logout().catch(() => {})}>
-            {user.email[0].toUpperCase()}
+            {(user.email || '?')[0].toUpperCase()}
           </button>
         </div>
       </header>
 
       <div style={{ padding: '24px' }}>
         <section className="mc-section">
-          <MessageDeliverySummary data={msgDelivery} students={students} loading={msgLoading} onReload={reloadMsg} />
+          <ErrorBoundary>
+            <MessageDeliverySummary data={msgDelivery} students={students} loading={msgLoading} onReload={reloadMsg} />
+          </ErrorBoundary>
         </section>
         {/* ②대용량 발송: Plan 2 */}
         <DirectSmsCard />

@@ -25,11 +25,14 @@ export default function DirectSmsCard() {
     setSending(true); setMsg('');
     try {
       const payload = { recipients, text, requestId: reqIdRef.current };
-      if (when === 'schedule') payload.scheduledAt = scheduledAt.replace('T', ' ') + ':00';
+      if (when === 'schedule') payload.scheduledAt = scheduledAt.slice(0, 16).replace('T', ' ') + ':00';
       const res = await sendDirectMessage(payload);
-      if (res.duplicate) setMsg('이미 발송된 요청입니다.');
-      else setMsg(`${res.queued}건 발송 접수${res.invalid?.length ? ` · 무효 번호 ${res.invalid.length}건 제외` : ''}`);
-      setRecipients(''); setText(''); resetReqId();
+      if (res.duplicate) {
+        setMsg('이미 발송된 요청입니다.');
+      } else {
+        setMsg(`${res.queued}건 발송 접수${res.invalid?.length ? ` · 무효 번호 ${res.invalid.length}건 제외` : ''}`);
+        setRecipients(''); setText(''); resetReqId();
+      }
     } catch (e) {
       setMsg('발송 실패: ' + (e?.message || e));
     } finally {
@@ -60,7 +63,7 @@ export default function DirectSmsCard() {
                 <button className={when === 'schedule' ? 'on' : ''} onClick={() => setWhen('schedule')}>예약</button>
               </div>
               {when === 'schedule' && (
-                <input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />
+                <input type="datetime-local" value={scheduledAt} onChange={(e) => { setScheduledAt(e.target.value); resetReqId(); }} />
               )}
               <button className="mc-send" style={{ marginLeft: 'auto' }} disabled={sending} onClick={onSend}>
                 {sending ? '발송 중…' : '발송'}
