@@ -1031,6 +1031,13 @@ export async function createPromoCampaign(payload) {
   return res.data;
 }
 
+// 학생별 발송 내역(message_logs 최신순).
+export async function getStudentMessages(studentId) {
+  const callable = httpsCallable(functions, 'getStudentMessages');
+  const res = await callable({ studentId });
+  return res.data;
+}
+
 // ─── AI 자동화 설정 (automation_settings/student_report) ──────────────────────
 // director 등급 이상만 read/write 가능 (rules: canRunAiBatch). 문서 없으면 null → UI 기본값.
 // 문서 경로/필드/콜러블명은 배포된 functions-shared 백엔드 계약에 맞춘다.

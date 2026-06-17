@@ -2,7 +2,7 @@
 // 수신 대상(학생/학부모1/학부모2/기타) 선택. 대규모/다수 발송은 별도 화면.
 // 권한·광고 규제는 서버 callable이 검증한다.
 
-import { sendParentNotice, createPromoCampaign } from './data-layer.js';
+import { sendParentNotice, createPromoCampaign, getStudentMessages } from './data-layer.js';
 import { esc, escAttr } from './ui-utils.js';
 
 let _deps = {};
@@ -38,6 +38,9 @@ const QUICK_ACTIONS = [
 ];
 
 const PROMO_PLACEHOLDER = '(광고)[임팩트세븐학원]\n\n안내 내용을 입력하세요.\n\n무료수신거부 080-000-0000';
+
+const KIND_LABEL = { attendance: '출결', parent_notice: '안내', promo: '홍보' };
+const CHANNEL_LABEL = { kakao: '알림톡', sms: 'SMS', lms: 'LMS', mms: 'MMS' };
 
 // deps: { getStudent(id) → {name, student_phone, parent_phone_*, other_phone}, toast(msg, type), readonly }
 export function initMessageCardDeps(deps) { _deps = deps; }
@@ -93,6 +96,7 @@ export function renderMessageTab(studentId) {
         <button type="button" class="btn msg-mode-btn" data-mode="promo">홍보(광고)</button>
       </div>
       <div id="msg-form"></div>
+      <div id="msg-history" style="margin-top:18px;"></div>
     </div>
   `;
   el.querySelectorAll('input[name="msg-recipient"]').forEach((r) => {
@@ -102,6 +106,45 @@ export function renderMessageTab(studentId) {
     b.addEventListener('click', () => { _mode = b.dataset.mode; renderForm(studentId, hasRecipient, readonly); });
   });
   renderForm(studentId, hasRecipient, readonly);
+  loadHistory(studentId);
+}
+
+function formatLogTime(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function renderHistoryItem(it) {
+  const ok = it.status === 'sent';
+  const statusTxt = ok ? '성공' : '실패';
+  const color = ok ? '#00754A' : '#c82014';
+  const left = `${esc(KIND_LABEL[it.kind] || it.kind || '')} · ${esc(CHANNEL_LABEL[it.channel] || it.channel || '-')}`;
+  return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0efea;font-size:13px;">
+    <span>${left}</span>
+    <span><span style="color:${color};">${esc(statusTxt)}</span> <span style="color:#999;">${esc(formatLogTime(it.createdAt))}</span></span>
+  </div>`;
+}
+
+async function loadHistory(studentId) {
+  const box = document.getElementById('msg-history');
+  if (!box) return;
+  box.innerHTML = '<div style="color:#888;font-size:13px;">발송 내역 불러오는 중…</div>';
+  try {
+    const { items } = await getStudentMessages(studentId);
+    if (!items || !items.length) {
+      box.innerHTML = '<div style="color:#888;font-size:13px;">발송 내역이 없습니다.</div>';
+      return;
+    }
+    box.innerHTML = `<div style="font-weight:600;margin-bottom:8px;">최근 발송 내역</div>${items.map(renderHistoryItem).join('')}`;
+  } catch (err) {
+    box.innerHTML = `<div style="color:#c82014;font-size:13px;">내역 조회 실패: ${esc(err?.message || '')}</div>`;
+  }
+}
+
+// 발송은 워커가 비동기로 처리하므로 잠시 뒤 내역을 새로고침한다.
+function scheduleHistoryReload(studentId) {
+  setTimeout(() => loadHistory(studentId), 2500);
 }
 
 function renderForm(studentId, hasRecipient, readonly) {
@@ -164,6 +207,7 @@ async function sendQuick(studentId, templateKey) {
       requestId: `${templateKey}_${studentId}_${Date.now()}`,
     }),
     '알림톡 발송을 요청했습니다.',
+    () => scheduleHistoryReload(studentId),
   );
 }
 
@@ -176,7 +220,7 @@ async function sendNotice(studentId, sel) {
   await doSend(
     () => sendParentNotice({ studentId, templateKey, variables, recipientField: _recipientField, requestId: _noticeReqId }),
     '알림톡 발송을 요청했습니다.',
-    () => { _noticeReqId = null; },
+    () => { _noticeReqId = null; scheduleHistoryReload(studentId); },
   );
 }
 
@@ -191,7 +235,7 @@ async function sendPromo(studentId) {
       studentIds: [studentId], recipientField: _recipientField, requestId: _promoReqId,
     }),
     '브랜드 메시지 발송을 요청했습니다.',
-    () => { _promoReqId = null; },
+    () => { _promoReqId = null; scheduleHistoryReload(studentId); },
   );
 }
 
