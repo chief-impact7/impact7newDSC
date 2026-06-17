@@ -1031,6 +1031,13 @@ export async function createPromoCampaign(payload) {
   return res.data;
 }
 
+// 임의 번호 정보성 SMS 즉석 발송(메시지 센터 ③블록).
+export async function sendDirectMessage(payload) {
+  const callable = httpsCallable(functions, 'sendDirectMessage');
+  const res = await callable(payload);
+  return res.data;
+}
+
 // 학생별 발송 내역(message_logs 최신순).
 export async function getStudentMessages(studentId) {
   const callable = httpsCallable(functions, 'getStudentMessages');
