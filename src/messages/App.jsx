@@ -4,6 +4,7 @@ import { auth, dataAuthReady } from '../../firebase-config.js';
 import { signInWithGoogle, logout } from '../../auth.js';
 import { useStudents, useMessageDelivery } from '../dashboard/hooks/useFirestore.js';
 import MessageDeliverySummary from '../dashboard/components/MessageDeliverySummary.jsx';
+import DirectSmsCard from './components/DirectSmsCard.jsx';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -66,7 +67,7 @@ export default function App() {
           <MessageDeliverySummary data={msgDelivery} students={students} loading={msgLoading} onReload={reloadMsg} />
         </section>
         {/* ②대용량 발송: Plan 2 */}
-        {/* ③임의 즉석 SMS: Task 9 */}
+        <DirectSmsCard />
       </div>
     </div>
   );
