@@ -1016,6 +1016,21 @@ export async function generateStudentReportAi(studentId) {
   return res.data;
 }
 
+// ─── 학생 상세 '메시지' 탭: 개별 발송 ─────────────────────────────────────────
+// 정보성 안내(알림톡 템플릿). 동의·야간 제한 없음. 서버에서 직원 권한 검증.
+export async function sendParentNotice(payload) {
+  const callable = httpsCallable(functions, 'sendParentNotice');
+  const res = await callable(payload);
+  return res.data;
+}
+
+// 개별 홍보(브랜드 메시지). studentIds 1명으로 캠페인 재사용. 서버에서 원장 권한·광고 규제 검증.
+export async function createPromoCampaign(payload) {
+  const callable = httpsCallable(functions, 'createPromoCampaign');
+  const res = await callable(payload);
+  return res.data;
+}
+
 // ─── AI 자동화 설정 (automation_settings/student_report) ──────────────────────
 // director 등급 이상만 read/write 가능 (rules: canRunAiBatch). 문서 없으면 null → UI 기본값.
 // 문서 경로/필드/콜러블명은 배포된 functions-shared 백엔드 계약에 맞춘다.

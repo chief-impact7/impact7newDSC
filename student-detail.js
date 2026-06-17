@@ -67,6 +67,7 @@ export function initStudentDetailDeps(deps) {
 // ─── Module-local state ─────────────────────────────────────────────────────
 let _lastRenderedStudentId = null;
 let _renderConsultationFn = null;
+let _renderMessageFn = null;
 
 // ─── 재원기간 (tenure) ───────────────────────────────────────────────────────
 // history_logs에서 공유 deriveTenure로 파생해 헤더에 표시 (DB app.js와 동일 SSoT 로직).
@@ -399,6 +400,7 @@ export function switchDetailTab(tab) {
     document.getElementById('report-tab').style.display = tab === 'report' ? '' : 'none';
     document.getElementById('score-tab').style.display = tab === 'score' ? '' : 'none';
     document.getElementById('consultation-tab').style.display = tab === 'consultation' ? '' : 'none';
+    document.getElementById('message-tab').style.display = tab === 'message' ? '' : 'none';
     if (tab === 'score') loadScoreCard();
     if (tab === 'report') {
         if (state.selectedStudentId) _loadReportOrHistoryCard(state.selectedStudentId);
@@ -431,6 +433,21 @@ export function switchDetailTab(tab) {
             });
             _renderConsultationFn = renderConsultationTab;
             renderConsultationTab(state.selectedStudentId);
+        });
+    }
+    if (tab === 'message') {
+        if (_renderMessageFn) {
+            _renderMessageFn(state.selectedStudentId);
+            return;
+        }
+        import('./message-card.js').then(({ renderMessageTab, initMessageCardDeps }) => {
+            initMessageCardDeps({
+                getStudent: (id) => findStudent(id),
+                toast: (msg, type) => showToast(msg, type),
+                readonly: window.READ_ONLY === true,
+            });
+            _renderMessageFn = renderMessageTab;
+            renderMessageTab(state.selectedStudentId);
         });
     }
 }
