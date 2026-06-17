@@ -1,0 +1,13 @@
+.mc-section { margin-bottom: 18px; }
+.mc-section-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 800; margin: 0 0 12px; }
+.mc-tag { font-size: 11px; font-weight: 700; color: #fff; background: #5d6b64; border-radius: 20px; padding: 2px 9px; }
+.mc-direct { display: grid; grid-template-columns: 1fr 1.3fr; gap: 14px; }
+.mc-field-label { color: #7c8a83; font-size: 12px; margin: 0 0 3px; }
+.mc-textarea { width: 100%; min-height: 70px; border: 1px solid #e3e8e5; border-radius: 8px; padding: 9px; font: inherit; resize: vertical; }
+.mc-seg { display: flex; gap: 6px; }
+.mc-seg button { font-size: 12px; border: 1px solid #e3e8e5; border-radius: 7px; padding: 5px 11px; background: #fff; cursor: pointer; }
+.mc-seg button.on { background: #0b7a52; color: #fff; border-color: #0b7a52; }
+.mc-send { height: 38px; border: 0; border-radius: 9px; background: #0b7a52; color: #fff; font-weight: 800; padding: 0 16px; cursor: pointer; }
+.mc-send:disabled { opacity: .55; cursor: default; }
+.mc-note { font-size: 12px; color: #5d6b64; background: #fff8ea; border: 1px solid #f0e2bf; border-radius: 8px; padding: 8px 11px; }
+@media (max-width: 760px) { .mc-direct { grid-template-columns: 1fr; } }

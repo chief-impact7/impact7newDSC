@@ -13,6 +13,7 @@ export default defineConfig({
                 dashboard: resolve(__dirname, 'dashboard.html'),
                 classSetup: resolve(__dirname, 'class-setup.html'),
                 checkin: resolve(__dirname, 'checkin.html'),
+                messages: resolve(__dirname, 'messages.html'),
             },
         },
     },
