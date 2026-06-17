@@ -64,8 +64,8 @@ export default function App() {
         </div>
       </header>
 
-      <div style={{ padding: '24px' }}>
-        <section className="mc-section">
+      <div className="mc-wrap">
+        <section className="mc-section mc-delivery-section">
           <ErrorBoundary>
             <MessageDeliverySummary data={msgDelivery} students={students} loading={msgLoading} onReload={reloadMsg} />
           </ErrorBoundary>

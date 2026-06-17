@@ -64,8 +64,8 @@ export default function BulkSendCard({ students = [] }) {
 
   return (
     <section className="mc-section">
-      <div className="mc-section-title">📣 대용량 발송 <span className="mc-tag" style={{ background: '#0a6e49' }}>필터·검색·누적</span></div>
-      <div className="dash-card">
+      <div className="mc-card">
+        <div className="mc-section-title">📣 대용량 발송 <span className="mc-tag" style={{ background: '#0a6e49' }}>필터·검색·누적</span></div>
         <div className="bulk-split">
           <div className="bulk-left">
             <div className="bulk-filters">

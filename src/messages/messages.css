@@ -1,28 +1,43 @@
+.mc-wrap { max-width: 1180px; margin: 0 auto; padding: 20px; }
+
+/* MessageDeliverySummary가 내부적으로 dash-card를 렌더링하므로 래퍼 없이 mc-card와 동일한 카드 외형을 주입 */
+.mc-card,
+.mc-delivery-section .dash-card { border: 1px solid #e3e8e5; border-radius: 13px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.mc-card { background: #fff; padding: 16px; }
 .mc-section { margin-bottom: 18px; }
+
 .mc-section-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 800; margin: 0 0 12px; }
 .mc-tag { font-size: 11px; font-weight: 700; color: #fff; background: #5d6b64; border-radius: 20px; padding: 2px 9px; }
+
 .mc-direct { display: grid; grid-template-columns: 1fr 1.3fr; gap: 14px; }
+@media (max-width: 760px) { .mc-direct { grid-template-columns: 1fr; } }
+
 .mc-field-label { color: #7c8a83; font-size: 12px; margin: 0 0 3px; }
 .mc-textarea { width: 100%; min-height: 70px; border: 1px solid #e3e8e5; border-radius: 8px; padding: 9px; font: inherit; resize: vertical; }
+
 .mc-seg { display: flex; gap: 6px; }
-.mc-seg button { font-size: 12px; border: 1px solid #e3e8e5; border-radius: 7px; padding: 5px 11px; background: #fff; cursor: pointer; }
+.mc-seg button { font-size: 11.5px; border: 1px solid #e3e8e5; border-radius: 7px; padding: 4px 10px; background: #fff; cursor: pointer; font-family: inherit; }
 .mc-seg button.on { background: #0b7a52; color: #fff; border-color: #0b7a52; }
-.mc-send { height: 38px; border: 0; border-radius: 9px; background: #0b7a52; color: #fff; font-weight: 800; padding: 0 16px; cursor: pointer; }
+
+.mc-send { height: 39px; border: 0; border-radius: 9px; background: #0b7a52; color: #fff; font-weight: 800; font-size: 14px; padding: 0 16px; cursor: pointer; font-family: inherit; }
 .mc-send:disabled { opacity: .55; cursor: default; }
+
 .mc-note { font-size: 12px; color: #5d6b64; background: #fff8ea; border: 1px solid #f0e2bf; border-radius: 8px; padding: 8px 11px; }
-@media (max-width: 760px) { .mc-direct { grid-template-columns: 1fr; } }
+
 .bulk-split { display: grid; grid-template-columns: 1.2fr 1fr; gap: 0; border: 1px solid #e3e8e5; border-radius: 11px; overflow: hidden; }
 .bulk-left { padding: 14px; border-right: 1px solid #e3e8e5; }
 .bulk-right { padding: 14px; background: #fbfdfc; }
 .bulk-filters { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
-.bulk-filters select { border: 1px solid #e3e8e5; border-radius: 7px; padding: 5px 9px; }
-.bulk-cart { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; background: #e8f5ef; border: 1px solid #cfe9df; border-radius: 8px; padding: 8px 11px; font-weight: 700; color: #0a6e49; }
-.bulk-clear { border: 0; background: none; color: #7c8a83; cursor: pointer; font-size: 12px; }
+.bulk-filters select { border: 1px solid #e3e8e5; border-radius: 7px; padding: 5px 9px; font: inherit; }
+.bulk-cart { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; background: #e8f5ef; border: 1px solid #cfe9df; border-radius: 8px; padding: 8px 11px; font-size: 12.5px; font-weight: 700; color: #0a6e49; }
+.bulk-clear { border: 0; background: none; color: #7c8a83; cursor: pointer; font-size: 11.5px; font-family: inherit; }
 .bulk-picked { list-style: none; margin: 8px 0 0; padding: 0; max-height: 150px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 6px; }
 .bulk-picked li { display: flex; align-items: center; gap: 4px; background: #fff; border: 1px solid #e3e8e5; border-radius: 16px; padding: 3px 5px 3px 10px; font-size: 12.5px; }
 .bulk-picked li button { border: 0; background: none; cursor: pointer; color: #99a3ad; font-size: 14px; }
 .bulk-more { color: #7c8a83; font-size: 12px; }
+
 .mc-search { display: flex; gap: 7px; margin-bottom: 6px; }
 .mc-search input { flex: 1; border: 1px solid #e3e8e5; border-radius: 7px; padding: 5px 9px; font: inherit; }
-.mc-search button { border: 1px solid #0b7a52; border-radius: 7px; padding: 5px 11px; background: #fff; color: #0b7a52; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.mc-search button { border: 1px solid #0b7a52; border-radius: 7px; padding: 5px 11px; background: #0b7a52; color: #fff; font-weight: 700; cursor: pointer; white-space: nowrap; font-family: inherit; }
+
 @media (max-width: 760px) { .bulk-split { grid-template-columns: 1fr; } .bulk-left { border-right: 0; border-bottom: 1px solid #e3e8e5; } }
