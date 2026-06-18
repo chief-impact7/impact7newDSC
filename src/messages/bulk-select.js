@@ -1,4 +1,4 @@
-import { studentGradeKey, branchFromStudent, enrollmentCode } from '../shared/firestore-helpers.js';
+import { studentGradeKey, branchFromStudent, enrollmentCode, allClassCodes } from '../shared/firestore-helpers.js';
 import { studentSearchTerms } from '@impact7/shared/student-label';
 import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 
@@ -16,7 +16,8 @@ export function filterStudents(students, criteria = {}) {
       const nameMatch = String(s.name ?? '').toLowerCase().includes(needle);
       const terms = studentSearchTerms(s);
       const termMatch = terms.some((t) => t.toLowerCase().includes(needle));
-      if (!nameMatch && !termMatch) return false;
+      const classMatch = allClassCodes(s).some((c) => c.toLowerCase().includes(needle));
+      if (!nameMatch && !termMatch && !classMatch) return false;
     }
     return true;
   });

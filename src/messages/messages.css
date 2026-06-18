@@ -31,6 +31,9 @@
 .bulk-filters select { border: 1px solid #e3e8e5; border-radius: 7px; padding: 5px 9px; font: inherit; }
 .bulk-cart { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; background: #e8f5ef; border: 1px solid #cfe9df; border-radius: 8px; padding: 8px 11px; font-size: 12.5px; font-weight: 700; color: #0a6e49; }
 .bulk-clear { border: 0; background: none; color: #7c8a83; cursor: pointer; font-size: 11.5px; font-family: inherit; }
+.bulk-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 0; }
+.bulk-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; background: #0a6e49; color: #fff; border-radius: 20px; padding: 3px 6px 3px 10px; }
+.bulk-chip button { border: 0; background: none; color: #fff; cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; font-family: inherit; }
 .bulk-picked { list-style: none; margin: 8px 0 0; padding: 0; max-height: 150px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 6px; }
 .bulk-picked li { display: flex; align-items: center; gap: 4px; background: #fff; border: 1px solid #e3e8e5; border-radius: 16px; padding: 3px 5px 3px 10px; font-size: 12.5px; }
 .bulk-picked li button { border: 0; background: none; cursor: pointer; color: #99a3ad; font-size: 14px; }

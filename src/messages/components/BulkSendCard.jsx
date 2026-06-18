@@ -4,13 +4,15 @@ import GradeFilter from '../../dashboard/components/GradeFilter.jsx';
 import { createBulkMessage, createPromoCampaign } from '../../../data-layer.js';
 
 function newReqId() { return 'bulk-' + Math.random().toString(36).slice(2) + '-' + performance.now().toString(36); }
+function newChipId() { return 'chip-' + Math.random().toString(36).slice(2) + '-' + performance.now().toString(36); }
 
 export default function BulkSendCard({ students = [] }) {
   const [branch, setBranch] = useState('');
   const [grades, setGrades] = useState(new Set());
   const [status, setStatus] = useState('all'); // all|enrolled|non
   const [q, setQ] = useState('');
-  const [picked, setPicked] = useState(() => new Map()); // id -> student (누적)
+  const [picked, setPicked] = useState(() => new Map()); // id -> {student, sources:Set} (누적, 출처 refcount)
+  const [searchChips, setSearchChips] = useState([]); // {id, label, criteria} 누적 검색 이력
   const [recipientField, setRecipientField] = useState('parent_1');
   const [kind, setKind] = useState('info'); // 'info'(정보성) | 'promo'(광고)
   const [title, setTitle] = useState('');
@@ -27,15 +29,41 @@ export default function BulkSendCard({ students = [] }) {
     [students, branch, grades, status, q],
   );
 
-  function addMatches() {
+  // 현재 검색어(+필터)로 매칭된 학생을 누적에 추가하고, 검색어는 칩으로 쌓는다(제거형 아닌 추가형).
+  // 각 학생은 자신을 추가한 출처(칩 id 또는 'manual') 집합을 들고, 칩 제거 시 그 출처만 빼 겹침을 보존한다.
+  function commitSearch() {
+    const token = q.trim();
+    const criteria = { branch, grades: new Set(grades), status, q: token };
+    const found = token ? filterStudents(students, criteria) : matches;
+    if (!found.length) { setMsg(token ? `"${token}" 검색 결과 없음` : '추가할 대상이 없습니다.'); return; }
+    const source = token ? newChipId() : 'manual';
     setPicked((prev) => {
       const next = new Map(prev);
-      for (const s of matches) next.set(s.id, s);
+      for (const s of found) {
+        const cur = next.get(s.id);
+        const sources = new Set(cur ? cur.sources : null);
+        sources.add(source);
+        next.set(s.id, { student: s, sources });
+      }
       return next;
     });
+    if (token) setSearchChips((prev) => [...prev, { id: source, label: token, criteria }]);
+    setQ(''); setMsg(''); resetReqId();
+  }
+  function removeChip(id) {
+    setPicked((prev) => {
+      const next = new Map(prev);
+      for (const [sid, entry] of next) {
+        if (!entry.sources.has(id)) continue;
+        if (entry.sources.size === 1) next.delete(sid);
+        else { const sources = new Set(entry.sources); sources.delete(id); next.set(sid, { ...entry, sources }); }
+      }
+      return next;
+    });
+    setSearchChips((prev) => prev.filter((c) => c.id !== id));
     resetReqId();
   }
-  function clearPicked() { setPicked(new Map()); resetReqId(); }
+  function clearPicked() { setPicked(new Map()); setSearchChips([]); resetReqId(); }
   function removeOne(id) { setPicked((prev) => { const n = new Map(prev); n.delete(id); return n; }); resetReqId(); }
 
   async function onSend() {
@@ -78,15 +106,29 @@ export default function BulkSendCard({ students = [] }) {
               <GradeFilter value={grades} onChange={setGrades} />
             </div>
             <div className="mc-search">
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="학교·이름 검색(예: 월촌중)" />
-              <button onClick={addMatches}>검색 결과 {matches.length}명 추가</button>
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.key === 'Enter' || e.key === 'Tab') && q.trim()) { e.preventDefault(); commitSearch(); }
+                }}
+                placeholder="이름·학교·반 검색 후 엔터(예: 노동현, 월촌중1, pa101)"
+              />
+              <button onClick={commitSearch}>검색 결과 {matches.length}명 추가</button>
             </div>
+            {searchChips.length > 0 && (
+              <div className="bulk-chips">
+                {searchChips.map((c) => (
+                  <span key={c.id} className="bulk-chip">{c.label}<button onClick={() => removeChip(c.id)}>×</button></span>
+                ))}
+              </div>
+            )}
             <div className="bulk-cart">
               <span>누적 대상 {picked.size}명</span>
               <button className="bulk-clear" onClick={clearPicked}>비우기</button>
             </div>
             <ul className="bulk-picked">
-              {[...picked.values()].slice(0, 50).map((s) => (
+              {[...picked.values()].slice(0, 50).map(({ student: s }) => (
                 <li key={s.id}><span>{s.name}</span><button onClick={() => removeOne(s.id)}>×</button></li>
               ))}
               {picked.size > 50 && <li className="bulk-more">… 외 {picked.size - 50}명</li>}

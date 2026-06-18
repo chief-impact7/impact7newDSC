@@ -17,6 +17,15 @@ describe('filterStudents', () => {
     expect(out.map((s) => s.name)).toEqual(['김철수']);
   });
 
+  it('filters by search query (class code via allClassCodes)', () => {
+    const list = [
+      S({ name: 'A', enrollments: [{ level_symbol: 'PA', class_number: '101' }] }),
+      S({ name: 'B', enrollments: [{ level_symbol: 'PA', class_number: '202' }] }),
+    ];
+    const out = filterStudents(list, { q: 'pa101' });
+    expect(out.map((s) => s.name)).toEqual(['A']);
+  });
+
   it('returns all when no criteria', () => {
     const list = [S(), S({ name: 'B' })];
     expect(filterStudents(list, {})).toHaveLength(2);

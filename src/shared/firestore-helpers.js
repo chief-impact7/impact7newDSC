@@ -9,7 +9,7 @@ import {
 } from '@impact7/shared/student-label';
 import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 import { db } from '../../firebase-config.js';
-import { enrollmentCode, branchFromStudent } from '../../student-core.js';
+import { enrollmentCode, branchFromStudent, allClassCodes } from '../../student-core.js';
 
 // 학부별 학기 정의 (impact7db.web.app 설정과 동일하게 유지)
 export const LEVEL_SEMESTERS = {
@@ -316,7 +316,7 @@ function normalizeEnrollments(s) {
     return [e];
 }
 
-export { enrollmentCode };
+export { enrollmentCode, allClassCodes };
 
 export const branchFromClassNumber = (num) => {
     const first = (num || '').trim()[0];

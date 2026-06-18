@@ -7,6 +7,7 @@ const GRADE_GROUPS = [
 ];
 
 // value: Set<string> (예: {'초6','중1'}), onChange: (Set) => void
+// 학부 버튼 3단 토글: 1번=학년 선택 드롭다운, 2번=학부 전체 선택, 3번=학부 전체 해제(→다시 1번)
 export default function GradeFilter({ value, onChange }) {
     const [openLevel, setOpenLevel] = useState(null);
     const ref = useRef(null);
@@ -27,6 +28,23 @@ export default function GradeFilter({ value, onChange }) {
         onChange(next);
     };
 
+    // value에서 파생: 선택0개+닫힘이면 드롭다운(1번), 전체선택이면 해제(3번), 그 외엔 전체선택(2번).
+    const cycleLevel = (level, short, grades) => {
+        const selected = grades.filter(g => value.has(short + g)).length;
+        if (selected === 0 && openLevel !== level) {
+            setOpenLevel(level);
+            return;
+        }
+        setOpenLevel(null);
+        const set = new Set(value);
+        const selectAll = selected !== grades.length;
+        grades.forEach(g => {
+            const key = short + g;
+            if (selectAll) set.add(key); else set.delete(key);
+        });
+        onChange(set);
+    };
+
     return (
         <div className="dash-grade-filter" ref={ref}>
             {GRADE_GROUPS.map(({ level, short, grades }) => {
@@ -36,7 +54,7 @@ export default function GradeFilter({ value, onChange }) {
                         <button
                             type="button"
                             className={`dash-grade-btn${active ? ' active' : ''}`}
-                            onClick={() => setOpenLevel(openLevel === level ? null : level)}
+                            onClick={() => cycleLevel(level, short, grades)}
                         >
                             {level}
                         </button>
