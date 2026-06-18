@@ -33,7 +33,7 @@ import {
 } from './student-helpers.js';
 import {
     initParentMessageDeps,
-    openParentMessageModal, regenerateParentMessage, copyParentMessage,
+    openParentMessageModal, regenerateParentMessage, copyParentMessage, sendParentMessage,
     switchParentMsgTab, togglePromptEditor, saveCustomPrompt, resetPromptToDefault
 } from './parent-message.js';
 import { initExportReportDeps, exportDailyReport } from './export-report.js';
@@ -204,6 +204,7 @@ window.state = state;
 window.openParentMessageModal = openParentMessageModal;
 window.regenerateParentMessage = regenerateParentMessage;
 window.copyParentMessage = copyParentMessage;
+window.sendParentMessage = sendParentMessage;
 window.switchParentMsgTab = switchParentMsgTab;
 window.togglePromptEditor = togglePromptEditor;
 window.saveCustomPrompt = saveCustomPrompt;

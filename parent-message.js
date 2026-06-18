@@ -6,6 +6,9 @@ import { geminiModel } from './firebase-ai.js';
 import { parseDateKST, getDayName } from './src/shared/firestore-helpers.js';
 import { esc, decodeHtmlEntities, formatTime12h, showSaveIndicator } from './ui-utils.js';
 import { enrollmentCode } from './student-helpers.js';
+import { sendDailyReport } from './data-layer.js';
+
+let _sendingReport = false;
 
 // ─── 의존성 주입 (daily-ops.js에서 init 호출) ──────────────────────────────
 let getStudentDomains, getStudentTestItems, getStudentChecklistStatus;
@@ -448,4 +451,36 @@ export function copyParentMessage() {
         console.error('클립보드 복사 실패:', err);
         alert('클립보드 복사에 실패했습니다.');
     });
+}
+
+// 일일 리포트 발송 — 친구면 정보형 BMS, 비친구면 가입 안내 SMS(서버가 분기). 수신 대상은 학부모1.
+export async function sendParentMessage() {
+    if (_sendingReport || !parentMsgStudentId) return;
+    const textEl = parentMsgMode === 'ai'
+        ? document.getElementById('parent-msg-text')
+        : document.getElementById('parent-msg-manual-text');
+    const content = textEl?.value?.trim();
+    if (!content) { alert('발송할 내용이 없습니다.'); return; }
+
+    const btn = document.getElementById('parent-msg-send-btn');
+    _sendingReport = true;
+    if (btn) btn.disabled = true;
+    try {
+        const res = await sendDailyReport({
+            studentId: parentMsgStudentId,
+            content,
+            recipientField: 'parent_1',
+            // 학생·날짜당 1회 멱등 — 같은 날 재클릭 시 서버가 duplicate 반환(중복 발송 차단).
+            requestId: `report_${parentMsgStudentId}_${state.selectedDate || ''}`,
+        });
+        if (res?.duplicate) alert('이미 발송된 요청입니다.');
+        else if (res?.joined) alert('카카오톡(브랜드메시지)으로 발송 접수되었습니다.');
+        else alert('학부모가 채널 미가입이라 가입 안내 문자를 발송했습니다.');
+    } catch (err) {
+        console.error('리포트 발송 실패:', err);
+        alert('발송 실패: ' + (err?.message || err));
+    } finally {
+        _sendingReport = false;
+        if (btn) btn.disabled = false;
+    }
 }

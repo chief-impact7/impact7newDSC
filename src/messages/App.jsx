@@ -6,6 +6,7 @@ import { useStudents, useMessageDelivery } from '../dashboard/hooks/useFirestore
 import MessageDeliverySummary from '../dashboard/components/MessageDeliverySummary.jsx';
 import DirectSmsCard from './components/DirectSmsCard.jsx';
 import BulkSendCard from './components/BulkSendCard.jsx';
+import ChannelFriendsCard from './components/ChannelFriendsCard.jsx';
 import ErrorBoundary from '../dashboard/components/ErrorBoundary.jsx';
 
 export default function App() {
@@ -71,6 +72,7 @@ export default function App() {
           </ErrorBoundary>
         </section>
         <BulkSendCard students={students} />
+        <ChannelFriendsCard students={students} />
         <DirectSmsCard />
       </div>
     </div>

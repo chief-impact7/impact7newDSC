@@ -1045,6 +1045,25 @@ export async function createBulkMessage(payload) {
   return res.data;
 }
 
+// 일일 학습 리포트 발송(직원 권한). 친구→정보형 BMS, 비친구→가입안내 SMS.
+export async function sendDailyReport(payload) {
+  const callable = httpsCallable(functions, 'sendDailyReport');
+  const res = await callable(payload);
+  return res.data;
+}
+
+// 카카오 채널 친구목록 업로드 동기화 / 조회(직원 권한).
+export async function syncChannelFriends(payload) {
+  const callable = httpsCallable(functions, 'syncChannelFriends');
+  const res = await callable(payload);
+  return res.data;
+}
+export async function getChannelFriends() {
+  const callable = httpsCallable(functions, 'getChannelFriends');
+  const res = await callable({});
+  return res.data;
+}
+
 // 학생별 발송 내역(message_logs 최신순).
 export async function getStudentMessages(studentId) {
   const callable = httpsCallable(functions, 'getStudentMessages');
