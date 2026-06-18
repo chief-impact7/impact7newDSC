@@ -275,9 +275,9 @@ export default function App() {
             <header className="dash-header">
                 <div className="dash-header-left">
                     <h1 className="dash-title">Impact7 DSC</h1>
-                    <span className="dash-subtitle">로그북</span>
-                    <a href="./" className="dash-link">입력 페이지</a>
-                    <a href="./messages.html" className="dash-link">메시지</a>
+                    <a href="./" className="dash-link" target="_blank" rel="noopener">DSC</a>
+                    <span className="dash-link active">로그북</span>
+                    <a href="./messages.html" className="dash-link" target="_blank" rel="noopener">메시지</a>
                 </div>
                 <div className="dash-header-right">
                     {Object.entries(currentSemesters).some(([, v]) => v) && (

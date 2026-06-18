@@ -52,9 +52,9 @@ export default function App() {
       <header className="dash-header">
         <div className="dash-header-left">
           <h1 className="dash-title">Impact7 DSC</h1>
-          <a href="./dashboard.html" className="dash-link">로그북</a>
-          <a href="./" className="dash-link">입력 페이지</a>
-          <span className="dash-subtitle">메시지</span>
+          <a href="./" className="dash-link" target="_blank" rel="noopener">DSC</a>
+          <a href="./dashboard.html" className="dash-link" target="_blank" rel="noopener">로그북</a>
+          <span className="dash-link active">메시지</span>
         </div>
         <div className="dash-header-right">
           <span className="dash-user-email">{(user.email || '').replace(/@gw\.impact7\.kr$/i, '@impact7.kr')}</span>

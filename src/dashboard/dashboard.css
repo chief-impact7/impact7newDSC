@@ -114,12 +114,14 @@ body {
 }
 .dash-link {
     font-size: 13px;
-    color: var(--primary);
+    color: var(--text-sec);
     text-decoration: none;
     border-left: 1px solid var(--border);
     padding-left: 12px;
 }
-.dash-link:hover { text-decoration: underline; }
+.dash-link:hover { text-decoration: underline; color: var(--primary); }
+.dash-link.active { color: var(--primary); font-weight: 700; cursor: default; }
+.dash-link.active:hover { text-decoration: none; }
 .dash-header-right {
     display: flex;
     align-items: center;
