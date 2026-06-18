@@ -48,14 +48,6 @@ export function initMessageCardDeps(deps) { _deps = deps; }
 
 function onlyDigits(v) { return String(v ?? '').replace(/\D/g, ''); }
 
-function formatPhone(v) {
-  const d = onlyDigits(v);
-  if (!d) return '';
-  if (d.length === 11) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
-  if (d.length === 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
-  return d;
-}
-
 // 현재 시각(KST 가정 — DSC 사용자 브라우저)을 '오전/오후 h:mm'으로. 등하원 #{시각} 변수값.
 function nowTimeKST() {
   const d = new Date();
@@ -80,17 +72,16 @@ export function renderMessageTab(studentId) {
   const hasRecipient = available.length > 0;
 
   const recipientRadios = available.map((o) =>
-    `<label style="display:inline-flex;align-items:center;gap:4px;margin:0 14px 6px 0;">
+    `<label style="display:inline-flex;align-items:center;gap:4px;margin:0;">
        <input type="radio" name="msg-recipient" value="${escAttr(o.field)}" ${o.field === _recipientField ? 'checked' : ''}>
-       ${esc(o.label)} <span style="color:#555;">${esc(formatPhone(student[o.key]))}</span>
+       ${esc(o.label)}
      </label>`,
   ).join('');
 
   el.innerHTML = `
     <div class="card" style="padding:16px;">
-      <h4 style="margin:0 0 12px;">메시지 발송 — ${esc(student.name || '')}</h4>
       ${hasRecipient
-        ? `<div style="margin-bottom:14px;"><div style="margin-bottom:6px;color:#555;">수신 대상</div>${recipientRadios}</div>`
+        ? `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:14px;"><span style="color:#555;">수신 대상</span>${recipientRadios}</div>`
         : '<div style="color:#c82014;margin-bottom:12px;">등록된 연락처가 없어 발송할 수 없습니다.</div>'}
       <div style="display:flex;gap:8px;margin-bottom:14px;">
         <button type="button" class="btn msg-mode-btn" data-mode="notice">정보성 안내</button>

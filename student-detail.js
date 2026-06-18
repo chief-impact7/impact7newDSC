@@ -1531,6 +1531,13 @@ export function renderStudentDetail(studentId) {
             _renderConsultationFn(studentId);
         }
     }
+    const messageTabEl = document.getElementById('message-tab');
+    if (messageTabEl) {
+        messageTabEl.style.display = state.detailTab === 'message' ? '' : 'none';
+        if (studentChanged && studentId && state.detailTab === 'message' && _renderMessageFn) {
+            _renderMessageFn(studentId);
+        }
+    }
 
     // 결석대장 카드 expanded 상태 복원
     _restoreExpandedAbsenceIndices(expandedAbsenceIndices);
