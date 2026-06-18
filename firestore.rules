@@ -1232,9 +1232,26 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // 태블릿 출결 이벤트 로그 — 서버(Admin SDK)·tabletCheckin callable 전용
+    match /attendance_events/{docId} {
+      allow read, write: if false;
+    }
+
+    // 키오스크 단말 정책(departure_policy) — 정책은 서버가 deviceId로 조회·적용
+    match /kiosk_devices/{deviceId} {
+      allow read, write: if false;
+    }
+
     // 메시지 발송 로그 — 대시보드 read 허용, 쓰기는 Admin SDK 전용
     match /message_logs/{id} {
       allow read: if isAuthorized();
+      allow write: if false;
+    }
+
+    // 홍보(광고) 캠페인 — 서버(createPromoCampaign callable) 전용 쓰기.
+    // 광고 발송 이력·대상은 민감하므로 read는 원장(isDirector)만.
+    match /promo_campaigns/{id} {
+      allow read: if isDirector();
       allow write: if false;
     }
 
