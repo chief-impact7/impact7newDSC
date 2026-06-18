@@ -15,6 +15,7 @@ import { formatDateKST } from '@impact7/shared/datetime';
 import { imeInputAttrs } from '@impact7/shared/ime-input';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { schoolLevelGradeLabel } from '@impact7/shared/student-label';
+import { ATTENDANCE_ACTIONS, normalizeAttendanceLabel } from '@impact7/shared/attendance-action';
 import { state, LEAVE_STATUSES } from './state.js';
 import {
     esc, escAttr, formatTime12h, renderTime12hSelect, oxDisplayClass,
@@ -220,18 +221,18 @@ export function getStudentChecklistStatus(studentId) {
         }
     }
 
-    // 7. 귀가
+    // 7. 하원
     items.push({
         key: 'departure',
-        label: '귀가',
-        done: rec.departure?.status === '귀가'
+        label: ATTENDANCE_ACTIONS.departure,
+        done: normalizeAttendanceLabel(rec.departure?.status) === ATTENDANCE_ACTIONS.departure
     });
 
     return items;
 }
 
 // 체크리스트 완료 캐시를 daily_records에 동기화(태블릿 하원 게이트용).
-// 귀가 항목 제외한 미완료가 0건이면 complete. 값이 바뀐 경우에만 저장(쓰기 폭주 방지).
+// 하원 항목 제외한 미완료가 0건이면 complete. 값이 바뀐 경우에만 저장(쓰기 폭주 방지).
 async function syncChecklistCache(studentId, items) {
     const pending = items.filter(i => !i.done && i.key !== 'departure').map(i => i.label);
     const complete = pending.length === 0;
@@ -254,7 +255,7 @@ function renderChecklistCard(studentId) {
 
     const rec = state.dailyRecords[studentId] || {};
     const departure = rec.departure || {};
-    const isDeparted = departure.status === '귀가';
+    const isDeparted = normalizeAttendanceLabel(departure.status) === ATTENDANCE_ACTIONS.departure;
 
     // Non-departure items that are not done
     const pendingItems = items.filter(i => !i.done && i.key !== 'departure');
@@ -265,19 +266,19 @@ function renderChecklistCard(studentId) {
         departureSection = `
             <button class="departure-btn departed" disabled>
                 <span class="material-symbols-outlined" style="font-size:16px;">check_circle</span>
-                귀가 완료 (${formatTime12h(departure.time || '')})
+                하원 완료 (${formatTime12h(departure.time || '')})
             </button>`;
     } else if (canDepart) {
         departureSection = `
             <button class="departure-btn ready" onclick="confirmDeparture('${escAttr(studentId)}')">
                 <span class="material-symbols-outlined" style="font-size:16px;">logout</span>
-                귀가 확인
+                하원 확인
             </button>`;
     } else {
         departureSection = `
             <button class="departure-btn not-ready" onclick="confirmDeparture('${escAttr(studentId)}')">
                 <span class="material-symbols-outlined" style="font-size:16px;">logout</span>
-                귀가 확인 (미완료 ${pendingItems.length}건)
+                하원 확인 (미완료 ${pendingItems.length}건)
             </button>`;
     }
 
@@ -328,7 +329,7 @@ export async function confirmDeparture(studentId) {
     showSaveIndicator('saving');
     try {
         const departure = {
-            status: '귀가',
+            status: ATTENDANCE_ACTIONS.departure,
             time: nowTimeStr(),
             confirmed_by: staffLabel(state.currentUser?.email),
             confirmed_at: new Date().toISOString()
@@ -349,7 +350,7 @@ export async function confirmDeparture(studentId) {
         renderListPanel();
         showSaveIndicator('saved');
     } catch (err) {
-        console.error('귀가 확인 실패:', err);
+        console.error('하원 확인 실패:', err);
         showSaveIndicator('error');
     }
 }

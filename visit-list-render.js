@@ -18,7 +18,7 @@ import {
     matchesBranchFilter, enrollmentCode
 } from './student-helpers.js';
 import {
-    todayStr, getDayName, studentShortLabel
+    todayStr, getDayName, studentShortLabel, ATTENDANCE_ACTIONS, normalizeAttendanceLabel
 } from './src/shared/firestore-helpers.js';
 import { staffLabel } from '@impact7/shared/staff-label';
 
@@ -563,10 +563,10 @@ export function renderDepartureCheckList() {
         );
     }
 
-    // 정렬: 미귀가 먼저, 그 안에서 진행률 높은순
+    // 정렬: 미하원 먼저, 그 안에서 진행률 높은순
     students.sort((a, b) => {
-        const depA = state.dailyRecords[a.docId]?.departure?.status === '귀가' ? 1 : 0;
-        const depB = state.dailyRecords[b.docId]?.departure?.status === '귀가' ? 1 : 0;
+        const depA = normalizeAttendanceLabel(state.dailyRecords[a.docId]?.departure?.status) === ATTENDANCE_ACTIONS.departure ? 1 : 0;
+        const depB = normalizeAttendanceLabel(state.dailyRecords[b.docId]?.departure?.status) === ATTENDANCE_ACTIONS.departure ? 1 : 0;
         if (depA !== depB) return depA - depB;
         const checkA = getStudentChecklistStatus(a.docId);
         const checkB = getStudentChecklistStatus(b.docId);
@@ -593,12 +593,12 @@ export function renderDepartureCheckList() {
         const doneCount = items.filter(i => i.done).length;
         const total = items.length;
         const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
-        const isDeparted = state.dailyRecords[s.docId]?.departure?.status === '귀가';
+        const isDeparted = normalizeAttendanceLabel(state.dailyRecords[s.docId]?.departure?.status) === ATTENDANCE_ACTIONS.departure;
         const isActive = s.docId === state.selectedStudentId ? 'active' : '';
 
         let statusTag = '';
         if (isDeparted) {
-            statusTag = '<span class="departure-status-tag departed">귀가</span>';
+            statusTag = '<span class="departure-status-tag departed">하원</span>';
         } else if (doneCount > 0) {
             statusTag = '<span class="departure-status-tag in-progress">진행중</span>';
         } else {

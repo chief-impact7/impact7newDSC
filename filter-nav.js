@@ -2,7 +2,7 @@
 // daily-ops.js에서 분리한 필터/내비게이션 UI (클러스터 1: 좌측 트리 + 칩)
 
 import { state, SV_SOURCE_MAP } from './state.js';
-import { getDayName, studentLevel } from './src/shared/firestore-helpers.js';
+import { getDayName, studentLevel, ATTENDANCE_ACTIONS, normalizeAttendanceLabel } from './src/shared/firestore-helpers.js';
 import {
     branchFromStudent, matchesBranchFilter, enrollmentCode, getActiveEnrollments,
     isWithdrawnAt, isOnLeaveAt
@@ -132,7 +132,7 @@ const COUNT_TOOLTIPS = {
     late: '지각 / 오늘 정규',
     absent: '결석 / 오늘 정규',
     other: '기타 / 오늘 정규',
-    departure_check: '귀가 완료 / 오늘 정규',
+    departure_check: '하원 완료 / 오늘 정규',
     naesin: '오늘 내신 인원',
     teukang: '오늘 특강 인원',
     sv_absence_makeup: '미시행 / 전체 일정',
@@ -174,7 +174,7 @@ export function renderSubFilters() {
                 { key: 'late', label: '지각' },
                 { key: 'absent', label: '결석' },
                 { key: 'other', label: '기타' },
-                { key: 'departure_check', label: '귀가점검' }
+                { key: 'departure_check', label: '하원점검' }
             ]},
             { key: 'naesin', label: '내신' },
             { key: 'teukang', label: '특강' }
@@ -537,7 +537,7 @@ export function renderFilterChips() {
     const categoryLabels = { attendance: '출결', homework: '숙제', test: '테스트', automation: '자동화', admin: '행정' };
     const subFilterLabels = {
         scheduled_visit: '비정규', pre_arrival: '정규', present: '출석', late: '지각', absent: '결석', other: '기타',
-        departure_check: '귀가점검', enroll_pending: '등원예정',
+        departure_check: '하원점검', enroll_pending: '등원예정',
         absence_ledger: '결석대장', leave_request: '휴퇴원요청', return_upcoming: '복귀예정',
         sv_absence_makeup: '결석보충', sv_clinic: '클리닉', sv_diagnostic: '진단평가', sv_fail: '미통과',
         hw_1st: '1차', hw_2nd: '2차', hw_next: '다음숙제',
@@ -741,7 +741,7 @@ export function getSubFilterCount(filterKey) {
                 return st && !['미확인', '출석', '지각', '결석'].includes(st);
             }).length);
             case 'departure_check': {
-                const departed = realRegular.filter(s => state.dailyRecords[s.docId]?.departure?.status === '귀가').length;
+                const departed = realRegular.filter(s => normalizeAttendanceLabel(state.dailyRecords[s.docId]?.departure?.status) === ATTENDANCE_ACTIONS.departure).length;
                 return { count: departed, total: regularTotal };
             }
             case 'naesin': {

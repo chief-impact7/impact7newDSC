@@ -401,7 +401,7 @@ export function renderListPanel() {
         return;
     }
 
-    // 귀가점검 서브필터 활성 시 귀가 체크 리스트로 전환
+    // 하원점검 서브필터 활성 시 하원 체크 리스트로 전환
     if (state.currentCategory === 'attendance' && state.currentSubFilter.has('departure_check')) {
         renderDepartureCheckList();
         return;

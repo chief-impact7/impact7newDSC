@@ -3,6 +3,7 @@
 // 권한·광고 규제는 서버 callable이 검증한다.
 
 import { sendParentNotice, createPromoCampaign, getStudentMessages } from './data-layer.js';
+import { ATTENDANCE_ACTIONS } from '@impact7/shared/attendance-action';
 import { esc, escAttr } from './ui-utils.js';
 
 let _deps = {};
@@ -31,10 +32,10 @@ const RECIPIENT_OPTIONS = [
 
 // 등하원 빠른 발송 — 현재 시각으로 즉시 알림톡(parent_notice 템플릿 arrival/departure/out/return).
 const QUICK_ACTIONS = [
-  { key: 'arrival', label: '등원' },
-  { key: 'departure', label: '귀가' },
-  { key: 'out', label: '외출' },
-  { key: 'return', label: '귀원' },
+  { key: 'arrival', label: ATTENDANCE_ACTIONS.arrival },
+  { key: 'departure', label: ATTENDANCE_ACTIONS.departure },
+  { key: 'out', label: ATTENDANCE_ACTIONS.out },
+  { key: 'return', label: ATTENDANCE_ACTIONS.return },
 ];
 
 const PROMO_PLACEHOLDER = '(광고)[임팩트세븐학원]\n\n안내 내용을 입력하세요.\n\n무료수신거부 080-000-0000';
@@ -196,7 +197,7 @@ function renderForm(studentId, hasRecipient, readonly) {
   }
 }
 
-// 등하원 빠른 발송 — 현재 시각으로 즉시. 의도적 반복(등원→귀가 등)이 가능하므로 멱등키는 매번 새로 발급(더블클릭만 _sending으로 차단).
+// 등하원 빠른 발송 — 현재 시각으로 즉시. 의도적 반복(등원→하원 등)이 가능하므로 멱등키는 매번 새로 발급(더블클릭만 _sending으로 차단).
 async function sendQuick(studentId, templateKey) {
   if (_sending) return;
   await doSend(

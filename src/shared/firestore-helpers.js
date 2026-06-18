@@ -318,6 +318,8 @@ function normalizeEnrollments(s) {
 
 export { enrollmentCode, allClassCodes };
 
+export { ATTENDANCE_ACTIONS, normalizeAttendanceLabel, attendanceLabel } from '@impact7/shared/attendance-action';
+
 export const branchFromClassNumber = (num) => {
     const first = (num || '').trim()[0];
     if (first === '1') return '2단지';

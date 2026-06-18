@@ -2,7 +2,7 @@
 // daily-ops.js에서 분리 (Phase 2-2)
 
 import { state, LEAVE_STATUSES } from './state.js';
-import { currentSchool, getDayName, studentGrade } from './src/shared/firestore-helpers.js';
+import { currentSchool, getDayName, studentGrade, ATTENDANCE_ACTIONS, normalizeAttendanceLabel } from './src/shared/firestore-helpers.js';
 import { getGoogleAccessToken, ensureGoogleAccessToken } from './auth.js';
 import { formatTime12h, showSaveIndicator } from './ui-utils.js';
 import {
@@ -100,7 +100,7 @@ export async function exportDailyReport() {
         '예정시간', '출결', '실제등원',
         '숙제1차', '숙제2차', '테스트1차', '테스트2차',
         '후속조치', '다음숙제',
-        '귀가', '귀가시간',
+        '하원', '하원시간',
         '수업→자습 전달', '학부모 전달'
     ];
 
@@ -164,9 +164,9 @@ export async function exportDailyReport() {
         }).filter(Boolean);
         const nextHw = nextHwParts.join(', ');
 
-        // 귀가
+        // 하원
         const dep = rec.departure || {};
-        const depStatus = dep.status === '귀가' ? '귀가' : '';
+        const depStatus = normalizeAttendanceLabel(dep.status) === ATTENDANCE_ACTIONS.departure ? ATTENDANCE_ACTIONS.departure : '';
         const depTime = dep.time ? formatTime12h(dep.time) : '';
 
         // 전달사항

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { getDayName, studentGradeKey, studentShortLabel } from '../../shared/firestore-helpers.js';
+import { getDayName, studentGradeKey, studentShortLabel, normalizeAttendanceLabel } from '../../shared/firestore-helpers.js';
 import { branchFromStudent, resolveNaesinCsKey, displayCodeFromCsKey, isOnLeaveAt, isWithdrawnAt } from '../../../student-helpers.js';
 import { applyNaesinFreeDerivation } from '@impact7/shared/enrollment-derivation';
 import { staffLabel } from '@impact7/shared/staff-label';
@@ -278,7 +278,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
         ].filter(Boolean).join(' / ');
         const next = [
             nextHomeworkText(rec),
-            rec.departure?.status ? `귀가: ${rec.departure.status}${rec.departure.time ? ` ${fmtTime(rec.departure.time)}` : ''}` : '',
+            rec.departure?.status ? `${normalizeAttendanceLabel(rec.departure.status)}${rec.departure.time ? ` ${fmtTime(rec.departure.time)}` : ''}` : '',
             rec.extra_visit?.date === date ? `비정규: ${rec.extra_visit.reason || '클리닉'} ${fmtTime(rec.extra_visit.time)}` : '',
         ].filter(Boolean).join(' / ');
         const expectedTime = earliestExpectedTime({
