@@ -230,8 +230,23 @@ export function getStudentChecklistStatus(studentId) {
     return items;
 }
 
+// 체크리스트 완료 캐시를 daily_records에 동기화(태블릿 하원 게이트용).
+// 귀가 항목 제외한 미완료가 0건이면 complete. 값이 바뀐 경우에만 저장(쓰기 폭주 방지).
+async function syncChecklistCache(studentId, items) {
+    const pending = items.filter(i => !i.done && i.key !== 'departure').map(i => i.label);
+    const complete = pending.length === 0;
+    const rec = state.dailyRecords[studentId] || {};
+    const prevComplete = !!rec.checklist_complete;
+    const prevPending = Array.isArray(rec.checklist_pending) ? rec.checklist_pending : [];
+    const samePending = prevPending.length === pending.length && prevPending.every((v, i) => v === pending[i]);
+    if (prevComplete === complete && samePending) return; // 변경 없음 → 스킵
+    // saveImmediately가 state.dailyRecords[studentId]까지 갱신·에러 처리한다.
+    await saveImmediately(studentId, { checklist_complete: complete, checklist_pending: pending });
+}
+
 function renderChecklistCard(studentId) {
     const items = getStudentChecklistStatus(studentId);
+    syncChecklistCache(studentId, items).catch(err => console.warn('[checklist-cache] 동기화 실패:', err)); // 캐시 동기화(fire-and-forget)
     const doneCount = items.filter(i => i.done).length;
     const total = items.length;
     const allDone = doneCount === total;
