@@ -478,11 +478,30 @@ export function switchDetailTab(tab) {
             initDocuCardDeps({
                 toast: (msg, type) => showToast(msg, type),
                 readonly: window.READ_ONLY === true,
+                refreshBadge: (id) => _refreshDocuBadge(id),
             });
             _renderDocuFn = renderDocuTab;
             renderDocuTab(state.selectedStudentId);
         });
     }
+}
+
+// 기록 탭 뱃지 — 2주 이내 student_records가 있으면 탭 버튼에 점 표시(탭 미오픈 상태에서도).
+let _docuBadgeStudentId = null;
+function _setDocuBadge(show) {
+    const btn = document.querySelector('.detail-tab[data-tab="docu"]');
+    if (btn) btn.classList.toggle('has-badge', !!show);
+}
+function _refreshDocuBadge(studentId) {
+    _docuBadgeStudentId = studentId;
+    _setDocuBadge(false); // 학생 전환 시 일단 제거
+    if (!studentId) return;
+    Promise.all([import('./docu-data.js'), import('./docu-records.js')])
+        .then(([data, recs]) => data.listStudentRecords(studentId).then(records => {
+            if (_docuBadgeStudentId !== studentId) return; // stale 방지
+            _setDocuBadge(recs.hasRecentRecord(records, Date.now()));
+        }))
+        .catch(err => console.warn('[docu] 뱃지 갱신 실패:', err));
 }
 
 // 비활성 학생: 출결현황 대신 수업이력(history_logs, DB와 동일한 7종 분류) 로드.
@@ -1040,6 +1059,9 @@ export function renderStudentDetail(studentId) {
         _loadReportOrHistoryCard(studentId);
     }
 
+    // 기록 탭 뱃지 — 학생 전환 시 2주 이내 기록 여부로 갱신(탭을 안 열어도 보이게)
+    if (studentChanged) _refreshDocuBadge(studentId);
+
     if (!studentId) {
         document.getElementById('detail-empty').style.display = '';
         document.getElementById('detail-content').style.display = 'none';
@@ -1522,7 +1544,7 @@ export function renderStudentDetail(studentId) {
     const tabsEl = document.getElementById('detail-tabs');
     if (tabsEl) {
         tabsEl.style.display = '';
-        const reportLabel = _isInactiveDetailStudent(student) ? '수업이력' : '출결현황';
+        const reportLabel = _isInactiveDetailStudent(student) ? '수업이력' : '출결';
         tabsEl.querySelectorAll('.detail-tab').forEach(t => {
             if (t.dataset.tab === 'report' || t.dataset.tab === 'score' || t.dataset.tab === 'consultation' || t.dataset.tab === 'docu') t.style.display = '';
             if (t.dataset.tab === 'report') t.textContent = reportLabel;

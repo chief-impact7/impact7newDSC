@@ -4,7 +4,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, deleteObject } from 'firebase/storage';
 import { db, storage } from './firebase-config.js';
-import { auditSet, auditDelete, READ_ONLY } from './audit.js';
+import { auditSet, auditUpdate, auditDelete, READ_ONLY } from './audit.js';
 import { toFileMeta } from './docu-records.js';
 
 const COL = 'student_records';
@@ -31,6 +31,13 @@ export async function createRecord(recordRef, studentId, type, { occurred_at, co
     created_at: serverTimestamp(),
   });
   return recordRef.id;
+}
+
+// 내용·일시(+선택적 files 병합)만 수정. audit이 updated_* 채움, READ_ONLY는 auditUpdate가 stub.
+export async function updateRecord(recordId, { occurred_at, content, files }) {
+  const data = { occurred_at: occurred_at || '', content: content || '' };
+  if (files !== undefined) data.files = files;
+  await auditUpdate(doc(db, COL, recordId), data);
 }
 
 export async function uploadRecordFile(studentId, recordId, file, index = 0) {

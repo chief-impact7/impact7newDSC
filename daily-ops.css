@@ -3399,11 +3399,12 @@ textarea.field-input {
     display: flex;
     gap: 0;
     border-bottom: 1px solid var(--border);
-    padding: 0 16px;
+    padding: 0 8px;
     background: var(--surface);
 }
 .detail-tab {
-    padding: 10px 16px;
+    flex: 1;                /* 6개 탭을 한 줄에 균등 분배(두 줄 방지) */
+    padding: 10px 4px;
     font-size: 13px;
     font-weight: 500;
     color: var(--text-sec);
@@ -3411,12 +3412,25 @@ textarea.field-input {
     border: none;
     border-bottom: 2px solid transparent;
     cursor: pointer;
+    white-space: nowrap;
+    position: relative;
     transition: color 0.15s, border-color 0.15s;
 }
 .detail-tab:hover { color: var(--text-main); }
 .detail-tab.active {
     color: var(--primary);
     border-bottom-color: var(--primary);
+}
+/* 기록 탭 뱃지 — 2주 이내 기록 알림(점). 뱃지는 '기록'(2글자) 탭에만 표시됨 */
+.detail-tab.has-badge::after {
+    content: '';
+    position: absolute;
+    top: 5px;
+    left: calc(50% + 13px);
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--danger);
 }
 
 /* ─── 출결현황 ─── */
@@ -3445,6 +3459,95 @@ textarea.field-input {
     font-size: 12px;
     min-width: auto;
 }
+
+/* ─── 기록 탭(docu) ─── 공통 detail-card / field-input / btn 언어를 따른다 */
+#docu-tab { padding: 12px 16px; display: flex; flex-direction: column; gap: 16px; }
+#docu-tab .detail-card { margin-bottom: 0; }
+
+.docu-input { margin-bottom: 12px; }
+/* 입력칸은 공통 field-input보다 얇게(상하 padding·min-height 축소). 반성문(rows=1)은 한 줄로 */
+.docu-input .docu-content,
+.docu-edit-content {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 6px 8px;
+    min-height: 0;
+}
+.docu-input-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+}
+.docu-icon-btn {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-container);
+}
+.docu-icon-btn:hover { color: var(--primary); border-color: var(--primary); }
+.docu-icon-btn .material-symbols-outlined { font-size: 20px; }
+.docu-input-toolbar .docu-chips { flex: 1; min-width: 0; }
+.docu-input-toolbar .docu-save-btn { flex-shrink: 0; }
+
+/* 선택/첨부 칩 — 날짜·파일명 표시 */
+.docu-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.docu-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    max-width: 100%;
+    padding: 2px 8px;
+    border-radius: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-sec);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.docu-chip .material-symbols-outlined { font-size: 14px; }
+.docu-chip-date { color: var(--primary); background: var(--primary-light); border-color: var(--primary-light); }
+
+/* 기록 리스트 */
+.docu-record-list { display: flex; flex-direction: column; gap: 8px; }
+.docu-record-item {
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+}
+.docu-record-head { display: flex; align-items: center; justify-content: space-between; }
+.docu-record-date {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-sec);
+}
+.docu-record-date .material-symbols-outlined { font-size: 16px; }
+.docu-record-actions { display: inline-flex; gap: 2px; }
+.docu-edit-btn,
+.docu-del-btn { width: 28px; height: 28px; }
+.docu-edit-btn .material-symbols-outlined,
+.docu-del-btn .material-symbols-outlined { font-size: 18px; }
+.docu-edit-btn:hover { color: var(--primary); }
+.docu-del-btn:hover { color: var(--danger); }
+.docu-record-item.docu-editing { border-color: var(--primary); }
+.docu-editing .docu-input-toolbar { margin-top: 8px; }
+.docu-record-content {
+    margin-top: 4px;
+    font-size: 13px;
+    color: var(--text-main);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.docu-record-files { margin-top: 6px; }
 
 /* 출석 테이블 */
 .report-attendance-table {

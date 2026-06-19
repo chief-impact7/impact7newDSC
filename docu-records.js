@@ -18,3 +18,33 @@ export function splitRecordsByType(records) {
 export function toFileMeta(file, path) {
   return { path, name: file.name, size: file.size, contentType: file.type };
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// created_at(Firestore Timestamp/Date/숫자/ISO) 또는 occurred_at('YYYY-MM-DD')을 ms로 정규화.
+function toMillis(v) {
+  if (v == null) return null;
+  if (typeof v === 'number') return v;
+  if (v instanceof Date) return v.getTime();
+  if (typeof v.toMillis === 'function') return v.toMillis();
+  if (typeof v.seconds === 'number') return v.seconds * 1000;
+  if (typeof v === 'string') {
+    const t = Date.parse(v);
+    return Number.isNaN(t) ? null : t;
+  }
+  return null;
+}
+
+// 기록 하나가 nowMs 기준 windowDays(기본 14일) 이내인지. created_at·occurred_at 중 더 최근 값으로 판정.
+export function isRecentRecord(rec, nowMs, windowDays = 14) {
+  if (!rec) return false;
+  const cutoff = nowMs - windowDays * DAY_MS;
+  const candidates = [toMillis(rec.created_at), toMillis(rec.occurred_at)].filter(t => t != null);
+  return candidates.some(t => t >= cutoff);
+}
+
+// 최근(2주 이내) 기록이 하나라도 있으면 true — 기록 탭 뱃지용.
+export function hasRecentRecord(records, nowMs, windowDays = 14) {
+  const list = Array.isArray(records) ? records : [];
+  return list.some(r => isRecentRecord(r, nowMs, windowDays));
+}
