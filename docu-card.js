@@ -14,6 +14,7 @@ let _deps = {};
 let _currentStudentId = null;
 let _saving = false;
 let _editingId = null; // 인라인 편집 중인 기록 id
+let _editBuffer = null; // 편집 중 미저장 입력(content·occurred_at) 스냅샷 — 재렌더 유실 방지
 
 export function initDocuCardDeps(deps) {
   _deps = deps; // { toast, readonly }
@@ -46,15 +47,19 @@ function recordItemHtml(rec) {
 // 인라인 편집 폼 — 입력폼(.docu-input)과 동일한 디자인 언어 재사용. 기존 첨부는 그대로 표시.
 function recordEditHtml(rec) {
   const id = esc(rec.id);
-  const dateChip = rec.occurred_at
-    ? `<span class="docu-chip docu-chip-date"><span class="material-symbols-outlined">event</span>${esc(rec.occurred_at)}</span>`
+  // 같은 항목 재렌더 시 미저장 버퍼 우선(저장본 rec로 덮어쓰지 않음).
+  const useBuf = _editBuffer && _editingId === rec.id;
+  const content = useBuf ? _editBuffer.content : (rec.content || '');
+  const occurredAt = useBuf ? _editBuffer.occurred_at : (rec.occurred_at || '');
+  const dateChip = occurredAt
+    ? `<span class="docu-chip docu-chip-date"><span class="material-symbols-outlined">event</span>${esc(occurredAt)}</span>`
     : '';
   return `<div class="docu-record-item docu-editing" data-id="${id}">
-    <textarea class="field-input docu-content docu-edit-content" maxlength="${MAX_CONTENT_LEN}" rows="2">${esc(rec.content || '')}</textarea>
+    <textarea class="field-input docu-content docu-edit-content" maxlength="${MAX_CONTENT_LEN}" rows="2">${esc(content)}</textarea>
     <div class="docu-input-toolbar">
-      <input type="date" class="docu-edit-date" value="${esc(rec.occurred_at || '')}" hidden onchange="window.__docuEditChange('${id}')">
+      <input type="date" class="docu-edit-date docu-visually-hidden" value="${esc(occurredAt)}" onchange="window.__docuEditChange('${id}')">
       <button type="button" class="icon-btn docu-icon-btn" title="날짜 선택" aria-label="날짜 선택" onclick="window.__docuEditPickDate('${id}')"><span class="material-symbols-outlined">calendar_month</span></button>
-      <input type="file" class="docu-edit-file" accept="image/*" multiple hidden onchange="window.__docuEditChange('${id}')">
+      <input type="file" class="docu-edit-file docu-visually-hidden" accept="image/*" multiple onchange="window.__docuEditChange('${id}')">
       <button type="button" class="icon-btn docu-icon-btn" title="이미지 첨부" aria-label="이미지 첨부" onclick="window.__docuEditPickFile('${id}')"><span class="material-symbols-outlined">image</span></button>
       <div class="docu-chips docu-edit-chips">${dateChip}</div>
       <button class="btn btn-primary btn-sm docu-edit-save" onclick="window.__docuEditSave('${id}')">저장</button>
@@ -70,11 +75,11 @@ function sectionHtml(title, type, records, { icon = 'description', contentPlaceh
     <div class="docu-input" data-type="${type}">
       <textarea class="field-input docu-content" placeholder="${esc(contentPlaceholder)}" maxlength="${MAX_CONTENT_LEN}" rows="${rows}"></textarea>
       <div class="docu-input-toolbar">
-        <input type="date" class="docu-date-input" hidden onchange="window.__docuInputChange('${type}')">
+        <input type="date" class="docu-date-input docu-visually-hidden" onchange="window.__docuInputChange('${type}')">
         <button type="button" class="icon-btn docu-icon-btn" title="날짜 선택" aria-label="날짜 선택" onclick="window.__docuPickDate('${type}')">
           <span class="material-symbols-outlined">calendar_month</span>
         </button>
-        <input type="file" class="docu-file-input" accept="image/*" multiple hidden onchange="window.__docuInputChange('${type}')">
+        <input type="file" class="docu-file-input docu-visually-hidden" accept="image/*" multiple onchange="window.__docuInputChange('${type}')">
         <button type="button" class="icon-btn docu-icon-btn" title="이미지 첨부" aria-label="이미지 첨부" onclick="window.__docuPickFile('${type}')">
           <span class="material-symbols-outlined">image</span>
         </button>
@@ -107,7 +112,18 @@ function renderChips(type) {
 }
 
 export async function renderDocuTab(studentId) {
-  if (_currentStudentId !== studentId) _editingId = null; // 학생 전환 시 편집 모드 해제
+  if (_currentStudentId !== studentId) {
+    _editingId = null; _editBuffer = null; // 학생 전환 시 편집 모드·버퍼 해제
+  } else if (_editingId) {
+    // 같은 학생 재렌더(휴퇴원 버튼 등)로 DOM이 교체되기 전에 편집 중 입력을 스냅샷.
+    const box = editBox(_editingId);
+    if (box) {
+      _editBuffer = {
+        content: box.querySelector('.docu-edit-content')?.value ?? '',
+        occurred_at: box.querySelector('.docu-edit-date')?.value ?? '',
+      };
+    }
+  }
   _currentStudentId = studentId;
   const el = document.getElementById('docu-tab');
   if (!el) return;
@@ -160,11 +176,13 @@ function renderEditChips(id) {
 window.__docuEdit = function (recordId) {
   if (_deps.readonly || _saving || !_currentStudentId) return;
   _editingId = recordId;
+  _editBuffer = null; // 편집 진입 시 저장본 값으로 시작
   renderDocuTab(_currentStudentId);
 };
 
 window.__docuEditCancel = function () {
   _editingId = null;
+  _editBuffer = null;
   if (_currentStudentId) renderDocuTab(_currentStudentId);
 };
 
@@ -226,6 +244,7 @@ window.__docuEditSave = async function (recordId) {
     await updateRecord(recordId, patch);
     _deps.toast?.('수정되었습니다', 'success');
     _editingId = null;
+    _editBuffer = null;
     _deps.refreshBadge?.(studentId); // 일시 변경으로 2주 이내 여부가 바뀔 수 있음
     if (_currentStudentId === studentId) renderDocuTab(studentId); // stale 가드
   } catch (err) {
