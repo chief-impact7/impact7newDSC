@@ -218,6 +218,17 @@ hook이 없다면 `bash scripts/install-hooks.sh`로 설치한다.
 |------|----------|------|------|
 | 2026-06-09 | 초기 구성 | agents/performance-auditor.md, skills/performance-audit/SKILL.md | 8개 컬렉션 onSnapshot 전환(2026-03-24) 후 읽기 스파이크 모니터링 중. 비용 위험 요소를 사전에 정적 분석하는 하네스 필요 |
 
+## 하네스: 기록 탭(docu)
+
+**목표:** 학생 상세패널 '기록' 탭(반성문/기타 기록 = `student_records` + Firebase Storage 파일 첨부 + 휴퇴원요청서 카드 이동)을 구현·검증·확장. docu-builder 구현 → attachment-auditor·code-reviewer·security-auditor 병렬 검증의 생성-검증 파이프라인.
+
+**트리거:** 기록 탭/docu 탭/반성문 탭/기타 기록/첨부 파일 업로드/student_records/파일 첨부 기능/휴퇴원 카드 이동/Storage 업로드 요청 시 `docu-tab` 스킬을 사용하라. 새 기록 유형·필드·섹션 추가에도 사용. 단순 코드 리뷰만은 code-quality, 배포 전 종합은 pre-deploy.
+
+**변경 이력:**
+| 날짜 | 변경 내용 | 대상 | 사유 |
+|------|----------|------|------|
+| 2026-06-19 | 초기 구성 | agents/attachment-auditor.md, agents/docu-builder.md, skills/docu-tab/SKILL.md | DSC 상세패널 6번째 '기록' 탭 도입. Firebase Storage 파일 첨부는 기존 하네스에 전무한 영역이라 attachment-auditor 신설(security-auditor의 Firestore 전용과 분리). 기록 모듈(student_records+Storage+탭 UI) 구현 전문 docu-builder 추가. 설계·계획은 `~/projects/docu/docs/superpowers/` |
+
 ## 크로스앱 조율
 
 크로스앱·공유 컬렉션 변경은 impact7DB의 `impact7-orchestrator` 하네스에서 조율한다.
