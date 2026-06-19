@@ -4,7 +4,7 @@
 
 import { collection, doc, serverTimestamp, deleteField, writeBatch } from 'firebase/firestore';
 import { db } from './firebase-config.js';
-import { parseDateKST, todayStr } from './src/shared/firestore-helpers.js';
+import { parseDateKST, todayStr, finalApprovalDate } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditAdd, batchUpdate } from './audit.js';
 import { state, LEAVE_STATUSES } from './state.js';
 import { esc, escAttr, showSaveIndicator, _fmtTs } from './ui-utils.js';
@@ -12,7 +12,7 @@ import { branchFromStudent, allClassCodes, activeClassCodes, enrollmentCode, fin
 import { schoolSearchTerms } from './school-normalizer.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
-let renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, _isOlderThan, loadWithdrawnStudents, renderFilterChips;
+let renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, _isOlderThan, _toDate, loadWithdrawnStudents, renderFilterChips;
 
 export function initLeaveRequestDeps(deps) {
     renderSubFilters = deps.renderSubFilters;
@@ -20,8 +20,17 @@ export function initLeaveRequestDeps(deps) {
     renderStudentDetail = deps.renderStudentDetail;
     getTeacherName = deps.getTeacherName;
     _isOlderThan = deps._isOlderThan;
+    _toDate = deps._toDate;
     loadWithdrawnStudents = deps.loadWithdrawnStudents;
     renderFilterChips = deps.renderFilterChips;
+}
+
+// 미승인 대기(requested) 경과일 — 7일 이상이면 목록에 경고 뱃지 노출(자동승인 폐지 보완).
+const LEAVE_REQUEST_STALE_DAYS = 7;
+function _daysSinceRequested(r) {
+    const d = _toDate(r.requested_at);
+    if (!d || isNaN(d)) return null;
+    return Math.floor((Date.now() - d.getTime()) / 86400000);
 }
 
 // ─── 휴퇴원 유형 헬퍼 ──────────────────────────────────────────────────────
@@ -63,7 +72,13 @@ function _leaveRequestStatusBadge(r) {
     if (!r.teacher_approved_by) pending.push('교수부');
     if (!r.approved_by) pending.push('행정부');
     const label = pending.length > 0 ? `${pending.join('·')}대기` : '승인대기';
-    return `<span class="absence-status-badge unconsulted">${esc(label)}</span>`;
+    let badge = `<span class="absence-status-badge unconsulted">${esc(label)}</span>`;
+    // 자동승인 폐지 → 장기 미처리 요청은 경고 뱃지로 수동 처리를 유도
+    const days = _daysSinceRequested(r);
+    if (days != null && days >= LEAVE_REQUEST_STALE_DAYS) {
+        badge += `<span class="absence-status-badge" style="background:#fef3c7;color:#b45309;border:1px solid #fbbf24;margin-left:2px;">⚠ ${days}일 경과</span>`;
+    }
+    return badge;
 }
 
 // ─── 휴퇴원요청서 리스트 ─────────────────────────────────────────────────────
@@ -84,7 +99,7 @@ export function renderLeaveRequestList() {
     // 그룹: 승인 대기 → 승인 완료 (7일 이내만)
     const pending = records.filter(r => r.status === 'requested');
     const approved = records.filter(r =>
-        r.status === 'approved' && !_isOlderThan(r.approved_at, { days: 7 })
+        r.status === 'approved' && !_isOlderThan(finalApprovalDate(r), { days: 7 })
     );
     const visibleCount = pending.length + approved.length;
     countEl.textContent = `${visibleCount}건`;

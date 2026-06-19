@@ -672,35 +672,8 @@ export async function autoCloseOldRecords() {
         console.log(`결석대장 자동 행정완료${READ_ONLY ? ' 시뮬레이션' : ''}: ${oldAbsences.length}건`);
     }
 
-    // 휴퇴원요청: 1개월 경과 requested → 자동승인
-    const oldRequests = state.leaveRequests.filter(r =>
-        r.status === 'requested' && _isOlderThan(r.requested_at, { months: 1 })
-    );
-    for (const r of oldRequests) {
-        try {
-            const updates = {
-                status: 'approved',
-                approved_by: 'system_auto',
-                approved_at: serverTimestamp()
-            };
-            if (!r.teacher_approved_by) {
-                updates.teacher_approved_by = 'system_auto';
-                updates.teacher_approved_at = serverTimestamp();
-            }
-            await auditUpdate(doc(db, 'leave_requests', r.docId), updates);
-            if (!READ_ONLY) {
-                r.status = 'approved';
-                if (!r.teacher_approved_by) r.teacher_approved_by = 'system_auto';
-                if (!r.approved_by) r.approved_by = 'system_auto';
-            }
-            // 학생 status 실제 변경은 Cloud Function(onLeaveRequestApproved)이 처리
-        } catch (err) {
-            console.error('휴퇴원요청 자동승인 실패:', r.docId, err);
-        }
-    }
-    if (oldRequests.length > 0) {
-        console.log(`휴퇴원요청 자동 승인: ${oldRequests.length}건 (학생 상태 전이는 Cloud Function이 처리)`);
-    }
+    // 휴퇴원요청은 자동승인하지 않는다(이전: 1개월 경과 시 system_auto 승인).
+    // 장기 미처리 요청은 승인 대신 목록에서 경고 뱃지로 노출해 수동 처리를 유도한다(_leaveRequestStatusBadge).
 
     // 숙제미통과/테스트미통과 등원: 1개월 경과 pending → 자동 기타 처리
     const oldHwTasks = state.hwFailTasks.filter(t => t.status === 'pending' && t.scheduled_date && _isOlderThan(t.scheduled_date, { months: 1 }));

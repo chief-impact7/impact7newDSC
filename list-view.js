@@ -4,7 +4,7 @@
 import {
     state, LEAVE_STATUSES, SV_L3_KEYS, DEFAULT_TONE, REGULAR_CLASS_TYPES
 } from './state.js';
-import { getDayName, todayStr, studentShortLabel, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
+import { getDayName, todayStr, studentShortLabel, PAST_STUDENT_STATUSES, finalApprovalDate } from './src/shared/firestore-helpers.js';
 import {
     branchFromStudent, matchesBranchFilter, enrollmentCode, allClassCodes, _enrollCodeList,
     deriveNaesinCode, getActiveEnrollments, getStudentStartTime, isOnLeaveAt, isWithdrawnAt,
@@ -834,7 +834,7 @@ export function renderListPanel() {
             const hasCurrentSemester = s.enrollments.length > 0;
             const wdLr = state.leaveRequests.find(lr => lr.student_id === s.docId && lr.status === 'approved' &&
                 (lr.request_type === '퇴원요청' || lr.request_type === '휴원→퇴원'));
-            const isRecentWithdrawal = wdLr && !_isOlderThan(wdLr.approved_at, { months: 1 });
+            const isRecentWithdrawal = wdLr && !_isOlderThan(finalApprovalDate(wdLr), { months: 1 });
             if (hasCurrentSemester || isRecentWithdrawal) {
                 leaveBadge = `<span class="tag" style="background:#dc2626;color:#fff;">퇴원</span>`;
             } else {

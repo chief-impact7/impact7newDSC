@@ -2,7 +2,7 @@
 // daily-ops.js에서 분리한 필터/내비게이션 UI (클러스터 1: 좌측 트리 + 칩)
 
 import { state, SV_SOURCE_MAP } from './state.js';
-import { getDayName, studentLevel, ATTENDANCE_ACTIONS, normalizeAttendanceLabel } from './src/shared/firestore-helpers.js';
+import { getDayName, studentLevel, ATTENDANCE_ACTIONS, normalizeAttendanceLabel, finalApprovalDate } from './src/shared/firestore-helpers.js';
 import {
     branchFromStudent, matchesBranchFilter, enrollmentCode, getActiveEnrollments,
     isWithdrawnAt, isOnLeaveAt
@@ -779,7 +779,7 @@ export function getSubFilterCount(filterKey) {
                 let filtered = [...state.leaveRequests];
                 if (state.selectedBranch) filtered = filtered.filter(r => r.branch === state.selectedBranch);
                 const pending = filtered.filter(r => r.status === 'requested').length;
-                const recentApproved = filtered.filter(r => r.status === 'approved' && !_isOlderThan(r.approved_at, { days: 7 })).length;
+                const recentApproved = filtered.filter(r => r.status === 'approved' && !_isOlderThan(finalApprovalDate(r), { days: 7 })).length;
                 return { count: pending, total: pending + recentApproved };
             }
             case 'return_upcoming': {

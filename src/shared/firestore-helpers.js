@@ -233,7 +233,10 @@ const dateFromFirestoreValue = (value) => {
     return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const finalApprovalDate = (request) => {
+// 휴퇴원요청 최종 승인 시각 = 행정부(approved_at)·교수부(teacher_approved_at) 승인 중 더 늦은 시각.
+// 한쪽이 먼저 승인하고 다른 쪽이 늦게 승인하면 approved_at만으로는 최종 승인 직후에도
+// '최근 승인' 판정에서 탈락하므로(민서윤 사례), 두 시각 중 더 늦은 값으로 판정한다.
+export const finalApprovalDate = (request) => {
     const dates = [request.approved_at, request.teacher_approved_at]
         .map(dateFromFirestoreValue)
         .filter(Boolean);

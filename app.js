@@ -229,7 +229,7 @@ window.saveTempAttendance = saveTempAttendance;
 window.openContactAsTemp = openContactAsTemp;
 
 // leave-request.js 의존성 주입 + window 노출
-initLeaveRequestDeps({ renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, _isOlderThan, loadWithdrawnStudents, renderFilterChips });
+initLeaveRequestDeps({ renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, _isOlderThan, _toDate, loadWithdrawnStudents, renderFilterChips });
 window.renderLeaveRequestList = renderLeaveRequestList;
 window.selectLeaveRequest = selectLeaveRequest;
 window.renderReturnUpcomingList = renderReturnUpcomingList;
