@@ -5,6 +5,7 @@ import {
     initializeFirestore, persistentLocalCache, persistentMultipleTabManager
 } from 'firebase/firestore';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
+import { getStorage, connectStorageEmulator } from 'firebase/storage';
 
 const firebaseConfig = {
     apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
@@ -71,6 +72,9 @@ export { db };
 // 공유 LLM 게이트웨이(llmGenerate)가 배포된 리전. dataAuth 토큰 사용.
 export const functions = getFunctions(dataApp, 'asia-northeast3');
 
+// 파일 첨부(반성문/기타 기록) 저장소. Firestore와 동일하게 dataApp 기준.
+export const storage = getStorage(dataApp);
+
 // Emulator 모드: VITE_USE_EMULATOR=true일 때 Firestore + Auth를 로컬 emulator에 연결.
 // 별도 터미널에서 `firebase emulators:start --only firestore,auth` 먼저 실행해야 함.
 // production DB는 안 건드림 (완전 격리).
@@ -79,5 +83,6 @@ if (import.meta.env.DEV && import.meta.env.VITE_USE_EMULATOR === 'true') {
     connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
     connectAuthEmulator(dataAuth, 'http://localhost:9099', { disableWarnings: true });
     connectFunctionsEmulator(functions, 'localhost', 5001);
+    connectStorageEmulator(storage, 'localhost', 9199);
     console.warn('%c🔧 EMULATOR MODE — Firestore/Auth localhost:8080/9099 사용', 'background:#dbeafe;color:#1e3a8a;font-size:13px;font-weight:700;padding:4px 8px;border-radius:4px;');
 }

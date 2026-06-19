@@ -602,6 +602,29 @@ service cloud.firestore {
       allow delete: if isAuthorized();
     }
 
+    // 학생 기록(반성문·기타) — 일시 + 내용 + Storage 파일 첨부
+    match /student_records/{docId} {
+
+      function hasOnlyAllowedStudentRecordFields() {
+        return request.resource.data.keys().hasOnly([
+          'student_id', 'type', 'occurred_at', 'content', 'files',
+          'created_at', 'updated_by', 'updated_at'
+        ]);
+      }
+
+      allow read: if isAuthorized();
+
+      allow create, update: if isAuthorized()
+        && hasOnlyAllowedStudentRecordFields()
+        && request.resource.data.type is string
+        && request.resource.data.type in ['reflection', 'etc']
+        && request.resource.data.content is string
+        && request.resource.data.content.size() <= 5000
+        && withinFieldLimit(15);
+
+      allow delete: if isAuthorized();
+    }
+
     // =========================================================================
     // [DSC] Temp Attendance (임시출석)
     // =========================================================================

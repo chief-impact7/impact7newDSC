@@ -44,7 +44,7 @@ import { renderTestFailActionCard } from './test-management.js';
 import {
     renderAbsenceRecordCard, _getExpandedAbsenceIndices, _restoreExpandedAbsenceIndices
 } from './absence-records.js';
-import { renderLeaveRequestCard, renderReturnConsultCard } from './leave-request.js';
+import { renderReturnConsultCard } from './leave-request.js';
 import { renderUnifiedMemoCard } from './role-memo.js';
 import { loadClassHistoryCard } from './class-history.js';
 // 비활성 학생(퇴원·종강·상담 등) 식별용 — 출결현황 탭 라벨을 "수업이력"으로 동적 전환.
@@ -69,6 +69,7 @@ export function initStudentDetailDeps(deps) {
 let _lastRenderedStudentId = null;
 let _renderConsultationFn = null;
 let _renderMessageFn = null;
+let _renderDocuFn = null;
 
 // ─── 재원기간 (tenure) ───────────────────────────────────────────────────────
 // history_logs에서 공유 deriveTenure로 파생해 헤더에 표시 (DB app.js와 동일 SSoT 로직).
@@ -417,6 +418,8 @@ export function switchDetailTab(tab) {
     document.getElementById('score-tab').style.display = tab === 'score' ? '' : 'none';
     document.getElementById('consultation-tab').style.display = tab === 'consultation' ? '' : 'none';
     document.getElementById('message-tab').style.display = tab === 'message' ? '' : 'none';
+    const docuTabEl = document.getElementById('docu-tab');
+    if (docuTabEl) docuTabEl.style.display = tab === 'docu' ? '' : 'none';
     if (tab === 'score') loadScoreCard();
     if (tab === 'report') {
         if (state.selectedStudentId) _loadReportOrHistoryCard(state.selectedStudentId);
@@ -464,6 +467,20 @@ export function switchDetailTab(tab) {
             });
             _renderMessageFn = renderMessageTab;
             renderMessageTab(state.selectedStudentId);
+        });
+    }
+    if (tab === 'docu') {
+        if (_renderDocuFn) {
+            _renderDocuFn(state.selectedStudentId);
+            return;
+        }
+        import('./docu-card.js').then(({ renderDocuTab, initDocuCardDeps }) => {
+            initDocuCardDeps({
+                toast: (msg, type) => showToast(msg, type),
+                readonly: window.READ_ONLY === true,
+            });
+            _renderDocuFn = renderDocuTab;
+            renderDocuTab(state.selectedStudentId);
         });
     }
 }
@@ -1435,7 +1452,6 @@ export function renderStudentDetail(studentId) {
                 </div>
                 ${enrollInfo}
             </div>` : ''}
-            ${renderLeaveRequestCard(studentId)}
             ${renderAbsenceRecordCard(studentId)}
             ${renderUnifiedMemoCard(studentId)}`;
     }
@@ -1477,9 +1493,6 @@ export function renderStudentDetail(studentId) {
         <!-- 결석대장 카드 -->
         ${renderAbsenceRecordCard(studentId)}
 
-        <!-- 휴퇴원요청서 카드 -->
-        ${renderLeaveRequestCard(studentId)}
-
         <!-- 클리닉 카드 -->
         ${extraVisitHtml}
 
@@ -1511,7 +1524,7 @@ export function renderStudentDetail(studentId) {
         tabsEl.style.display = '';
         const reportLabel = _isInactiveDetailStudent(student) ? '수업이력' : '출결현황';
         tabsEl.querySelectorAll('.detail-tab').forEach(t => {
-            if (t.dataset.tab === 'report' || t.dataset.tab === 'score' || t.dataset.tab === 'consultation') t.style.display = '';
+            if (t.dataset.tab === 'report' || t.dataset.tab === 'score' || t.dataset.tab === 'consultation' || t.dataset.tab === 'docu') t.style.display = '';
             if (t.dataset.tab === 'report') t.textContent = reportLabel;
             t.classList.toggle('active', t.dataset.tab === state.detailTab);
         });
@@ -1536,6 +1549,15 @@ export function renderStudentDetail(studentId) {
         messageTabEl.style.display = state.detailTab === 'message' ? '' : 'none';
         if (studentChanged && studentId && state.detailTab === 'message' && _renderMessageFn) {
             _renderMessageFn(studentId);
+        }
+    }
+    const docuTabEl2 = document.getElementById('docu-tab');
+    if (docuTabEl2) {
+        docuTabEl2.style.display = state.detailTab === 'docu' ? '' : 'none';
+        // 휴퇴원 카드가 docu 탭으로 이동했으므로, 같은 학생의 휴퇴원 액션(renderStudentDetail
+        // 재호출) 후에도 탭을 다시 그려야 카드 상태가 반영된다(studentChanged 무관).
+        if (studentId && state.detailTab === 'docu' && _renderDocuFn) {
+            _renderDocuFn(studentId);
         }
     }
 
