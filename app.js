@@ -33,7 +33,7 @@ import {
 } from './student-helpers.js';
 import {
     initParentMessageDeps,
-    openParentMessageModal, regenerateParentMessage, copyParentMessage, sendParentMessage,
+    openParentMessageModal, regenerateParentMessage, copyParentMessage, sendParentMessage, sendParentMessageWithConsult,
     switchParentMsgTab, togglePromptEditor, saveCustomPrompt, resetPromptToDefault
 } from './parent-message.js';
 import { initExportReportDeps, exportDailyReport } from './export-report.js';
@@ -205,13 +205,18 @@ window.openParentMessageModal = openParentMessageModal;
 window.regenerateParentMessage = regenerateParentMessage;
 window.copyParentMessage = copyParentMessage;
 window.sendParentMessage = sendParentMessage;
+window.sendParentMessageWithConsult = sendParentMessageWithConsult;
 window.switchParentMsgTab = switchParentMsgTab;
 window.togglePromptEditor = togglePromptEditor;
 window.saveCustomPrompt = saveCustomPrompt;
 window.resetPromptToDefault = resetPromptToDefault;
 
 // parent-message.js 의존성 주입 (getStudentDomains 등은 daily-ops에 남아있으므로)
-initParentMessageDeps({ getStudentDomains, getStudentTestItems, getStudentChecklistStatus });
+initParentMessageDeps({
+    getStudentDomains, getStudentTestItems, getStudentChecklistStatus,
+    getStudent: (id) => findStudent(id),
+    getCurrentTeacher: () => ({ id: state.currentUser?.uid ?? '', name: getTeacherName(state.currentUser?.email ?? '') }),
+});
 
 // export-report.js 의존성 주입
 initExportReportDeps({ getStudentDomains, getStudentTestItems, getTeacherName });

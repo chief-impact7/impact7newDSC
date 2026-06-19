@@ -6,17 +6,20 @@ import { geminiModel } from './firebase-ai.js';
 import { parseDateKST, getDayName } from './src/shared/firestore-helpers.js';
 import { esc, decodeHtmlEntities, formatTime12h, showSaveIndicator } from './ui-utils.js';
 import { enrollmentCode } from './student-helpers.js';
-import { sendDailyReport } from './data-layer.js';
+import { sendDailyReport, addConsultation } from './data-layer.js';
+import { buildConsultationPayload } from './consultation-payload.js';
 
 let _sendingReport = false;
 
 // ─── 의존성 주입 (daily-ops.js에서 init 호출) ──────────────────────────────
-let getStudentDomains, getStudentTestItems, getStudentChecklistStatus;
+let getStudentDomains, getStudentTestItems, getStudentChecklistStatus, getStudent, getCurrentTeacher;
 
 export function initParentMessageDeps(deps) {
     getStudentDomains = deps.getStudentDomains;
     getStudentTestItems = deps.getStudentTestItems;
     getStudentChecklistStatus = deps.getStudentChecklistStatus;
+    getStudent = deps.getStudent;
+    getCurrentTeacher = deps.getCurrentTeacher;
 }
 
 // ─── 모듈 내부 변수 ────────────────────────────────────────────────────────
@@ -454,7 +457,8 @@ export function copyParentMessage() {
 }
 
 // 일일 리포트 발송 — 친구면 정보형 BMS, 비친구면 가입 안내 SMS(서버가 분기). 수신 대상은 학부모1.
-export async function sendParentMessage() {
+// logConsultation=true면 발송 성공 후 상담 기록에 자동 저장(형태='문자').
+async function _doSend(logConsultation) {
     if (_sendingReport || !parentMsgStudentId) return;
     const textEl = parentMsgMode === 'ai'
         ? document.getElementById('parent-msg-text')
@@ -462,9 +466,9 @@ export async function sendParentMessage() {
     const content = textEl?.value?.trim();
     if (!content) { alert('발송할 내용이 없습니다.'); return; }
 
-    const btn = document.getElementById('parent-msg-send-btn');
+    const btnIds = ['parent-msg-send-btn', 'parent-msg-send-log-btn'];
     _sendingReport = true;
-    if (btn) btn.disabled = true;
+    btnIds.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
     try {
         const res = await sendDailyReport({
             studentId: parentMsgStudentId,
@@ -473,14 +477,47 @@ export async function sendParentMessage() {
             // 학생·날짜당 1회 멱등 — 같은 날 재클릭 시 서버가 duplicate 반환(중복 발송 차단).
             requestId: `report_${parentMsgStudentId}_${state.selectedDate || ''}`,
         });
-        if (res?.duplicate) alert('이미 발송된 요청입니다.');
-        else if (res?.joined) alert('카카오톡(브랜드메시지)으로 발송 접수되었습니다.');
-        else alert('학부모가 채널 미가입이라 가입 안내 문자를 발송했습니다.');
+        let msg = res?.duplicate ? '이미 발송된 요청입니다.'
+            : res?.joined ? '카카오톡(브랜드메시지)으로 발송 접수되었습니다.'
+            : '학부모가 채널 미가입이라 가입 안내 문자를 발송했습니다.';
+
+        // 상담 기록은 새로 발송된 경우에만 저장(중복 요청이면 이미 기록됐을 수 있어 건너뜀).
+        if (logConsultation && !res?.duplicate) {
+            if (!state.selectedDate) {
+                msg += ' · (날짜 정보가 없어 상담은 저장되지 않음 — 상담 탭에서 수동 저장하세요)';
+            } else {
+                try {
+                    const student = getStudent?.(parentMsgStudentId) || {};
+                    const teacher = getCurrentTeacher?.() || {};
+                    await addConsultation(buildConsultationPayload({
+                        studentId: parentMsgStudentId,
+                        studentName: student.name || '',
+                        className: '',
+                        teacherId: teacher.id || '',
+                        teacherName: teacher.name || '',
+                        date: state.selectedDate,
+                        target: '학부모',
+                        method: '문자',
+                        consultationType: '정기',
+                        text: content,
+                        title: '',
+                    }));
+                    msg += ' · 상담 기록 저장됨';
+                } catch (e) {
+                    console.error('상담 기록 저장 실패:', e);
+                    msg += ' · (상담 저장 실패 — 상담 탭에서 수동 저장하세요: ' + (e?.message || e) + ')';
+                }
+            }
+        }
+        alert(msg);
     } catch (err) {
         console.error('리포트 발송 실패:', err);
         alert('발송 실패: ' + (err?.message || err));
     } finally {
         _sendingReport = false;
-        if (btn) btn.disabled = false;
+        btnIds.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = false; });
     }
 }
+
+export function sendParentMessage() { return _doSend(false); }
+export function sendParentMessageWithConsult() { return _doSend(true); }
