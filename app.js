@@ -187,6 +187,22 @@ if (import.meta.env?.DEV) {
     window._debug = { get allStudents() { return state.allStudents; }, get dailyRecords() { return state.dailyRecords; }, get hwFailTasks() { return state.hwFailTasks; }, get testFailTasks() { return state.testFailTasks; } };
 }
 
+// 코드 분할 청크 로드 실패(주로 새 배포 후 stale-chunk — 구 탭이 옛 청크 해시를 못 찾음)
+// 전역 처리. Vite는 동적 import 청크를 못 가져오면 vite:preloadError를 발화한다.
+// 한 번만 자동 새로고침해 새 청크를 받고(10초 가드로 무한 새로고침 방지), 재발 시 안내한다.
+// 모든 entry/탭의 동적 import를 일괄 커버하므로 호출부마다 .catch를 둘 필요가 없다.
+window.addEventListener('vite:preloadError', (event) => {
+    console.error('[chunk] 동적 import 로드 실패:', event.payload);
+    let last = 0;
+    try { last = Number(sessionStorage.getItem('dsc_chunk_reload_at')) || 0; } catch { /* storage 비활성 */ }
+    if (Date.now() - last > 10000) {
+        try { sessionStorage.setItem('dsc_chunk_reload_at', String(Date.now())); } catch { /* noop */ }
+        window.location.reload();
+    } else {
+        showToast('탭을 불러오지 못했습니다. 새로고침해 주세요.', 'error');
+    }
+});
+
 window.state = state;
 
 // _attToggleClass, _toVisitStatus, _visitBtnStyles, _visitLabel,

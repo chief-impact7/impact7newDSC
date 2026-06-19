@@ -408,26 +408,8 @@ function _ensureReportInputDefaults() {
     if (!endEl.value) endEl.value = formatDateKST(today);
 }
 
-// 동적 import(코드 분할 청크) 로드 실패 처리 — 주로 새 배포 후 구 탭이 옛 청크 해시를
-// 못 찾는 stale-chunk 상황. .catch가 없으면 import 실패가 조용히 삼켜져 탭이 빈 화면이 된다.
-// 청크 로드 실패일 때만 자동 새로고침해 새 청크를 받고, 그래도 안 되면 안내한다.
-// 시간 가드(10초)로 무한 새로고침과 일시 네트워크 오류 과민반응을 막는다.
-function _importTab(loader, label) {
-    return loader().catch(err => {
-        console.error(`[detail] ${label} 탭 모듈 로드 실패:`, err);
-        const isChunkError = /dynamically imported module|module script failed|Failed to fetch/i.test(String(err?.message || ''));
-        let last = 0;
-        try { last = Number(sessionStorage.getItem('dsc_chunk_reload_at')) || 0; } catch { /* storage 비활성 */ }
-        if (isChunkError && Date.now() - last > 10000) {
-            try { sessionStorage.setItem('dsc_chunk_reload_at', String(Date.now())); } catch { /* noop */ }
-            location.reload();
-            return new Promise(() => {}); // reload 진행 중 — 후속 then 차단
-        }
-        showToast('탭을 불러오지 못했습니다. 새로고침해 주세요.', 'error');
-        throw err;
-    });
-}
-
+// 탭 모듈은 동적 import로 로드한다. 청크 로드 실패(stale-chunk)는 app.js의 전역
+// vite:preloadError 핸들러가 자동 새로고침으로 처리하므로 호출부에 .catch를 두지 않는다.
 export function switchDetailTab(tab) {
     state.detailTab = tab;
     document.querySelectorAll('.detail-tab').forEach(t => {
@@ -449,7 +431,7 @@ export function switchDetailTab(tab) {
             _renderConsultationFn(state.selectedStudentId);
             return;
         }
-        _importTab(() => import('./consultation-card.js'), '상담').then(({ renderConsultationTab, initConsultationCardDeps }) => {
+        import('./consultation-card.js').then(({ renderConsultationTab, initConsultationCardDeps }) => {
             initConsultationCardDeps({
                 getStudent: (id) => findStudent(id),
                 getCurrentTeacher: () => ({
@@ -479,7 +461,7 @@ export function switchDetailTab(tab) {
             _renderMessageFn(state.selectedStudentId);
             return;
         }
-        _importTab(() => import('./message-card.js'), '메시지').then(({ renderMessageTab, initMessageCardDeps }) => {
+        import('./message-card.js').then(({ renderMessageTab, initMessageCardDeps }) => {
             initMessageCardDeps({
                 getStudent: (id) => findStudent(id),
                 toast: (msg, type) => showToast(msg, type),
@@ -494,7 +476,7 @@ export function switchDetailTab(tab) {
             _renderDocuFn(state.selectedStudentId);
             return;
         }
-        _importTab(() => import('./docu-card.js'), '기록').then(({ renderDocuTab, initDocuCardDeps }) => {
+        import('./docu-card.js').then(({ renderDocuTab, initDocuCardDeps }) => {
             initDocuCardDeps({
                 toast: (msg, type) => showToast(msg, type),
                 readonly: window.READ_ONLY === true,
@@ -1549,7 +1531,7 @@ export function renderStudentDetail(studentId) {
     if (!isWithdrawn) {
         const statusMount = document.getElementById('student-status-mount');
         if (statusMount) {
-            _importTab(() => import('./student-status-card.js'), '상태카드').then(({ renderStudentStatusCard, initStudentStatusCardDeps }) => {
+            import('./student-status-card.js').then(({ renderStudentStatusCard, initStudentStatusCardDeps }) => {
                 initStudentStatusCardDeps({ readonly: window.READ_ONLY === true });
                 // stale 방지: 그 사이 다른 학생으로 바뀌었으면 스킵
                 if (statusMount.dataset.studentId === studentId) {
