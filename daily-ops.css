@@ -3481,6 +3481,17 @@ textarea.field-input {
     gap: 6px;
     margin-top: 8px;
 }
+/* 날짜/파일 input은 DOM에 살려두되 시각적으로만 숨김 — showPicker 미지원 시 .click() fallback이 동작하도록 */
+.docu-visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    opacity: 0;
+    pointer-events: none;
+}
 .docu-icon-btn {
     width: 32px;
     height: 32px;
