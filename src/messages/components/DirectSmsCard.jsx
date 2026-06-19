@@ -43,7 +43,7 @@ export default function DirectSmsCard() {
   return (
     <section className="mc-section">
       <div className="mc-card">
-        <div className="mc-section-title">✍️ 임의 번호 즉석 SMS <span className="mc-tag">정보성 전용</span></div>
+        <div className="mc-section-title">📱 휴대폰 문자 전송 <span className="mc-tag">정보성 전용</span></div>
         <div className="mc-direct">
           <div>
             <p className="mc-field-label">수신번호 (줄바꿈/쉼표로 여러 명)</p>

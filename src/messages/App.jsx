@@ -72,8 +72,8 @@ export default function App() {
           </ErrorBoundary>
         </section>
         <BulkSendCard students={students} />
-        <ChannelFriendsCard students={students} />
         <DirectSmsCard />
+        <ChannelFriendsCard students={students} />
       </div>
     </div>
   );
