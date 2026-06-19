@@ -550,8 +550,10 @@ function _isDetailInputFocused() {
     if (!el) return false;
     const tag = el.tagName;
     if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') return false;
-    const detailPanel = document.getElementById('detail-cards') || document.getElementById('detail-content');
-    return detailPanel && detailPanel.contains(el);
+    // detail-content 우선 — 기록(docu) 탭(#docu-tab)은 #detail-cards의 형제라
+    // detail-cards 기준이면 docu 입력 중에도 가드가 작동하지 않아 재렌더로 입력이 유실된다.
+    const detailPanel = document.getElementById('detail-content') || document.getElementById('detail-cards');
+    return !!detailPanel && detailPanel.contains(el);
 }
 
 function _realtimeRefreshUI() {
