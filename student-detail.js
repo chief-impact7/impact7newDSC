@@ -818,113 +818,32 @@ function externalEventLabel(event) {
     return `${event.year || ''} ${event.month || ''}월 모의고사 ${event.grade ? `${event.grade}학년` : ''}`.replace(/\s+/g, ' ').trim();
 }
 
-function studentNumberOf(student) {
-    return student?.studentNumber || student?.registrationNo || '';
-}
-
-function isSameSchoolGradeResult(result, student) {
-    const className = result.className || '';
-    const school = currentSchool(student);
-    const grade = studentGrade(student);
-    return (!school || className.includes(school)) && (!grade || className.includes(`${grade}학년`));
-}
-
-async function firstResultByQuery(examId, field, value) {
-    if (!value) return null;
-    const snap = await getDocs(query(
-        collection(db, 'results', examId, 'students'),
-        where(field, '==', value)
-    ));
-    return snap.empty ? null : snap.docs[0];
-}
-
-async function findAcademyResultDoc(examId, studentId) {
-    const directSnap = await getDoc(doc(db, 'results', examId, 'students', studentId));
-    if (directSnap.exists()) return directSnap;
-
-    const student = state.allStudents.find(s => s.docId === studentId);
-    const studentNumber = studentNumberOf(student);
-
-    return await firstResultByQuery(examId, 'studentId', studentId)
-        || await firstResultByQuery(examId, 'studentNumber', studentNumber)
-        || await firstResultByQuery(examId, 'registrationNo', studentNumber)
-        || await findAcademyResultByName(examId, student);
-}
-
-async function findAcademyResultByName(examId, student) {
-    if (!student?.name) return null;
-
-    const snap = await getDocs(query(
-        collection(db, 'results', examId, 'students'),
-        where('studentName', '==', student.name)
-    ));
-    if (snap.empty) return null;
-    if (snap.size === 1) return snap.docs[0];
-
-    return snap.docs.find(d => isSameSchoolGradeResult(d.data(), student)) || null;
-}
-
-async function loadAcademyScores(studentId) {
-    const [examSnap, deptSnap] = await Promise.all([
-        getDocs(collection(db, 'exams')),
-        getDocs(collection(db, 'departments')),
-    ]);
-    const departmentsById = new Map();
-    deptSnap.forEach(d => departmentsById.set(d.id, d.data()));
-
-    const exams = [];
-    examSnap.forEach(d => {
-        const data = d.data();
-        if (data.deptId) exams.push({ id: d.id, ...data });
-    });
-
-    const rows = await Promise.all(exams.map(async exam => {
-        const resultSnap = await findAcademyResultDoc(exam.id, studentId);
-        if (!resultSnap) return null;
-        const r = resultSnap.data();
-        const department = departmentsById.get(exam.deptId);
+// student_scores/{studentId} 요약 raw → 화면 row. 점수 해석은 기존 헬퍼 재사용(계산 위치 불변). F-11.
+// (과거 results/external_score_events N+1 조회 → Cloud Function이 비정규화한 요약 1회 읽기로 전환)
+function buildAcademyRows(academy, departmentsById) {
+    return Object.values(academy || {}).map(a => {
+        const department = departmentsById.get(a.deptId);
         return {
-            title: esc(exam.title || '진단평가'),
-            date: esc(scoreDateText(exam.schedule?.startDate) || ''),
-            score: esc(reportScoreValue(r, department)),
-            domains: renderDomainScores(r, department),
+            title: esc(a.title || '진단평가'),
+            date: esc(scoreDateText(a.date) || ''),
+            score: esc(reportScoreValue(a.result, department)),
+            domains: renderDomainScores(a.result, department),
         };
-    }));
-
-    return rows.filter(Boolean).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 }
 
-async function loadSuneungIndexScores(studentId) {
-    const eventSnap = await getDocs(query(collection(db, 'external_score_events'), where('type', '==', 'suneung_index')));
-    const events = [];
-    eventSnap.forEach(d => events.push({ id: d.id, ...d.data() }));
-
-    const rows = await Promise.all(events.map(async event => {
-        const scoreSnap = await getDoc(doc(db, 'external_score_events', event.id, 'students', studentId));
-        if (!scoreSnap.exists()) return null;
-        const s = scoreSnap.data();
-        return {
-            title: esc(`${event.year || ''} ${event.month || ''}월 수능인덱스`.replace(/\s+/g, ' ').trim()),
-            date: esc(event.date || event.updatedAt || ''),
-            raw: esc(s.rawScore != null ? String(s.rawScore) : '—'),
-            index: esc('준비 중'),
-        };
-    }));
-
-    return rows.filter(Boolean).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+function buildSuneungRows(entries) {
+    return entries.map(({ event, score: s }) => ({
+        title: esc(`${event.year || ''} ${event.month || ''}월 수능인덱스`.replace(/\s+/g, ' ').trim()),
+        date: esc(event.date || event.updatedAt || ''),
+        raw: esc(s.rawScore != null ? String(s.rawScore) : '—'),
+        index: esc('준비 중'),
+    })).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 }
 
-async function loadExternalScores(studentId, type) {
-    const eventSnap = await getDocs(query(collection(db, 'external_score_events'), where('type', '==', type)));
-    const events = [];
-    eventSnap.forEach(d => events.push({ id: d.id, ...d.data() }));
-
-    const rows = await Promise.all(events.map(async event => {
-        const scoreSnap = await getDoc(doc(db, 'external_score_events', event.id, 'students', studentId));
-        if (!scoreSnap.exists()) return null;
-        const s = scoreSnap.data();
-        // 응시 대상 등록만 되고 점수 미입력된 placeholder 문서는 제외 — 표시할 실데이터
-        // (점수/등급/성적표/메모)가 하나도 없으면 빈 행이 마치 기록 있는 것처럼 보였다.
+function buildExternalRows(entries, type) {
+    return entries.map(({ event, score: s }) => {
+        // 점수/등급/성적표/메모가 하나도 없는 placeholder 응시 등록은 제외(빈 행 방지).
         const hasMeaningfulScore =
             scoreNum(s.predictedScore) != null || scoreNum(s.finalScore) != null
             || !!s.predictedGrade || !!s.finalGrade || !!s.reportImageUrl
@@ -934,8 +853,6 @@ async function loadExternalScores(studentId, type) {
         const diff = scoreNum(s.finalScore) != null && scoreNum(s.predictedScore) != null
             ? scoreNum(s.finalScore - s.predictedScore)
             : null;
-        // 학교내신은 작성일시 숨김. 정렬은 시험 시점 기준 — 한글 lexicographic은
-        // "기말"<"중간"이라 시간 역순이 깨지므로 examName을 시간순 코드로 매핑.
         const isSchool = type === 'school';
         const examNameOrder = ({ '중간': '1', '기말': '2' })[event.examName] || event.examName || '';
         const gradeKey = String(event.grade || '').padStart(2, '0');
@@ -958,9 +875,7 @@ async function loadExternalScores(studentId, type) {
             date: isSchool ? '' : (event.date || event.updatedAt || ''),
             _sortKey: sortKey,
         };
-    }));
-
-    return rows.filter(Boolean).sort((a, b) => (b._sortKey || '').localeCompare(a._sortKey || ''));
+    }).filter(Boolean).sort((a, b) => (b._sortKey || '').localeCompare(a._sortKey || ''));
 }
 
 // studentId 인자 우선 — renderStudentDetail이 그리는 상단 프로필과 동일 학생으로 점수를
@@ -973,25 +888,20 @@ export async function loadScoreCard(studentId = state.selectedStudentId) {
     contentEl.innerHTML = '<div class="detail-card-empty" style="padding:32px;text-align:center;">성적을 불러오는 중...</div>';
 
     try {
-        const [academyRows, suneungRows, schoolRows, mockRows] = await Promise.all([
-            loadAcademyScores(studentId).catch(err => {
-                console.warn('진단평가 조회 실패:', err);
-                return [];
-            }),
-            loadSuneungIndexScores(studentId).catch(err => {
-                console.warn('수능인덱스 조회 실패:', err);
-                return [];
-            }),
-            loadExternalScores(studentId, 'school').catch(err => {
-                console.warn('내신 성적 조회 실패:', err);
-                return [];
-            }),
-            loadExternalScores(studentId, 'mock').catch(err => {
-                console.warn('모의고사 성적 조회 실패:', err);
-                return [];
-            }),
+        // student_scores/{studentId} 요약 1회 + departments 1회로 4개 섹션을 구성한다(과거 N+1 제거). F-11.
+        const [scoreSnap, deptSnap] = await Promise.all([
+            getDoc(doc(db, 'student_scores', studentId)),
+            getDocs(collection(db, 'departments')),
         ]);
         if (state.selectedStudentId !== studentId) return;
+        const sdata = scoreSnap.exists() ? scoreSnap.data() : {};
+        const departmentsById = new Map();
+        deptSnap.forEach(d => departmentsById.set(d.id, d.data()));
+        const externalAll = Object.values(sdata.external || {});
+        const academyRows = buildAcademyRows(sdata.academy, departmentsById);
+        const suneungRows = buildSuneungRows(externalAll.filter(e => e.type === 'suneung_index'));
+        const schoolRows = buildExternalRows(externalAll.filter(e => e.type === 'school'), 'school');
+        const mockRows = buildExternalRows(externalAll.filter(e => e.type === 'mock'), 'mock');
 
         const academyHtml = renderScoreTable('진단평가', 'bar_chart', academyRows, '진단평가 결과가 없습니다.', [
             { key: 'title', label: '시험' },
