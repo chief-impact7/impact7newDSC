@@ -1,5 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { sendDirectMessage } from '../../../data-layer.js';
+import { messageMeta, normalizePhones } from '../message-format.js';
+import { parsePhonesFromFile, sampleCsv } from '../message-import.js';
+import TemplateBar from './TemplateBar.jsx';
 
 function newReqId() {
   // 입력 1회분 멱등키. 발송 성공 또는 내용 변경 시 리셋.
@@ -14,8 +17,36 @@ export default function DirectSmsCard() {
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState('');
   const reqIdRef = useRef(newReqId());
+  const fileRef = useRef(null);
 
   function resetReqId() { reqIdRef.current = newReqId(); }
+
+  async function onFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const phones = await parsePhonesFromFile(file);
+      if (!phones.length) { setMsg('파일에서 유효한 번호를 찾지 못했습니다.'); return; }
+      // 기존 입력에 없는 번호만 이어붙인다(중복 제거 — 발송과 동일한 정규화 기준).
+      const have = new Set(normalizePhones(recipients));
+      const add = phones.filter((p) => !have.has(p));
+      setRecipients(recipients.trim() ? recipients.replace(/\s*$/, '') + '\n' + add.join('\n') : add.join('\n'));
+      setMsg(`${file.name} — ${phones.length}개 인식 · ${add.length}개 추가`);
+      resetReqId();
+    } catch (err) {
+      setMsg('파일 읽기 실패: ' + (err?.message || err));
+    } finally {
+      e.target.value = '';
+    }
+  }
+
+  function downloadSample() {
+    const blob = new Blob(['﻿' + sampleCsv()], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = '수신번호_양식.csv'; a.click();
+    URL.revokeObjectURL(url);
+  }
 
   async function onSend() {
     if (sending) return;
@@ -40,23 +71,41 @@ export default function DirectSmsCard() {
     }
   }
 
+  const meta = messageMeta(text);
+  const count = new Set(normalizePhones(recipients)).size;
+
   return (
     <section className="mc-section">
       <div className="mc-card">
         <div className="mc-section-title">📱 휴대폰 문자 전송 <span className="mc-tag">정보성 전용</span></div>
         <div className="mc-direct">
           <div>
-            <p className="mc-field-label">수신번호 (줄바꿈/쉼표로 여러 명)</p>
+            <div className="mc-content-head">
+              <p className="mc-field-label">수신번호 (줄바꿈/쉼표로 여러 명){count ? ` · ${count}명` : ''}</p>
+              <div className="mc-vars">
+                <button type="button" className="mc-var-btn" onClick={() => fileRef.current?.click()}>📄 Excel·CSV 업로드</button>
+                <button type="button" className="mc-var-btn" onClick={downloadSample}>양식</button>
+              </div>
+            </div>
+            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={onFile} />
             <textarea className="mc-textarea" value={recipients}
               onChange={(e) => { setRecipients(e.target.value); resetReqId(); }}
               placeholder={'010-1234-5678\n010-9876-5432'} />
             <p className="mc-field-label" style={{ marginTop: 6 }}>학생 DB에 없는 번호도 가능 · 발신 02-2649-0509</p>
           </div>
           <div>
-            <p className="mc-field-label">내용</p>
+            <div className="mc-content-head">
+              <p className="mc-field-label">내용</p>
+              <TemplateBar content={text} onPick={(c) => { setText(c); resetReqId(); }} />
+            </div>
             <textarea className="mc-textarea" value={text}
               onChange={(e) => { setText(e.target.value); resetReqId(); }}
               placeholder="안내 내용을 입력하세요." />
+            <div className="mc-meta">
+              <span>{meta.chars}자 · {meta.bytes}byte</span>
+              <span className={'mc-pill' + (meta.type === 'LMS' ? ' lms' : '')}>{meta.type}</span>
+              {count ? <span>· {count}명</span> : null}
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
               <div className="mc-seg">
                 <button className={when === 'now' ? 'on' : ''} onClick={() => setWhen('now')}>즉시</button>

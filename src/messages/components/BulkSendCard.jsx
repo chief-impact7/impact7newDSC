@@ -4,7 +4,17 @@ import { studentFullLabel, currentSchool } from '@impact7/shared/student-label';
 import { allClassCodes } from '../../shared/firestore-helpers.js';
 import GradeFilter from '../../dashboard/components/GradeFilter.jsx';
 import { messageMeta } from '../message-format.js';
+import TemplateBar from './TemplateBar.jsx';
 import { createBulkMessage, createPromoCampaign } from '../../../data-layer.js';
+
+// 광고 규제(정보통신망법 §50): 머리에 (광고)[학원명], 끝에 무료수신거부 080. 서버도 동일 검증.
+const OPT_OUT_LINE = '무료수신거부 080-XXX-XXXX';
+function insertOptOut(content) {
+  let c = content;
+  if (!/\(광고\)/.test(c)) c = '(광고) [임팩트세븐학원]\n' + c;
+  if (!/(무료거부|수신거부|080)/.test(c)) c = c.replace(/\s*$/, '') + '\n' + OPT_OUT_LINE;
+  return c;
+}
 
 function newReqId() { return 'bulk-' + Math.random().toString(36).slice(2) + '-' + performance.now().toString(36); }
 
@@ -197,8 +207,12 @@ export default function BulkSendCard({ students = [] }) {
                 {VARS.map((v) => (
                   <button key={v} type="button" className="mc-var-btn" onClick={() => { setContent((c) => c + v); resetReqId(); }}>{v}</button>
                 ))}
+                {kind === 'promo' && (
+                  <button type="button" className="mc-var-btn" onClick={() => { setContent((c) => insertOptOut(c)); resetReqId(); }}>+ (광고)·080</button>
+                )}
               </div>
             </div>
+            <TemplateBar content={content} onPick={(c) => { setContent(c); resetReqId(); }} />
             <textarea className="mc-textarea bulk-content" value={content} onChange={(e) => { setContent(e.target.value); resetReqId(); }}
               placeholder={kind === 'promo' ? '(광고) [임팩트세븐학원]\n\n...\n\n무료수신거부 080-...' : '안내 내용을 입력하세요.'} />
             <div className="mc-meta">
@@ -213,7 +227,7 @@ export default function BulkSendCard({ students = [] }) {
             <p className="bulk-col-title">미리보기 &amp; 발송</p>
             <div className="mc-phone">
               <p className="mc-phone-sender">임팩트세븐학원 → {firstStudent ? `${firstStudent.name} ${recipientText}` : recipientText}</p>
-              <div className={'mc-bubble' + (content ? '' : ' empty') + (kind === 'promo' ? ' promo' : '')}>
+              <div className={'mc-bubble' + (content ? '' : ' empty')}>
                 {content ? applyVars(content, firstStudent) : '내용을 입력하면 여기에 표시됩니다.'}
               </div>
             </div>

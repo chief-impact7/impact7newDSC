@@ -57,6 +57,14 @@
 .mc-vars { display: flex; gap: 5px; }
 .mc-var-btn { font-size: 11px; border: 1px solid #cfe9df; background: #e8f5ef; color: #0a6e49; border-radius: 6px; padding: 2px 7px; cursor: pointer; font-family: inherit; }
 .mc-var-btn:hover { background: #d6ede2; }
+
+/* 템플릿 불러오기/저장 바 */
+.mc-tpl { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.mc-tpl select, .mc-tpl-title { font-size: 11.5px; border: 1px solid #e3e8e5; border-radius: 6px; padding: 2px 6px; font-family: inherit; }
+.mc-tpl-title { width: 110px; }
+.mc-tpl-save { font-size: 11px; border: 1px solid #0b7a52; background: #0b7a52; color: #fff; border-radius: 6px; padding: 2px 8px; cursor: pointer; font-family: inherit; }
+.mc-tpl-save:disabled { opacity: .5; cursor: default; }
+.mc-tpl-del { font-size: 11px; border: 0; background: none; color: #99a3ad; cursor: pointer; font-family: inherit; }
 .mc-meta { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: 7px; font-size: 12px; color: #7c8a83; }
 .mc-pill { background: #e8f5ef; border: 1px solid #cfe9df; border-radius: 20px; padding: 1px 9px; font-weight: 800; color: #0a6e49; }
 .mc-pill.lms { background: #fff4e6; border-color: #f3d9b3; color: #a4671a; }
@@ -65,7 +73,6 @@
 .mc-phone { background: #9bbbd4; border-radius: 14px; padding: 12px 11px; }
 .mc-phone-sender { font-size: 11px; color: #2c4a66; font-weight: 800; margin: 0 0 7px; }
 .mc-bubble { background: #fff; border-radius: 3px 13px 13px 13px; padding: 10px 12px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; box-shadow: 0 1px 1px rgba(0,0,0,.07); }
-.mc-bubble.promo::before { content: '(광고) '; color: #a4671a; font-weight: 800; }
 .mc-bubble.empty { color: #aeb8c2; box-shadow: none; }
 .mc-preview-foot { font-size: 11px; color: #7c8a83; margin: 7px 0 0; }
 .bulk-summary { margin-top: 10px; background: #f3f7f5; border: 1px solid #e3e8e5; border-radius: 8px; padding: 8px 11px; font-size: 12.5px; font-weight: 700; color: #0a6e49; }
