@@ -1179,6 +1179,12 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // [공통] 학생 성적 요약(student_scores) — 서버 Cloud Function(admin)만 갱신. F-11.
+    match /student_scores/{studentId} {
+      allow read: if isAuthorized();
+      allow write: if false;
+    }
+
     // =========================================================================
     // [공통] 상담 데이터
     // =========================================================================
