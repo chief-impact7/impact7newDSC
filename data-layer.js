@@ -860,8 +860,10 @@ export async function saveRetakeSchedule(data) {
     }
 }
 
-export async function saveImmediately(studentId, updates) {
-    showSaveIndicator('saving');
+// silent: 사용자가 명시적으로 저장한 게 아닌 백그라운드 캐시 동기화(예: 체크리스트 캐시
+// backfill)는 인디케이터를 띄우지 않는다. 단순 조회에 "저장 완료"가 떠 오해를 주는 것 방지.
+export async function saveImmediately(studentId, updates, { silent = false } = {}) {
+    if (!silent) showSaveIndicator('saving');
     try {
         const docId = makeDailyRecordId(studentId, state.selectedDate);
         const student = state.allStudents.find(s => s.docId === studentId);
@@ -877,10 +879,10 @@ export async function saveImmediately(studentId, updates) {
         }
         Object.assign(state.dailyRecords[studentId], updates);
 
-        showSaveIndicator('saved');
+        if (!silent) showSaveIndicator('saved');
     } catch (err) {
         console.error('저장 실패:', err);
-        showSaveIndicator('error');
+        if (!silent) showSaveIndicator('error');
     }
 }
 

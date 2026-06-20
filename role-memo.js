@@ -582,7 +582,7 @@ async function saveStudentMemoArray(studentId, memos) {
         const s = findStudent(studentId);
         if (s) s.memo = memos;
         showSaveIndicator('saved');
-        renderStudentDetail(studentId);
+        if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
     } catch (err) {
         console.error('고정 메모 저장 실패:', err);
         showSaveIndicator('error');

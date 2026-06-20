@@ -256,7 +256,7 @@ export async function saveStudentScheduledTime(studentId, classCode, time) {
         await auditUpdate(doc(db, 'students', studentId), { enrollments });
         student.enrollments = enrollments;
         showSaveIndicator('saved');
-        renderStudentDetail(studentId);
+        if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
     } catch (err) {
         console.error('등원예정시간 저장 실패:', err);
         showSaveIndicator('error');

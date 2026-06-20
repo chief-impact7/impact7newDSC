@@ -243,7 +243,8 @@ async function syncChecklistCache(studentId, items) {
     const samePending = prevPending.length === pending.length && prevPending.every((v, i) => v === pending[i]);
     if (prevComplete === complete && samePending) return; // 변경 없음 → 스킵
     // saveImmediately가 state.dailyRecords[studentId]까지 갱신·에러 처리한다.
-    await saveImmediately(studentId, { checklist_complete: complete, checklist_pending: pending });
+    // silent: 단순 조회 시 백그라운드 캐시 backfill이라 "저장 완료" 인디케이터를 띄우지 않는다.
+    await saveImmediately(studentId, { checklist_complete: complete, checklist_pending: pending }, { silent: true });
 }
 
 function renderChecklistCard(studentId) {
@@ -517,12 +518,13 @@ function _loadReportOrHistoryCard(studentId) {
     } else {
         if (dateRangeEl) dateRangeEl.style.display = '';
         _ensureReportInputDefaults();
-        loadReportCard();
+        loadReportCard(studentId);
     }
 }
 
-export async function loadReportCard() {
-    const studentId = state.selectedStudentId;
+// studentId 인자 우선(생략 시 현재 선택 학생). 상단 프로필과 동일 학생의 출결을 그리고,
+// getDocs 후 stale 가드로 빠른 학생 전환 시 구학생 데이터가 신학생 라벨로 그려지는 것 차단.
+export async function loadReportCard(studentId = state.selectedStudentId) {
     if (!studentId) return;
 
     const startDate = document.getElementById('report-start').value;
@@ -547,6 +549,8 @@ export async function loadReportCard() {
             where('date', '<=', endDate)
         );
         const snap = await getDocs(q);
+        // 조회 중 다른 학생으로 전환됐으면 구학생 레코드를 신학생 라벨로 그리지 않도록 폐기.
+        if (state.selectedStudentId !== studentId) return;
         const records = [];
         snap.forEach(d => records.push(d.data()));
         records.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -919,6 +923,14 @@ async function loadExternalScores(studentId, type) {
         const scoreSnap = await getDoc(doc(db, 'external_score_events', event.id, 'students', studentId));
         if (!scoreSnap.exists()) return null;
         const s = scoreSnap.data();
+        // 응시 대상 등록만 되고 점수 미입력된 placeholder 문서는 제외 — 표시할 실데이터
+        // (점수/등급/성적표/메모)가 하나도 없으면 빈 행이 마치 기록 있는 것처럼 보였다.
+        const hasMeaningfulScore =
+            scoreNum(s.predictedScore) != null || scoreNum(s.finalScore) != null
+            || !!s.predictedGrade || !!s.finalGrade || !!s.reportImageUrl
+            || (type === 'mock' && (scoreNum(s.percentile) != null || scoreNum(s.standardScore) != null))
+            || (type === 'school' && !!s.memo);
+        if (!hasMeaningfulScore) return null;
         const diff = scoreNum(s.finalScore) != null && scoreNum(s.predictedScore) != null
             ? scoreNum(s.finalScore - s.predictedScore)
             : null;
@@ -951,8 +963,9 @@ async function loadExternalScores(studentId, type) {
     return rows.filter(Boolean).sort((a, b) => (b._sortKey || '').localeCompare(a._sortKey || ''));
 }
 
-export async function loadScoreCard() {
-    const studentId = state.selectedStudentId;
+// studentId 인자 우선 — renderStudentDetail이 그리는 상단 프로필과 동일 학생으로 점수를
+// 채우기 위함(인자 생략 시 현재 선택 학생). selectedStudentId만 읽으면 상단≠점수 불일치 가능.
+export async function loadScoreCard(studentId = state.selectedStudentId) {
     if (!studentId) return;
 
     const contentEl = document.getElementById('score-content');
@@ -1559,7 +1572,7 @@ export function renderStudentDetail(studentId) {
     const scoreTabEl = document.getElementById('score-tab');
     if (scoreTabEl) {
         scoreTabEl.style.display = state.detailTab === 'score' ? '' : 'none';
-        if (state.detailTab === 'score') loadScoreCard();
+        if (state.detailTab === 'score') loadScoreCard(studentId);
     }
     const consultTabEl = document.getElementById('consultation-tab');
     if (consultTabEl) {

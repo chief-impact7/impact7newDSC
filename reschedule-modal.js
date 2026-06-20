@@ -166,7 +166,7 @@ async function _saveBulkReschedule(items, newDate, newTime, reason, studentId) {
         _subFilterBaseRef.clear();
         renderSubFilters();
         renderListPanel();
-        if (studentId) renderStudentDetail(studentId);
+        if (studentId && state.selectedStudentId === studentId) renderStudentDetail(studentId);
         showSaveIndicator('saved');
     } catch (err) {
         console.error('묶음 재지정 저장 실패:', err);
@@ -229,7 +229,7 @@ export async function saveReschedule() {
             document.getElementById('reschedule-modal').style.display = 'none';
             _rescheduleTarget = null;
             state._scheduledVisitsCache = null;
-            renderStudentDetail(studentId);
+            if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
             renderListPanel();
             showSaveIndicator('saved');
         } catch (err) {
@@ -282,7 +282,7 @@ export async function saveReschedule() {
         _subFilterBaseRef.clear();
         renderSubFilters();
         renderListPanel();
-        if (studentId) renderStudentDetail(studentId);
+        if (studentId && state.selectedStudentId === studentId) renderStudentDetail(studentId);
         showSaveIndicator('saved');
     } catch (err) {
         console.error('재지정 저장 실패:', err);

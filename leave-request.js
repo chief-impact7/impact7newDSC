@@ -283,7 +283,7 @@ export async function toggleReturnConsult(studentId) {
             delete s.return_consult_done_by;
             delete s.return_consult_done_at;
         }
-        renderStudentDetail(studentId);
+        if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
         renderSubFilters();
         renderListPanel();
         showSaveIndicator('saved');
@@ -731,7 +731,7 @@ export async function toggleCancelLeaveRequest(docId, studentId) {
         showSaveIndicator('saved');
         renderSubFilters();
         if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) renderLeaveRequestList();
-        renderStudentDetail(studentId);
+        if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
     } catch (err) { alert('처리 실패: ' + err.message); }
 }
 
@@ -783,7 +783,7 @@ export async function cancelScheduledLeave(studentId) {
 
         showSaveIndicator('saved');
         renderSubFilters();
-        renderStudentDetail(studentId);
+        if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
     } catch (err) {
         alert('휴원 취소 처리 실패: ' + err.message);
     }
@@ -834,7 +834,7 @@ export async function cancelScheduledWithdrawal(studentId) {
         showSaveIndicator('saved');
         renderSubFilters();
         if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) renderLeaveRequestList();
-        renderStudentDetail(studentId);
+        if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
     } catch (err) {
         alert('퇴원 취소 처리 실패: ' + err.message);
     }
@@ -866,7 +866,7 @@ export async function teacherApproveLeaveRequest(docId, studentId) {
             showSaveIndicator('saved');
             renderSubFilters();
             if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) renderLeaveRequestList();
-            renderStudentDetail(studentId);
+            if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
         } catch (err) { alert('교수부 승인 취소 실패: ' + err.message); }
         return;
     }
@@ -895,7 +895,7 @@ export async function teacherApproveLeaveRequest(docId, studentId) {
         showSaveIndicator('saved');
         renderSubFilters();
         if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) renderLeaveRequestList();
-        renderStudentDetail(studentId);
+        if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
     } catch (err) {
         alert('교수부 승인 실패: ' + err.message);
         console.error(err);
@@ -916,7 +916,7 @@ export async function approveLeaveRequest(docId, studentId) {
             showSaveIndicator('saved');
             renderSubFilters();
             if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) renderLeaveRequestList();
-            renderStudentDetail(studentId);
+            if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
         } catch (err) { alert('행정부 승인 취소 실패: ' + err.message); }
         return;
     }
@@ -946,7 +946,7 @@ export async function approveLeaveRequest(docId, studentId) {
         showSaveIndicator('saved');
         renderSubFilters();
         if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) renderLeaveRequestList();
-        renderStudentDetail(studentId);
+        if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
     } catch (err) {
         alert('행정부 승인 실패: ' + err.message);
         console.error(err);
@@ -965,7 +965,7 @@ export async function cancelLeaveRequest(docId, studentId) {
         if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) {
             renderLeaveRequestList();
         }
-        renderStudentDetail(studentId);
+        if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
     } catch (err) {
         alert('취소 실패: ' + err.message);
         console.error(err);
@@ -1111,7 +1111,7 @@ export async function submitReturnFromLeave() {
         if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) {
             renderLeaveRequestList();
         }
-        renderStudentDetail(savedStudentId);
+        if (state.selectedStudentId === savedStudentId) renderStudentDetail(savedStudentId);
     } catch (err) {
         alert('요청 실패: ' + err.message);
         console.error(err);
