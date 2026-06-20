@@ -65,7 +65,7 @@ service cloud.firestore {
           && data.enrollments is list
           && (!data.keys().hasAny(['status']) || (
                 data.status is string
-                && data.status in ['등원예정', '재원', '실휴원', '가휴원', '퇴원', '상담']
+                && data.status in ['등원예정', '재원', '실휴원', '가휴원', '퇴원', '상담', '종강']
              ))
           && (!data.keys().hasAny(['parent_phone_1']) || (
                 data.parent_phone_1 is string

@@ -11,30 +11,30 @@ service firebase.storage {
 
     // === impact7exam ===
     match /exam-papers/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow read: if isAuthorized();
+      allow write: if isAuthorized();
     }
     match /scans/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow read: if isAuthorized();
+      allow write: if isAuthorized();
     }
 
     // === impact7HR ===
     match /staff/{staffId}/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow read: if isAuthorized();
+      allow write: if isAuthorized();
     }
     match /contracts/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow read: if isAuthorized();
+      allow write: if isAuthorized();
     }
     match /expenses/{expenseId}/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow read: if isAuthorized();
+      allow write: if isAuthorized();
     }
     match /signatures/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow read: if isAuthorized();
+      allow write: if isAuthorized();
     }
 
     // === impact7newDSC ===
