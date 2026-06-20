@@ -26,6 +26,16 @@ describe('filterStudents', () => {
     expect(out.map((s) => s.name)).toEqual(['A']);
   });
 
+  it('filters by classCode against all enrollments (학생 객체가 아닌 enrollments 기준)', () => {
+    const list = [
+      S({ name: 'A', enrollments: [{ level_symbol: 'PA', class_number: '101' }, { level_symbol: 'NA', class_number: '202' }] }),
+      S({ name: 'B', enrollments: [{ level_symbol: 'PA', class_number: '303' }] }),
+    ];
+    // 두 번째 enrollment 코드로도 매칭돼야 한다(학생 객체엔 level_symbol/class_number가 없음).
+    const out = filterStudents(list, { classCode: 'NA202' });
+    expect(out.map((s) => s.name)).toEqual(['A']);
+  });
+
   it('returns all when no criteria', () => {
     const list = [S(), S({ name: 'B' })];
     expect(filterStudents(list, {})).toHaveLength(2);

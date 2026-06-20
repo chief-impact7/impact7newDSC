@@ -1,4 +1,4 @@
-import { studentGradeKey, branchFromStudent, enrollmentCode, allClassCodes } from '../shared/firestore-helpers.js';
+import { studentGradeKey, branchFromStudent, allClassCodes } from '../shared/firestore-helpers.js';
 import { studentSearchTerms } from '@impact7/shared/student-label';
 import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 
@@ -9,7 +9,7 @@ export function filterStudents(students, criteria = {}) {
   return (students || []).filter((s) => {
     if (branch && branchFromStudent(s) !== branch) return false;
     if (grades && grades.size && !grades.has(studentGradeKey(s))) return false;
-    if (classCode && enrollmentCode(s) !== classCode) return false;
+    if (classCode && !allClassCodes(s).includes(classCode)) return false;
     if (status === 'enrolled' && !ENROLLABLE_STATUSES.has(s.status)) return false;
     if (status === 'non' && ENROLLABLE_STATUSES.has(s.status)) return false;
     if (needle) {
