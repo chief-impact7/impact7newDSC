@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import ReactECharts from 'echarts-for-react';
+import ReactECharts from '../echarts.jsx';
 import { HW_FIELDS } from '../constants.js';
 
 const PIE_COLORS = ['#188038', '#d93025', '#f9ab00', '#dadce0'];

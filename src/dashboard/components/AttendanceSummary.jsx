@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import ReactECharts from 'echarts-for-react';
+import ReactECharts from '../echarts.jsx';
 
 const COLORS = { 출석: '#188038', 결석: '#d93025', 지각: '#f9ab00', 조퇴: '#e67e22' };
 

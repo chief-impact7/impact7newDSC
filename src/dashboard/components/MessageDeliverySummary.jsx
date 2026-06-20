@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import ReactECharts from 'echarts-for-react';
+import ReactECharts from '../echarts.jsx';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../../firebase-config.js';
 import { formatDateTimeKST } from '@impact7/shared/datetime';

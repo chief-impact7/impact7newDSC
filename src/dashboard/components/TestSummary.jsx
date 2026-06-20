@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import ReactECharts from 'echarts-for-react';
+import ReactECharts from '../echarts.jsx';
 import { TEST_FIELDS } from '../constants.js';
 
 const BAR_COLORS = ['#1a73e8', '#188038', '#f9ab00', '#d93025'];

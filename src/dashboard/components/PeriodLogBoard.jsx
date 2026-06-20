@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import ReactECharts from 'echarts-for-react';
+import ReactECharts from '../echarts.jsx';
 import { HW_FIELDS, TEST_FIELDS } from '../constants.js';
 
 const ATTENDANCE_KEYS = ['출석', '지각', '조퇴', '결석'];

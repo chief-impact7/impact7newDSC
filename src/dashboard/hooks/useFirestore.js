@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../../firebase-config.js';
 import {
@@ -59,9 +59,11 @@ export function useDashboardData(user, startDate, endDate) {
     const [dailyLog, setDailyLog] = useState(emptyDailyLogData);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const reqIdRef = useRef(0);
 
     const reload = useCallback(() => {
         if (!user || !startDate || !endDate) return;
+        const reqId = ++reqIdRef.current;   // 빠른 기간 변경 시 이전 요청 응답이 최신을 덮지 않도록. F-09
         setLoading(true);
         setError(null);
         Promise.all([
@@ -71,6 +73,7 @@ export function useDashboardData(user, startDate, endDate) {
             startDate === endDate ? fetchDashboardDailyLogData(startDate) : Promise.resolve(null),
         ])
             .then(([c, records, p, log]) => {
+                if (reqId !== reqIdRef.current) return;
                 setChecks(c);
                 setDailyRecords(records);
                 setPostponed(p);
@@ -78,10 +81,13 @@ export function useDashboardData(user, startDate, endDate) {
                 else setDailyLog(emptyDailyLogData());
             })
             .catch(err => {
+                if (reqId !== reqIdRef.current) return;
                 console.error('[useDashboardData]', err);
                 setError(err);
             })
-            .finally(() => setLoading(false));
+            .finally(() => {
+                if (reqId === reqIdRef.current) setLoading(false);
+            });
     }, [user, startDate, endDate]);
 
     useEffect(() => { reload(); }, [reload]);
