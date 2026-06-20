@@ -226,6 +226,7 @@ window.__docuEditSave = async function (recordId) {
   if (saveBtn) saveBtn.disabled = true;
   try {
     const patch = { occurred_at, content };
+    let uploadedMetas = [];
     // 추가 첨부가 있으면 기존 files에 병합(파일 개별 삭제는 범위 밖).
     if (newFiles.length) {
       const records = await listStudentRecords(studentId);
@@ -239,9 +240,16 @@ window.__docuEditSave = async function (recordId) {
         await deleteRecordFiles(metas);
         throw upErr;
       }
+      uploadedMetas = metas;
       patch.files = [...existingFiles, ...metas];
     }
-    await updateRecord(recordId, patch);
+    // 문서 갱신 실패 시 이번에 올린 신규 파일을 보상 삭제(고아 객체 방지). F-05.
+    try {
+      await updateRecord(recordId, patch);
+    } catch (docErr) {
+      await deleteRecordFiles(uploadedMetas);
+      throw docErr;
+    }
     _deps.toast?.('수정되었습니다', 'success');
     _editingId = null;
     _editBuffer = null;
@@ -281,6 +289,7 @@ window.__docuSave = async function (type) {
 
   _saving = true;
   if (saveBtn) saveBtn.disabled = true;
+  let phase = 'upload';
   try {
     const recordRef = newRecordRef();
     const recordId = recordRef.id;
@@ -294,14 +303,20 @@ window.__docuSave = async function (type) {
       await deleteRecordFiles(metas);
       throw upErr;
     }
-    // 문서는 마지막에 1회만 기록 — 빈 문서/고아 객체 없음.
-    await createRecord(recordRef, studentId, type, { occurred_at, content, files: metas });
+    // 문서는 마지막에 1회만 기록 — 실패 시 방금 올린 파일을 보상 삭제(고아 객체 방지). F-05.
+    phase = 'doc';
+    try {
+      await createRecord(recordRef, studentId, type, { occurred_at, content, files: metas });
+    } catch (docErr) {
+      await deleteRecordFiles(metas);
+      throw docErr;
+    }
     _deps.toast?.('저장되었습니다', 'success');
     _deps.refreshBadge?.(studentId); // 방금 추가한 기록은 항상 2주 이내 → 뱃지 갱신
     if (_currentStudentId === studentId) renderDocuTab(studentId); // stale 가드
   } catch (err) {
     console.error('[docu] 저장 실패:', err);
-    _deps.toast?.('저장 실패(첨부 업로드 오류)', 'error');
+    _deps.toast?.(phase === 'upload' ? '저장 실패(첨부 업로드 오류)' : '저장 실패(기록 저장 오류)', 'error');
     if (saveBtn && document.body.contains(saveBtn)) saveBtn.disabled = false;
   } finally {
     _saving = false;
@@ -311,8 +326,15 @@ window.__docuSave = async function (type) {
 window.__docuDelete = async function (recordId) {
   if (_deps.readonly || !_currentStudentId || _saving) return;
   const studentId = _currentStudentId;
-  let records = [];
-  try { records = await listStudentRecords(studentId); } catch { /* 아래에서 처리 */ }
+  let records;
+  try {
+    records = await listStudentRecords(studentId);
+  } catch (err) {
+    // 조회 실패를 조용히 삼키면 삭제가 무반응으로 보인다(성공과 구분 불가). F-05.
+    console.error('[docu] 기록 조회 실패:', err);
+    _deps.toast?.('삭제 실패(기록 조회 오류)', 'error');
+    return;
+  }
   const rec = records.find(r => r.id === recordId);
   if (!rec) return;
   try {

@@ -59,7 +59,10 @@ export async function deleteRecordFiles(files) {
 }
 
 // 반환: { failed: string[] } — 삭제 실패한 파일 경로(이미 없는 객체는 무시).
+// 문서를 먼저 삭제한다 — 문서 삭제가 실패하면 파일은 건드리지 않아 정합성을 유지하고(throw),
+// 성공 후 파일 삭제가 실패하면 고아 객체만 남아(failed로 반환) dangling 참조는 생기지 않는다. F-05.
 export async function deleteRecord(record) {
+  await auditDelete(doc(db, COL, record.id));
   const failed = [];
   for (const f of record.files || []) {
     if (READ_ONLY) { console.log('[READ-ONLY] deleteObject 차단:', f.path); continue; }
@@ -70,6 +73,5 @@ export async function deleteRecord(record) {
       failed.push(f.path);
     }
   }
-  await auditDelete(doc(db, COL, record.id));
   return { failed };
 }
