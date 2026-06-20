@@ -1705,8 +1705,15 @@ export async function addExtraVisit(studentId) {
 export async function clearExtraVisit(studentId) {
     if (state.selectedDate < todayStr()) { alert('과거 기록은 삭제할 수 없습니다.'); return; }
     const rec = state.dailyRecords[studentId];
+    const prevExtraVisit = rec ? rec.extra_visit : undefined;
     if (rec) delete rec.extra_visit;
-    await saveImmediately(studentId, { extra_visit: deleteField() });
+    try {
+        await saveImmediately(studentId, { extra_visit: deleteField() });
+    } catch (err) {
+        // 저장 실패 시 optimistic delete를 되돌린다. F-04.
+        console.error('방문 삭제 실패:', err);
+        if (rec && prevExtraVisit !== undefined) rec.extra_visit = prevExtraVisit;
+    }
     renderStudentDetail(studentId);
     renderSubFilters();
     renderListPanel();

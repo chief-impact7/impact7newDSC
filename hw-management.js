@@ -776,7 +776,20 @@ export function toggleHomework(studentId, hwIndex, status) {
     const homework = [...(rec.homework || [])];
     if (homework[hwIndex]) {
         homework[hwIndex] = { ...homework[hwIndex], status };
-        saveImmediately(studentId, { homework });
+        const prevHomework = rec.homework ? rec.homework.map(h => ({ ...h })) : undefined;
+        saveImmediately(studentId, { homework }).catch((err) => {
+            // 저장 실패 시 optimistic 캐시 rollback + 리렌더. F-04.
+            // daily_records onSnapshot이 재구성하면 항목이 사라질 수 있어 존재 가드.
+            console.error('숙제 저장 실패:', err);
+            const cur = state.dailyRecords[studentId];
+            if (cur) {
+                if (prevHomework) cur.homework = prevHomework;
+                else delete cur.homework;
+            }
+            renderSubFilters();
+            renderListPanel();
+            if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
+        });
 
         if (!state.dailyRecords[studentId]) {
             state.dailyRecords[studentId] = { student_id: studentId, date: state.selectedDate };
@@ -824,8 +837,23 @@ export function applyHwDomainOX(studentId, field, domain, forceValue) {
         updates[secondField] = secondData;
     }
 
-    // 즉시 저장
-    saveImmediately(studentId, updates);
+    // 즉시 저장 (실패 시 optimistic 캐시 rollback + 리렌더). F-04.
+    // 변경한 두 필드만 되돌린다 — 레코드 통째 교체는 그 사이 동시 변경된 다른 필드(출결 등)를
+    // 유실시키고, onSnapshot 재구성으로 항목이 사라지면 undefined가 되므로 존재 가드.
+    const prevField = rec[field];
+    const prevSecond = secondField ? rec[secondField] : undefined;
+    saveImmediately(studentId, updates).catch((err) => {
+        console.error('OX 저장 실패:', err);
+        const cur = state.dailyRecords[studentId];
+        if (cur) {
+            if (prevField === undefined) delete cur[field]; else cur[field] = prevField;
+            if (secondField && updates[secondField] !== undefined) {
+                if (prevSecond === undefined) delete cur[secondField]; else cur[secondField] = prevSecond;
+            }
+        }
+        renderSubFilters();
+        if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
+    });
 
     // 로컬 캐시 업데이트
     if (!state.dailyRecords[studentId]) {

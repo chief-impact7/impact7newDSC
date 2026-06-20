@@ -16,6 +16,7 @@ import { showSaveIndicator, showToast } from './ui-utils.js';
 import { openKoreanDatePicker } from './date-picker.js';
 import { normalizeDays, enrollmentCode, branchFromStudent, makeDailyRecordId, getActiveEnrollments } from './student-helpers.js';
 import { DEFAULT_HISTORY_LIMIT } from './consultation-filter.js';
+import { createDebouncedWriter } from './save-scheduler.js';
 import { createPromoteEnrollPending } from '@impact7/shared/promote-enroll';
 import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 import { deriveStudentNumber, studentNumberIdentityKey } from '@impact7/shared/student-number';
@@ -25,6 +26,61 @@ const _promoteEnrollPending = createPromoteEnrollPending(
     { db, writeBatch, doc, collection, serverTimestamp },
     { idField: 'docId', batchUpdate }
 );
+
+// ─── 지연 저장 스케줄러 (날짜 컨텍스트 고정) ──────────────────────────────────
+// 예약 시점의 targetDate·payload를 캡처해, 발동 전에 날짜를 바꿔도 원래 날짜 문서에만
+// 저장한다. 로컬 캐시는 발동 시점에 같은 날짜를 보고 있을 때만 갱신한다. F-01.
+// daily_records 저장 + 로컬 캐시 갱신 헬퍼 (debounce/immediate 공통)
+async function _persistDailyRecord(studentId, targetDate, updates) {
+    const student = state.allStudents.find(s => s.docId === studentId);
+    await auditSet(doc(db, 'daily_records', makeDailyRecordId(studentId, targetDate)), {
+        student_id: studentId,
+        date: targetDate,
+        branch: branchFromStudent(student || {}),
+        ...updates
+    }, { merge: true });
+}
+function _applyDailyCache(studentId, targetDate, updates) {
+    if (!state.dailyRecords[studentId]) {
+        state.dailyRecords[studentId] = { docId: makeDailyRecordId(studentId, targetDate), student_id: studentId, date: targetDate };
+    }
+    Object.assign(state.dailyRecords[studentId], updates);
+}
+
+async function _writeDailyRecord({ studentId, targetDate, updates }) {
+    try {
+        await _persistDailyRecord(studentId, targetDate, updates);
+        // 발동 시점에 같은 날짜를 보고 있을 때만 캐시 갱신
+        if (state.selectedDate === targetDate) _applyDailyCache(studentId, targetDate, updates);
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('저장 실패:', err);
+        showSaveIndicator('error');
+        alert('저장 실패: ' + (err.code || '') + ' ' + (err.message || err));
+    }
+}
+const _dailyWriter = createDebouncedWriter(_writeDailyRecord);
+
+async function _writeClassNextHw({ classCode, targetDate, domains }) {
+    try {
+        await auditSet(doc(db, 'class_next_hw', `${classCode}_${targetDate}`), {
+            class_code: classCode,
+            date: targetDate,
+            domains
+        }, { merge: true });
+        showSaveIndicator('saved');
+    } catch (err) {
+        console.error('다음숙제 저장 실패:', err);
+        showSaveIndicator('error');
+    }
+}
+const _nextHwWriter = createDebouncedWriter(_writeClassNextHw);
+
+// 날짜 전환 전 예약된 저장을 원래 날짜에 즉시 확정한다.
+async function flushPendingDailyWrites() {
+    await _dailyWriter.flushAll();
+    await _nextHwWriter.flushAll();
+}
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderSubFilters, renderListPanel, renderStudentDetail, renderClassDetail,
@@ -104,35 +160,22 @@ export async function loadClassNextHw(date) {
 }
 
 export function saveClassNextHw(classCode, domain, text, immediate = false) {
-    const timerKey = `${classCode}_${domain}`;
-    if (state.nextHwSaveTimers[timerKey]) clearTimeout(state.nextHwSaveTimers[timerKey]);
-
+    const targetDate = state.selectedDate;
     // 로컬 상태 즉시 업데이트
     if (!state.classNextHw[classCode]) {
-        state.classNextHw[classCode] = { class_code: classCode, date: state.selectedDate, domains: {} };
+        state.classNextHw[classCode] = { class_code: classCode, date: targetDate, domains: {} };
     }
     state.classNextHw[classCode].domains[domain] = text;
+    // 예약 시점 domains 스냅샷 — 발동 시 날짜가 바뀌어 교체된 state를 참조하지 않도록 고정
+    const domains = { ...state.classNextHw[classCode].domains };
+    const key = `${classCode}_${domain}_${targetDate}`;
 
-    const doSave = async () => {
-        showSaveIndicator('saving');
-        try {
-            const docId = `${classCode}_${state.selectedDate}`;
-            await auditSet(doc(db, 'class_next_hw', docId), {
-                class_code: classCode,
-                date: state.selectedDate,
-                domains: state.classNextHw[classCode].domains
-            }, { merge: true });
-            showSaveIndicator('saved');
-        } catch (err) {
-            console.error('다음숙제 저장 실패:', err);
-            showSaveIndicator('error');
-        }
-    };
-
+    showSaveIndicator('saving');
     if (immediate) {
-        doSave();
+        _nextHwWriter.cancel(key);
+        _writeClassNextHw({ classCode, targetDate, domains });
     } else {
-        state.nextHwSaveTimers[timerKey] = setTimeout(doSave, 2000);
+        _nextHwWriter.request(key, { classCode, targetDate, domains });
     }
 }
 
@@ -814,33 +857,9 @@ export function loadWithdrawnStudents() {
 }
 
 export function saveDailyRecord(studentId, updates) {
-    if (state.saveTimers[studentId]) clearTimeout(state.saveTimers[studentId]);
+    const targetDate = state.selectedDate;
     showSaveIndicator('saving');
-
-    state.saveTimers[studentId] = setTimeout(async () => {
-        try {
-            const docId = makeDailyRecordId(studentId, state.selectedDate);
-            const student = state.allStudents.find(s => s.docId === studentId);
-            await auditSet(doc(db, 'daily_records', docId), {
-                student_id: studentId,
-                date: state.selectedDate,
-                branch: branchFromStudent(student || {}),
-                ...updates
-            }, { merge: true });
-
-            // 로컬 캐시 업데이트
-            if (!state.dailyRecords[studentId]) {
-                state.dailyRecords[studentId] = { docId, student_id: studentId, date: state.selectedDate };
-            }
-            Object.assign(state.dailyRecords[studentId], updates);
-
-            showSaveIndicator('saved');
-        } catch (err) {
-            console.error('저장 실패:', err);
-            showSaveIndicator('error');
-            alert('저장 실패: ' + (err.code || '') + ' ' + (err.message || err));
-        }
-    }, 2000);
+    _dailyWriter.request(`${studentId}_${targetDate}`, { studentId, targetDate, updates });
 }
 
 export async function saveRetakeSchedule(data) {
@@ -864,25 +883,15 @@ export async function saveRetakeSchedule(data) {
 // backfill)는 인디케이터를 띄우지 않는다. 단순 조회에 "저장 완료"가 떠 오해를 주는 것 방지.
 export async function saveImmediately(studentId, updates, { silent = false } = {}) {
     if (!silent) showSaveIndicator('saving');
+    const targetDate = state.selectedDate;
     try {
-        const docId = makeDailyRecordId(studentId, state.selectedDate);
-        const student = state.allStudents.find(s => s.docId === studentId);
-        await auditSet(doc(db, 'daily_records', docId), {
-            student_id: studentId,
-            date: state.selectedDate,
-            branch: branchFromStudent(student || {}),
-            ...updates
-        }, { merge: true });
-
-        if (!state.dailyRecords[studentId]) {
-            state.dailyRecords[studentId] = { docId, student_id: studentId, date: state.selectedDate };
-        }
-        Object.assign(state.dailyRecords[studentId], updates);
-
+        await _persistDailyRecord(studentId, targetDate, updates);
+        _applyDailyCache(studentId, targetDate, updates);
         if (!silent) showSaveIndicator('saved');
     } catch (err) {
         console.error('저장 실패:', err);
         if (!silent) showSaveIndicator('error');
+        throw err;   // F-04: 실패를 호출자에게 전파 (optimistic rollback/재시도는 호출자 책임)
     }
 }
 
@@ -911,6 +920,7 @@ export function updateDateDisplay() {
 }
 
 export async function reloadForDate() {
+    await flushPendingDailyWrites();   // 예약된 저장을 원래(이전) 날짜에 확정한 뒤 새 날짜 로드
     updateDateDisplay();   // 데이터 로드를 기다리지 않고 날짜 칩/배너 즉시 갱신
     state._visitStatusPending = {};
 

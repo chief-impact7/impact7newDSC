@@ -9,7 +9,7 @@ import { getDayName } from './src/shared/firestore-helpers.js';
 import { state, NEW_STUDENT_DAYS } from './state.js';
 import { showSaveIndicator, nowTimeStr } from './ui-utils.js';
 import { branchFromStudent, getStudentClassContextsForDate, isPauseExpired, pauseExpiredDays, findStudent } from './student-helpers.js';
-import { saveImmediately, saveDailyRecord } from './data-layer.js';
+import { saveImmediately, saveDailyRecord, reloadForDate } from './data-layer.js';
 
 // 토글 UI의 "기본" 라벨 집합 — 이 라벨들을 클릭하면 attendance.status는 '미확인'으로 리셋.
 // 오늘 수업 유형/비정규 여부에 따라 첫 버튼 라벨이 동적으로 바뀌지만, 의미는 모두 동일("아직 미확인").
@@ -301,7 +301,12 @@ export function applyAttendance(studentId, displayStatus, force = false, silent 
         updates.arrival_time = '';
     }
 
-    saveImmediately(studentId, updates);
+    saveImmediately(studentId, updates).catch((err) => {
+        // 저장 실패 시 optimistic 캐시·DOM·결석대장 부수효과를 서버 기준으로 재동기화. F-04.
+        // bulk(silent) 경로는 학생마다 전체 reload가 폭발하므로 생략 — 서버 onSnapshot이 교정한다.
+        console.error('출결 저장 실패:', err);
+        if (!silent) reloadForDate();
+    });
 
     if (!state.dailyRecords[studentId]) {
         state.dailyRecords[studentId] = { student_id: studentId, date: state.selectedDate };

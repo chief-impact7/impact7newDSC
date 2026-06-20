@@ -72,6 +72,16 @@ test('branchFromStudent: 판별 불가 → 빈 문자열', () => {
     assert.equal(branchFromStudent({ enrollments: [{ class_number: '301' }] }), '');
 });
 
+// 내신 csKey 접두('10단지…'/'2단지…')는 첫 글자 규칙보다 먼저 판정해야 한다.
+// 로컬 재구현은 첫 글자만 봐서 '10단지…'를 '1'→2단지로 오분류했다(shared와 drift). F-03.
+test('branchFromStudent: "10단지…" 접두 우선 (첫 글자 1 규칙보다 먼저)', () => {
+    assert.equal(branchFromStudent({ enrollments: [{ class_number: '10단지목동중1A' }] }), '10단지');
+});
+
+test('branchFromStudent: "2단지…" 접두', () => {
+    assert.equal(branchFromStudent({ enrollments: [{ class_number: '2단지양정중중2A' }] }), '2단지');
+});
+
 // ─── allClassCodes ────────────────────────────────────────────────────────────
 
 test('allClassCodes: enrollments 없으면 빈 배열', () => {

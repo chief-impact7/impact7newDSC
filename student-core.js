@@ -14,14 +14,9 @@ export function enrollmentCode(e) {
     return `${e.level_symbol || ''}${e.class_number || ''}`.trim();
 }
 
-export function branchFromStudent(s) {
-    if (s.branch) return s.branch;
-    const cn = s.enrollments?.[0]?.class_number || '';
-    const first = cn.trim()[0];
-    if (first === '1') return '2단지';
-    if (first === '2') return '10단지';
-    return '';
-}
+// 지점(단지) 파생은 shared가 SSoT. 로컬 재구현은 '10단지…' 접두를 첫 글자 '1'→2단지로
+// 오분류했다(shared는 접두를 먼저 판정 → 10단지). F-03 drift 제거.
+export { branchFromStudent } from '@impact7/shared/branch';
 
 export const allClassCodes = (s) =>
     (s.enrollments || []).map(e => enrollmentCode(e)).filter(Boolean);

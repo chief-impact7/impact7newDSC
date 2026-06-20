@@ -18,9 +18,9 @@
 | 영역 | 기술 |
 |------|------|
 | 언어 | JavaScript (ES Modules) |
-| DSC 입력 페이지 | Vanilla JS + Vite (`index.html`, `daily-ops.js`) |
+| DSC 입력 페이지 | Vanilla JS + Vite (`index.html` → `app.js`, `naesin.js`) |
 | 대시보드 페이지 | React + Vite (`dashboard.html`, `src/dashboard/`) |
-| 차트 | Recharts |
+| 차트 | ECharts (`echarts` + `echarts-for-react`) |
 | 스타일링 | CSS (`:root` 변수 기반) |
 | 디자인 시스템 | Google Material Design 3 |
 | Backend/DB | Firebase (Auth, Firestore) |
@@ -32,8 +32,9 @@
 ```
 impact7newDSC/
 ├── index.html              # DSC 입력 페이지 (Vanilla JS)
-├── daily-ops.js            # DSC 메인 오케스트레이터
-├── app.js                  # excel.html용 구형/엑셀형 입력 로직
+├── app.js                  # DSC 메인 오케스트레이터 (구 daily-ops.js)
+├── naesin.js               # 내신 입력 로직 (index.html 보조 entry)
+├── excel.js                # excel.html용 구형/엑셀형 입력 로직 (구 app.js)
 ├── dashboard.html          # 대시보드 페이지 (React)
 ├── class-setup.html        # 반 편성 도우미
 ├── auth.js                 # Google 로그인/로그아웃 (공유)
@@ -58,9 +59,9 @@ impact7newDSC/
 
 ### 파일 역할 - 수정 시 주의
 
-- **daily-ops.js**: 메인 DSC 입력 앱의 오케스트레이터. 기능별 세부 로직은 `attendance.js`, `data-layer.js`, `student-detail.js` 등으로 분리되어 있음
-- **app.js**: `excel.html`에서 사용하는 구형/엑셀형 입력 로직. 메인 입력 앱으로 착각하지 말 것
-- **index.html**: 구조적 변경(탭/패널/모달 추가·삭제) 시 `daily-ops.js`와 관련 기능 모듈의 `window.*` 노출을 함께 확인
+- **app.js**: 메인 DSC 입력 앱의 오케스트레이터(구 daily-ops.js). 기능별 세부 로직은 `attendance.js`, `data-layer.js`, `student-detail.js` 등으로 분리되어 있음
+- **excel.js**: `excel.html`에서 사용하는 구형/엑셀형 입력 로직(구 app.js). 메인 입력 앱으로 착각하지 말 것
+- **index.html**: 구조적 변경(탭/패널/모달 추가·삭제) 시 `app.js`와 관련 기능 모듈의 `window.*` 노출을 함께 확인
 - **daily-ops.css**: 메인 DSC 입력 페이지 스타일
 - **.env**: 절대 커밋하지 않음. `VITE_` 접두사 필수
 
@@ -148,7 +149,7 @@ postponed_tasks/{autoId}
 ├── created_at: timestamp
 ```
 
-### `daily_records` 컬렉션 (daily-ops.js 전용)
+### `daily_records` 컬렉션 (메인 입력앱 `app.js` 전용)
 ```
 daily_records/{studentId}_{date}
 ├── student_id: string
@@ -264,7 +265,7 @@ hw_fail_tasks/{studentId}_{domain}_{sourceDate}
 
 ### 7.4 불변 조건 (코드 리팩토링 시 절대 깨지면 안 됨)
 
-**소속 트리 반코드 수집** (`_getAllClassCodes()` in `daily-ops.js`):
+**소속 트리 반코드 수집** (`_getAllClassCodes()` in `class-resolver.js`):
 - 정규 반코드는 반드시 **`class_settings` + `enrollment` 양쪽**에서 수집해야 한다
 - `class_settings` 문서가 없는 반도 enrollment에 학생이 있으면 소속 트리에 표시되어야 한다
 - class_settings 기반만으로 수집하면 Firestore에 문서가 없는 정규 반이 사라진다

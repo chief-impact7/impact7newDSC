@@ -9,7 +9,7 @@
  *   await auditUpdate(ref, { field: value });  // updated_by, updated_at 자동 추가
  */
 
-import { updateDoc, setDoc, deleteDoc, addDoc, getDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { updateDoc, setDoc, addDoc, getDoc, collection, doc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from './firebase-config.js';
 
 // READ-ONLY DEV 모드: VITE_READ_ONLY=true일 때 모든 write를 console.log로 stub.
@@ -67,22 +67,22 @@ export async function auditAdd(collectionRef, data) {
 
 export async function auditDelete(ref) {
     if (READ_ONLY) { _stub('auditDelete', ref, null); return; }
-    try {
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-            await addDoc(collection(db, 'audit_logs'), {
-                action: 'delete',
-                collection: ref.parent.id,
-                doc_id: ref.id,
-                data_before: snap.data(),
-                deleted_by: normalizeImpact7Email(auth.currentUser?.email || window._auditUser || 'unknown'),
-                deleted_at: serverTimestamp()
-            });
-        }
-    } catch (err) {
-        console.warn('[auditDelete] 삭제 로그 기록 실패:', err);
+    // 삭제 전 스냅샷 기록과 실제 삭제를 하나의 batch로 묶어 원자화한다.
+    // 감사 로그 기록이 실패하면 삭제도 일어나지 않는다(fail-closed). F-06.
+    const snap = await getDoc(ref);
+    const batch = writeBatch(db);
+    if (snap.exists()) {
+        batch.set(doc(collection(db, 'audit_logs')), {
+            action: 'delete',
+            collection: ref.parent.id,
+            doc_id: ref.id,
+            data_before: snap.data(),
+            deleted_by: normalizeImpact7Email(auth.currentUser?.email || window._auditUser || 'unknown'),
+            deleted_at: serverTimestamp()
+        });
     }
-    return deleteDoc(ref);
+    batch.delete(ref);
+    return batch.commit();
 }
 
 export function batchUpdate(batch, ref, data) {
