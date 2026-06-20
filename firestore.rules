@@ -641,7 +641,7 @@ service cloud.firestore {
           'updated_by', 'updated_at', 'edit_history',
           'arrival_status', 'cancel_reason',
           // 진단평가신청서(diagnostic_application) 동기화 경로가 부여하는 메타 필드
-          'source', 'source_application_id', 'student_id'
+          'source', 'source_application_id', 'student_id', 'marketing_consent'
         ])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
