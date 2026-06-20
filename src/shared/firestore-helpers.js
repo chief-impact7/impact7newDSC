@@ -1,5 +1,5 @@
 import {
-    collection, getDocs, query, where
+    collection, getDocs, query, where, Timestamp
 } from 'firebase/firestore';
 import {
     currentSchool,
@@ -245,20 +245,33 @@ export const finalApprovalDate = (request) => {
 };
 
 export async function fetchApprovedLeaveRequestsForDate(date) {
-    const q = query(
+    // 전체 approved 스캔 대신 두 승인 시각 각각의 하루 범위만 조회한다(승인 누적과 무관한 비용). F-10.
+    // finalApprovalDate = max(approved_at, teacher_approved_at)이므로 두 쿼리 합집합 후 최종일을 재검증.
+    const startDate = parseDateKST(date);
+    if (Number.isNaN(startDate.getTime())) return [];
+    const dayStart = Timestamp.fromDate(startDate);
+    const dayEnd = Timestamp.fromDate(new Date(startDate.getTime() + 24 * 60 * 60 * 1000)); // KST는 DST 없음
+
+    const byField = (field) => getDocs(query(
         collection(db, 'leave_requests'),
-        where('status', '==', 'approved')
-    );
-    const snap = await getDocs(q);
-    const list = [];
-    snap.forEach(docSnap => {
-        const data = { id: docSnap.id, ...docSnap.data() };
-        const approvedDate = finalApprovalDate(data);
-        if (approvedDate && toDateStrKST(approvedDate) === date) {
-            list.push({ ...data, final_approved_at: approvedDate });
-        }
-    });
-    return list;
+        where('status', '==', 'approved'),
+        where(field, '>=', dayStart),
+        where(field, '<', dayEnd),
+    ));
+    const [snapApproved, snapTeacher] = await Promise.all([byField('approved_at'), byField('teacher_approved_at')]);
+
+    const byId = new Map();
+    for (const snap of [snapApproved, snapTeacher]) {
+        snap.forEach(docSnap => {
+            const data = { id: docSnap.id, ...docSnap.data() };
+            const approvedDate = finalApprovalDate(data);
+            // 두 시각 중 늦은 값이 해당 날짜인 것만(한쪽만 그날·다른쪽이 더 늦으면 제외).
+            if (approvedDate && toDateStrKST(approvedDate) === date) {
+                byId.set(docSnap.id, { ...data, final_approved_at: approvedDate });
+            }
+        });
+    }
+    return [...byId.values()];
 }
 
 export async function fetchDashboardDailyLogData(date) {
