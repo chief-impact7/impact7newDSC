@@ -96,6 +96,8 @@ service cloud.firestore {
         ];
         return request.resource.data.keys().hasOnly(allowed);
       }
+      // withinFieldLimit는 allowed 목록 크기(48)와 맞춘다 — 과거 36은 hasOnly가 이미 허용한
+      // 필드를 다 채운 정상 문서를 조용히 거부했음(O-04). allowed 확장 시 이 값도 함께 올린다.
 
       // DB/DSC: 읽기+쓰기, Director: 읽기만
       allow read: if isAuthorized();
@@ -109,13 +111,13 @@ service cloud.firestore {
       allow create: if isAuthorized()
         && hasRequiredStudentFields()
         && hasOnlyAllowedStudentFields()
-        && withinFieldLimit(36)
+        && withinFieldLimit(48)
         && enrollmentStatusConsistent();
 
       allow update: if isAuthorized()
         && hasRequiredStudentFields()
         && hasOnlyAllowedStudentFields()
-        && withinFieldLimit(36)
+        && withinFieldLimit(48)
         && (!resource.data.keys().hasAny(['status']) || request.resource.data.keys().hasAny(['status']))
         && enrollmentStatusConsistent();
 
@@ -196,10 +198,27 @@ service cloud.firestore {
     // [Exam] 사용자 프로필 (UID 기반)
     // =========================================================================
     match /exam_users/{userId} {
-      allow read: if isLoggedIn();
-      allow write: if isLoggedIn()
-        && (request.auth.uid == userId
-            || get(/databases/$(database)/documents/exam_users/$(request.auth.uid)).data.role == 'owner');
+      function isExamOwner() {
+        return isAuthorized()
+          && exists(/databases/$(database)/documents/exam_users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/exam_users/$(request.auth.uid)).data.role == 'owner';
+      }
+
+      // 외부(비 impact7) 도메인 차단 — isLoggedIn()이 아닌 도메인 검증.
+      allow read: if isAuthorized();
+
+      // 자기 문서 신규 생성(exam 첫 로그인 프로비저닝): 기본 등급 'teacher'만 — owner 자가 부여 차단.
+      allow create: if isAuthorized()
+        && request.auth.uid == userId
+        && request.resource.data.role == 'teacher';
+
+      // 자기 문서 수정: role 불변(권한 상승 차단). 표시명·deptIds 등만 변경 가능.
+      allow update: if isAuthorized()
+        && request.auth.uid == userId
+        && request.resource.data.role == resource.data.role;
+
+      // owner: 타인 포함 전체 관리(역할 부여·회수는 owner 전용).
+      allow create, update, delete: if isExamOwner();
     }
 
     // =========================================================================
@@ -780,8 +799,7 @@ service cloud.firestore {
       // director/staff: 전체 읽기·쓰기
       allow read, write: if isDirector() || isStaff();
 
-      // 비인증 사용자: 토큰 검증(read) + 완료 처리(update)만 허용
-      allow read: if true;
+      // 비인증 토큰 검증 read는 getHrPublicToken callable로 이전(G03). 완료 처리(update)만 허용.
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
         .hasOnly(['status', 'staffId'])
         && request.resource.data.status == 'completed'
@@ -797,8 +815,7 @@ service cloud.firestore {
     match /contractSigningTokens/{tokenId} {
       allow read, write: if isDirector() || isStaff();
 
-      // 비인증 사용자: 토큰 검증(read) + 서명 완료(update)만 허용
-      allow read: if true;
+      // 비인증 토큰 검증 read는 getHrPublicToken callable로 이전(G03). 서명 완료(update)만 허용.
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
         .hasOnly(['status'])
         && request.resource.data.status == 'signed'
@@ -814,8 +831,7 @@ service cloud.firestore {
     match /salaryAgreementTokens/{tokenId} {
       allow read, write: if isDirector() || isStaff();
 
-      // 비인증 사용자: 토큰 검증(read) + 서명 완료(update)만 허용
-      allow read: if true;
+      // 비인증 토큰 검증 read는 getHrPublicToken callable로 이전(G03). 서명 완료(update)만 허용.
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
         .hasOnly(['status'])
         && request.resource.data.status == 'signed'
@@ -860,8 +876,7 @@ service cloud.firestore {
     match /shortTermTokens/{tokenId} {
       allow read, write: if isDirector() || isShortTerm();
 
-      // 비인증 사용자: 토큰 검증(read) + 완료 처리(update)만 허용
-      allow read: if true;
+      // 비인증 토큰 검증 read는 getHrPublicToken callable로 이전(G03). 완료 처리(update)만 허용.
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
         .hasOnly(['status', 'personId'])
         && request.resource.data.status == 'completed'
@@ -885,16 +900,14 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/onboardingTokens/$(request.resource.data.tokenId)).data.status == 'pending'
         && get(/databases/$(database)/documents/onboardingTokens/$(request.resource.data.tokenId)).data.expiresAt > request.time;
 
-      // 비인증: 토큰 기반 staff 읽기 (이름 표시용) — get만 허용, list 불가
-      allow get: if true;
+      // 비인증 staff 읽기는 getHrPublicToken callable로 이전(G03) — 공개 get 제거.
 
       match /contracts/{contractId} {
         allow read: if isDirector() ||
           (isStaff() && resource.data.assignedTo == request.auth.uid);
         allow write: if isDirector();
 
-        // 비인증: 토큰 기반 계약서 읽기 + 서명/급여약정/PDF URL 업데이트
-        allow get: if true;
+        // 비인증 계약서 읽기는 getHrPublicToken callable로 이전(G03). 서명 update만 유지.
         // ready→signed: 계약서 서명 (contractSigningToken 검증)
         allow update: if resource.data.status == 'ready'
           && request.resource.data.status == 'signed'
@@ -992,7 +1005,7 @@ service cloud.firestore {
     // =========================================================================
     match /employeeOnboardingTokens/{tokenId} {
       allow read, write: if isDirector() || isStaff();
-      allow read: if true;
+      // 비인증 토큰 검증 read는 getHrPublicToken callable로 이전(G03). 완료 처리(update)만 허용.
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
         .hasOnly(['status', 'staffId'])
         && request.resource.data.status == 'completed'
@@ -1006,7 +1019,7 @@ service cloud.firestore {
     // =========================================================================
     match /employeeContractSigningTokens/{tokenId} {
       allow read, write: if isDirector() || isStaff();
-      allow read: if true;
+      // 비인증 토큰 검증 read는 getHrPublicToken callable로 이전(G03). 서명 완료(update)만 허용.
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
         .hasOnly(['status'])
         && request.resource.data.status == 'signed'
@@ -1027,13 +1040,13 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/employeeOnboardingTokens/$(request.resource.data.tokenId))
         && get(/databases/$(database)/documents/employeeOnboardingTokens/$(request.resource.data.tokenId)).data.status == 'pending'
         && get(/databases/$(database)/documents/employeeOnboardingTokens/$(request.resource.data.tokenId)).data.expiresAt > request.time;
-      allow get: if true;
+      // 비인증 employee 읽기는 getHrPublicToken callable로 이전(G03) — 공개 get 제거.
 
       match /contracts/{contractId} {
         allow read: if isDirector() ||
           (isStaff() && resource.data.assignedTo == request.auth.uid);
         allow write: if isDirector();
-        allow get: if true;
+        // 비인증 계약서 읽기는 getHrPublicToken callable로 이전(G03). 서명 update만 유지.
         // ready→signed: 계약서 서명 (employeeContractSigningToken 검증)
         allow update: if resource.data.status == 'ready'
           && request.resource.data.status == 'signed'
@@ -1162,10 +1175,11 @@ service cloud.firestore {
     // [Exam] 내신분석자료
     // =========================================================================
     match /exam_analyses/{id} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null
+      // 외부 도메인 차단 — request.auth != null이 아닌 도메인 검증(N-01).
+      allow read: if isAuthorized();
+      allow create: if isAuthorized()
                       && request.resource.data.createdBy == request.auth.uid;
-      allow update, delete: if request.auth != null
+      allow update, delete: if isAuthorized()
                               && (resource.data.createdBy == request.auth.uid
                                   || request.auth.token.admin == true);
     }
