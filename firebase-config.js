@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase/app';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import { getAuth, initializeAuth, inMemoryPersistence, onIdTokenChanged, connectAuthEmulator } from 'firebase/auth';
 import {
     getFirestore, connectFirestoreEmulator,
@@ -38,6 +39,22 @@ if (import.meta.env.DEV) {
 const app = initializeApp(firebaseConfig);
 const dataApp = initializeApp(firebaseConfig, 'dsc');
 export { app };
+
+// App Check — Firestore/Functions/Storage 요청에 App Check 토큰을 동봉(미강제 단계).
+// dataApp이 db/functions/storage 호출 주체이므로 dataApp에 부착한다.
+// ReCaptcha Enterprise는 DOM이 필요하므로 브라우저(document 존재)에서만 init한다.
+// node:test/vitest 등 비브라우저 환경에서 firebase-config import 시 크래시 방지(운영 무영향).
+if (typeof document !== 'undefined') {
+    // 로컬 개발: 디버그 토큰 활성화(콘솔에 출력된 토큰을 App Check에 등록해야 로컬서 동작). 운영 무영향.
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+        // @ts-ignore
+        self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    }
+    initializeAppCheck(dataApp, {
+        provider: new ReCaptchaEnterpriseProvider('6LcS4ywtAAAAADd8BBiFo_Fd4XXiXT1Uf3gHGxYl'),
+        isTokenAutoRefreshEnabled: true,
+    });
+}
 
 export const auth = getAuth(app);
 
