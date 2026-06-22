@@ -24,5 +24,5 @@ metadata:
 - `showStudyCards = isAttended && !isNaesinActive` → 영역별숙제·테스트현황·숙제미통과·테스트미통과
 - 다음숙제(nextHwHtml)는 출석 무관이라 `isNaesinActive || uniqueClasses.length===0`로 별도 게이트
 
-## 후속 과제 — shared 내신 predicate drift
-내신 active 판정이 3겹: `_isNaesinActiveAt`(student-detail 로컬, raw `naesin_class_override`를 csKey 직접 사용) vs `isNaesinActiveToday`(student-helpers, `resolveNaesinCsKey` 경유) vs shared `applyNaesinFreeDerivation`(@impact7/shared/enrollment-derivation)이 내부 인코딩한 판정. 지금은 결과 일치하나 override 해석이 달라 향후 drift 가능(list-view 라벨 vs detail 카드 표시 어긋남). → shared에 순수 boolean predicate 추가하고 두 호출부가 import하는 통합을 검토. drift 패턴은 [[feedback_dashboard_reads_dsc_only]] 참고.
+## 내신 active 판정 — shared SSoT 통합 완료 (shared v1.31.0, 2026-06-22)
+3겹(`_isNaesinActiveAt`·`isNaesinActiveToday`·`applyNaesinFreeDerivation` 내부 판정)을 shared `isNaesinActiveAt`로 일원화. shared `deriveActiveNaesinEnrollment`(applyNaesinFreeDerivation과 SSoT 공유)를 boolean으로 노출. DSC `isNaesinActiveToday`는 얇은 래퍼(활성필터+주입), `_isNaesinActiveAt`는 제거. 통합으로 '내신 라벨'과 '파생 등원일정'이 항상 동일 판정. DB는 boolean predicate 미사용(applyNaesinFreeDerivation만 사용), HR/exam은 내신 무관. 상세: [[reference_naesin_active_shared]]
