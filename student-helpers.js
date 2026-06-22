@@ -3,7 +3,7 @@
 
 import { todayStr, parseDateKST, getDayName } from './src/shared/firestore-helpers.js';
 import { state, LEVEL_SHORT, LEAVE_STATUSES } from './state.js';
-import { applyNaesinFreeDerivation } from '@impact7/shared/enrollment-derivation';
+import { applyNaesinFreeDerivation, isNaesinActiveAt } from '@impact7/shared/enrollment-derivation';
 import { currentSchool, normalizeRealLevelGrade } from '@impact7/shared/student-label';
 import {
     normalizeDays, enrollmentCode, branchFromStudent, allClassCodes,
@@ -147,26 +147,19 @@ export function getActiveEnrollments(s, dateStr) {
     });
 }
 
-// 학생의 "현재 수업 모드" 판정용 predicate.
-// enrollment.class_type 뿐 아니라 class_settings의 naesin/free 윈도우도 확인 —
-// 옛 자유학기 enrollment가 남아있어도 naesin 윈도우가 우선 잡혀야 라벨이 정확해짐.
+// 학생의 "현재 수업 모드"(내신기간 활성) 판정 — 내신 라벨용.
+// 판정 로직은 shared SSoT(isNaesinActiveAt). getActiveEnrollments와 동일한 활성 필터
+// (미시작·종료 제외)를 적용한 뒤 넘겨, '내신 라벨'과 '파생 등원일정'이 항상 일치한다.
 export function isNaesinActiveToday(s, dateStr) {
     const today = dateStr || todayStr();
     const validDate = (d) => d && /^\d{4}-/.test(d);
-    const enrollments = s.enrollments || [];
-    const current = enrollments.filter(e => !validDate(e.end_date) || e.end_date >= today);
-    // 1) explicit 내신 enrollment (start_date 도달)
-    if (current.some(e =>
-        e.class_type === '내신' && validDate(e.start_date) && e.start_date <= today
-    )) return true;
-    // 2) manual override: 어떤 active base enrollment이든 naesin 윈도우가 활성이면 true
-    return current.some(e => {
-        if (!isActiveNaesinBase(e, today) || !e.naesin_class_override) return false;
-        const csKey = resolveNaesinCsKey(s, e);
-        if (!csKey) return false;
-        const cs = state.classSettings[csKey];
-        return cs?.naesin_start && cs?.naesin_end &&
-               cs.naesin_start <= today && cs.naesin_end >= today;
+    const current = (s.enrollments || []).filter(e =>
+        !(validDate(e.start_date) && e.start_date > today) &&
+        !(validDate(e.end_date) && e.end_date < today));
+    return isNaesinActiveAt(current, {
+        classSettings: state.classSettings,
+        dateStr: today,
+        resolveNaesinCsKey: (re) => resolveNaesinCsKey(s, re),
     });
 }
 

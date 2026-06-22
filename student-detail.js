@@ -25,7 +25,7 @@ import {
     enrollmentCode, findStudent,
     branchFromStudent, makeDailyRecordId,
     getActiveEnrollments, getStudentStartTime,
-    allClassCodes, isActiveNaesinBase
+    allClassCodes, isNaesinActiveToday
 } from './student-helpers.js';
 import {
     currentSchool, studentGrade, todayStr, getDayName
@@ -384,22 +384,6 @@ function _classTypeLabel(types) {
     return [...types].join('/');
 }
 
-// 내신 활성 체크 — class_type='내신' enrollment 또는 naesin_class_override+class_settings 기간
-function _isNaesinActiveAt(student, date) {
-    const enrolls = student.enrollments || [];
-    const valid = (d) => d && /^\d{4}-/.test(d);
-    if (enrolls.some(e =>
-        e.class_type === '내신' &&
-        valid(e.start_date) && e.start_date <= date &&
-        (!valid(e.end_date) || e.end_date >= date))) return true;
-    return enrolls.some(e => {
-        if (!isActiveNaesinBase(e, date) || !e.naesin_class_override) return false;
-        const cs = state.classSettings[e.naesin_class_override];
-        if (!cs?.naesin_start || !cs?.naesin_end) return false;
-        return cs.naesin_start <= date && date <= cs.naesin_end;
-    });
-}
-
 function _ensureReportInputDefaults() {
     const startEl = document.getElementById('report-start');
     const endEl = document.getElementById('report-end');
@@ -584,7 +568,7 @@ function renderReportCard(records) {
         if (student && date) {
             // 내신 활성은 자동 유도라 enrollment에 '내신' 항목이 없을 수 있어 우선 검사.
             // 그 외에는 그 날짜 활성 enrollment의 class_type 표시 (day 매칭 우선, 없으면 활성 전체).
-            if (_isNaesinActiveAt(student, date)) {
+            if (isNaesinActiveToday(student, date)) {
                 classLabel = '내신';
             } else {
                 const active = getActiveEnrollments(student, date);
@@ -1050,7 +1034,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     const isLeaveStudent = LEAVE_STATUSES.includes(student.status);
     // 내신기간 중에는 정규반 학습관리 카드(영역별숙제·테스트현황·다음숙제·숙제/테스트 미통과)를
     // 숨긴다 — 내신 종료 후 정규 복귀 시 자동 재표시. (1차 판정, 아래 분기에서 재사용)
-    const isNaesinActive = _isNaesinActiveAt(student, state.selectedDate);
+    const isNaesinActive = isNaesinActiveToday(student, state.selectedDate);
 
     const isWithdrawn = student.status === '퇴원';
     // 퇴원 학생: leave_request 한 번만 조회 (프로필 태그 + 퇴원 정보 카드에서 공유)
