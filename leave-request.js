@@ -423,9 +423,10 @@ function _renderLRRow(r, idx, studentId) {
             </div>`;
     }
 
-    // 복귀상담 메모 (최종 승인 완료 건)
+    // 복귀상담 메모 (최종 승인 완료 건) — 단, 복귀/재등원 요청은 이미 복귀가 끝난 건이라
+    // 복귀유도 상담이 무의미하므로 입력칸을 띄우지 않는다.
     let returnConsultHtml = '';
-    if (r.status === 'approved') {
+    if (r.status === 'approved' && !_isReturnType(r.request_type)) {
         const stu = state.allStudents.find(x => x.docId === studentId);
         const consultDone = stu?.return_consult_done;
         const consultChecked = consultDone ? 'check_circle' : 'phone_in_talk';

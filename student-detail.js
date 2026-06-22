@@ -67,6 +67,9 @@ export function initStudentDetailDeps(deps) {
 
 // ─── Module-local state ─────────────────────────────────────────────────────
 let _lastRenderedStudentId = null;
+// 증분 렌더링용 — 직전에 detail-cards에 그린 카드 HTML. realtime 갱신에서 동일하면
+// (같은 학생 동일성은 studentChanged 가드가 담당) innerHTML 교체·비동기 마운트를 건너뛴다.
+let _lastCardsHtml = null;
 let _renderConsultationFn = null;
 let _renderMessageFn = null;
 let _renderDocuFn = null;
@@ -969,7 +972,7 @@ function renderTempClassOverrideCard(studentId) {
     `;
 }
 
-export function renderStudentDetail(studentId) {
+export function renderStudentDetail(studentId, { incremental = false } = {}) {
     // detail 영역이 DOM에 미렌더 상태면 (학생 detail 미열림 + realtime refresh 등) skip — null 안전망
     if (!document.getElementById('profile-avatar')) return;
     const studentChanged = studentId !== _lastRenderedStudentId;
@@ -1045,6 +1048,9 @@ export function renderStudentDetail(studentId) {
     const attStatus = rec?.attendance?.status || '미확인';
     const arrivalTime = rec?.arrival_time || '';
     const isLeaveStudent = LEAVE_STATUSES.includes(student.status);
+    // 내신기간 중에는 정규반 학습관리 카드(영역별숙제·테스트현황·다음숙제·숙제/테스트 미통과)를
+    // 숨긴다 — 내신 종료 후 정규 복귀 시 자동 재표시. (1차 판정, 아래 분기에서 재사용)
+    const isNaesinActive = _isNaesinActiveAt(student, state.selectedDate);
 
     const isWithdrawn = student.status === '퇴원';
     // 퇴원 학생: leave_request 한 번만 조회 (프로필 태그 + 퇴원 정보 카드에서 공유)
@@ -1077,7 +1083,6 @@ export function renderStudentDetail(studentId) {
         tagClass = 'tag-pending';
         tagText = '';
     } else {
-        const isNaesinActive = _isNaesinActiveAt(student, state.selectedDate);
         const displayStatus = attStatus === '미확인' ? (isNaesinActive ? '내신' : '정규') : attStatus;
         tagClass = attStatus === '출석' ? 'tag-present' :
                    attStatus === '결석' ? 'tag-absent' :
@@ -1205,13 +1210,15 @@ export function renderStudentDetail(studentId) {
 
     // 영역 숙제 현황 카드
     const isAttended = isAttendedStatus(attStatus);
+    // 정규반 학습관리 카드 표시 게이트 — 출석했고 내신기간이 아닐 때만
+    const showStudyCards = isAttended && !isNaesinActive;
     const detailDomains = isAttended ? getStudentDomains(studentId) : [];
     const d1st = isAttended ? (rec.hw_domains_1st || {}) : {};
     const d2nd = isAttended ? (rec.hw_domains_2nd || {}) : {};
     const hasAnyDomain = isAttended && (Object.values(d1st).some(v => v) || Object.values(d2nd).some(v => v));
     const has1stHw = isAttended && Object.values(d1st).some(v => v);
     const has2ndHw = isAttended && Object.values(d2nd).some(v => v);
-    const domainHwHtml = !isAttended ? '' : `
+    const domainHwHtml = !showStudyCards ? '' : `
         <div class="detail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">domain_verification</span>
@@ -1255,7 +1262,7 @@ export function renderStudentDetail(studentId) {
     const hasAnyTest = isAttended && (Object.values(t1st).some(v => v) || Object.values(t2nd).some(v => v));
     const has1stTest = isAttended && Object.values(t1st).some(v => v);
     const has2ndTest = isAttended && Object.values(t2nd).some(v => v);
-    const domainTestHtml = !isAttended ? '' : `
+    const domainTestHtml = !showStudyCards ? '' : `
         <div class="detail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">quiz</span>
@@ -1302,7 +1309,7 @@ export function renderStudentDetail(studentId) {
         .filter(Boolean);
     const uniqueClasses = [...new Set(studentClasses)];
     const personalNextHw = rec.personal_next_hw || {};
-    const nextHwHtml = uniqueClasses.length === 0 ? '' : `
+    const nextHwHtml = (isNaesinActive || uniqueClasses.length === 0) ? '' : `
         <div class="detail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">assignment</span>
@@ -1403,7 +1410,7 @@ export function renderStudentDetail(studentId) {
             ${renderUnifiedMemoCard(studentId)}`;
     }
 
-    cardsContainer.innerHTML = isWithdrawn ? withdrawnHtml : `
+    const cardsHtml = isWithdrawn ? withdrawnHtml : `
         <!-- AI 종합 상태 카드 (비동기 마운트) -->
         <div id="student-status-mount" data-student-id="${escAttr(studentId)}"></div>
 
@@ -1428,11 +1435,11 @@ export function renderStudentDetail(studentId) {
         <!-- 다음숙제 카드 -->
         ${nextHwHtml}
 
-        <!-- 숙제 미통과 카드 (출석 학생만) -->
-        ${isAttended ? renderHwFailActionCard(studentId, detailDomains, d2nd, rec.hw_fail_action || {}, has2ndHw ? 'default' : '1st_only') : ''}
+        <!-- 숙제 미통과 카드 (출석 학생만, 내신기간 제외) -->
+        ${showStudyCards ? renderHwFailActionCard(studentId, detailDomains, d2nd, rec.hw_fail_action || {}, has2ndHw ? 'default' : '1st_only') : ''}
 
-        <!-- 테스트 미통과 카드 (출석 학생만) -->
-        ${isAttended ? renderTestFailActionCard(studentId, detailTestSections, t2nd, rec.test_fail_action || {}, has2ndTest ? 'default' : '1st_only') : ''}
+        <!-- 테스트 미통과 카드 (출석 학생만, 내신기간 제외) -->
+        ${showStudyCards ? renderTestFailActionCard(studentId, detailTestSections, t2nd, rec.test_fail_action || {}, has2ndTest ? 'default' : '1st_only') : ''}
 
         <!-- 밀린 Task 카드 (숙제 + 테스트) -->
         ${renderPendingTasksCard(studentId, [...studentHwTasks, ...studentTestTasks])}
@@ -1447,20 +1454,32 @@ export function renderStudentDetail(studentId) {
         ${renderUnifiedMemoCard(studentId)}
     `;
 
-    // 재원기간 — 헤더에 비동기로 채움 (history_logs deriveTenure, DB와 동일 로직)
-    if (document.getElementById('detail-header-tenure')) fillTenure(studentId, student);
+    // 증분 렌더링: realtime 갱신에서 카드 HTML이 직전과 동일하고, 현재 detail-cards가
+    // '이 학생의 표준 카드'(student-status-mount 마커)를 담고 있으면 교체를 건너뛴다.
+    // detail-cards는 naesin/class/diagnostic 등과 공유되므로 마커로 점유 출처를 확인해
+    // 다른 화면이 컨테이너를 점유한 사이의 stale skip을 방지한다.
+    const cardsUnchanged = incremental && !studentChanged && _lastCardsHtml === cardsHtml &&
+        !isWithdrawn && !!cardsContainer.querySelector(`#student-status-mount[data-student-id="${CSS.escape(studentId)}"]`);
 
-    // AI 종합 상태 카드 — 비동기 마운트 (퇴원 뷰 제외)
-    if (!isWithdrawn) {
-        const statusMount = document.getElementById('student-status-mount');
-        if (statusMount) {
-            import('./student-status-card.js').then(({ renderStudentStatusCard, initStudentStatusCardDeps }) => {
-                initStudentStatusCardDeps({ readonly: window.READ_ONLY === true });
-                // stale 방지: 그 사이 다른 학생으로 바뀌었으면 스킵
-                if (statusMount.dataset.studentId === studentId) {
-                    renderStudentStatusCard(studentId, statusMount);
-                }
-            });
+    if (!cardsUnchanged) {
+        cardsContainer.innerHTML = cardsHtml;
+        _lastCardsHtml = cardsHtml;
+
+        // 재원기간 — 헤더에 비동기로 채움 (history_logs deriveTenure, DB와 동일 로직)
+        if (document.getElementById('detail-header-tenure')) fillTenure(studentId, student);
+
+        // AI 종합 상태 카드 — 비동기 마운트 (퇴원 뷰 제외)
+        if (!isWithdrawn) {
+            const statusMount = document.getElementById('student-status-mount');
+            if (statusMount) {
+                import('./student-status-card.js').then(({ renderStudentStatusCard, initStudentStatusCardDeps }) => {
+                    initStudentStatusCardDeps({ readonly: window.READ_ONLY === true });
+                    // stale 방지: 그 사이 다른 학생으로 바뀌었으면 스킵
+                    if (statusMount.dataset.studentId === studentId) {
+                        renderStudentStatusCard(studentId, statusMount);
+                    }
+                });
+            }
         }
     }
 
@@ -1482,7 +1501,8 @@ export function renderStudentDetail(studentId) {
     const scoreTabEl = document.getElementById('score-tab');
     if (scoreTabEl) {
         scoreTabEl.style.display = state.detailTab === 'score' ? '' : 'none';
-        if (state.detailTab === 'score') loadScoreCard(studentId);
+        // realtime(incremental) 갱신에선 성적 탭을 다시 로드하지 않음 — 무관한 쓰기에 스크롤·상태 리셋 방지
+        if (state.detailTab === 'score' && !incremental) loadScoreCard(studentId);
     }
     const consultTabEl = document.getElementById('consultation-tab');
     if (consultTabEl) {
@@ -1502,14 +1522,15 @@ export function renderStudentDetail(studentId) {
     if (docuTabEl2) {
         docuTabEl2.style.display = state.detailTab === 'docu' ? '' : 'none';
         // 휴퇴원 카드가 docu 탭으로 이동했으므로, 같은 학생의 휴퇴원 액션(renderStudentDetail
-        // 재호출) 후에도 탭을 다시 그려야 카드 상태가 반영된다(studentChanged 무관).
-        if (studentId && state.detailTab === 'docu' && _renderDocuFn) {
+        // 직접 재호출) 후에도 탭을 다시 그려야 카드 상태가 반영된다(studentChanged 무관).
+        // 단 realtime(incremental) 갱신에선 다시 그리지 않음 — 무관한 쓰기에 펼침·스크롤 리셋 방지.
+        if (studentId && state.detailTab === 'docu' && _renderDocuFn && !incremental) {
             _renderDocuFn(studentId);
         }
     }
 
-    // 결석대장 카드 expanded 상태 복원
-    _restoreExpandedAbsenceIndices(expandedAbsenceIndices);
+    // 결석대장 카드 expanded 상태 복원 (카드를 다시 그렸을 때만 — skip 시 DOM 유지)
+    if (!cardsUnchanged) _restoreExpandedAbsenceIndices(expandedAbsenceIndices);
 
     // 좁은 화면(<=1100px)에서 패널 표시 — 데스크톱에선 무해
     document.getElementById('detail-panel').classList.add('mobile-visible');

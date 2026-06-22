@@ -605,9 +605,13 @@ function _realtimeRefreshUI() {
         _rtDebounce = null;
         renderSubFilters();
         renderListPanel();
-        // 상세패널 입력 중이면 리렌더 건너뜀 (입력 내용 유실 방지)
+        // 상세패널을 incremental로 재렌더한다. 카드 HTML이 직전과 같으면(다른 사람의 무관한
+        // 쓰기) 교체를 건너뛰어 깜빡임을 막고, 비-daily 탭 콘텐츠(기록/상담/성적/메시지)는
+        // studentChanged·!incremental 가드로 재생성되지 않아 그대로 보존된다. 동시에 daily
+        // 카드와 프로필 헤더는 매번 최신화되어 탭 복귀 시 stale이 없다.
+        // (입력 포커스 중이면 건너뜀 — 입력 내용 유실 방지)
         if (state.selectedStudentId && !_isDetailInputFocused()) {
-            renderStudentDetail(state.selectedStudentId);
+            renderStudentDetail(state.selectedStudentId, { incremental: true });
         }
     }, 200);
 }
