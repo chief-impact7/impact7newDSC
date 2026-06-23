@@ -15,9 +15,11 @@ import { formatTimeKST } from '@impact7/shared/datetime';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderStudentDetail;
+let refreshDocuBadge; // 메모 CRUD가 기록 탭 뱃지(최근 14일)를 갱신하도록 student-detail에서 주입.
 
 export function initRoleMemoDeps(deps) {
     renderStudentDetail = deps.renderStudentDetail;
+    refreshDocuBadge = deps.refreshDocuBadge;
 }
 
 // ─── 롤(역할) 관리 ──────────────────────────────────────────────────────────
@@ -582,7 +584,10 @@ async function saveStudentMemoArray(studentId, memos) {
         const s = findStudent(studentId);
         if (s) s.memo = memos;
         showSaveIndicator('saved');
-        if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
+        if (state.selectedStudentId === studentId) {
+            renderStudentDetail(studentId); // 같은 학생 재렌더 → docu 탭 메모 카드 갱신
+            refreshDocuBadge?.(studentId); // 메모 추가/삭제로 14일 이내 여부가 바뀔 수 있음
+        }
     } catch (err) {
         console.error('고정 메모 저장 실패:', err);
         showSaveIndicator('error');

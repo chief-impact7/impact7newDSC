@@ -155,7 +155,7 @@ import {
     initStudentDetailDeps,
     renderStudentDetail, renderClinicInputs, switchDetailTab, loadReportCard,
     confirmDeparture, saveExtraVisit, addExtraVisit, clearExtraVisit,
-    getStudentChecklistStatus
+    getStudentChecklistStatus, refreshDocuBadge
 } from './student-detail.js';
 import {
     getUniqueClassCodes, getClassMgmtCount,
@@ -918,7 +918,7 @@ window.resetTestSection = resetTestSection;
 window.saveClassDefaultTime = saveClassDefaultTime;
 
 // 롤/메모 관련 → role-memo.js에서 import
-initRoleMemoDeps({ renderStudentDetail });
+initRoleMemoDeps({ renderStudentDetail, refreshDocuBadge });
 window.selectRole = selectRole;
 window.toggleMemoSection = toggleMemoSection;
 window.toggleMemoPanel = toggleMemoPanel;

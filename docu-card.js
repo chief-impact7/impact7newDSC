@@ -5,6 +5,7 @@ import {
 } from './docu-data.js';
 import { splitRecordsByType } from './docu-records.js';
 import { renderLeaveRequestCard } from './leave-request.js';
+import { renderUnifiedMemoCard } from './role-memo.js';
 import { esc } from './ui-utils.js';
 
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
@@ -137,6 +138,7 @@ export async function renderDocuTab(studentId) {
   const { reflections, etc } = splitRecordsByType(records);
   el.innerHTML = `
     ${renderLeaveRequestCard(studentId)}
+    ${renderUnifiedMemoCard(studentId)}
     ${sectionHtml('반성문', 'reflection', reflections, { icon: 'history_edu', contentPlaceholder: '간단한 내용', rows: 1 })}
     ${sectionHtml('기타', 'etc', etc, { icon: 'edit_note', contentPlaceholder: '내용', rows: 1 })}
   `;

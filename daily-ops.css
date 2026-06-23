@@ -3421,7 +3421,7 @@ textarea.field-input {
     color: var(--primary);
     border-bottom-color: var(--primary);
 }
-/* 기록 탭 뱃지 — 2주 이내 기록 알림(점). 뱃지는 '기록'(2글자) 탭에만 표시됨 */
+/* 상세 탭 뱃지 — 2주 이내 새 항목 알림(점). 기록·상담·성적(모두 2글자) 탭에 공통 적용 */
 .detail-tab.has-badge::after {
     content: '';
     position: absolute;

@@ -34,7 +34,7 @@ import { auditSet } from './audit.js';
 import {
     getStudentDomains, getStudentTestItems, getClassDomains,
     getTeacherName, getStudentOverrides,
-    saveDailyRecord, saveImmediately
+    saveDailyRecord, saveImmediately, searchStudentConsultations
 } from './data-layer.js';
 import { isAttendedStatus } from './attendance.js';
 import {
@@ -45,7 +45,8 @@ import {
     renderAbsenceRecordCard, _getExpandedAbsenceIndices, _restoreExpandedAbsenceIndices
 } from './absence-records.js';
 import { renderReturnConsultCard } from './leave-request.js';
-import { renderUnifiedMemoCard } from './role-memo.js';
+import { normalizeStudentMemos } from './role-memo.js';
+import { hasRecentRecord } from './docu-records.js';
 import { loadClassHistoryCard } from './class-history.js';
 // 비활성 학생(퇴원·종강·상담 등) 식별용 — 출결현황 탭 라벨을 "수업이력"으로 동적 전환.
 const _isInactiveDetailStudent = (s) => !ENROLLABLE_STATUSES.has(s?.status || '');
@@ -476,31 +477,83 @@ export function switchDetailTab(tab) {
     }
 }
 
-// 기록 탭 뱃지 — 2주 이내 student_records가 있으면 탭 버튼에 점 표시(탭 미오픈 상태에서도).
-let _docuBadgeStudentId = null;
-function _setDocuBadge(show) {
-    const btn = document.querySelector('.detail-tab[data-tab="docu"]');
+// 상세 탭 뱃지 — 학생 전환 시 기록·상담·성적 탭에 2주 이내 새 항목 알림(점)을 표시.
+// 탭을 안 열어도 보이게 학생 전환마다 1회씩만 조회한다. 모든 비동기는 _badgeStudentId로 stale 가드.
+let _badgeStudentId = null;
+function _setTabBadge(tab, show) {
+    const btn = document.querySelector(`.detail-tab[data-tab="${tab}"]`);
     if (btn) btn.classList.toggle('has-badge', !!show);
 }
+
+// 기록 탭: 대기중 요청서 | 최근(14일) 요청서 | 최근 반성문·기타 | 최근 메모(student.memo created_at).
 function _refreshDocuBadge(studentId) {
-    _docuBadgeStudentId = studentId;
-    _setDocuBadge(false); // 학생 전환 시 일단 제거
+    _badgeStudentId = studentId;
+    _setTabBadge('docu', false); // 학생 전환 시 일단 제거
     if (!studentId) return;
+    const now = Date.now();
+    const student = findStudent(studentId);
     // 대기중(승인 진행 중) 휴/퇴원 요청서는 기간과 무관하게 뱃지 대상
     const lrs = (state.leaveRequests || []).filter(lr => lr.student_id === studentId);
     const hasPendingLR = lrs.some(lr => lr.status === 'requested');
-    Promise.all([import('./docu-data.js'), import('./docu-records.js')])
-        .then(([data, recs]) => data.listStudentRecords(studentId).then(records => {
-            if (_docuBadgeStudentId !== studentId) return; // stale 방지
-            const now = Date.now();
-            // 뱃지 = 대기중 요청서 | 최근(14일) 생성된 요청서(승인완료여도) | 최근 생성된 반성문·기타
-            const show = hasPendingLR
-                || recs.hasRecentRecord(lrs, now)
-                || recs.hasRecentRecord(records, now);
-            _setDocuBadge(show);
-        }))
-        .catch(err => console.warn('[docu] 뱃지 갱신 실패:', err));
+    // 메모는 student 문서에 이미 있어 동기 판정. 레거시 string memo(created_at='')는 자연히 최근 아님.
+    const memosRecent = student ? hasRecentRecord(normalizeStudentMemos(student), now) : false;
+    import('./docu-data.js')
+        .then(data => data.listStudentRecords(studentId))
+        .then(records => {
+            if (_badgeStudentId !== studentId) return; // stale 방지
+            const show = hasPendingLR || memosRecent
+                || hasRecentRecord(lrs, now)
+                || hasRecentRecord(records, now);
+            _setTabBadge('docu', show);
+        })
+        .catch(err => console.warn('[badge] 기록 뱃지 갱신 실패:', err));
 }
+
+// 상담 탭: date(상담일)·created_at이 14일 이내인 상담이 있으면. date 범위 쿼리로 가볍게 1회 조회.
+function _refreshConsultationBadge(studentId) {
+    _badgeStudentId = studentId;
+    _setTabBadge('consultation', false);
+    if (!studentId) return;
+    const now = Date.now();
+    const startDate = new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    searchStudentConsultations(studentId, { startDate, limitCount: 1 })
+        .then(rows => {
+            if (_badgeStudentId !== studentId) return;
+            // consultations의 date/created_at을 isRecentRecord의 occurred_at/created_at에 매핑해 재사용.
+            const mapped = rows.map(c => ({ occurred_at: c.date, created_at: c.created_at }));
+            _setTabBadge('consultation', hasRecentRecord(mapped, now));
+        })
+        .catch(err => console.warn('[badge] 상담 뱃지 갱신 실패:', err));
+}
+
+// 성적 탭: academy/external 항목의 시험일(date) 또는 요약 updated_at이 14일 이내면. 요약 1회 조회.
+function _refreshScoreBadge(studentId) {
+    _badgeStudentId = studentId;
+    _setTabBadge('score', false);
+    if (!studentId) return;
+    const now = Date.now();
+    getDoc(doc(db, 'student_scores', studentId))
+        .then(snap => {
+            if (_badgeStudentId !== studentId) return;
+            const sdata = snap.exists() ? snap.data() : {};
+            const cands = [];
+            for (const a of Object.values(sdata.academy || {})) cands.push({ occurred_at: a?.date });
+            for (const e of Object.values(sdata.external || {})) cands.push({ occurred_at: e?.date || e?.event?.date });
+            cands.push({ created_at: sdata.updated_at }); // 요약 최근 갱신도 "새 성적"으로 간주
+            _setTabBadge('score', hasRecentRecord(cands, now));
+        })
+        .catch(err => console.warn('[badge] 성적 뱃지 갱신 실패:', err));
+}
+
+// 학생 전환 시 기록·상담·성적 뱃지를 한 번에 갱신.
+function _refreshDetailBadges(studentId) {
+    _refreshDocuBadge(studentId);
+    _refreshConsultationBadge(studentId);
+    _refreshScoreBadge(studentId);
+}
+
+// role-memo.js가 메모 CRUD 후 기록 뱃지를 갱신할 수 있도록 공개.
+export { _refreshDocuBadge as refreshDocuBadge };
 
 // 비활성 학생: 출결현황 대신 수업이력(history_logs, DB와 동일한 7종 분류) 로드.
 // 활성 학생: 기존 출결현황 로드 (날짜 범위 입력 유지).
@@ -979,8 +1032,8 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
         _loadReportOrHistoryCard(studentId);
     }
 
-    // 기록 탭 뱃지 — 학생 전환 시 2주 이내 기록 여부로 갱신(탭을 안 열어도 보이게)
-    if (studentChanged) _refreshDocuBadge(studentId);
+    // 상세 탭 뱃지 — 학생 전환 시 기록·상담·성적 2주 이내 새 항목 여부로 갱신(탭을 안 열어도 보이게)
+    if (studentChanged) _refreshDetailBadges(studentId);
 
     if (!studentId) {
         document.getElementById('detail-empty').style.display = '';
@@ -1398,8 +1451,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
                 </div>
                 ${enrollInfo}
             </div>` : ''}
-            ${renderAbsenceRecordCard(studentId)}
-            ${renderUnifiedMemoCard(studentId)}`;
+            ${renderAbsenceRecordCard(studentId)}`;
     }
 
     const cardsHtml = isWithdrawn ? withdrawnHtml : `
@@ -1441,10 +1493,8 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
 
         <!-- 클리닉 카드 -->
         ${extraVisitHtml}
-
-        <!-- 메모 카드 (통합) -->
-        ${renderUnifiedMemoCard(studentId)}
     `;
+    // 메모 카드는 기록(docu) 탭의 휴퇴원 요청서 아래로 이동(docu-card.js renderDocuTab).
 
     // 증분 렌더링: realtime 갱신에서 카드 HTML이 직전과 동일하고, 현재 detail-cards가
     // '이 학생의 표준 카드'(student-status-mount 마커)를 담고 있으면 교체를 건너뛴다.

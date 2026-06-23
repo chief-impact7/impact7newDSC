@@ -40,7 +40,8 @@ export function isRecentRecord(rec, nowMs, windowDays = 14) {
   if (!rec) return false;
   const cutoff = nowMs - windowDays * DAY_MS;
   const candidates = [toMillis(rec.created_at), toMillis(rec.occurred_at)].filter(t => t != null);
-  return candidates.some(t => t >= cutoff);
+  // 미래 날짜(예: 예약된 시험일·상담일)는 '최근'으로 보지 않는다 — 뱃지 오탐 방지
+  return candidates.some(t => t >= cutoff && t <= nowMs);
 }
 
 // 최근(2주 이내) 기록이 하나라도 있으면 true — 기록 탭 뱃지용.
