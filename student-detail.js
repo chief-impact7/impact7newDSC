@@ -46,7 +46,7 @@ import {
 } from './absence-records.js';
 import { renderReturnConsultCard } from './leave-request.js';
 import { normalizeStudentMemos } from './role-memo.js';
-import { hasRecentRecord } from './docu-records.js';
+import { hasRecentRecord, splitRecordsByType } from './docu-records.js';
 import { loadClassHistoryCard } from './class-history.js';
 // 비활성 학생(퇴원·종강·상담 등) 식별용 — 출결현황 탭 라벨을 "수업이력"으로 동적 전환.
 const _isInactiveDetailStudent = (s) => !ENROLLABLE_STATUSES.has(s?.status || '');
@@ -411,11 +411,15 @@ export function switchDetailTab(tab) {
     document.getElementById('message-tab').style.display = tab === 'message' ? '' : 'none';
     const docuTabEl = document.getElementById('docu-tab');
     if (docuTabEl) docuTabEl.style.display = tab === 'docu' ? '' : 'none';
-    if (tab === 'score') loadScoreCard();
+    if (tab === 'score') {
+        if (state.selectedStudentId) _openedDetailTabs.add(`${state.selectedStudentId}:score`);
+        loadScoreCard();
+    }
     if (tab === 'report') {
         if (state.selectedStudentId) _loadReportOrHistoryCard(state.selectedStudentId);
     }
     if (tab === 'consultation') {
+        if (state.selectedStudentId) _openedDetailTabs.add(`${state.selectedStudentId}:consultation`);
         if (_renderConsultationFn) {
             _renderConsultationFn(state.selectedStudentId);
             return;
@@ -480,6 +484,9 @@ export function switchDetailTab(tab) {
 // 상세 탭 뱃지 — 학생 전환 시 기록·상담·성적 탭에 2주 이내 새 항목 알림(점)을 표시.
 // 탭을 안 열어도 보이게 학생 전환마다 1회씩만 조회한다. 모든 비동기는 _badgeStudentId로 stale 가드.
 let _badgeStudentId = null;
+// 상담·성적 뱃지는 비용(쿼리·getDoc)이 커서 그 탭을 한 번이라도 연 학생만 계산한다.
+// 세션 내 `${studentId}:${tab}` 기록 — switchDetailTab에서 등록.
+const _openedDetailTabs = new Set();
 function _setTabBadge(tab, show) {
     const btn = document.querySelector(`.detail-tab[data-tab="${tab}"]`);
     if (btn) btn.classList.toggle('has-badge', !!show);
@@ -495,15 +502,21 @@ function _refreshDocuBadge(studentId) {
     // 대기중(승인 진행 중) 휴/퇴원 요청서는 기간과 무관하게 뱃지 대상
     const lrs = (state.leaveRequests || []).filter(lr => lr.student_id === studentId);
     const hasPendingLR = lrs.some(lr => lr.status === 'requested');
-    // 메모는 student 문서에 이미 있어 동기 판정. 레거시 string memo(created_at='')는 자연히 최근 아님.
-    const memosRecent = student ? hasRecentRecord(normalizeStudentMemos(student), now) : false;
+    // 메모는 동기 판정. 단 화면 메모 카드에 실제 표시되는 메모(고정 또는 선택일 메모)만 대상 —
+    // 지난 비고정 메모는 카드에 안 보이므로 뱃지 오탐을 막는다.
+    const visibleMemos = student
+        ? normalizeStudentMemos(student).filter(m => m.pinned || m.date === state.selectedDate)
+        : [];
+    const memosRecent = hasRecentRecord(visibleMemos, now);
     import('./docu-data.js')
         .then(data => data.listStudentRecords(studentId))
         .then(records => {
             if (_badgeStudentId !== studentId) return; // stale 방지
+            // 화면 기록 탭(splitRecordsByType)은 reflection/etc만 표시 → 뱃지도 그 둘만 본다.
+            const { reflections, etc } = splitRecordsByType(records);
             const show = hasPendingLR || memosRecent
                 || hasRecentRecord(lrs, now)
-                || hasRecentRecord(records, now);
+                || hasRecentRecord([...reflections, ...etc], now);
             _setTabBadge('docu', show);
         })
         .catch(err => console.warn('[badge] 기록 뱃지 갱신 실패:', err));
@@ -537,9 +550,14 @@ function _refreshScoreBadge(studentId) {
             if (_badgeStudentId !== studentId) return;
             const sdata = snap.exists() ? snap.data() : {};
             const cands = [];
+            // 화면에 실제 행이 그려지는 항목의 시험일(date)만 본다(요약 updated_at은 빈 요약도
+            // 최근이라 오탐 → 제외). academy·수능인덱스는 화면이 필터 없이 다 표시한다.
             for (const a of Object.values(sdata.academy || {})) cands.push({ occurred_at: a?.date });
-            for (const e of Object.values(sdata.external || {})) cands.push({ occurred_at: e?.date || e?.event?.date });
-            cands.push({ created_at: sdata.updated_at }); // 요약 최근 갱신도 "새 성적"으로 간주
+            for (const e of Object.values(sdata.external || {})) {
+                // 학교내신·모의고사는 화면(buildExternalRows)이 무점수 placeholder를 제외하므로 뱃지도 동일 판정.
+                if ((e?.type === 'school' || e?.type === 'mock') && !externalScoreIsMeaningful(e?.score, e?.type)) continue;
+                cands.push({ occurred_at: e?.date || e?.event?.date });
+            }
             _setTabBadge('score', hasRecentRecord(cands, now));
         })
         .catch(err => console.warn('[badge] 성적 뱃지 갱신 실패:', err));
@@ -548,8 +566,12 @@ function _refreshScoreBadge(studentId) {
 // 학생 전환 시 기록·상담·성적 뱃지를 한 번에 갱신.
 function _refreshDetailBadges(studentId) {
     _refreshDocuBadge(studentId);
-    _refreshConsultationBadge(studentId);
-    _refreshScoreBadge(studentId);
+    // 상담·성적은 그 탭을 한 번이라도 연 학생만 계산(읽기 비용 절감).
+    // 안 연 학생은 계산을 건너뛰되, 이전 학생의 점이 남지 않도록 명시적으로 끈다.
+    if (_openedDetailTabs.has(`${studentId}:consultation`)) _refreshConsultationBadge(studentId);
+    else _setTabBadge('consultation', false);
+    if (_openedDetailTabs.has(`${studentId}:score`)) _refreshScoreBadge(studentId);
+    else _setTabBadge('score', false);
 }
 
 // role-memo.js가 메모 CRUD 후 기록 뱃지를 갱신할 수 있도록 공개.
@@ -889,15 +911,19 @@ function buildSuneungRows(entries) {
     })).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 }
 
+// 외부 성적(학교내신·모의고사) 항목에 의미있는 점수/등급/성적표/메모가 있는지 — 화면 행 생성
+// (buildExternalRows)과 성적 뱃지가 공유하는 단일 판정(SSoT). 무점수 placeholder는 양쪽 모두 제외.
+function externalScoreIsMeaningful(s, type) {
+    return scoreNum(s?.predictedScore) != null || scoreNum(s?.finalScore) != null
+        || !!s?.predictedGrade || !!s?.finalGrade || !!s?.reportImageUrl
+        || (type === 'mock' && (scoreNum(s?.percentile) != null || scoreNum(s?.standardScore) != null))
+        || (type === 'school' && !!s?.memo);
+}
+
 function buildExternalRows(entries, type) {
     return entries.map(({ event, score: s }) => {
         // 점수/등급/성적표/메모가 하나도 없는 placeholder 응시 등록은 제외(빈 행 방지).
-        const hasMeaningfulScore =
-            scoreNum(s.predictedScore) != null || scoreNum(s.finalScore) != null
-            || !!s.predictedGrade || !!s.finalGrade || !!s.reportImageUrl
-            || (type === 'mock' && (scoreNum(s.percentile) != null || scoreNum(s.standardScore) != null))
-            || (type === 'school' && !!s.memo);
-        if (!hasMeaningfulScore) return null;
+        if (!externalScoreIsMeaningful(s, type)) return null;
         const diff = scoreNum(s.finalScore) != null && scoreNum(s.predictedScore) != null
             ? scoreNum(s.finalScore - s.predictedScore)
             : null;
