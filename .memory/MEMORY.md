@@ -1,7 +1,8 @@
 # Memory Index
 
-- master 푸시 시 GitHub Actions (`.github/workflows/deploy.yml`)로 자동 배포
+- master 푸시 시 GitHub Actions (`.github/workflows/deploy.yml`)로 자동 배포 (단 DSC deploy.yml은 빌드 안 하고 impact7-hosting에 dispatch만 — 실제 배포는 통합 호스팅 2~3분, 상세 [reference_unified_hosting_deploy](reference_unified_hosting_deploy.md))
 - `firebase deploy` 수동 실행 불필요
+- [reference_unified_hosting_deploy.md](reference_unified_hosting_deploy.md) — 통합 호스팅(impact7-app) 배포 흐름·캐시 헤더(index.html no-cache·assets immutable, SPA는 /{app}/** 매칭)·"배포했는데 옛 화면" 진단법(시크릿창·hash비교). DSC Actions success ≠ 배포완료
 - **볼트**: `Jon`
 - **경로**: `impact7DEV/impact7DSC/` (볼트 내 상대경로)
 - **obsidian CLI 명령**: `obsidian create vault="Jon" path="impact7DEV/impact7DSC/YYYY-MM-DD.md"`
