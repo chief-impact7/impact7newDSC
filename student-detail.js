@@ -486,10 +486,18 @@ function _refreshDocuBadge(studentId) {
     _docuBadgeStudentId = studentId;
     _setDocuBadge(false); // 학생 전환 시 일단 제거
     if (!studentId) return;
+    // 대기중(승인 진행 중) 휴/퇴원 요청서는 기간과 무관하게 뱃지 대상
+    const lrs = (state.leaveRequests || []).filter(lr => lr.student_id === studentId);
+    const hasPendingLR = lrs.some(lr => lr.status === 'requested');
     Promise.all([import('./docu-data.js'), import('./docu-records.js')])
         .then(([data, recs]) => data.listStudentRecords(studentId).then(records => {
             if (_docuBadgeStudentId !== studentId) return; // stale 방지
-            _setDocuBadge(recs.hasRecentRecord(records, Date.now()));
+            const now = Date.now();
+            // 뱃지 = 대기중 요청서 | 최근(14일) 생성된 요청서(승인완료여도) | 최근 생성된 반성문·기타
+            const show = hasPendingLR
+                || recs.hasRecentRecord(lrs, now)
+                || recs.hasRecentRecord(records, now);
+            _setDocuBadge(show);
         }))
         .catch(err => console.warn('[docu] 뱃지 갱신 실패:', err));
 }
