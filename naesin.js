@@ -1019,7 +1019,8 @@ window.saveNaesinClassSchedule = async function(csKey, day, time) {
     }
     window.showSaveIndicator?.('saving');
     try {
-        await auditSet(doc(db, 'class_settings', csKey), { schedule }, { merge: true });
+        // updateDoc으로 schedule 필드를 통째 교체 — merge:true의 deep-merge로는 요일 키 삭제가 반영되지 않는다.
+        await auditUpdate(doc(db, 'class_settings', csKey), { schedule });
         if (!classSettings[csKey]) classSettings[csKey] = {};
         classSettings[csKey].schedule = schedule;
         window.showSaveIndicator?.('saved');

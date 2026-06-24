@@ -49,8 +49,9 @@ const jsFiles = readdirSync(ROOT)
     .filter(f => f.endsWith('.js') && !f.startsWith('.'))
     .map(f => join(ROOT, f));
 
-// saveClassSettings 정의 자체(data-layer.js)에서 나오는 내부 패턴 무시
-const IGNORE_KEYS = new Set(['merge', 'merged']);
+// saveClassSettings 정의/호출의 옵션 인자 키 무시 (Firestore 필드 아님)
+// merge: 과거 setDoc 옵션 / replace: saveClassSettings 3번째 옵션 인자 { replace }
+const IGNORE_KEYS = new Set(['merge', 'merged', 'replace']);
 
 const staticFields = new Set();
 

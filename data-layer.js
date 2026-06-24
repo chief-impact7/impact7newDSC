@@ -225,8 +225,13 @@ export function getStudentTestItems(studentId) {
     return { sections, flat };
 }
 
-export async function saveClassSettings(classCode, data) {
-    await auditSet(doc(db, 'class_settings', classCode), data, { merge: true });
+// replace:true면 updateDoc으로 필드를 통째 교체 — schedule 같은 map은 setDoc merge의 deep-merge로 키 삭제가 안 되기 때문.
+export async function saveClassSettings(classCode, data, { replace = false } = {}) {
+    if (replace) {
+        await auditUpdate(doc(db, 'class_settings', classCode), data);
+    } else {
+        await auditSet(doc(db, 'class_settings', classCode), data, { merge: true });
+    }
     state.classSettings[classCode] = { ...state.classSettings[classCode], ...data };
 }
 

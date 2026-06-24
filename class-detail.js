@@ -538,7 +538,7 @@ export async function toggleClassDay(classCode, day, isAdd) {
 
     try {
         showSaveIndicator('saving');
-        await saveClassSettings(classCode, { [scheduleKey]: schedule });
+        await saveClassSettings(classCode, { [scheduleKey]: schedule }, { replace: true });
 
         const newDays = Object.keys(schedule).sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b));
         const batch = writeBatch(db);
@@ -577,7 +577,7 @@ export async function saveClassDayTime(classCode, day, time) {
     const schedule = { ...(cs[scheduleKey] || {}), [day]: time };
     try {
         showSaveIndicator('saving');
-        await saveClassSettings(classCode, { [scheduleKey]: schedule });
+        await saveClassSettings(classCode, { [scheduleKey]: schedule }, { replace: true });
         showSaveIndicator('saved');
     } catch (err) {
         console.error('시간 저장 실패:', err);
