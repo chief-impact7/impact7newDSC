@@ -10,8 +10,8 @@ import { getDayName, studentShortLabel, todayStr } from './src/shared/firestore-
 import { ENROLLABLE_STATUSES, isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { db } from './firebase-config.js';
-import { doc, getDoc, getDocFromServer } from 'firebase/firestore';
-import { auditUpdate, auditSet } from './audit.js';
+import { doc, getDoc, getDocFromServer, writeBatch } from 'firebase/firestore';
+import { auditUpdate, auditSet, batchUpdate, READ_ONLY } from './audit.js';
 import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt, isActiveNaesinBase, resolveNaesinCsKey } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 import { renderUnifiedMemoCard } from './role-memo.js';
@@ -1009,20 +1009,65 @@ window.saveNaesinClassPeriod = async function(csKey, field, value) {
 };
 
 window.saveNaesinClassSchedule = async function(csKey, day, time) {
-    const { classSettings } = _state();
+    const { allStudents, classSettings } = _state();
     const cs = classSettings[csKey] || {};
     const schedule = { ...(cs.schedule || {}) };
-    if (time) {
-        schedule[day] = time;
-    } else {
-        delete schedule[day];
-    }
+    const isAdd = !!time;
+    const wasActive = schedule[day] !== undefined;   // 변이 전: 이미 반에 있던 요일인가
+    if (isAdd) schedule[day] = time;
+    else delete schedule[day];
+
+    // 개별 naesin_days 동기화는 "새 요일 추가" 또는 "요일 삭제"에만 한다.
+    // 기존 요일의 시간만 바꾸는 경우(isAdd && wasActive)는 개별요일을 건드리지 않는다 — 그 요일을 일부러 끈 학생에게 재등록되는 회귀 방지.
+    const syncDay = isAdd ? !wasActive : true;
+
     window.showSaveIndicator?.('saving');
     try {
-        // updateDoc으로 schedule 필드를 통째 교체 — merge:true의 deep-merge로는 요일 키 삭제가 반영되지 않는다.
-        await auditUpdate(doc(db, 'class_settings', csKey), { schedule });
+        // 반 schedule + 개별요일 학생을 한 batch로 원자 저장.
+        // batchUpdate(=batch.update)는 schedule(map)·enrollments(array)를 통째 교체 → merge와 달리 요일 키 삭제가 반영된다.
+        const batch = writeBatch(db);
+        batchUpdate(batch, doc(db, 'class_settings', csKey), { schedule });
+
+        // 반 요일 변경을 개별 naesin_days 보유 학생에게 델타 반영(추가→add, 삭제→remove).
+        // naesin_days 없는 학생은 반 요일을 자동 추종하므로 건드리지 않는다. 개별 고유 요일은 보존(델타 머지).
+        const DAYS = ['월', '화', '수', '목', '금', '토', '일'];
+        const studentUpdates = [];
+        if (syncDay) {
+            for (const student of allStudents) {
+                if (student.status === '퇴원') continue;
+                let changed = false;
+                const enrollments = (student.enrollments || []).map(e => {
+                    if (!isActiveNaesinBase(e) || !e.class_number || e.naesin_class_override !== csKey) return e;
+                    if (!(e.naesin_days?.length > 0)) return e;        // 개별요일 없음 → 자동 추종, 무변경
+                    if (isAdd ? e.naesin_days.includes(day) : !e.naesin_days.includes(day)) return e;  // 이미 반영됨
+                    changed = true;
+                    const set = new Set(e.naesin_days);
+                    if (isAdd) set.add(day); else set.delete(day);
+                    const newDays = DAYS.filter(d => set.has(d));
+                    const u = { ...e };
+                    if (newDays.length > 0) u.naesin_days = newDays;
+                    else delete u.naesin_days;                         // 빈 요일 = 자동추종 (removeFromNaesin과 일관)
+                    if (!isAdd && u.naesin_schedule?.[day] !== undefined) {  // 요일 삭제 시 개별 시간 override도 정리
+                        const ns = { ...u.naesin_schedule };
+                        delete ns[day];
+                        if (Object.keys(ns).length > 0) u.naesin_schedule = ns;
+                        else delete u.naesin_schedule;
+                    }
+                    return u;
+                });
+                if (!changed) continue;
+                batchUpdate(batch, doc(db, 'students', student.docId), { enrollments });
+                studentUpdates.push({ student, enrollments });
+            }
+        }
+
+        await batch.commit();
+
         if (!classSettings[csKey]) classSettings[csKey] = {};
         classSettings[csKey].schedule = schedule;
+        if (!READ_ONLY) {
+            studentUpdates.forEach(({ student, enrollments }) => { student.enrollments = enrollments; });
+        }
         window.showSaveIndicator?.('saved');
         renderNaesinClassDetail(csKey);
     } catch (err) {
