@@ -17,7 +17,8 @@
   --surface-hover: #edebe9;
   --outline: rgba(0, 0, 0, 0.42);
   --text-main: rgba(0, 0, 0, 0.87);
-  --text-sec: rgba(0, 0, 0, 0.58);
+  /* 0.58→0.64: 작은 보조 텍스트가 베이지 surface 위에서 WCAG AA(4.5:1)를 넘도록 — 크기 유지, 가독성만 보강 */
+  --text-sec: rgba(0, 0, 0, 0.64);
   --hover-bg: #faf6ee;
   --active-bg: #d4e9e2;
   --active-text: #006241;
@@ -716,6 +717,7 @@ body {
 
 
 .count-chip {
+  font-variant-numeric: tabular-nums;
   font-family: var(--font-heading);
   font-size: 13px;
   font-weight: 600;
@@ -2800,7 +2802,7 @@ textarea.field-input {
   opacity: 0.6;
 }
 .visit-group-subitem .visit-source-badge {
-  font-size: 9px;
+  font-size: 11px;
   padding: 0px 5px;
 }
 .visit-subitem-detail {
@@ -3272,7 +3274,7 @@ textarea.field-input {
 .tag-sibling { background: #e8f0fe; color: #1967d2; font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 100px; display: inline-flex; align-items: center; gap: 3px; }
 
 /* 재원현황 (프로필 내) */
-.profile-stay-stats { margin-top: 6px; }
+.profile-stay-stats { margin-top: 6px; font-variant-numeric: tabular-nums; }
 .stay-period { margin-bottom: 4px; }
 .stay-period-label { font-size: 11px; color: var(--text-sec); margin-right: 6px; }
 .stay-period-value { font-size: 11px; color: var(--text-sec); }
@@ -4468,4 +4470,39 @@ textarea.field-input {
 .aias-progress-bar {
   height: 100%; background: var(--accent, #2f7d6b); border-radius: 99px;
   transition: width .4s ease;
+}
+
+/* ============================================================
+   접근성 보강 (A11y) — 시각 디자인·정보 밀도 영향 0
+   - 키보드 포커스는 키보드 사용자에게만 보이고 마우스/터치 클릭엔 안 나타남
+   - 모션/터치영역 분기로 데스크톱 조망(36px·작은 글씨)은 그대로 유지
+   ============================================================ */
+
+/* 키보드 탐색 시에만 포커스 링 표시 (마우스/터치 클릭엔 미표시).
+   border-radius는 주지 않는다 — outline이 요소의 기존 모서리(원형 버튼 등)를 자동으로 따른다. */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) { outline: none; }
+
+/* 모션 민감 사용자: 슬라이드·페이드·스피너 등 비핵심 모션 제거 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 터치 기기에서만 탭 영역 44px 확보 — 데스크톱 마우스는 36px 시각 그대로.
+   ::after는 레이아웃을 차지하지 않아 버튼 간격(gap 8px)도 유지된다. */
+@media (pointer: coarse) {
+  .icon-btn, .day-btn { position: relative; }
+  .icon-btn::after, .day-btn::after {
+    content: "";
+    position: absolute;
+    inset: -4px;            /* 36 + (4×2) = 44px */
+  }
 }

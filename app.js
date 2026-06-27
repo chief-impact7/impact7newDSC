@@ -738,16 +738,56 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// ─── Keyboard shortcut: ESC closes modals ───────────────────────────────────
+// ─── Modal keyboard: ESC 닫기 + Tab 포커스 트랩 ──────────────────────────────
+// 하드코딩 목록 대신 화면에 보이는 .modal-overlay 전체를 대상으로 해 새 모달
+// 추가 시 누락(drift)을 방지한다. 동적 생성 모달(id 없음)은 remove로 닫는다.
+function getTopVisibleModal() {
+    let top = null;
+    document.querySelectorAll('.modal-overlay, .parent-msg-modal-overlay').forEach(m => {
+        if (getComputedStyle(m).display !== 'none') top = m;
+    });
+    return top;
+}
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-        ['schedule-modal', 'homework-modal', 'test-modal', 'enrollment-modal', 'memo-modal', 'next-hw-modal', 'parent-msg-modal', 'temp-attendance-modal', 'bulk-confirm-modal', 'bulk-memo-modal', 'bulk-notify-modal', 'leave-request-modal'].forEach(id => {
-            const modal = document.getElementById(id);
-            if (modal?.style.display !== 'none') {
-                modal.style.display = 'none';
-            }
-        });
+        const modal = getTopVisibleModal();
+        if (!modal) return;
+        if (modal.id) modal.style.display = 'none';
+        else modal.remove();
+        return;
     }
+    if (e.key === 'Tab') {
+        const modal = getTopVisibleModal();
+        if (!modal) return;
+        const focusables = [...modal.querySelectorAll(
+            'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )].filter(el => el.offsetParent !== null);
+        if (!focusables.length) return;
+        const first = focusables[0], last = focusables[focusables.length - 1];
+        if (!modal.contains(document.activeElement)) {
+            e.preventDefault(); first.focus();
+        } else if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault(); last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault(); first.focus();
+        }
+    }
+});
+
+// ─── nav-l1 키보드 조작 (div[role=button]) ──────────────────────────────────
+// Enter/Space로 클릭과 동일하게 동작. HTML의 onkeydown에서 호출된다.
+window.handleNavL1Keydown = (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const item = e.target.closest('.nav-l1');
+    if (!item) return;
+    e.preventDefault(); // Space 페이지 스크롤 방지
+    item.click();
+};
+// 소속/반설정 트리 펼침 상태를 aria-expanded로 동기화 (클릭 버블링 후 실행)
+document.querySelector('.nav-l1-group')?.addEventListener('click', () => {
+    document.querySelectorAll('.nav-l1[data-category="branch"], .nav-l1[data-category="class_mgmt"]').forEach(el => {
+        el.setAttribute('aria-expanded', String(el.classList.contains('expanded')));
+    });
 });
 
 // loadPickerApi, pickDriveFolder, exportDailyReport

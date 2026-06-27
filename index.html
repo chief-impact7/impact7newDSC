@@ -48,7 +48,7 @@
             <div class="app-bar-center">
                 <div class="search-pill">
                     <span class="material-symbols-outlined">search</span>
-                    <input type="text" id="search-input" placeholder="이름·학교·전화·반·선생님 검색..." oninput="handleSearch(this.value)">
+                    <input type="text" id="search-input" aria-label="학생 검색 (이름·학교·전화·반·선생님)" placeholder="이름·학교·전화·반·선생님 검색..." oninput="handleSearch(this.value)">
                     <button class="search-clear" id="search-clear" onclick="clearSearch()" style="display:none" aria-label="검색 지우기">
                         <span class="material-symbols-outlined">close</span>
                     </button>
@@ -114,36 +114,36 @@
 
 
                 <!-- L1 Navigation -->
-                <nav class="nav-l1-group">
-                    <div class="nav-l1 active" data-category="attendance" onclick="setCategory('attendance')">
-                        <span class="material-symbols-outlined nav-l1-icon">check_circle</span>
+                <nav class="nav-l1-group" role="toolbar" aria-label="카테고리 탐색" onkeydown="handleNavL1Keydown(event)">
+                    <div class="nav-l1 active" data-category="attendance" role="button" tabindex="0" aria-pressed="true" aria-label="출결" onclick="setCategory('attendance')">
+                        <span class="material-symbols-outlined nav-l1-icon" aria-hidden="true">check_circle</span>
                         <span class="nav-l1-text">출결</span>
-                        <span class="material-symbols-outlined nav-l1-expand">expand_more</span>
+                        <span class="material-symbols-outlined nav-l1-expand" aria-hidden="true">expand_more</span>
                     </div>
-                    <div class="nav-l1" data-category="homework" onclick="setCategory('homework')">
-                        <span class="material-symbols-outlined nav-l1-icon">assignment</span>
+                    <div class="nav-l1" data-category="homework" role="button" tabindex="0" aria-pressed="false" aria-label="숙제" onclick="setCategory('homework')">
+                        <span class="material-symbols-outlined nav-l1-icon" aria-hidden="true">assignment</span>
                         <span class="nav-l1-text">숙제</span>
-                        <span class="material-symbols-outlined nav-l1-expand">expand_more</span>
+                        <span class="material-symbols-outlined nav-l1-expand" aria-hidden="true">expand_more</span>
                     </div>
-                    <div class="nav-l1" data-category="test" onclick="setCategory('test')">
-                        <span class="material-symbols-outlined nav-l1-icon">quiz</span>
+                    <div class="nav-l1" data-category="test" role="button" tabindex="0" aria-pressed="false" aria-label="테스트" onclick="setCategory('test')">
+                        <span class="material-symbols-outlined nav-l1-icon" aria-hidden="true">quiz</span>
                         <span class="nav-l1-text">테스트</span>
-                        <span class="material-symbols-outlined nav-l1-expand">expand_more</span>
+                        <span class="material-symbols-outlined nav-l1-expand" aria-hidden="true">expand_more</span>
                     </div>
-                    <div class="nav-l1" data-category="admin" onclick="setCategory('admin')">
-                        <span class="material-symbols-outlined nav-l1-icon">admin_panel_settings</span>
+                    <div class="nav-l1" data-category="admin" role="button" tabindex="0" aria-pressed="false" aria-label="행정" onclick="setCategory('admin')">
+                        <span class="material-symbols-outlined nav-l1-icon" aria-hidden="true">admin_panel_settings</span>
                         <span class="nav-l1-text">행정</span>
-                        <span class="material-symbols-outlined nav-l1-expand">expand_more</span>
+                        <span class="material-symbols-outlined nav-l1-expand" aria-hidden="true">expand_more</span>
                     </div>
-                    <div class="nav-l1" data-category="branch" onclick="setCategory('branch')">
-                        <span class="material-symbols-outlined nav-l1-icon">apartment</span>
+                    <div class="nav-l1" data-category="branch" role="button" tabindex="0" aria-expanded="false" aria-label="소속" onclick="setCategory('branch')">
+                        <span class="material-symbols-outlined nav-l1-icon" aria-hidden="true">apartment</span>
                         <span class="nav-l1-text">소속</span>
-                        <span class="material-symbols-outlined nav-l1-expand">expand_more</span>
+                        <span class="material-symbols-outlined nav-l1-expand" aria-hidden="true">expand_more</span>
                     </div>
-                    <div class="nav-l1" data-category="class_mgmt" onclick="setCategory('class_mgmt')">
-                        <span class="material-symbols-outlined nav-l1-icon">groups</span>
+                    <div class="nav-l1" data-category="class_mgmt" role="button" tabindex="0" aria-expanded="false" aria-label="반 설정" onclick="setCategory('class_mgmt')">
+                        <span class="material-symbols-outlined nav-l1-icon" aria-hidden="true">groups</span>
                         <span class="nav-l1-text">반 설정</span>
-                        <span class="material-symbols-outlined nav-l1-expand">expand_more</span>
+                        <span class="material-symbols-outlined nav-l1-expand" aria-hidden="true">expand_more</span>
                     </div>
                 </nav>
 
@@ -260,13 +260,13 @@
                     </div>
 
                     <!-- 상세 탭 -->
-                    <div class="detail-tabs" id="detail-tabs">
-                        <button class="detail-tab active" data-tab="daily" onclick="switchDetailTab('daily')">현황</button>
-                        <button class="detail-tab" data-tab="report" onclick="switchDetailTab('report')">출결</button>
-                        <button class="detail-tab" data-tab="docu" onclick="switchDetailTab('docu')">기록</button>
-                        <button class="detail-tab" data-tab="consultation" onclick="switchDetailTab('consultation')">상담</button>
-                        <button class="detail-tab" data-tab="score" onclick="switchDetailTab('score')">성적</button>
-                        <button class="detail-tab" data-tab="message" onclick="switchDetailTab('message')">메시지</button>
+                    <div class="detail-tabs" id="detail-tabs" role="tablist" aria-label="학생 상세 정보 탭">
+                        <button class="detail-tab active" data-tab="daily" role="tab" aria-selected="true" onclick="switchDetailTab('daily')">현황</button>
+                        <button class="detail-tab" data-tab="report" role="tab" aria-selected="false" onclick="switchDetailTab('report')">출결</button>
+                        <button class="detail-tab" data-tab="docu" role="tab" aria-selected="false" onclick="switchDetailTab('docu')">기록</button>
+                        <button class="detail-tab" data-tab="consultation" role="tab" aria-selected="false" onclick="switchDetailTab('consultation')">상담</button>
+                        <button class="detail-tab" data-tab="score" role="tab" aria-selected="false" onclick="switchDetailTab('score')">성적</button>
+                        <button class="detail-tab" data-tab="message" role="tab" aria-selected="false" onclick="switchDetailTab('message')">메시지</button>
                     </div>
 
                     <!-- 개인현황 카드들 (JS에서 동적 렌더링) -->

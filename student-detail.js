@@ -402,7 +402,9 @@ function _ensureReportInputDefaults() {
 export function switchDetailTab(tab) {
     state.detailTab = tab;
     document.querySelectorAll('.detail-tab').forEach(t => {
-        t.classList.toggle('active', t.dataset.tab === tab);
+        const isActive = t.dataset.tab === tab;
+        t.classList.toggle('active', isActive);
+        t.setAttribute('aria-selected', String(isActive)); // role="tab" 선택 상태 노출
     });
     document.getElementById('detail-cards').style.display = tab === 'daily' ? '' : 'none';
     document.getElementById('report-tab').style.display = tab === 'report' ? '' : 'none';

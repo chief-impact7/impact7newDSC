@@ -99,7 +99,9 @@ export function setCategory(category) {
     // L1 active 토글 (branch, class_mgmt 제외 — 글로벌 필터)
     document.querySelectorAll('.nav-l1').forEach(el => {
         if (el.dataset.category === 'branch' || el.dataset.category === 'class_mgmt') return;
-        el.classList.toggle('active', el.dataset.category === category);
+        const isActive = el.dataset.category === category;
+        el.classList.toggle('active', isActive);
+        el.setAttribute('aria-pressed', String(isActive)); // 스크린리더에 선택 상태 노출
     });
 
     // 카테고리에 따라 과거/미래 날짜 배너 표시 여부가 달라지므로 갱신
