@@ -1,4 +1,5 @@
 import { onAuthStateChanged } from 'firebase/auth';
+import { installKeyboardActivation, installModalA11y } from './a11y-dom.js';
 import {
     collection, getDocs, doc,
     query, where
@@ -738,51 +739,12 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// ─── Modal keyboard: ESC 닫기 + Tab 포커스 트랩 ──────────────────────────────
-// 하드코딩 목록 대신 화면에 보이는 .modal-overlay 전체를 대상으로 해 새 모달
-// 추가 시 누락(drift)을 방지한다. 동적 생성 모달(id 없음)은 remove로 닫는다.
-function getTopVisibleModal() {
-    let top = null;
-    document.querySelectorAll('.modal-overlay, .parent-msg-modal-overlay').forEach(m => {
-        if (getComputedStyle(m).display !== 'none') top = m;
-    });
-    return top;
-}
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        const modal = getTopVisibleModal();
-        if (!modal) return;
-        if (modal.id) modal.style.display = 'none';
-        else modal.remove();
-        return;
-    }
-    if (e.key === 'Tab') {
-        const modal = getTopVisibleModal();
-        if (!modal) return;
-        const focusables = [...modal.querySelectorAll(
-            'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )].filter(el => el.offsetParent !== null);
-        if (!focusables.length) return;
-        const first = focusables[0], last = focusables[focusables.length - 1];
-        if (!modal.contains(document.activeElement)) {
-            e.preventDefault(); first.focus();
-        } else if (e.shiftKey && document.activeElement === first) {
-            e.preventDefault(); last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-            e.preventDefault(); first.focus();
-        }
-    }
-});
-
-// ─── data-keyclick 요소 키보드 조작 (div/span[role=button] 등) ───────────────
-// Enter/Space로 클릭과 동일 동작 (요소 자신이 포커스일 때만 — 중첩 컨트롤 보호).
-// nav-l1·동적 렌더 요소가 모두 이 단일 위임을 공유한다.
-document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
-    const el = e.target.closest('[data-keyclick]');
-    if (!el || el !== e.target) return;
-    e.preventDefault();
-    el.click();
+// ─── 접근성: 키보드 활성화 + 모달 Esc 닫기/Tab 포커스 트랩 (공유 a11y-dom.js) ──
+// DSC는 data-keyclick 요소를 활성화, 모달은 정적이면 display 토글·동적이면 remove.
+installKeyboardActivation('[data-keyclick]');
+installModalA11y({
+    modalSelector: '.modal-overlay, .parent-msg-modal-overlay',
+    closeModal: (m) => { if (m.id) m.style.display = 'none'; else m.remove(); },
 });
 // 소속/반설정 트리 펼침 상태를 aria-expanded로 동기화 (클릭 버블링 후 실행)
 document.querySelector('.nav-l1-group')?.addEventListener('click', () => {

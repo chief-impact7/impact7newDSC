@@ -26,3 +26,14 @@ if [ -f "$TOKEN_CHECK" ]; then
         exit 1
     fi
 fi
+
+# 공유 DOM 유틸(a11y-dom.js) 동기화 검증
+DOM_CHECK=/Users/jongsooyi/projects/impact7DB/.agents/hooks/check-shared-dom.mjs
+if [ -f "$DOM_CHECK" ]; then
+    node "$DOM_CHECK" --app dsc
+    if [ $? -ne 0 ]; then
+        echo ""
+        echo "Push 차단: 공유 DOM 유틸이 마스터와 어긋남 — a11y-dom.js를 동기화하세요."
+        exit 1
+    fi
+fi
