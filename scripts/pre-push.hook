@@ -15,3 +15,14 @@ if [ $? -ne 0 ]; then
     echo "Push 차단: shared lock 불일치 — 위 안내의 npm install 명령으로 갱신 후 다시 push하세요."
     exit 1
 fi
+
+# 디자인 토큰 SSoT 검증 (impact7DB/.agents/design-tokens.json 기준 — 4앱 토큰값 동기화 강제)
+TOKEN_CHECK=/Users/jongsooyi/projects/impact7DB/.agents/hooks/check-design-tokens.mjs
+if [ -f "$TOKEN_CHECK" ]; then
+    node "$TOKEN_CHECK" --app dsc
+    if [ $? -ne 0 ]; then
+        echo ""
+        echo "Push 차단: 디자인 토큰이 SSoT와 어긋남 — design-tokens.json 또는 이 앱 CSS를 맞추세요."
+        exit 1
+    fi
+fi
