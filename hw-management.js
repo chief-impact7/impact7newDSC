@@ -96,11 +96,11 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
                     <span class="hw-fail-ox-badge ${oxDisplayClass(badgeVal)}">${esc(badgeVal || '—')}</span>
                     ${hasPendingTask ? `<span style="font-size:10px;color:var(--primary);padding:1px 5px;border-radius:4px;border:1px solid var(--primary);margin-right:auto;">저장됨·수정가능</span>` : ''}
                     <div class="hw-fail-type-btns">
-                        <button class="hw-fail-type-btn ${isVisit ? 'active' : ''}"
+                        <button class="hw-fail-type-btn ${isVisit ? 'active' : ''}" aria-pressed="${isVisit}"
                             onclick="selectHwFailType('${escAttr(studentId)}', '${escapedDomain}', '등원', this)">
                             <span class="material-symbols-outlined" style="font-size:13px;">directions_walk</span>등원
                         </button>
-                        <button class="hw-fail-type-btn ${isAlt ? 'active' : ''}"
+                        <button class="hw-fail-type-btn ${isAlt ? 'active' : ''}" aria-pressed="${isAlt}"
                             onclick="selectHwFailType('${escAttr(studentId)}', '${escapedDomain}', '대체숙제', this)">
                             <span class="material-symbols-outlined" style="font-size:13px;">edit_note</span>대체숙제
                         </button>
@@ -128,7 +128,7 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
                     </div>
                 ` : isAlt ? `
                     <div class="hw-fail-detail">
-                        <input type="text" class="field-input hw-fail-input" data-hw-field="alt_hw" style="width:100%;padding:4px 8px;font-size:12px;"
+                        <input type="text" class="field-input hw-fail-input" data-hw-field="alt_hw" aria-label="대체 숙제" style="width:100%;padding:4px 8px;font-size:12px;"
                             placeholder="대체 숙제 내용 (예: 단어장 50개)"
                             value="${escAttr(action.alt_hw || '')}">
                         <div class="hw-fail-detail-row" style="margin-top:4px;">
@@ -431,7 +431,7 @@ export function renderPendingTasksCard(studentId, tasks) {
         return `
             ${header}
             <div class="${rowClass}" data-task-idx="${idx}">
-                <div class="pending-task-summary" onclick="this.parentElement.classList.toggle('expanded')">
+                <div class="pending-task-summary" role="button" tabindex="0" data-keyclick aria-expanded="false" onclick="this.parentElement.classList.toggle('expanded'); this.setAttribute('aria-expanded', String(this.parentElement.classList.contains('expanded')))">
                     <span>${summary}</span>
                     <span class="pending-task-arrow material-symbols-outlined" style="font-size:16px;color:var(--text-sec);">expand_more</span>
                 </div>
@@ -538,7 +538,7 @@ export function renderNextHwClassList() {
         const domains = getClassDomains(cc);
         const data = state.classNextHw[cc]?.domains || {};
 
-        return `<div class="list-item next-hw-class-card ${isActive} ${statusClass}" data-class="${escAttr(cc)}" onclick="selectNextHwClass('${escAttr(cc)}')">
+        return `<div class="list-item next-hw-class-card ${isActive} ${statusClass}" data-class="${escAttr(cc)}" role="button" tabindex="0" data-keyclick onclick="selectNextHwClass('${escAttr(cc)}')">
             <div class="next-hw-class-header">
                 <span class="next-hw-class-code">${esc(cc)}</span>
                 <span class="next-hw-class-status">${filled}/${total}</span>
@@ -760,7 +760,7 @@ export function renderNextHwClassDetail(classCode) {
             </div>
             ${classStudents.length === 0
                 ? '<div class="detail-card-empty">소속 학생 없음</div>'
-                : classStudents.map(s => `<div class="detail-item" style="cursor:pointer;" onclick="selectStudent('${escAttr(s.docId)}')">
+                : classStudents.map(s => `<div class="detail-item" style="cursor:pointer;" role="button" tabindex="0" data-keyclick onclick="selectStudent('${escAttr(s.docId)}')">
                     <span>${esc(s.name)}</span>
                     <span class="tag" style="font-size:11px;">${esc(studentShortLabel(s))}</span>
                 </div>`).join('')

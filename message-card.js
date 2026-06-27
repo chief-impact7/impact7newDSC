@@ -84,8 +84,8 @@ export function renderMessageTab(studentId) {
         ? `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:14px;"><span style="color:#555;">수신 대상</span>${recipientRadios}</div>`
         : '<div style="color:#c82014;margin-bottom:12px;">등록된 연락처가 없어 발송할 수 없습니다.</div>'}
       <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <button type="button" class="btn msg-mode-btn" data-mode="notice">정보성 안내</button>
-        <button type="button" class="btn msg-mode-btn" data-mode="promo">홍보(광고)</button>
+        <button type="button" class="btn msg-mode-btn" data-mode="notice" aria-pressed="${_mode === 'notice'}">정보성 안내</button>
+        <button type="button" class="btn msg-mode-btn" data-mode="promo" aria-pressed="${_mode === 'promo'}">홍보(광고)</button>
       </div>
       <div id="msg-form"></div>
       <div id="msg-history" style="margin-top:18px;"></div>
@@ -181,7 +181,7 @@ function renderForm(studentId, hasRecipient, readonly) {
   } else {
     form.innerHTML = `
       <div style="font-size:13px;color:#777;margin-bottom:6px;">광고는 본문에 (광고) 표기와 무료수신거부 안내가 있어야 합니다.</div>
-      <textarea id="msg-content" class="field-input" rows="6" style="width:100%;box-sizing:border-box;" placeholder="${escAttr(PROMO_PLACEHOLDER)}" ${dis}></textarea>
+      <textarea id="msg-content" class="field-input" aria-label="홍보 메시지 본문" rows="6" style="width:100%;box-sizing:border-box;" placeholder="${escAttr(PROMO_PLACEHOLDER)}" ${dis}></textarea>
       <button type="button" id="msg-send" class="btn btn-primary" style="margin-top:12px;" ${dis}>브랜드 메시지 발송</button>
     `;
     document.getElementById('msg-send').addEventListener('click', () => sendPromo(studentId));

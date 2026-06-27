@@ -152,7 +152,7 @@ function Metric({ icon, label, value, note }) {
     return (
         <div className="period-metric">
             <div className="period-metric-label">
-                <span className="material-symbols-outlined">{icon}</span>
+                <span className="material-symbols-outlined" aria-hidden="true">{icon}</span>
                 {label}
             </div>
             <div className="period-metric-value">{value}</div>
@@ -214,11 +214,11 @@ function ClassTable({ rows }) {
             <table className="dash-table period-class-table">
                 <thead>
                     <tr>
-                        <th><button onClick={() => setSortKey('classCode')}>반</button></th>
-                        <th><button onClick={() => setSortKey('total')}>수업</button></th>
-                        <th><button onClick={() => setSortKey('attendanceRate')}>출석률</button></th>
-                        <th><button onClick={() => setSortKey('homeworkRate')}>숙제완료</button></th>
-                        <th><button onClick={() => setSortKey('issues')}>이슈</button></th>
+                        <th aria-sort={sortKey === 'classCode' ? 'ascending' : 'none'}><button type="button" onClick={() => setSortKey('classCode')}>반</button></th>
+                        <th aria-sort={sortKey === 'total' ? 'descending' : 'none'}><button type="button" onClick={() => setSortKey('total')}>수업</button></th>
+                        <th aria-sort={sortKey === 'attendanceRate' ? 'descending' : 'none'}><button type="button" onClick={() => setSortKey('attendanceRate')}>출석률</button></th>
+                        <th aria-sort={sortKey === 'homeworkRate' ? 'descending' : 'none'}><button type="button" onClick={() => setSortKey('homeworkRate')}>숙제완료</button></th>
+                        <th aria-sort={sortKey === 'issues' ? 'descending' : 'none'}><button type="button" onClick={() => setSortKey('issues')}>이슈</button></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -481,7 +481,7 @@ export default function PeriodLogBoard({ checks, dailyRecords = [], students = [
         <div className="period-log-board">
             <div className="period-board-head">
                 <div>
-                    <span className="material-symbols-outlined">monitoring</span>
+                    <span className="material-symbols-outlined" aria-hidden="true">monitoring</span>
                     기간 로그북
                 </div>
                 <span>{rangeText}</span>

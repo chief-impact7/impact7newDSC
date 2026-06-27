@@ -1171,7 +1171,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
         : [];
     const siblingHtml = siblings.length
         ? `<span class="tag tag-sibling"><span class="material-symbols-outlined" style="font-size:13px;">group</span> ${
-            siblings.map(s => `<span style="cursor:pointer;text-decoration:underline;" onclick="event.stopPropagation();selectStudent('${escAttr(s.id)}')">${esc(s.name)}</span>`).join(', ')
+            siblings.map(s => `<span style="cursor:pointer;text-decoration:underline;" role="link" tabindex="0" data-keyclick onclick="event.stopPropagation();selectStudent('${escAttr(s.id)}')">${esc(s.name)}</span>`).join(', ')
           }</span>`
         : '';
 
@@ -1254,7 +1254,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
                     ${ct !== '정규' ? `<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:${ct === '내신' ? 'var(--warning)' : 'var(--info)'};color:#fff;">${esc(ct)}</span>` : ''}
                     <span style="font-size:12px;color:var(--text-sec);white-space:nowrap;">${esc(days)}</span>
                     <span style="font-size:13px;white-space:nowrap;">${displayTime ? esc(formatTime12h(displayTime)) : '-'}</span>
-                    ${idx >= 0 ? `<span class="material-symbols-outlined" style="font-size:14px;color:var(--text-sec);cursor:pointer;margin-left:auto;" onclick="openEnrollmentModal('${escAttr(studentId)}', ${idx})">edit</span>` : ''}
+                    ${idx >= 0 ? `<span class="material-symbols-outlined" style="font-size:14px;color:var(--text-sec);cursor:pointer;margin-left:auto;" role="button" tabindex="0" data-keyclick aria-label="수강 정보 편집" onclick="openEnrollmentModal('${escAttr(studentId)}', ${idx})">edit</span>` : ''}
                 </div>`;
             }).join('')}
         </div>
@@ -1275,7 +1275,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
                 }</span>
                 ${esc(attStatus)} 사유
             </div>
-            <textarea class="field-input" style="width:100%;min-height:48px;resize:vertical;"
+            <textarea class="field-input" aria-label="출결 사유" style="width:100%;min-height:48px;resize:vertical;"
                 placeholder="${esc(attStatus)} 사유를 입력하세요..."
                 onchange="handleAttendanceChange('${studentId}', 'reason', this.value)">${esc(rec?.attendance?.reason || '')}</textarea>
         </div>
@@ -1401,7 +1401,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
                         const isNone = val === '없음';
                         const displayText = !val ? '미입력' : isNone ? '숙제 없음' : val;
                         const color = !val ? 'var(--outline)' : isNone ? 'var(--text-sec)' : 'var(--text-main)';
-                        return `<div class="next-hw-detail-row" style="margin-bottom:4px;cursor:pointer;" onclick="openPersonalNextHwModal('${escAttr(studentId)}', '${escAttr(cc)}', '${escAttr(d)}')">
+                        return `<div class="next-hw-detail-row" style="margin-bottom:4px;cursor:pointer;" role="button" tabindex="0" data-keyclick onclick="openPersonalNextHwModal('${escAttr(studentId)}', '${escAttr(cc)}', '${escAttr(d)}')">
                             <span class="next-hw-detail-label">${esc(d)}</span>
                             <span style="font-size:13px;color:${color};flex:1;">${esc(displayText)}</span>
                             ${hasPersonal ? '<span style="font-size:10px;color:var(--primary);">개인</span>' : ''}
@@ -1421,8 +1421,8 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     const clinicButtons = isPastDate
         ? (hasClinic ? '' : '')
         : `<span style="display:flex;gap:2px;">
-            ${hasClinic ? `<button class="icon-btn" style="width:28px;height:28px;" onclick="clearExtraVisit('${escAttr(studentId)}')"><span class="material-symbols-outlined" style="font-size:18px;color:var(--danger);">close</span></button>` : ''}
-            <button class="icon-btn" style="width:28px;height:28px;" onclick="addExtraVisit('${escAttr(studentId)}')"><span class="material-symbols-outlined" style="font-size:18px;">add</span></button>
+            ${hasClinic ? `<button class="icon-btn" style="width:28px;height:28px;" aria-label="클리닉 삭제" onclick="clearExtraVisit('${escAttr(studentId)}')"><span class="material-symbols-outlined" style="font-size:18px;color:var(--danger);">close</span></button>` : ''}
+            <button class="icon-btn" style="width:28px;height:28px;" aria-label="클리닉 추가" onclick="addExtraVisit('${escAttr(studentId)}')"><span class="material-symbols-outlined" style="font-size:18px;">add</span></button>
         </span>`;
     const extraVisitHtml = `
         <div class="detail-card">
@@ -1455,7 +1455,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
                 <span style="font-size:12px;color:var(--text-sec);">${esc(days)}</span>
                 ${time ? `<span style="font-size:12px;">${esc(formatTime12h(time))}</span>` : ''}
                 ${period ? `<span style="font-size:11px;color:var(--text-sec);">${esc(period)}</span>` : ''}
-                <span class="material-symbols-outlined" style="font-size:14px;color:var(--text-sec);cursor:pointer;margin-left:auto;" onclick="openEnrollmentModal('${escAttr(studentId)}', ${idx})">edit</span>
+                <span class="material-symbols-outlined" style="font-size:14px;color:var(--text-sec);cursor:pointer;margin-left:auto;" role="button" tabindex="0" data-keyclick aria-label="수강 정보 편집" onclick="openEnrollmentModal('${escAttr(studentId)}', ${idx})">edit</span>
             </div>`;
         }).join('');
         withdrawnHtml = `
@@ -1621,7 +1621,7 @@ export function renderClinicInputs(studentId, extraVisit, isReadonly) {
     const reasonOn = isReadonly ? 'readonly' : imeInputAttrs(`saveExtraVisit('${escAttr(studentId)}', 'reason', this.value)`);
     return `<div style="display:flex;flex-direction:column;gap:6px;">
         <div style="display:flex;gap:6px;">
-            <input type="date" class="field-input" style="flex:1;padding:4px 8px;font-size:12px;"
+            <input type="date" class="field-input" aria-label="클리닉 날짜" style="flex:1;padding:4px 8px;font-size:12px;"
                 value="${escAttr(v.date || '')}" ${dateOn}>
             ${renderTime12hSelect({
                 value: v.time || DEFAULT_CLINIC_TIME,
@@ -1629,7 +1629,7 @@ export function renderClinicInputs(studentId, extraVisit, isReadonly) {
                 style: 'width:105px;padding:4px 8px;font-size:12px;',
             })}
         </div>
-        <input type="text" class="field-input" style="width:100%;padding:4px 8px;font-size:12px;"
+        <input type="text" class="field-input" aria-label="클리닉 사유" style="width:100%;padding:4px 8px;font-size:12px;"
             placeholder="사유 (예: 보충수업, 재시험 등)"
             value="${escAttr(v.reason || '')}" ${reasonOn}>
     </div>`;

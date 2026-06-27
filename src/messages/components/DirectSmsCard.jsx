@@ -87,8 +87,8 @@ export default function DirectSmsCard() {
                 <button type="button" className="mc-var-btn" onClick={downloadSample}>양식</button>
               </div>
             </div>
-            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={onFile} />
-            <textarea className="mc-textarea" value={recipients}
+            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" aria-label="번호 파일 업로드" style={{ display: 'none' }} onChange={onFile} />
+            <textarea aria-label="수신번호 목록" className="mc-textarea" value={recipients}
               onChange={(e) => { setRecipients(e.target.value); resetReqId(); }}
               placeholder={'010-1234-5678\n010-9876-5432'} />
             <p className="mc-field-label" style={{ marginTop: 6 }}>학생 DB에 없는 번호도 가능 · 발신 02-2649-0509</p>
@@ -98,7 +98,7 @@ export default function DirectSmsCard() {
               <p className="mc-field-label">내용</p>
               <TemplateBar content={text} onPick={(c) => { setText(c); resetReqId(); }} />
             </div>
-            <textarea className="mc-textarea" value={text}
+            <textarea aria-label="메시지 내용" className="mc-textarea" value={text}
               onChange={(e) => { setText(e.target.value); resetReqId(); }}
               placeholder="안내 내용을 입력하세요." />
             <div className="mc-meta">
@@ -108,17 +108,17 @@ export default function DirectSmsCard() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
               <div className="mc-seg">
-                <button className={when === 'now' ? 'on' : ''} onClick={() => setWhen('now')}>즉시</button>
-                <button className={when === 'schedule' ? 'on' : ''} onClick={() => setWhen('schedule')}>예약</button>
+                <button type="button" className={when === 'now' ? 'on' : ''} aria-pressed={when === 'now'} onClick={() => setWhen('now')}>즉시</button>
+                <button type="button" className={when === 'schedule' ? 'on' : ''} aria-pressed={when === 'schedule'} onClick={() => setWhen('schedule')}>예약</button>
               </div>
               {when === 'schedule' && (
-                <input type="datetime-local" value={scheduledAt} onChange={(e) => { setScheduledAt(e.target.value); resetReqId(); }} />
+                <input aria-label="예약 발송 시각" type="datetime-local" value={scheduledAt} onChange={(e) => { setScheduledAt(e.target.value); resetReqId(); }} />
               )}
               <button className="mc-send" style={{ marginLeft: 'auto' }} disabled={sending} onClick={onSend}>
                 {sending ? '발송 중…' : '발송'}
               </button>
             </div>
-            {msg && <p className="mc-field-label" style={{ marginTop: 8 }}>{msg}</p>}
+            {msg && <p className="mc-field-label" role="status" aria-live="polite" style={{ marginTop: 8 }}>{msg}</p>}
             <div className="mc-note" style={{ marginTop: 10 }}>정보성 안내 전용입니다. 광고성 내용은 보낼 수 없습니다(미동의 번호 광고 = 위법).</div>
           </div>
         </div>

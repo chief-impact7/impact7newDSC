@@ -128,11 +128,11 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
                     <span class="hw-fail-ox-badge ${oxDisplayClass(badgeVal)}">${esc(badgeVal || '—')}</span>
                     ${hasPendingTask ? `<span style="font-size:10px;color:var(--primary);padding:1px 5px;border-radius:4px;border:1px solid var(--primary);margin-right:auto;">저장됨·수정가능</span>` : ''}
                     <div class="hw-fail-type-btns">
-                        <button class="hw-fail-type-btn ${isVisit ? 'active' : ''}"
+                        <button class="hw-fail-type-btn ${isVisit ? 'active' : ''}" aria-pressed="${isVisit}"
                             onclick="selectTestFailType('${escAttr(studentId)}', '${escapedItem}', '등원', this)">
                             <span class="material-symbols-outlined" style="font-size:13px;">directions_walk</span>등원
                         </button>
-                        <button class="hw-fail-type-btn ${isAlt ? 'active' : ''}"
+                        <button class="hw-fail-type-btn ${isAlt ? 'active' : ''}" aria-pressed="${isAlt}"
                             onclick="selectTestFailType('${escAttr(studentId)}', '${escapedItem}', '대체숙제', this)">
                             <span class="material-symbols-outlined" style="font-size:13px;">edit_note</span>대체숙제
                         </button>
@@ -160,7 +160,7 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
                     </div>
                 ` : isAlt ? `
                     <div class="hw-fail-detail">
-                        <input type="text" class="field-input hw-fail-input" data-test-field="alt_hw" style="width:100%;padding:4px 8px;font-size:12px;"
+                        <input type="text" class="field-input hw-fail-input" data-test-field="alt_hw" aria-label="대체 숙제" style="width:100%;padding:4px 8px;font-size:12px;"
                             placeholder="대체 숙제 내용 (예: 단어장 50개)"
                             value="${escAttr(action.alt_hw || '')}">
                         <div class="hw-fail-detail-row" style="margin-top:4px;">

@@ -249,7 +249,7 @@ export default function App() {
 
     if (error || dashError) {
         return (
-            <div style={{
+            <div role="alert" style={{
                 padding: '20px',
                 margin: '20px',
                 background: '#fce8e6',
@@ -292,7 +292,7 @@ export default function App() {
                         </div>
                     )}
                     <span className="dash-user-email">{displayImpact7Email(user.email)}</span>
-                    <button className="dash-avatar" onClick={() => logout()} title="로그아웃">
+                    <button className="dash-avatar" onClick={() => logout()} title="로그아웃" aria-label="로그아웃">
                         {user.email[0].toUpperCase()}
                     </button>
                 </div>
@@ -302,7 +302,7 @@ export default function App() {
             <div className="dash-filters">
                 <div className="dash-filter-group">
                     <label>기간</label>
-                    <select value={rangeType} onChange={e => setRangeType(e.target.value)}>
+                    <select aria-label="기간" value={rangeType} onChange={e => setRangeType(e.target.value)}>
                         <option value="day">일별</option>
                         <option value="week">주별</option>
                         <option value="custom">직접 선택</option>
@@ -313,15 +313,15 @@ export default function App() {
                     <div className="dash-filter-group">
                         <label>날짜</label>
                         <div className="dash-date-nav">
-                            <button onClick={() => setBaseDate(addDays(normalizedBaseDate, -1))}>
-                                <span className="material-symbols-outlined">chevron_left</span>
+                            <button type="button" aria-label="이전 날" onClick={() => setBaseDate(addDays(normalizedBaseDate, -1))}>
+                                <span className="material-symbols-outlined" aria-hidden="true">chevron_left</span>
                             </button>
                             <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, normalizedBaseDate, setBaseDate)}>{normalizedBaseDate}</button>
-                            <button onClick={() => setBaseDate(addDays(normalizedBaseDate, 1))}>
-                                <span className="material-symbols-outlined">chevron_right</span>
+                            <button type="button" aria-label="다음 날" onClick={() => setBaseDate(addDays(normalizedBaseDate, 1))}>
+                                <span className="material-symbols-outlined" aria-hidden="true">chevron_right</span>
                             </button>
-                            <button onClick={() => setBaseDate(todayStr())} title="오늘">
-                                <span className="material-symbols-outlined">today</span>
+                            <button type="button" aria-label="오늘" onClick={() => setBaseDate(todayStr())} title="오늘">
+                                <span className="material-symbols-outlined" aria-hidden="true">today</span>
                             </button>
                         </div>
                     </div>
@@ -331,12 +331,12 @@ export default function App() {
                     <div className="dash-filter-group">
                         <label>기준일</label>
                         <div className="dash-date-nav">
-                            <button onClick={() => setBaseDate(addDays(normalizedBaseDate, -7))}>
-                                <span className="material-symbols-outlined">chevron_left</span>
+                            <button type="button" aria-label="이전 주" onClick={() => setBaseDate(addDays(normalizedBaseDate, -7))}>
+                                <span className="material-symbols-outlined" aria-hidden="true">chevron_left</span>
                             </button>
                             <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, normalizedBaseDate, setBaseDate)}>{normalizedBaseDate}</button>
-                            <button onClick={() => setBaseDate(addDays(normalizedBaseDate, 7))}>
-                                <span className="material-symbols-outlined">chevron_right</span>
+                            <button type="button" aria-label="다음 주" onClick={() => setBaseDate(addDays(normalizedBaseDate, 7))}>
+                                <span className="material-symbols-outlined" aria-hidden="true">chevron_right</span>
                             </button>
                             <button className="dash-text-btn" onClick={() => setBaseDate(todayStr())}>
                                 이번 주
@@ -360,7 +360,7 @@ export default function App() {
 
                 <div className="dash-filter-group">
                     <label>소속</label>
-                    <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)}>
+                    <select aria-label="소속" value={branchFilter} onChange={e => setBranchFilter(e.target.value)}>
                         <option value="">전체</option>
                         <option value="2단지">2단지</option>
                         <option value="10단지">10단지</option>
@@ -374,7 +374,7 @@ export default function App() {
 
                 <div className="dash-filter-group">
                     <label>반</label>
-                    <select value={classFilter} onChange={e => setClassFilter(e.target.value)}>
+                    <select aria-label="반" value={classFilter} onChange={e => setClassFilter(e.target.value)}>
                         <option value="">전체</option>
                         {classList.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>

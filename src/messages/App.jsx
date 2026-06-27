@@ -59,7 +59,7 @@ export default function App() {
         </div>
         <div className="dash-header-right">
           <span className="dash-user-email">{(user.email || '').replace(/@gw\.impact7\.kr$/i, '@impact7.kr')}</span>
-          <button className="dash-avatar" onClick={() => logout().catch(() => {})}>
+          <button className="dash-avatar" aria-label="로그아웃" title="로그아웃" onClick={() => logout().catch(() => {})}>
             {(user.email || '?')[0].toUpperCase()}
           </button>
         </div>

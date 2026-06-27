@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block" />
     <link rel="stylesheet" href="class-setup.css">
+    <link rel="stylesheet" href="a11y.css">
 </head>
 <body>
     <div id="boot-splash" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#fff;z-index:9999;color:#6b7280;font-size:14px;">불러오는 중…</div>
@@ -38,7 +39,7 @@
             </div>
             <div class="app-bar-right">
                 <span id="user-email" class="user-email"></span>
-                <button class="icon-btn" id="user-avatar" onclick="handleLogout()" title="로그아웃">
+                <button class="icon-btn" id="user-avatar" onclick="handleLogout()" title="로그아웃" aria-label="로그아웃">
                     <span class="material-symbols-outlined">logout</span>
                 </button>
             </div>
@@ -97,21 +98,21 @@
                     <div id="name-regular" style="display:none;">
                         <div class="form-row">
                             <div class="form-field">
-                                <label>레벨</label>
+                                <label for="input-level">레벨</label>
                                 <input type="text" id="input-level" placeholder="예: A, B, P">
                             </div>
                             <div class="form-field">
-                                <label>반 번호</label>
+                                <label for="input-class-number">반 번호</label>
                                 <input type="text" id="input-class-number" placeholder="예: 101, 202">
                             </div>
                         </div>
                         <div id="free-semester-dates" class="form-row" style="display:none;">
                             <div class="form-field">
-                                <label>시작일</label>
+                                <label for="input-free-start">시작일</label>
                                 <input type="date" id="input-free-start">
                             </div>
                             <div class="form-field">
-                                <label>종료일</label>
+                                <label for="input-free-end">종료일</label>
                                 <input type="date" id="input-free-end">
                             </div>
                         </div>
@@ -121,7 +122,7 @@
                     <div id="name-naesin" style="display:none;">
                         <div class="form-row">
                             <div class="form-field">
-                                <label>지점</label>
+                                <label for="input-naesin-branch">지점</label>
                                 <select id="input-naesin-branch">
                                     <option value="">선택</option>
                                     <option value="2단지">2단지</option>
@@ -129,7 +130,7 @@
                                 </select>
                             </div>
                             <div class="form-field">
-                                <label>과정</label>
+                                <label for="input-naesin-level">과정</label>
                                 <select id="input-naesin-level">
                                     <option value="">선택</option>
                                     <option value="중">중등</option>
@@ -139,12 +140,12 @@
                         </div>
                         <div class="form-row">
                             <div class="form-field">
-                                <label>학교</label>
+                                <label for="input-school">학교</label>
                                 <input type="text" id="input-school" placeholder="예: 불곡중" list="school-list">
                                 <datalist id="school-list"></datalist>
                             </div>
                             <div class="form-field">
-                                <label>학년</label>
+                                <label for="input-grade">학년</label>
                                 <select id="input-grade">
                                     <option value="">선택</option>
                                     <option value="1">1학년</option>
@@ -153,7 +154,7 @@
                                 </select>
                             </div>
                             <div class="form-field">
-                                <label>반 구분</label>
+                                <label for="input-naesin-group">반 구분</label>
                                 <select id="input-naesin-group">
                                     <option value="A">A</option>
                                     <option value="B">B</option>
@@ -164,11 +165,11 @@
                         </div>
                         <div class="form-row">
                             <div class="form-field">
-                                <label>내신 시작일</label>
+                                <label for="input-naesin-start">내신 시작일</label>
                                 <input type="date" id="input-naesin-start">
                             </div>
                             <div class="form-field">
-                                <label>내신 종료일</label>
+                                <label for="input-naesin-end">내신 종료일</label>
                                 <input type="date" id="input-naesin-end">
                             </div>
                         </div>
@@ -178,17 +179,17 @@
                     <div id="name-special" style="display:none;">
                         <div class="form-row">
                             <div class="form-field full">
-                                <label>반 이름</label>
+                                <label for="input-special-name">반 이름</label>
                                 <input type="text" id="input-special-name" placeholder="예: 여름특강A, 겨울캠프">
                             </div>
                         </div>
                         <div class="form-row">
                             <div class="form-field">
-                                <label>시작일</label>
+                                <label for="input-special-start">시작일</label>
                                 <input type="date" id="input-special-start">
                             </div>
                             <div class="form-field">
-                                <label>종료일</label>
+                                <label for="input-special-end">종료일</label>
                                 <input type="date" id="input-special-end">
                             </div>
                         </div>
@@ -196,8 +197,8 @@
                             <div class="form-field full">
                                 <label>수강료</label>
                                 <div style="display:flex;gap:8px;margin-top:4px;">
-                                    <button class="fee-type-btn" data-fee="유료" onclick="selectFeeType('유료')" type="button">유료</button>
-                                    <button class="fee-type-btn" data-fee="무료" onclick="selectFeeType('무료')" type="button">무료</button>
+                                    <button class="fee-type-btn" data-fee="유료" onclick="selectFeeType('유료')" type="button" aria-pressed="false">유료</button>
+                                    <button class="fee-type-btn" data-fee="무료" onclick="selectFeeType('무료')" type="button" aria-pressed="false">무료</button>
                                 </div>
                             </div>
                         </div>
@@ -206,7 +207,7 @@
                     <!-- 담당 선생님 (공통) -->
                     <div class="form-row" style="margin-top:16px;">
                         <div class="form-field full">
-                            <label>담당 선생님</label>
+                            <label for="input-teacher">담당 선생님</label>
                             <select id="input-teacher">
                                 <option value="">선택</option>
                             </select>
@@ -220,7 +221,7 @@
                     <div class="student-search-area">
                         <div class="search-input-wrap">
                             <span class="material-symbols-outlined">search</span>
-                            <input type="text" id="student-search" placeholder="이름, 학교, 반 코드(I201 등) 검색..." oninput="searchStudents(this.value)">
+                            <input type="text" id="student-search" placeholder="이름, 학교, 반 코드(I201 등) 검색..." oninput="searchStudents(this.value)" aria-label="학생 검색">
                         </div>
                         <div class="search-results" id="search-results"></div>
                     </div>
@@ -234,13 +235,13 @@
                 <div class="form-section" id="days-section">
                     <h3 class="section-title">수업 요일 / 시간</h3>
                     <div class="day-selector">
-                        <button class="day-chip" data-day="월" onclick="toggleDay('월')">월</button>
-                        <button class="day-chip" data-day="화" onclick="toggleDay('화')">화</button>
-                        <button class="day-chip" data-day="수" onclick="toggleDay('수')">수</button>
-                        <button class="day-chip" data-day="목" onclick="toggleDay('목')">목</button>
-                        <button class="day-chip" data-day="금" onclick="toggleDay('금')">금</button>
-                        <button class="day-chip" data-day="토" onclick="toggleDay('토')">토</button>
-                        <button class="day-chip" data-day="일" onclick="toggleDay('일')">일</button>
+                        <button class="day-chip" data-day="월" onclick="toggleDay('월')" aria-pressed="false">월</button>
+                        <button class="day-chip" data-day="화" onclick="toggleDay('화')" aria-pressed="false">화</button>
+                        <button class="day-chip" data-day="수" onclick="toggleDay('수')" aria-pressed="false">수</button>
+                        <button class="day-chip" data-day="목" onclick="toggleDay('목')" aria-pressed="false">목</button>
+                        <button class="day-chip" data-day="금" onclick="toggleDay('금')" aria-pressed="false">금</button>
+                        <button class="day-chip" data-day="토" onclick="toggleDay('토')" aria-pressed="false">토</button>
+                        <button class="day-chip" data-day="일" onclick="toggleDay('일')" aria-pressed="false">일</button>
                     </div>
                     <div class="time-settings" id="time-settings"></div>
                 </div>

@@ -146,16 +146,17 @@ export default function BulkSendCard({ students = [] }) {
           <div className="bulk-left">
             <p className="bulk-col-title">받는 사람</p>
             <div className="bulk-filters">
-              <select value={branch} onChange={(e) => setBranch(e.target.value)}>
+              <select aria-label="소속" value={branch} onChange={(e) => setBranch(e.target.value)}>
                 <option value="">소속 전체</option><option value="2단지">2단지</option><option value="10단지">10단지</option>
               </select>
-              <select value={status} onChange={(e) => setStatus(e.target.value)}>
+              <select aria-label="수신 상태" value={status} onChange={(e) => setStatus(e.target.value)}>
                 <option value="enrolled">재원</option><option value="all">재원+비원생</option><option value="non">비원생</option>
               </select>
               <GradeFilter value={grades} onChange={setGrades} />
             </div>
             <div className="mc-search">
               <input
+                aria-label="대상 검색"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 onKeyDown={(e) => {
@@ -191,15 +192,15 @@ export default function BulkSendCard({ students = [] }) {
             <p className="mc-field-label">받는이 {kind === 'promo' ? '(단일)' : '(다중 선택)'}</p>
             <div className="mc-seg">
               {['student', 'parent_1', 'parent_2'].map((f) => (
-                <button key={f} className={recipientFields.has(f) ? 'on' : ''} onClick={() => toggleRecipient(f)}>
+                <button key={f} type="button" className={recipientFields.has(f) ? 'on' : ''} aria-pressed={recipientFields.has(f)} onClick={() => toggleRecipient(f)}>
                   {RECIPIENT_LABELS[f]}
                 </button>
               ))}
             </div>
             <p className="mc-field-label" style={{ marginTop: 8 }}>종류</p>
             <div className="mc-seg">
-              <button className={kind === 'info' ? 'on' : ''} onClick={() => selectKind('info')}>정보성</button>
-              <button className={kind === 'promo' ? 'on' : ''} onClick={() => selectKind('promo')}>홍보성</button>
+              <button type="button" className={kind === 'info' ? 'on' : ''} aria-pressed={kind === 'info'} onClick={() => selectKind('info')}>정보성</button>
+              <button type="button" className={kind === 'promo' ? 'on' : ''} aria-pressed={kind === 'promo'} onClick={() => selectKind('promo')}>홍보성</button>
             </div>
             <div className="mc-content-head">
               <p className="mc-field-label" style={{ marginTop: 8 }}>내용</p>
@@ -213,7 +214,7 @@ export default function BulkSendCard({ students = [] }) {
               </div>
             </div>
             <TemplateBar content={content} onPick={(c) => { setContent(c); resetReqId(); }} />
-            <textarea className="mc-textarea bulk-content" value={content} onChange={(e) => { setContent(e.target.value); resetReqId(); }}
+            <textarea aria-label="메시지 내용" className="mc-textarea bulk-content" value={content} onChange={(e) => { setContent(e.target.value); resetReqId(); }}
               placeholder={kind === 'promo' ? '(광고) [임팩트세븐학원]\n\n...\n\n무료수신거부 080-...' : '안내 내용을 입력하세요.'} />
             <div className="mc-meta">
               <span>{meta.chars}자 · {meta.bytes}byte</span>
@@ -235,15 +236,15 @@ export default function BulkSendCard({ students = [] }) {
             <div className="bulk-summary">대상 {checkedCount}명 · 받는이 {recipientText} · {meta.type} · {kind === 'promo' ? '홍보성' : '정보성'}</div>
             <div className="bulk-send-row">
               <div className="mc-seg">
-                <button className={when === 'now' ? 'on' : ''} onClick={() => setWhen('now')}>즉시</button>
-                <button className={when === 'schedule' ? 'on' : ''} onClick={() => setWhen('schedule')}>예약</button>
+                <button type="button" className={when === 'now' ? 'on' : ''} aria-pressed={when === 'now'} onClick={() => setWhen('now')}>즉시</button>
+                <button type="button" className={when === 'schedule' ? 'on' : ''} aria-pressed={when === 'schedule'} onClick={() => setWhen('schedule')}>예약</button>
               </div>
-              {when === 'schedule' && <input type="datetime-local" value={scheduledAt} onChange={(e) => { setScheduledAt(e.target.value); resetReqId(); }} />}
+              {when === 'schedule' && <input aria-label="예약 발송 시각" type="datetime-local" value={scheduledAt} onChange={(e) => { setScheduledAt(e.target.value); resetReqId(); }} />}
             </div>
             <button className="mc-send bulk-send-btn" disabled={sending} onClick={onSend}>
               {sending ? '발송 중…' : `${checkedCount}명에게 발송`}
             </button>
-            {msg && <p className="mc-field-label" style={{ marginTop: 8 }}>{msg}</p>}
+            {msg && <p className="mc-field-label" role="status" aria-live="polite" style={{ marginTop: 8 }}>{msg}</p>}
           </div>
         </div>
       </div>

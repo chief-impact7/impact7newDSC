@@ -4473,28 +4473,10 @@ textarea.field-input {
 }
 
 /* ============================================================
-   접근성 보강 (A11y) — 시각 디자인·정보 밀도 영향 0
-   - 키보드 포커스는 키보드 사용자에게만 보이고 마우스/터치 클릭엔 안 나타남
-   - 모션/터치영역 분기로 데스크톱 조망(36px·작은 글씨)은 그대로 유지
+   접근성 보강 (A11y, DSC 로컬) — 보편 규칙(focus-visible·reduced-motion)은
+   공유 SSoT 후보인 a11y.css로 분리했다. 여기엔 .icon-btn 등 DSC 클래스에
+   의존하는 규칙만 둔다.
    ============================================================ */
-
-/* 키보드 탐색 시에만 포커스 링 표시 (마우스/터치 클릭엔 미표시).
-   border-radius는 주지 않는다 — outline이 요소의 기존 모서리(원형 버튼 등)를 자동으로 따른다. */
-:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-:focus:not(:focus-visible) { outline: none; }
-
-/* 모션 민감 사용자: 슬라이드·페이드·스피너 등 비핵심 모션 제거 */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: .01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: .01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
 
 /* 터치 기기에서만 탭 영역 44px 확보 — 데스크톱 마우스는 36px 시각 그대로.
    ::after는 레이아웃을 차지하지 않아 버튼 간격(gap 8px)도 유지된다. */

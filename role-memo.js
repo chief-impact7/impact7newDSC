@@ -208,9 +208,10 @@ export function renderMemoPanel() {
     const contentContainer = document.getElementById('memo-content');
     if (!tabsContainer || !contentContainer) return;
 
+    tabsContainer.setAttribute('role', 'tablist');
     tabsContainer.innerHTML = `
-        <button class="memo-tab ${state.memoTab === 'inbox' ? 'active' : ''}" onclick="setMemoTab('inbox')">수신함</button>
-        <button class="memo-tab ${state.memoTab === 'outbox' ? 'active' : ''}" onclick="setMemoTab('outbox')">발신함</button>
+        <button class="memo-tab ${state.memoTab === 'inbox' ? 'active' : ''}" role="tab" aria-selected="${state.memoTab === 'inbox'}" onclick="setMemoTab('inbox')">수신함</button>
+        <button class="memo-tab ${state.memoTab === 'outbox' ? 'active' : ''}" role="tab" aria-selected="${state.memoTab === 'outbox'}" onclick="setMemoTab('outbox')">발신함</button>
     `;
 
     renderMemoList(contentContainer);
@@ -249,7 +250,7 @@ function renderMemoList(container) {
             const pinTitle = isPinned ? '고정 해제' : '고정';
             const dateLabel = m.date !== state.selectedDate ? `<span class="memo-item-pin-date">${esc(m.date || '')}</span>` : '';
 
-            return `<div class="memo-item${pinClass} ${isUnread ? 'unread' : ''}" onclick="expandMemo('${m.docId}', this)">
+            return `<div class="memo-item${pinClass} ${isUnread ? 'unread' : ''}" role="button" tabindex="0" data-keyclick onclick="expandMemo('${m.docId}', this)">
                 <div class="memo-item-header">
                     <span class="memo-item-sender">${senderLabel}</span>
                     <span style="display:flex;align-items:center;gap:4px;">
@@ -376,7 +377,7 @@ export function searchMemoStudent(q) {
 
     dropdown.innerHTML = matches.map(s => {
         const code = (s.enrollments || []).map(e => enrollmentCode(e)).join(', ');
-        return `<div class="memo-student-dropdown-item" onclick="selectMemoStudent('${escAttr(s.docId)}', '${escAttr(s.name)}')">${esc(s.name)} <span style="color:var(--text-sec);font-size:11px;">${esc(code)}</span></div>`;
+        return `<div class="memo-student-dropdown-item" role="button" tabindex="0" data-keyclick onclick="selectMemoStudent('${escAttr(s.docId)}', '${escAttr(s.name)}')">${esc(s.name)} <span style="color:var(--text-sec);font-size:11px;">${esc(code)}</span></div>`;
     }).join('');
     dropdown.style.display = '';
 }
@@ -550,8 +551,8 @@ export function renderUnifiedMemoCard(studentId) {
                 <div class="student-memo-bottom">
                     <span class="student-memo-meta">${esc(meta)}</span>
                     <span class="student-memo-actions">
-                        <span class="material-symbols-outlined student-memo-btn" title="${m.pinned ? '고정 해제' : '고정'}" onclick="toggleStudentMemoPin('${escAttr(studentId)}',${m._idx})">${pinIcon}</span>
-                        <span class="material-symbols-outlined student-memo-btn delete" title="삭제" onclick="deleteStudentMemo('${escAttr(studentId)}',${m._idx})">close</span>
+                        <span class="material-symbols-outlined student-memo-btn" role="button" tabindex="0" data-keyclick aria-label="${m.pinned ? '고정 해제' : '고정'}" title="${m.pinned ? '고정 해제' : '고정'}" onclick="toggleStudentMemoPin('${escAttr(studentId)}',${m._idx})">${pinIcon}</span>
+                        <span class="material-symbols-outlined student-memo-btn delete" role="button" tabindex="0" data-keyclick aria-label="메모 삭제" title="삭제" onclick="deleteStudentMemo('${escAttr(studentId)}',${m._idx})">close</span>
                     </span>
                 </div>
             </div>`;
@@ -564,13 +565,13 @@ export function renderUnifiedMemoCard(studentId) {
                 <span class="material-symbols-outlined" style="color:var(--text-sec);font-size:18px;">sticky_note_2</span>
                 메모
             </span>
-            <button class="icon-btn" style="width:28px;height:28px;" onclick="document.getElementById('memo-add-row-${escAttr(studentId)}').style.display=document.getElementById('memo-add-row-${escAttr(studentId)}').style.display==='none'?'':'none'" title="메모 추가">
+            <button class="icon-btn" style="width:28px;height:28px;" aria-label="메모 추가" onclick="document.getElementById('memo-add-row-${escAttr(studentId)}').style.display=document.getElementById('memo-add-row-${escAttr(studentId)}').style.display==='none'?'':'none'" title="메모 추가">
                 <span class="material-symbols-outlined" style="font-size:20px;">add</span>
             </button>
         </div>
         <div class="student-memo-add" id="memo-add-row-${escAttr(studentId)}" style="display:none;">
             <input type="text" class="field-input student-memo-input" id="detail-memo-input-${escAttr(studentId)}"
-                placeholder="메모 입력 후 Enter..." onkeydown="if(event.key==='Enter'){event.preventDefault();addStudentMemo('${escAttr(studentId)}');}">
+                aria-label="메모 입력" placeholder="메모 입력 후 Enter..." onkeydown="if(event.key==='Enter'){event.preventDefault();addStudentMemo('${escAttr(studentId)}');}">
         </div>
         ${listHtml}
     </div>`;

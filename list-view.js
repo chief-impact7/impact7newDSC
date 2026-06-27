@@ -556,7 +556,7 @@ export function renderListPanel() {
                         else if (st === defaultLabel) classes.push('active-default');
                         else classes.push('active-other');
                     }
-                    return `<button class="${classes.join(' ')}" onclick="event.stopPropagation(); toggleAttendance('${escAttr(s.docId)}', '${st}')">${st}</button>`;
+                    return `<button class="${classes.join(' ')}" aria-pressed="${st === currentDisplay}" onclick="event.stopPropagation(); toggleAttendance('${escAttr(s.docId)}', '${st}')">${st}</button>`;
                 }).join('') +
                 `</div>`;
         } else if (state.currentCategory === 'homework') {
@@ -599,7 +599,7 @@ export function renderListPanel() {
                                 if (h.status === st) {
                                     activeClass = st === '확인완료' ? 'active-present' : st === '제출' ? 'active-late' : 'active-absent';
                                 }
-                                return `<button class="toggle-btn ${activeClass}" onclick="event.stopPropagation(); toggleHomework('${escAttr(s.docId)}', ${i}, '${st}')">${st}</button>`;
+                                return `<button class="toggle-btn ${activeClass}" aria-pressed="${h.status === st}" onclick="event.stopPropagation(); toggleHomework('${escAttr(s.docId)}', ${i}, '${st}')">${st}</button>`;
                             }).join('') +
                             `</div></div>`;
                     }).join('');
@@ -866,7 +866,7 @@ export function renderListPanel() {
             const category = isHw1stFilter ? 'homework' : 'test';
             const hasFail1st = Object.values(rec[field] || {}).some(v => v && v !== 'O');
             if (hasFail1st) {
-                followUpBtnHtml = `<button class="follow-up-btn" title="후속대책" onclick="event.stopPropagation(); openFollowUpAction('${escAttr(s.docId)}', '${category}')"><span class="material-symbols-outlined" style="font-size:16px;">assignment_late</span></button>`;
+                followUpBtnHtml = `<button class="follow-up-btn" title="후속대책" aria-label="후속대책" onclick="event.stopPropagation(); openFollowUpAction('${escAttr(s.docId)}', '${category}')"><span class="material-symbols-outlined" style="font-size:16px;">assignment_late</span></button>`;
             }
         }
 
@@ -875,8 +875,8 @@ export function renderListPanel() {
         // 내신 학생: 부제목을 내신반명 하나로 축약 (배지가 '내신' 표시 + 반명에 학교·학년 포함되어 중복)
         const descCode = isNaesinStudent ? code.split(', ').filter(c => c !== '내신').join(', ') : code;
         const descTail = isNaesinStudent ? '' : (studentShortLabel(s) ? ' · ' + esc(studentShortLabel(s)) : '');
-        return `<div class="list-item ${isActive}${state.bulkMode ? ' bulk-mode' : ''}${state.selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}" onclick="handleListItemClick(event, '${escAttr(s.docId)}')">
-            <input type="checkbox" class="list-item-checkbox" ${state.selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">
+        return `<div class="list-item ${isActive}${state.bulkMode ? ' bulk-mode' : ''}${state.selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}" role="button" tabindex="0" data-keyclick onclick="handleListItemClick(event, '${escAttr(s.docId)}')">
+            <input type="checkbox" class="list-item-checkbox" aria-label="학생 선택" ${state.selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">
             <div class="item-info">
                 <span class="item-title">${esc(s.name)}${newBadge}${naesinBadge}${leaveBadge}${pauseExpiredBadge}${lrPendingTags}${siblingIcon}${hwFailIconHtml}${overrideBadge}${overrideInBadge} ${teacherBadge}</span>
                 <span class="item-desc">${esc(descCode)}${descTail}</span>

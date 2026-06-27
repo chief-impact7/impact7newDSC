@@ -10,6 +10,7 @@
     <!-- Material Symbols -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block" />
     <link rel="stylesheet" href="daily-ops.css">
+    <link rel="stylesheet" href="a11y.css">
     <script src="https://apis.google.com/js/api.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -114,33 +115,33 @@
 
 
                 <!-- L1 Navigation -->
-                <nav class="nav-l1-group" role="toolbar" aria-label="카테고리 탐색" onkeydown="handleNavL1Keydown(event)">
-                    <div class="nav-l1 active" data-category="attendance" role="button" tabindex="0" aria-pressed="true" aria-label="출결" onclick="setCategory('attendance')">
+                <nav class="nav-l1-group" role="toolbar" aria-label="카테고리 탐색">
+                    <div class="nav-l1 active" data-category="attendance" role="button" tabindex="0" data-keyclick aria-pressed="true" aria-label="출결" onclick="setCategory('attendance')">
                         <span class="material-symbols-outlined nav-l1-icon" aria-hidden="true">check_circle</span>
                         <span class="nav-l1-text">출결</span>
                         <span class="material-symbols-outlined nav-l1-expand" aria-hidden="true">expand_more</span>
                     </div>
-                    <div class="nav-l1" data-category="homework" role="button" tabindex="0" aria-pressed="false" aria-label="숙제" onclick="setCategory('homework')">
+                    <div class="nav-l1" data-category="homework" role="button" tabindex="0" data-keyclick aria-pressed="false" aria-label="숙제" onclick="setCategory('homework')">
                         <span class="material-symbols-outlined nav-l1-icon" aria-hidden="true">assignment</span>
                         <span class="nav-l1-text">숙제</span>
                         <span class="material-symbols-outlined nav-l1-expand" aria-hidden="true">expand_more</span>
                     </div>
-                    <div class="nav-l1" data-category="test" role="button" tabindex="0" aria-pressed="false" aria-label="테스트" onclick="setCategory('test')">
+                    <div class="nav-l1" data-category="test" role="button" tabindex="0" data-keyclick aria-pressed="false" aria-label="테스트" onclick="setCategory('test')">
                         <span class="material-symbols-outlined nav-l1-icon" aria-hidden="true">quiz</span>
                         <span class="nav-l1-text">테스트</span>
                         <span class="material-symbols-outlined nav-l1-expand" aria-hidden="true">expand_more</span>
                     </div>
-                    <div class="nav-l1" data-category="admin" role="button" tabindex="0" aria-pressed="false" aria-label="행정" onclick="setCategory('admin')">
+                    <div class="nav-l1" data-category="admin" role="button" tabindex="0" data-keyclick aria-pressed="false" aria-label="행정" onclick="setCategory('admin')">
                         <span class="material-symbols-outlined nav-l1-icon" aria-hidden="true">admin_panel_settings</span>
                         <span class="nav-l1-text">행정</span>
                         <span class="material-symbols-outlined nav-l1-expand" aria-hidden="true">expand_more</span>
                     </div>
-                    <div class="nav-l1" data-category="branch" role="button" tabindex="0" aria-expanded="false" aria-label="소속" onclick="setCategory('branch')">
+                    <div class="nav-l1" data-category="branch" role="button" tabindex="0" data-keyclick aria-expanded="false" aria-label="소속" onclick="setCategory('branch')">
                         <span class="material-symbols-outlined nav-l1-icon" aria-hidden="true">apartment</span>
                         <span class="nav-l1-text">소속</span>
                         <span class="material-symbols-outlined nav-l1-expand" aria-hidden="true">expand_more</span>
                     </div>
-                    <div class="nav-l1" data-category="class_mgmt" role="button" tabindex="0" aria-expanded="false" aria-label="반 설정" onclick="setCategory('class_mgmt')">
+                    <div class="nav-l1" data-category="class_mgmt" role="button" tabindex="0" data-keyclick aria-expanded="false" aria-label="반 설정" onclick="setCategory('class_mgmt')">
                         <span class="material-symbols-outlined nav-l1-icon" aria-hidden="true">groups</span>
                         <span class="nav-l1-text">반 설정</span>
                         <span class="material-symbols-outlined nav-l1-expand" aria-hidden="true">expand_more</span>

@@ -25,14 +25,14 @@ export default function TemplateBar({ content, onPick }) {
 
   return (
     <div className="mc-tpl">
-      <select value={sel} onChange={(e) => pick(e.target.value)} onFocus={() => setList(loadTemplates())}>
+      <select aria-label="템플릿 선택" value={sel} onChange={(e) => pick(e.target.value)} onFocus={() => setList(loadTemplates())}>
         <option value="">템플릿 불러오기…</option>
         {list.map((t) => <option key={t.title} value={t.title}>{t.title}</option>)}
       </select>
       {sel && <button type="button" className="mc-tpl-del" onClick={onDelete}>삭제</button>}
       {saveOpen ? (
         <>
-          <input className="mc-tpl-title" value={titleInput} onChange={(e) => setTitleInput(e.target.value)}
+          <input aria-label="템플릿 이름" className="mc-tpl-title" value={titleInput} onChange={(e) => setTitleInput(e.target.value)}
             placeholder="템플릿 이름" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSave(); } }} />
           <button type="button" className="mc-tpl-save" onClick={onSave} disabled={!titleInput.trim() || !content.trim()}>저장</button>
           <button type="button" className="mc-tpl-del" onClick={() => { setSaveOpen(false); setTitleInput(''); }}>취소</button>

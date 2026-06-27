@@ -774,15 +774,16 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// ─── nav-l1 키보드 조작 (div[role=button]) ──────────────────────────────────
-// Enter/Space로 클릭과 동일하게 동작. HTML의 onkeydown에서 호출된다.
-window.handleNavL1Keydown = (e) => {
+// ─── data-keyclick 요소 키보드 조작 (div/span[role=button] 등) ───────────────
+// Enter/Space로 클릭과 동일 동작 (요소 자신이 포커스일 때만 — 중첩 컨트롤 보호).
+// nav-l1·동적 렌더 요소가 모두 이 단일 위임을 공유한다.
+document.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' && e.key !== ' ') return;
-    const item = e.target.closest('.nav-l1');
-    if (!item) return;
-    e.preventDefault(); // Space 페이지 스크롤 방지
-    item.click();
-};
+    const el = e.target.closest('[data-keyclick]');
+    if (!el || el !== e.target) return;
+    e.preventDefault();
+    el.click();
+});
 // 소속/반설정 트리 펼침 상태를 aria-expanded로 동기화 (클릭 버블링 후 실행)
 document.querySelector('.nav-l1-group')?.addEventListener('click', () => {
     document.querySelectorAll('.nav-l1[data-category="branch"], .nav-l1[data-category="class_mgmt"]').forEach(el => {

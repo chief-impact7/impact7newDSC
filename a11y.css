@@ -1,0 +1,31 @@
+/* ============================================================
+   impact7 공통 접근성 규칙 (a11y) — 에코시스템 공유 SSoT 후보
+   ------------------------------------------------------------
+   디자인 토큰·특정 클래스에 의존하지 않는 "보편 규칙"만 둔다.
+   - 순수 CSS 앱(DSC·DB): <link rel="stylesheet" href="a11y.css">
+   - Tailwind 앱(HR·exam): globals에서 @import
+   클래스 의존 규칙(예: .icon-btn 터치영역 확장)은 각 앱 로컬 CSS에 둔다.
+
+   ⚠️ 이 파일은 DSC에서 먼저 검증된 공통 규칙이다. 다른 앱에도 동일하게
+      적용하는 것이 일관성에 좋다. shared(@impact7/shared)는 순수 함수 전용
+      이라 CSS는 담지 않으므로, 승격은 크로스앱 조율(impact7DB orchestrator)에서.
+   ============================================================ */
+
+/* 키보드 탐색 시에만 포커스 링 표시 (마우스/터치 클릭엔 미표시).
+   border-radius는 주지 않는다 — outline이 요소의 기존 모서리(원형 버튼 등)를
+   자동으로 따른다. --primary 미정의 앱을 위해 Starbucks 그린을 fallback. */
+:focus-visible {
+  outline: 2px solid var(--primary, #00754A);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) { outline: none; }
+
+/* 모션 민감 사용자: 슬라이드·페이드·스피너 등 비핵심 모션 제거 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

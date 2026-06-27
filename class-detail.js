@@ -92,27 +92,30 @@ export function openClassTempOverrideModal(classCode) {
     // 반에 등록되지 않은 학생 검색 가능한 모달
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'ovr-modal-title');
     overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
     overlay.innerHTML = `
         <div class="modal-content">
             <div class="modal-header">
-                <h3>타반 학생 추가 — ${esc(classCode)}</h3>
-                <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+                <h3 id="ovr-modal-title">타반 학생 추가 — ${esc(classCode)}</h3>
+                <button class="modal-close" aria-label="닫기" onclick="this.closest('.modal-overlay').remove()">
                     <span class="material-symbols-outlined">close</span>
                 </button>
             </div>
             <div class="modal-body">
                 <div class="form-field">
-                    <label class="field-label">학생 검색</label>
+                    <label class="field-label" for="ovr-class-student-search">학생 검색</label>
                     <input type="text" class="field-input" id="ovr-class-student-search" placeholder="학생 이름 검색" ${imeInputAttrs('filterClassOverrideStudents()')}>
                 </div>
                 <div id="ovr-class-student-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:4px;"></div>
                 <div class="form-field" style="margin-top:12px;">
-                    <label class="field-label">날짜</label>
+                    <label class="field-label" for="ovr-class-date">날짜</label>
                     <input type="date" class="field-input" id="ovr-class-date" value="${state.selectedDate}">
                 </div>
                 <div class="form-field">
-                    <label class="field-label">사유 (선택)</label>
+                    <label class="field-label" for="ovr-class-reason">사유 (선택)</label>
                     <input type="text" class="field-input" id="ovr-class-reason" placeholder="사유 입력">
                 </div>
             </div>
@@ -140,7 +143,7 @@ export function filterClassOverrideStudents() {
         ? '<div style="padding:8px;color:var(--text-sec);font-size:12px;">검색 결과 없음</div>'
         : filtered.map(s => {
             const codes = getActiveEnrollments(s, state.selectedDate).map(e => enrollmentCode(e)).filter(Boolean).join(', ');
-            return `<div class="ovr-student-option" data-id="${escAttr(s.docId)}" onclick="selectClassOverrideStudent(this)" style="padding:6px 8px;cursor:pointer;border-radius:4px;display:flex;align-items:center;gap:8px;">
+            return `<div class="ovr-student-option" data-id="${escAttr(s.docId)}" onclick="selectClassOverrideStudent(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectClassOverrideStudent(this);}" role="button" tabindex="0" style="padding:6px 8px;cursor:pointer;border-radius:4px;display:flex;align-items:center;gap:8px;">
                 <span style="font-weight:500;">${esc(s.name)}</span>
                 <span style="font-size:11px;color:var(--text-sec);">${esc(codes)}</span>
             </div>`;
@@ -178,6 +181,7 @@ export function applyClassDetailTabMode() {
         tabsEl.querySelectorAll('.detail-tab').forEach(t => {
             if (t.dataset.tab === 'report' || t.dataset.tab === 'score' || t.dataset.tab === 'consultation') t.style.display = 'none';
             t.classList.toggle('active', t.dataset.tab === 'daily');
+            t.setAttribute('aria-selected', String(t.dataset.tab === 'daily'));
         });
     }
     state.detailTab = 'daily';
@@ -272,7 +276,7 @@ export function renderClassDetail(classCode) {
                 </div>
                 <div class="domain-chips-container">${testChips || '<span style="font-size:12px;color:var(--text-sec);">테스트 없음</span>'}</div>
                 <div class="domain-add-row">
-                    <input type="text" class="field-input" data-test-section="${escAttr(secName)}" placeholder="테스트 이름" style="flex:1;"
+                    <input type="text" class="field-input" data-test-section="${escAttr(secName)}" placeholder="테스트 이름" aria-label="테스트 이름" style="flex:1;"
                         onkeydown="if(event.key==='Enter') addTestToSection('${escAttr(classCode)}', '${escAttr(secName)}')">
                     <button class="btn btn-primary btn-sm" onclick="addTestToSection('${escAttr(classCode)}', '${escAttr(secName)}')">추가</button>
                 </div>
@@ -301,14 +305,14 @@ export function renderClassDetail(classCode) {
             </div>
             <div class="teacher-assign-grid">
                 <div class="teacher-assign-row">
-                    <label class="teacher-assign-label">담당</label>
+                    <label class="teacher-assign-label" for="teacher-select">담당</label>
                     <select class="field-input teacher-assign-select" id="teacher-select" onchange="saveTeacherAssign('${escAttr(classCode)}')">
                         <option value="">미지정</option>
                         ${teacherOptions}
                     </select>
                 </div>
                 <div class="teacher-assign-row">
-                    <label class="teacher-assign-label">부담당</label>
+                    <label class="teacher-assign-label" for="sub-teacher-select">부담당</label>
                     <select class="field-input teacher-assign-select" id="sub-teacher-select" onchange="saveTeacherAssign('${escAttr(classCode)}')">
                         <option value="">미지정</option>
                         ${subTeacherOptions}
@@ -345,7 +349,7 @@ export function renderClassDetail(classCode) {
                 등원예정시간
             </div>
             <div class="arrival-bulk-row">
-                <input type="time" class="arrival-time-input" value="${defaultTime}"
+                <input type="time" class="arrival-time-input" aria-label="등원예정시간" value="${defaultTime}"
                     onchange="saveClassDefaultTime('${escAttr(classCode)}', this.value)">
             </div>
             <div style="font-size:11px;color:var(--text-sec);margin-top:4px;">변경 시 자동 저장${timeUpdatedLabel ? ` · 최근: ${esc(timeUpdatedLabel)}` : ''}</div>
@@ -358,7 +362,7 @@ export function renderClassDetail(classCode) {
             </div>
             <div class="domain-chips-container">${domainChips || '<span class="detail-card-empty">영역 없음</span>'}</div>
             <div class="domain-add-row">
-                <input type="text" id="domain-add-input" class="field-input" placeholder="새 영역 이름" style="flex:1;"
+                <input type="text" id="domain-add-input" class="field-input" placeholder="새 영역 이름" aria-label="새 영역 이름" style="flex:1;"
                     onkeydown="if(event.key==='Enter') addClassDomain('${escAttr(classCode)}')">
                 <button class="btn btn-primary btn-sm" onclick="addClassDomain('${escAttr(classCode)}')">추가</button>
             </div>
@@ -372,7 +376,7 @@ export function renderClassDetail(classCode) {
             </div>
             ${testSectionsHtml}
             <div class="domain-add-row" style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
-                <input type="text" id="test-section-add-input" class="field-input" placeholder="새 섹션 이름" style="flex:1;"
+                <input type="text" id="test-section-add-input" class="field-input" placeholder="새 섹션 이름" aria-label="새 섹션 이름" style="flex:1;"
                     onkeydown="if(event.key==='Enter') addTestSection('${escAttr(classCode)}')">
                 <button class="btn btn-secondary btn-sm" onclick="addTestSection('${escAttr(classCode)}')">섹션 추가</button>
             </div>
@@ -488,7 +492,7 @@ function renderClassScheduleCard(classCode) {
     const rows = activeDays.map(day => `
         <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
             <span class="naesin-day-badge naesin-day-active" style="flex-shrink:0;">${esc(day)}</span>
-            <input type="time" class="arrival-time-input" style="flex:1;"
+            <input type="time" class="arrival-time-input" aria-label="${escAttr(day)} 수업시간" style="flex:1;"
                 value="${esc(schedule[day] || '16:00')}"
                 onchange="saveClassDayTime('${escAttr(classCode)}', '${escAttr(day)}', this.value)">
             <button class="icon-btn" style="width:28px;height:28px;"
@@ -600,10 +604,10 @@ function renderFreeSemesterPeriodCard(classCode) {
                 자유학기 기간
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
-                <input type="date" class="field-input" value="${escAttr(start)}" style="flex:1;"
+                <input type="date" class="field-input" aria-label="자유학기 시작일" value="${escAttr(start)}" style="flex:1;"
                     onchange="saveFreeSemesterPeriod('${escAttr(classCode)}', 'free_start', this.value)">
                 <span style="color:var(--text-sec);">~</span>
-                <input type="date" class="field-input" value="${escAttr(end)}" style="flex:1;"
+                <input type="date" class="field-input" aria-label="자유학기 종료일" value="${escAttr(end)}" style="flex:1;"
                     onchange="saveFreeSemesterPeriod('${escAttr(classCode)}', 'free_end', this.value)">
             </div>
             <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">기간이 지나면 자동으로 정규로 복귀합니다</div>
@@ -658,10 +662,10 @@ function renderTeukangPeriodCard(classCode) {
                 특강 기간
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
-                <input type="date" class="field-input" value="${escAttr(start)}" style="flex:1;"
+                <input type="date" class="field-input" aria-label="특강 시작일" value="${escAttr(start)}" style="flex:1;"
                     onchange="saveTeukangPeriod('${escAttr(classCode)}', 'special_start', this.value)">
                 <span style="color:var(--text-sec);">~</span>
-                <input type="date" class="field-input" value="${escAttr(end)}" style="flex:1;"
+                <input type="date" class="field-input" aria-label="특강 종료일" value="${escAttr(end)}" style="flex:1;"
                     onchange="saveTeukangPeriod('${escAttr(classCode)}', 'special_end', this.value)">
             </div>
         </div>

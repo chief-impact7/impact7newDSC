@@ -228,7 +228,7 @@ function renderSearchBar(studentId) {
         <label>종료일 <input type="date" id="consult-search-end" value="${end}"></label>
       </div>
       <div class="row">
-        <input type="text" id="consult-search-kw" placeholder="키워드 (메모·유형·강사명)">
+        <input type="text" id="consult-search-kw" aria-label="키워드 검색" placeholder="키워드 (메모·유형·강사명)">
         <button id="consult-search-btn" onclick="onSearchConsultations('${esc(studentId)}')">검색</button>
         <button id="consult-search-reset" onclick="onResetConsultationSearch('${esc(studentId)}')">초기화</button>
       </div>
@@ -275,10 +275,12 @@ function renderHistoryCard(consultations, pinnedIds = [], studentId = '') {
 function renderConsultationHeader() {
   // 다른 탭과 통일: 별도 "상담" 헤더 바 없이 서브탭부터 바로 (탭 바에 이미 '상담' 표시됨)
   return `
-    <div class="consultation-subtabs">
+    <div class="consultation-subtabs" role="tablist">
       <button class="consultation-subtab ${_activeSubtab === 'input' ? 'active' : ''}"
+        role="tab" aria-selected="${_activeSubtab === 'input'}"
         onclick="onConsultationSubtab('input')">입력</button>
       <button class="consultation-subtab ${_activeSubtab === 'search' ? 'active' : ''}"
+        role="tab" aria-selected="${_activeSubtab === 'search'}"
         onclick="onConsultationSubtab('search')">조회</button>
     </div>
   `;

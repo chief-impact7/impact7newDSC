@@ -341,7 +341,9 @@ function syncPreviewFromDom(t) {
 function restoreFeeButtonState(t) {
     if (t !== '특강') return;
     document.querySelectorAll('.fee-type-btn').forEach(b => {
-        b.classList.toggle('selected', b.dataset.fee === wizardData.feeType);
+        const isSelected = b.dataset.fee === wizardData.feeType;
+        b.classList.toggle('selected', isSelected);
+        b.setAttribute('aria-pressed', String(isSelected));
     });
 }
 
@@ -405,7 +407,9 @@ function updateSpecialPreview() {
 window.selectFeeType = function (type) {
     wizardData.feeType = type;
     document.querySelectorAll('.fee-type-btn').forEach(b => {
-        b.classList.toggle('selected', b.dataset.fee === type);
+        const isSelected = b.dataset.fee === type;
+        b.classList.toggle('selected', isSelected);
+        b.setAttribute('aria-pressed', String(isSelected));
     });
     renderSummary();
 };
@@ -513,7 +517,8 @@ function _doSearchStudents(q) {
         const alreadySelected = selectedIds.has(s.docId);
         const isInactive = !ACTIVE_STUDENT_STATUSES.has(s.status);
         return `<div class="search-result-item ${alreadySelected ? 'already-selected' : ''}"
-                     data-doc-id="${esc(s.docId)}">
+                     data-doc-id="${esc(s.docId)}"
+                     role="button" tabindex="${alreadySelected ? -1 : 0}" aria-disabled="${alreadySelected}">
                     <div class="result-info">
                         <span class="result-name">${esc(s.name)}</span>
                         <span class="result-meta">${esc(studentShortLabel(s))}${phoneSuffix(s)}</span>
@@ -533,6 +538,12 @@ function bindStudentEventDelegation() {
         results.addEventListener('click', e => {
             const item = e.target.closest('.search-result-item[data-doc-id]');
             if (item) window.addStudent(item.dataset.docId);
+        });
+        results.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                const item = e.target.closest('.search-result-item[data-doc-id]');
+                if (item) { e.preventDefault(); window.addStudent(item.dataset.docId); }
+            }
         });
         results.dataset.delegated = '1';
     }
@@ -620,7 +631,7 @@ function renderSelectedStudents() {
                             <span class="selected-chip-name">${esc(s.name)}</span>
                             <span class="selected-chip-meta">${esc(meta)}</span>
                         </div>
-                        <button class="remove-btn" type="button" data-doc-id="${esc(s.docId)}">
+                        <button class="remove-btn" type="button" data-doc-id="${esc(s.docId)}" aria-label="${esc(s.name)} 제거">
                             <span class="material-symbols-outlined" style="font-size:18px;">close</span>
                         </button>
                     </div>`;
@@ -638,7 +649,9 @@ window.toggleDay = function (day) {
     wizardData.days.sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b));
 
     document.querySelectorAll('.day-chip').forEach(c => {
-        c.classList.toggle('selected', wizardData.days.includes(c.dataset.day));
+        const isSelected = wizardData.days.includes(c.dataset.day);
+        c.classList.toggle('selected', isSelected);
+        c.setAttribute('aria-pressed', String(isSelected));
     });
 
     renderTimeSettings();
@@ -650,7 +663,7 @@ function renderTimeSettings() {
         const time = wizardData.schedule[day] || '16:00';
         wizardData.schedule[day] = time;
         return `<div class="time-row">
-                    <label>${day}</label>
+                    <label for="time-${day}">${day}</label>
                     <input type="time" id="time-${day}" value="${time}" oninput="syncTimeFromInputs()">
                 </div>`;
     }).join('');

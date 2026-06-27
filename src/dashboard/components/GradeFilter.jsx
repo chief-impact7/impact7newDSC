@@ -17,8 +17,15 @@ export default function GradeFilter({ value, onChange }) {
         const onDown = (e) => {
             if (ref.current && !ref.current.contains(e.target)) setOpenLevel(null);
         };
+        const onKey = (e) => {
+            if (e.key === 'Escape') setOpenLevel(null);
+        };
         document.addEventListener('mousedown', onDown);
-        return () => document.removeEventListener('mousedown', onDown);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onDown);
+            document.removeEventListener('keydown', onKey);
+        };
     }, [openLevel]);
 
     const toggleGrade = (key) => {
@@ -55,6 +62,8 @@ export default function GradeFilter({ value, onChange }) {
                             type="button"
                             className={`dash-grade-btn${active ? ' active' : ''}`}
                             onClick={() => cycleLevel(level, short, grades)}
+                            aria-haspopup="true"
+                            aria-expanded={openLevel === level}
                         >
                             {level}
                         </button>

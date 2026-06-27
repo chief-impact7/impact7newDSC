@@ -55,11 +55,11 @@ export default function ChannelFriendsCard({ students = [] }) {
       <div className="mc-card">
         <div className="mc-section-title">📡 카카오 채널 친구 관리</div>
         <p className="mc-field-label">친구 전화번호 붙여넣기 (줄바꿈/쉼표 구분)</p>
-        <textarea className="mc-textarea" value={raw} onChange={(e) => setRaw(e.target.value)}
+        <textarea aria-label="친구 전화번호 목록" className="mc-textarea" value={raw} onChange={(e) => setRaw(e.target.value)}
           placeholder={'010-1111-2222\n010-3333-4444'} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
           <button className="mc-send" disabled={busy} onClick={onUpload}>{busy ? '동기화 중…' : '친구목록 업로드'}</button>
-          {msg && <span className="mc-field-label">{msg}</span>}
+          {msg && <span className="mc-field-label" role="status" aria-live="polite">{msg}</span>}
         </div>
         <div className="bulk-cart" style={{ marginTop: 14 }}>
           <span>미가입 재원생 학부모 {friends ? `${unjoined.length}명` : '…'}</span>

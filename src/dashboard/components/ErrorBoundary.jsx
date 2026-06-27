@@ -21,9 +21,9 @@ export default class ErrorBoundary extends React.Component {
     render() {
         if (this.state.hasError) {
             return (
-                <div className="dash-card dash-error-card">
+                <div role="alert" className="dash-card dash-error-card">
                     <div className="dash-card-body" style={{ textAlign: 'center', padding: '32px 18px' }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 36, color: 'var(--danger)', marginBottom: 8, display: 'block' }}>
+                        <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: 36, color: 'var(--danger)', marginBottom: 8, display: 'block' }}>
                             error
                         </span>
                         <p style={{ color: 'var(--text-sec)', marginBottom: 16 }}>

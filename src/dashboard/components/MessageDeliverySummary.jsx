@@ -79,11 +79,11 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
         <div className="dash-card msg-delivery">
             <div className="dash-card-header">
                 <span>
-                    <span className="material-symbols-outlined">send</span>
+                    <span className="material-symbols-outlined" aria-hidden="true">send</span>
                     발송 현황 (출결 알림)
                 </span>
                 <button className="dash-text-btn" onClick={onReload} disabled={loading} title="새로고침">
-                    <span className="material-symbols-outlined">refresh</span>
+                    <span className="material-symbols-outlined" aria-hidden="true">refresh</span>
                     {loading ? '불러오는 중' : '새로고침'}
                 </button>
             </div>
@@ -117,7 +117,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                     </ul>
                 </div>
 
-                {retryError && <p className="msg-retry-error">{retryError}</p>}
+                {retryError && <p className="msg-retry-error" role="status" aria-live="assertive">{retryError}</p>}
 
                 {failures.length > 0 ? (
                     <div className="msg-failure-list">
