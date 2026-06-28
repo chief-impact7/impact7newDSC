@@ -62,10 +62,19 @@ for (const filePath of jsFiles) {
         if (!line.includes('saveClassSettings(')) continue;
         // 함수 정의 라인(export async function saveClassSettings)은 스킵
         if (/function\s+saveClassSettings/.test(line)) continue;
-        // saveClassSettings 호출이 있는 라인부터 최대 8줄 범위 검사
+        // saveClassSettings(...) 호출 인자만 추출한다. 호출 괄호를 균형 매칭해,
+        // 뒤따르는 무관한 객체 리터럴(예: _propagateEnrollmentChange({ matcher: ... }))의
+        // 키가 class_settings 필드로 오탐되는 것을 막는다.
         const chunk = lines.slice(i, i + 8).join('\n');
+        const callIdx = chunk.indexOf('saveClassSettings(');
+        let depth = 0, end = chunk.length;
+        for (let j = callIdx + 'saveClassSettings'.length; j < chunk.length; j++) {
+            if (chunk[j] === '(') depth++;
+            else if (chunk[j] === ')') { depth--; if (depth === 0) { end = j + 1; break; } }
+        }
+        const callText = chunk.slice(callIdx, end);
         // { staticKey: ... } 패턴 — 동적 [varName] 제외, Firestore 옵션 키 제외
-        const matches = [...chunk.matchAll(/\{\s*([a-z_]+)\s*:/g)];
+        const matches = [...callText.matchAll(/\{\s*([a-z_]+)\s*:/g)];
         for (const m of matches) {
             if (!IGNORE_KEYS.has(m[1])) staticFields.add(m[1]);
         }
