@@ -9,6 +9,11 @@ export { LEVEL_SHORT } from '@impact7/shared/student-label';
 export const OX_CYCLE = ['O', '△', 'X', ''];
 export const VISIT_STATUS_CYCLE = ['pending', '완료', '기타'];
 export const DEFAULT_DOMAINS = ['Gr', 'A/G', 'R/C'];
+// \uD14C\uC2A4\uD2B8 \uC139\uC158 \uAE30\uBCF8\uAC12 SSoT \u2014 data-layer.js\u00B7test-management.js\uC758 \uB85C\uCEEC \uC911\uBCF5 \uC815\uC758\uC640 \uB3D9\uC77C \uAC12(\uC815\uBCF8).
+export const DEFAULT_TEST_SECTIONS = {
+    '\uAE30\uBC18\uD559\uC2B5\uD14C\uC2A4\uD2B8': ['Vo', 'Id', 'ISC'],
+    '\uB9AC\uBDF0\uD14C\uC2A4\uD2B8': []
+};
 export const KOREAN_CHAR_RE = /^[\uAC00-\uD7AF]/;
 export const SV_SOURCE_MAP = {
     sv_absence_makeup: ['absence_makeup'],

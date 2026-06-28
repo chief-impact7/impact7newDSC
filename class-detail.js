@@ -9,7 +9,7 @@ import { auditUpdate, auditDelete, batchUpdate, batchSet, READ_ONLY, normalizeIm
 import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { imeInputAttrs } from '@impact7/shared/ime-input';
-import { state, DAY_ORDER } from './state.js';
+import { state, DAY_ORDER, DEFAULT_DOMAINS, DEFAULT_TEST_SECTIONS } from './state.js';
 import { esc, escAttr, showSaveIndicator, showToast } from './ui-utils.js';
 import { matchesBranchFilter, enrollmentCode, getActiveEnrollments, isActiveNaesinBase } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';

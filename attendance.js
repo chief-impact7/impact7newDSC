@@ -8,7 +8,7 @@ import { auditUpdate, auditSet, auditDelete, batchUpdate, normalizeImpact7Email 
 import { getDayName } from './src/shared/firestore-helpers.js';
 import { state, NEW_STUDENT_DAYS } from './state.js';
 import { showSaveIndicator, nowTimeStr } from './ui-utils.js';
-import { branchFromStudent, getStudentClassContextsForDate, isPauseExpired, pauseExpiredDays, findStudent } from './student-helpers.js';
+import { branchFromStudent, getStudentClassContextsForDate, isPauseExpired, pauseExpiredDays, findStudent, enrollmentCode } from './student-helpers.js';
 import { saveImmediately, saveDailyRecord, reloadForDate } from './data-layer.js';
 
 // 토글 UI의 "기본" 라벨 집합 — 이 라벨들을 클릭하면 attendance.status는 '미확인'으로 리셋.
