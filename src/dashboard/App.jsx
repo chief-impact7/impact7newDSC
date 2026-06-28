@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, dataAuthReady } from '../../firebase-config.js';
 import { signInWithGoogle, logout } from '../../auth.js';
@@ -8,8 +8,10 @@ import { openKoreanDatePicker } from '../../date-picker.js';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import DailyLogBoard from './components/DailyLogBoard.jsx';
 import GradeFilter from './components/GradeFilter.jsx';
-import PeriodLogBoard from './components/PeriodLogBoard.jsx';
-import ConsultationBoard from './components/ConsultationBoard.jsx';
+// 일별 뷰(기본)는 echarts를 안 쓴다. 차트를 쓰는 기간 뷰와 상담 뷰는 lazy 로드해
+// 일별 첫 페인트에서 echarts(~수백KB)를 빼 초기 로딩을 가볍게 한다.
+const PeriodLogBoard = lazy(() => import('./components/PeriodLogBoard.jsx'));
+const ConsultationBoard = lazy(() => import('./components/ConsultationBoard.jsx'));
 
 const pad2 = (value) => String(value).padStart(2, '0');
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})/;
@@ -394,15 +396,17 @@ export default function App() {
                     <div className="dash-grid"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>
                 ) : (
                     <ErrorBoundary>
-                        <ConsultationBoard
-                            consultations={consultations}
-                            students={students}
-                            branchFilter={branchFilter}
-                            classFilter={classFilter}
-                            gradeFilter={gradeFilter}
-                            startDate={startDate}
-                            endDate={endDate}
-                        />
+                        <Suspense fallback={<div className="dash-grid"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>}>
+                            <ConsultationBoard
+                                consultations={consultations}
+                                students={students}
+                                branchFilter={branchFilter}
+                                classFilter={classFilter}
+                                gradeFilter={gradeFilter}
+                                startDate={startDate}
+                                endDate={endDate}
+                            />
+                        </Suspense>
                     </ErrorBoundary>
                 )
             ) : rangeType === 'day' ? (
@@ -437,14 +441,16 @@ export default function App() {
                         </div>
                     ) : (
                         <ErrorBoundary>
-                            <PeriodLogBoard
-                                checks={filteredChecks}
-                                dailyRecords={filteredDailyRecords}
-                                students={students}
-                                postponed={filteredPostponed}
-                                startDate={startDate}
-                                endDate={endDate}
-                            />
+                            <Suspense fallback={<div className="dash-grid"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>}>
+                                <PeriodLogBoard
+                                    checks={filteredChecks}
+                                    dailyRecords={filteredDailyRecords}
+                                    students={students}
+                                    postponed={filteredPostponed}
+                                    startDate={startDate}
+                                    endDate={endDate}
+                                />
+                            </Suspense>
                         </ErrorBoundary>
                     )}
                 </div>
