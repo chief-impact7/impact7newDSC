@@ -50,10 +50,16 @@ if (typeof document !== 'undefined') {
         // @ts-ignore
         self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
     }
-    initializeAppCheck(dataApp, {
+    // App Check init을 첫 데이터 read 임계경로에서 분리한다. reCAPTCHA Enterprise 토큰 발급
+    // (원격 왕복)이 초기 students/records read를 블록해 로딩이 느려지던 회귀(2026-06) 해소.
+    // 미강제(enforcement off) 단계라 첫 요청에 토큰이 없어도 백엔드가 거부하지 않으므로 무방.
+    // ⚠️ 강제 전환 시 이 지연을 제거하고 동기 init으로 되돌릴 것(첫 요청부터 토큰 필요).
+    const initAppCheck = () => initializeAppCheck(dataApp, {
         provider: new ReCaptchaEnterpriseProvider('6LcS4ywtAAAAADd8BBiFo_Fd4XXiXT1Uf3gHGxYl'),
         isTokenAutoRefreshEnabled: true,
     });
+    if ('requestIdleCallback' in window) requestIdleCallback(initAppCheck, { timeout: 3000 });
+    else setTimeout(initAppCheck, 1500);
 }
 
 export const auth = getAuth(app);
