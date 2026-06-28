@@ -2,25 +2,26 @@
 // daily-ops.js에서 추출한 테스트 관리 관련 함수
 // Phase 3-5
 
-import { doc, writeBatch } from 'firebase/firestore';
-import { db } from './firebase-config.js';
-import { auditUpdate, auditSet, batchUpdate, batchSet } from './audit.js';
 import { state, DEFAULT_TEST_SECTIONS } from './state.js';
-import { esc, escAttr, showSaveIndicator, oxDisplayClass, formatTime12h, renderTime12hSelect, _stripYear } from './ui-utils.js';
-import { makeDailyRecordId, branchFromStudent } from './student-helpers.js';
-import { staffLabel } from '@impact7/shared/staff-label';
+import {
+    initFailActionShared, renderFailActionCard, reopenFailDomain, selectFailType,
+    clearFailType, saveFailFields, saveFailAction, completeFailTask, cancelFailTask,
+} from './fail-action-shared.js';
 
 // 명시적으로 편집 요청된 item 추적 (pending이지만 폼 표시)
 const _reopenedTestItems = new Set();
 
 // ─── deps injection ─────────────────────────────────────────────────────────
-let renderStudentDetail, renderListPanel, checkCanEditGrading, getClassDomains;
+let getClassDomains;
 
 export function initTestManagementDeps(deps) {
-    renderStudentDetail = deps.renderStudentDetail;
-    renderListPanel = deps.renderListPanel;
-    checkCanEditGrading = deps.checkCanEditGrading;
     getClassDomains = deps.getClassDomains;
+    // 공유 fail-action 엔진 deps 주입 (hw 모듈과 동일 인스턴스 — 둘 중 먼저 init되는 쪽이 설정)
+    initFailActionShared({
+        renderStudentDetail: deps.renderStudentDetail,
+        renderListPanel: deps.renderListPanel,
+        checkCanEditGrading: deps.checkCanEditGrading,
+    });
 }
 
 // ─── getClassTestSections ──────────────────────────────────────────────────
@@ -34,387 +35,39 @@ export function getClassTestSections(classCode) {
     return sections;
 }
 
-// ─── Test Fail Action (테스트 2차 미통과 처리) ────────────────────────────────
+// ─── 테스트 미통과 후속대책 (공유 fail-action 엔진의 test 바인딩) ─────────────
+// hw와의 차이: pending은 폼에서 숨기고(밀린 Task로 이동) "모두 처리됨" 표시,
+// 행 인라인 저장태그 없음, task에 source:'test', docId 접두 'test_', _reopenedTestItems로
+// 명시적 편집요청 추적.
+const TEST_CONFIG = {
+    collection: 'test_fail_tasks',
+    docIdPrefix: 'test_',
+    actionField: 'test_fail_action',
+    firstField: 'test_domains_1st',
+    fieldAttr: 'data-test-field',
+    datasetKey: 'testField',
+    stateTasksKey: 'testFailTasks',
+    titleNoun: '테스트',
+    descUnit: '항목',
+    cardIcon: 'quiz',
+    countSuffix: '개',
+    extraTaskData: { source: 'test' },
+    savedTagInline: false,
+    hidePendingFromForm: true,
+    reopenedSet: _reopenedTestItems,
+    selectFn: 'selectTestFailType',
+    clearFn: 'clearTestFailType',
+    saveFieldsFn: 'saveTestFailFields',
+};
 
 export function renderTestFailActionCard(studentId, testSections, t2nd, testFailAction, mode = 'default') {
-    const rec = state.dailyRecords[studentId] || {};
-    const t1st = rec.test_domains_1st || {};
-    const is1stOnly = mode === '1st_only';
-
-    const allItems = Object.values(testSections).flat();
-    // 미통과 대상
-    const failItems = is1stOnly
-        ? allItems.filter(t => { const v = t1st[t] || ''; return v && v !== 'O'; })
-        : allItems.filter(t => {
-            const v2 = t2nd[t] || '';
-            if (v2 === 'X' || v2 === '△') return true;
-            const v1 = t1st[t] || '';
-            if (v1 && v1 !== 'O' && !v2) return true;
-            return false;
-        });
-
-    const titleLabel = is1stOnly ? '테스트 1차 미통과' : '테스트 2차 미통과';
-    const passLabel = is1stOnly ? '테스트 1차 모두 통과!' : '테스트 2차 모두 통과!';
-
-    if (failItems.length === 0) {
-        return `
-            <div class="detail-card hw-fail-card">
-                <div class="detail-card-title">
-                    <span class="material-symbols-outlined" style="color:var(--success);font-size:18px;">check_circle</span>
-                    ${titleLabel}
-                </div>
-                <div class="detail-card-empty" style="color:var(--success);">✅ ${passLabel}</div>
-            </div>
-        `;
-    }
-
-    // pending task 항목은 밀린 Task로 이동됐으므로 숨김.
-    // 단, 명시적으로 편집 요청된 항목은 폼을 표시한다.
-    const filteredItems = failItems.filter(item => {
-        const isPending = !!state.testFailTasks.find(t =>
-            t.student_id === studentId && t.domain === item
-            && t.source_date === state.selectedDate && t.status === 'pending'
-        );
-        return !isPending || _reopenedTestItems.has(`${studentId}_${item}`);
-    });
-
-    if (filteredItems.length === 0) {
-        return `
-            <div class="detail-card hw-fail-card">
-                <div class="detail-card-title">
-                    <span class="material-symbols-outlined" style="color:var(--success);font-size:18px;">task_alt</span>
-                    ${titleLabel}
-                </div>
-                <div class="detail-card-empty" style="color:var(--text-sec);">모두 처리됨</div>
-            </div>
-        `;
-    }
-
-    const descLabel = is1stOnly
-        ? '테스트 1차 미통과 항목에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.'
-        : '테스트 2차 미통과 항목에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.';
-
-    const rows = filteredItems.map(item => {
-        const closedTask = state.testFailTasks.find(t =>
-            t.student_id === studentId && t.domain === item
-            && t.source_date === state.selectedDate
-            && t.status !== 'pending' && t.status
-        );
-        if (closedTask) return _renderClosedTestFailRow(studentId, item, closedTask);
-
-        const hasPendingTask = !!state.testFailTasks.find(t =>
-            t.student_id === studentId && t.domain === item
-            && t.source_date === state.selectedDate && t.status === 'pending'
-        );
-
-        const action = testFailAction[item] || {};
-        const type = action.type || '';
-        const isVisit = type === '등원';
-        const isAlt = type === '대체숙제';
-        const escapedItem = escAttr(item);
-        const badgeVal = is1stOnly ? (t1st[item] || '') : (t2nd[item] || '');
-
-        return `
-            <div class="hw-fail-domain-row" data-domain="${escapedItem}">
-                <div class="hw-fail-domain-header">
-                    <span style="font-size:12px;font-weight:600;color:var(--text-main);">${esc(item)}</span>
-                    <span class="hw-fail-ox-badge ${oxDisplayClass(badgeVal)}">${esc(badgeVal || '—')}</span>
-                    ${hasPendingTask ? `<span style="font-size:10px;color:var(--primary);padding:1px 5px;border-radius:4px;border:1px solid var(--primary);margin-right:auto;">저장됨·수정가능</span>` : ''}
-                    <div class="hw-fail-type-btns">
-                        <button class="hw-fail-type-btn ${isVisit ? 'active' : ''}" aria-pressed="${isVisit}"
-                            onclick="selectTestFailType('${escAttr(studentId)}', '${escapedItem}', '등원', this)">
-                            <span class="material-symbols-outlined" style="font-size:13px;">directions_walk</span>등원
-                        </button>
-                        <button class="hw-fail-type-btn ${isAlt ? 'active' : ''}" aria-pressed="${isAlt}"
-                            onclick="selectTestFailType('${escAttr(studentId)}', '${escapedItem}', '대체숙제', this)">
-                            <span class="material-symbols-outlined" style="font-size:13px;">edit_note</span>대체숙제
-                        </button>
-                        ${type ? `<button class="hw-fail-type-btn hw-fail-clear-btn"
-                            onclick="clearTestFailType('${escAttr(studentId)}', '${escapedItem}')">${hasPendingTask ? '삭제' : '취소'}</button>` : ''}
-                    </div>
-                </div>
-                ${isVisit ? `
-                    <div class="hw-fail-detail">
-                        <div class="hw-fail-detail-row">
-                            <label class="field-label" style="font-size:11px;color:var(--text-sec);flex-shrink:0;">등원일시</label>
-                            <input type="date" class="field-input hw-fail-input" data-test-field="scheduled_date" style="flex:1;padding:4px 8px;font-size:12px;"
-                                value="${escAttr(action.scheduled_date || '')}">
-                            ${renderTime12hSelect({
-                                value: action.scheduled_time || '16:00',
-                                dataAttr: 'data-test-field="scheduled_time"',
-                                className: 'hw-fail-input',
-                                style: 'width:105px;padding:4px 8px;font-size:12px;',
-                            })}
-                        </div>
-                        <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc(staffLabel(action.handler || state.currentUser?.email || ''))}</div>
-                        <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveTestFailFields('${escAttr(studentId)}', '${escapedItem}', this)">
-                            <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
-                        </button>
-                    </div>
-                ` : isAlt ? `
-                    <div class="hw-fail-detail">
-                        <input type="text" class="field-input hw-fail-input" data-test-field="alt_hw" aria-label="대체 숙제" style="width:100%;padding:4px 8px;font-size:12px;"
-                            placeholder="대체 숙제 내용 (예: 단어장 50개)"
-                            value="${escAttr(action.alt_hw || '')}">
-                        <div class="hw-fail-detail-row" style="margin-top:4px;">
-                            <label class="field-label" style="font-size:11px;color:var(--text-sec);flex-shrink:0;">제출기한</label>
-                            <input type="date" class="field-input hw-fail-input" data-test-field="scheduled_date" style="flex:1;padding:4px 8px;font-size:12px;"
-                                value="${escAttr(action.scheduled_date || '')}">
-                        </div>
-                        <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc(staffLabel(action.handler || state.currentUser?.email || ''))}</div>
-                        <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="saveTestFailFields('${escAttr(studentId)}', '${escapedItem}', this)">
-                            <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
-                        </button>
-                    </div>
-                ` : ''}
-            </div>
-        `;
-    }).join('<hr style="border:none;border-top:1px solid var(--border);margin:8px 0;">');
-
-    return `
-        <div class="detail-card hw-fail-card">
-            <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--danger);font-size:18px;">quiz</span>
-                ${titleLabel} (${filteredItems.length}개)
-            </div>
-            <div class="hw-fail-desc" style="font-size:12px;color:var(--text-sec);margin-bottom:10px;">
-                ${descLabel}
-            </div>
-            ${rows}
-        </div>
-    `;
+    const items = Object.values(testSections).flat();
+    return renderFailActionCard({ studentId, items, d2nd: t2nd, failAction: testFailAction, mode, config: TEST_CONFIG });
 }
-
-// 닫힌(완료/취소/기타) test_fail_task 항목.
-function _renderClosedTestFailRow(studentId, item, task) {
-    const detail = task.type === '등원'
-        ? `${_stripYear(task.scheduled_date || '')}${task.scheduled_time ? ' ' + formatTime12h(task.scheduled_time) : ''}`
-        : (task.alt_hw || '내용 없음');
-    return `
-        <div class="hw-fail-domain-row hw-fail-closed" data-domain="${escAttr(item)}" style="opacity:0.75;">
-            <div class="hw-fail-domain-header">
-                <span style="font-size:12px;font-weight:600;color:var(--text-main);">${esc(item)}</span>
-                <span style="font-size:11px;padding:1px 6px;border-radius:4px;background:var(--surface-alt);color:var(--text-sec);">처리됨 (${esc(task.status)})</span>
-            </div>
-            <div style="font-size:11px;color:var(--text-sec);padding:4px 0 0 6px;">
-                ${esc(task.type)} · ${esc(detail)}
-            </div>
-        </div>
-    `;
-}
-
-// 닫힌 task 재활성화는 UI에서 제공하지 않는다. 기존 window API 호환용으로만 유지.
-export async function reopenTestFailDomain(studentId, item) {
-    const taskDocId = `test_${studentId}_${item}_${state.selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
-    const task = state.testFailTasks.find(t => t.docId === taskDocId);
-    if (!task || task.status === 'pending') return;
-    if (!confirm(`'${item}' 후속대책을 다시 활성화하시겠습니까?`)) return;
-    showSaveIndicator('saving');
-    try {
-        await auditUpdate(doc(db, 'test_fail_tasks', taskDocId), {
-            status: 'pending',
-            completed_by: '',
-            completed_at: '',
-            cancelled_by: '',
-            cancelled_at: '',
-        });
-        Object.assign(task, { status: 'pending', completed_by: '', completed_at: '', cancelled_by: '', cancelled_at: '' });
-        _reopenedTestItems.add(`${studentId}_${item}`);
-        renderStudentDetail(studentId);
-        renderListPanel();
-        showSaveIndicator('saved');
-    } catch (err) {
-        console.error('재입력 활성화 실패:', err);
-        showSaveIndicator('error');
-    }
-}
-
-export async function selectTestFailType(studentId, item, type, btnEl) {
-    if (!checkCanEditGrading(studentId)) return;
-    const rec = state.dailyRecords[studentId] || {};
-    const testFailAction = { ...(rec.test_fail_action || {}) };
-    const current = testFailAction[item] || {};
-
-    testFailAction[item] = {
-        ...current,
-        type,
-        handler: current.handler || state.currentUser?.email || '',
-        scheduled_date: current.scheduled_date || '',
-        scheduled_time: current.scheduled_time || '',
-        alt_hw: current.alt_hw || '',
-        updated_at: new Date().toISOString(),
-    };
-
-    // 타입 선택 단계: daily_records에만 저장 (test_fail_tasks는 "저장" 버튼 시 생성)
-    await _saveTestFailActionOnly(studentId, testFailAction);
-    renderStudentDetail(studentId);
-}
-
-export async function clearTestFailType(studentId, item) {
-    if (!checkCanEditGrading(studentId)) return;
-    const rec = state.dailyRecords[studentId] || {};
-    const testFailAction = { ...(rec.test_fail_action || {}) };
-    delete testFailAction[item];
-    _reopenedTestItems.delete(`${studentId}_${item}`);
-    await saveTestFailAction(studentId, testFailAction);
-    renderStudentDetail(studentId);
-}
-
-export async function saveTestFailFields(studentId, item, btnEl) {
-    if (!checkCanEditGrading(studentId)) return;
-    const row = btnEl.closest('.hw-fail-domain-row');
-    if (!row) return;
-    if (!state.dailyRecords[studentId]) state.dailyRecords[studentId] = {};
-    if (!state.dailyRecords[studentId].test_fail_action) state.dailyRecords[studentId].test_fail_action = {};
-    if (!state.dailyRecords[studentId].test_fail_action[item]) state.dailyRecords[studentId].test_fail_action[item] = {};
-    row.querySelectorAll('[data-test-field]').forEach(el => {
-        state.dailyRecords[studentId].test_fail_action[item][el.dataset.testField] = el.value;
-    });
-    state.dailyRecords[studentId].test_fail_action[item].updated_at = new Date().toISOString();
-    _reopenedTestItems.delete(`${studentId}_${item}`);
-    await saveTestFailAction(studentId, state.dailyRecords[studentId].test_fail_action, item);
-    renderStudentDetail(studentId);
-}
-
-// daily_records에만 test_fail_action 저장 (타입 선택 단계용, task 생성 없음)
-async function _saveTestFailActionOnly(studentId, testFailAction) {
-    const docId = makeDailyRecordId(studentId, state.selectedDate);
-    const student = state.allStudents.find(s => s.docId === studentId);
-    try {
-        await auditSet(doc(db, 'daily_records', docId), {
-            student_id: studentId,
-            date: state.selectedDate,
-            branch: branchFromStudent(student || {}),
-            test_fail_action: testFailAction
-        }, { merge: true });
-        if (!state.dailyRecords[studentId]) state.dailyRecords[studentId] = { student_id: studentId, date: state.selectedDate };
-        state.dailyRecords[studentId].test_fail_action = testFailAction;
-        showSaveIndicator('saved');
-    } catch (err) {
-        console.error('test_fail_action 저장 실패:', err);
-        showSaveIndicator('error');
-    }
-}
-
-// onlyDomain: 지정 시 해당 영역만 task 생성/업데이트
-export async function saveTestFailAction(studentId, testFailAction, onlyDomain) {
-    const docId = makeDailyRecordId(studentId, state.selectedDate);
-    const student = state.allStudents.find(s => s.docId === studentId);
-    try {
-        await auditSet(doc(db, 'daily_records', docId), {
-            student_id: studentId,
-            date: state.selectedDate,
-            branch: branchFromStudent(student || {}),
-            test_fail_action: testFailAction
-        }, { merge: true });
-        if (!state.dailyRecords[studentId]) state.dailyRecords[studentId] = { student_id: studentId, date: state.selectedDate };
-        state.dailyRecords[studentId].test_fail_action = testFailAction;
-
-        // test_fail_tasks 컬렉션 동기화
-        // 1) 서버 확인이 필요한 항목들을 병렬로 읽기
-        const testTaskEntries = Object.entries(testFailAction).filter(([item, action]) => action.type && (!onlyDomain || item === onlyDomain));
-        const testTaskChecks = testTaskEntries.map(([item, action]) => {
-            const taskDocId = `test_${studentId}_${item}_${state.selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
-            const existing = state.testFailTasks.find(t => t.docId === taskDocId);
-            return { item, action, taskDocId, existing };
-        });
-
-        // 2) 쓰기를 배치로 모아서 커밋
-        const testWriteBatch = writeBatch(db);
-        let testWriteCount = 0;
-        for (const check of testTaskChecks) {
-            if (!check) continue;
-            const { item, action, taskDocId, existing } = check;
-            // 닫힌(완료/취소/기타) task는 saveTestFailAction이 건드리지 않는다.
-            if (existing && existing.status && existing.status !== 'pending') continue;
-
-            const taskData = {
-                student_id: studentId,
-                student_name: student?.name || '',
-                domain: item,
-                type: action.type,
-                source: 'test',
-                source_date: state.selectedDate,
-                scheduled_date: action.scheduled_date || '',
-                scheduled_time: action.scheduled_time || '',
-                alt_hw: action.alt_hw || '',
-                handler: staffLabel(action.handler || state.currentUser?.email || ''),
-                status: 'pending',
-                created_by: staffLabel(state.currentUser?.email),
-                created_at: existing?.created_at || new Date().toISOString(),
-                branch: branchFromStudent(student || {}),
-            };
-            batchSet(testWriteBatch, doc(db, 'test_fail_tasks', taskDocId), taskData, { merge: true });
-            testWriteCount++;
-            const idx = state.testFailTasks.findIndex(t => t.docId === taskDocId);
-            if (idx >= 0) {
-                state.testFailTasks[idx] = { docId: taskDocId, ...taskData };
-            } else {
-                state.testFailTasks.push({ docId: taskDocId, ...taskData });
-            }
-        }
-        if (testWriteCount > 0) await testWriteBatch.commit();
-
-        // 삭제된 item의 pending tasks 취소
-        const testCancelTargets = state.testFailTasks.filter(t => t.student_id === studentId && t.source_date === state.selectedDate && t.status === 'pending' && (!testFailAction[t.domain] || !testFailAction[t.domain].type));
-        if (testCancelTargets.length > 0) {
-            const cancelBatch = writeBatch(db);
-            for (const t of testCancelTargets) {
-                batchUpdate(cancelBatch, doc(db, 'test_fail_tasks', t.docId), {
-                    status: '취소',
-                    cancelled_by: staffLabel(state.currentUser?.email),
-                    cancelled_at: new Date().toISOString()
-                });
-                t.status = '취소';
-            }
-            await cancelBatch.commit();
-        }
-
-        showSaveIndicator('saved');
-    } catch (err) {
-        console.error('test_fail_action 저장 실패:', err);
-        showSaveIndicator('error');
-    }
-}
-
-export async function completeTestFailTask(taskDocId, studentId) {
-    if (!confirm('완료 처리하시겠습니까?')) return;
-    showSaveIndicator('saving');
-    try {
-        const completedBy = staffLabel(state.currentUser?.email);
-        await auditUpdate(doc(db, 'test_fail_tasks', taskDocId), {
-            status: '완료',
-            completed_by: completedBy,
-            completed_at: new Date().toISOString()
-        });
-        const t = state.testFailTasks.find(t => t.docId === taskDocId);
-        if (t) { t.status = '완료'; t.completed_by = completedBy; }
-        renderStudentDetail(studentId);
-        renderListPanel();
-        showSaveIndicator('saved');
-    } catch (err) {
-        console.error('완료 처리 실패:', err);
-        showSaveIndicator('error');
-    }
-}
-
-export async function cancelTestFailTask(taskDocId, studentId) {
-    if (!confirm('취소 처리하시겠습니까?')) return;
-    showSaveIndicator('saving');
-    try {
-        const cancelledBy = staffLabel(state.currentUser?.email);
-        await auditUpdate(doc(db, 'test_fail_tasks', taskDocId), {
-            status: '취소',
-            cancelled_by: cancelledBy,
-            cancelled_at: new Date().toISOString()
-        });
-        const t = state.testFailTasks.find(t => t.docId === taskDocId);
-        if (t) { t.status = '취소'; t.cancelled_by = cancelledBy; }
-        renderStudentDetail(studentId);
-        renderListPanel();
-        showSaveIndicator('saved');
-    } catch (err) {
-        console.error('취소 처리 실패:', err);
-        showSaveIndicator('error');
-    }
-}
+export const reopenTestFailDomain = (studentId, item) => reopenFailDomain(studentId, item, TEST_CONFIG);
+export const selectTestFailType = (studentId, item, type, btnEl) => selectFailType(studentId, item, type, TEST_CONFIG);
+export const clearTestFailType = (studentId, item) => clearFailType(studentId, item, TEST_CONFIG);
+export const saveTestFailFields = (studentId, item, btnEl) => saveFailFields(studentId, item, btnEl, TEST_CONFIG);
+export const saveTestFailAction = (studentId, testFailAction, onlyDomain) => saveFailAction(studentId, testFailAction, onlyDomain, TEST_CONFIG);
+export const completeTestFailTask = (taskDocId, studentId) => completeFailTask(taskDocId, studentId, TEST_CONFIG);
+export const cancelTestFailTask = (taskDocId, studentId) => cancelFailTask(taskDocId, studentId, TEST_CONFIG);
