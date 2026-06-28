@@ -432,6 +432,36 @@ function renderRegularClassDayCard(classCode) {
     `;
 }
 
+// 반 변경을 전 학생 enrollment에 batch 전파하는 공통 메커니즘.
+//   matcher(e): 이 enrollment를 바꿀지, mutate(e): 바뀐 enrollment 반환.
+//   skipWithdrawn: 퇴원생 제외 여부(자유학기 기간 저장은 퇴원생도 포함 — 기존 동작 보존).
+// 반환 {batch, hasOps, studentUpdates}. 커밋은 호출자가 — saveClassSettings와의 순서가
+// 함수마다 다르기 때문(요일 토글은 병렬, 자유/특강 요일은 settings 먼저).
+function _propagateEnrollmentChange({ matcher, mutate, skipWithdrawn = true }) {
+    const batch = writeBatch(db);
+    let hasOps = false;
+    const studentUpdates = [];
+    for (const student of state.allStudents) {
+        if (skipWithdrawn && student.status === '퇴원') continue;
+        let changed = false;
+        const updated = (student.enrollments || []).map(e => {
+            if (matcher(e)) { changed = true; return mutate(e); }
+            return e;
+        });
+        if (!changed) continue;
+        batchUpdate(batch, doc(db, 'students', student.docId), { enrollments: updated });
+        studentUpdates.push({ student, enrollments: updated });
+        hasOps = true;
+    }
+    return { batch, hasOps, studentUpdates };
+}
+
+// 낙관적 캐시 반영 — READ_ONLY 모드에선 로컬 enrollments를 건드리지 않는다.
+function _applyStudentUpdates(studentUpdates) {
+    if (READ_ONLY) return;
+    studentUpdates.forEach(({ student, enrollments }) => { student.enrollments = enrollments; });
+}
+
 export async function toggleRegularClassDay(classCode, day, isAdd) {
     const currentDays = _getRegularClassDays(classCode);
     const newDays = isAdd
@@ -440,31 +470,15 @@ export async function toggleRegularClassDay(classCode, day, isAdd) {
 
     showSaveIndicator('saving');
     try {
-        const batch = writeBatch(db);
-        let hasOps = false;
-        const studentUpdates = [];
-        for (const student of state.allStudents) {
-            if (student.status === '퇴원') continue;
-            let changed = false;
-            const updated = (student.enrollments || []).map(e => {
-                if (enrollmentCode(e) === classCode && (e.class_type || '정규') === '정규') {
-                    changed = true;
-                    return { ...e, day: newDays };
-                }
-                return e;
-            });
-            if (!changed) continue;
-            batchUpdate(batch, doc(db, 'students', student.docId), { enrollments: updated });
-            studentUpdates.push({ student, enrollments: updated });
-            hasOps = true;
-        }
+        const { batch, hasOps, studentUpdates } = _propagateEnrollmentChange({
+            matcher: e => enrollmentCode(e) === classCode && (e.class_type || '정규') === '정규',
+            mutate: e => ({ ...e, day: newDays }),
+        });
         await Promise.all([
             saveClassSettings(classCode, { default_days: newDays }),
             hasOps ? batch.commit() : Promise.resolve(),
         ]);
-        if (!READ_ONLY) {
-            studentUpdates.forEach(({ student, enrollments }) => { student.enrollments = enrollments; });
-        }
+        _applyStudentUpdates(studentUpdates);
         showSaveIndicator('saved');
         renderClassDetail(classCode);
     } catch (err) {
@@ -545,28 +559,12 @@ export async function toggleClassDay(classCode, day, isAdd) {
         await saveClassSettings(classCode, { [scheduleKey]: schedule }, { replace: true });
 
         const newDays = Object.keys(schedule).sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b));
-        const batch = writeBatch(db);
-        let hasOps = false;
-        const studentUpdates = [];
-        for (const student of state.allStudents) {
-            if (student.status === '퇴원') continue;
-            let changed = false;
-            const updated = (student.enrollments || []).map(e => {
-                if (enrollmentCode(e) === classCode && e.class_type === classType) {
-                    changed = true;
-                    return { ...e, day: newDays };
-                }
-                return e;
-            });
-            if (!changed) continue;
-            batchUpdate(batch, doc(db, 'students', student.docId), { enrollments: updated });
-            studentUpdates.push({ student, enrollments: updated });
-            hasOps = true;
-        }
+        const { batch, hasOps, studentUpdates } = _propagateEnrollmentChange({
+            matcher: e => enrollmentCode(e) === classCode && e.class_type === classType,
+            mutate: e => ({ ...e, day: newDays }),
+        });
         if (hasOps) await batch.commit();
-        if (!READ_ONLY) {
-            studentUpdates.forEach(({ student, enrollments }) => { student.enrollments = enrollments; });
-        }
+        _applyStudentUpdates(studentUpdates);
         showSaveIndicator('saved');
         renderClassDetail(classCode);
     } catch (err) {
@@ -619,30 +617,17 @@ export async function saveFreeSemesterPeriod(classCode, field, value) {
     showSaveIndicator('saving');
     try {
         const enrollmentField = field === 'free_start' ? 'start_date' : 'end_date';
-        const batch = writeBatch(db);
-        let hasOps = false;
-        const studentUpdates = [];
-        for (const student of state.allStudents) {
-            let changed = false;
-            const updated = (student.enrollments || []).map(e => {
-                if (e.class_type === '자유학기' && enrollmentCode(e) === classCode) {
-                    changed = true;
-                    return { ...e, [enrollmentField]: value };
-                }
-                return e;
-            });
-            if (!changed) continue;
-            batchUpdate(batch, doc(db, 'students', student.docId), { enrollments: updated });
-            studentUpdates.push({ student, enrollments: updated });
-            hasOps = true;
-        }
+        // 자유학기 기간 저장은 퇴원생 enrollment도 갱신한다(기존 동작 — skipWithdrawn:false).
+        const { batch, hasOps, studentUpdates } = _propagateEnrollmentChange({
+            matcher: e => e.class_type === '자유학기' && enrollmentCode(e) === classCode,
+            mutate: e => ({ ...e, [enrollmentField]: value }),
+            skipWithdrawn: false,
+        });
         await Promise.all([
             saveClassSettings(classCode, { [field]: value }),
             hasOps ? batch.commit() : Promise.resolve(),
         ]);
-        if (!READ_ONLY) {
-            studentUpdates.forEach(({ student, enrollments }) => { student.enrollments = enrollments; });
-        }
+        _applyStudentUpdates(studentUpdates);
         showSaveIndicator('saved');
         renderClassDetail(classCode);
     } catch (err) {

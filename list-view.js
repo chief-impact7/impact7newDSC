@@ -105,6 +105,21 @@ export function isVisitStudent(docId) {
 
 // ─── Filtering ──────────────────────────────────────────────────────────────
 
+// 학생 검색 술어 (SSoT). 호출처마다 매칭 범위가 다르므로 플래그로 절을 켠다.
+// name·학교는 항상 매칭; enroll(반코드)·phone(학생/학부모)·teacher(담당교사)는 옵션.
+// 전부 OR 논리라 절 평가 순서는 결과에 영향 없다.
+function studentMatchesQuery(s, q, { enroll = false, phone = false, teacher = false } = {}) {
+    if (s.name?.toLowerCase().includes(q)) return true;
+    if (schoolSearchTerms(s).some(t => t.toLowerCase().includes(q))) return true;
+    if (phone && (s.student_phone?.includes(q) || s.parent_phone_1?.includes(q))) return true;
+    if (enroll && (s.enrollments || []).some(e => enrollmentCode(e).toLowerCase().includes(q))) return true;
+    if (teacher && (s.enrollments || []).some(e => {
+        const t = state.classSettings[enrollmentCode(e)]?.teacher;
+        return t && getTeacherName(t).toLowerCase().includes(q);
+    })) return true;
+    return false;
+}
+
 export function getFilteredStudents() {
     // 반 설정/소속 L4: 정규 모드 + 반 선택 — 그 반에 등록된 모든 정규/자유학기 학생 (요일 무관)
     // + 오늘 그 반으로 들어온 타반수업 학생도 포함 (a101 김여원이 a103에서 수업하면 a103 화면에서도 보이도록)
@@ -154,14 +169,7 @@ export function getFilteredStudents() {
         students = students.filter(s => matchesBranchFilter(s));
         if (state.searchQuery) {
             const q = state.searchQuery.trim().toLowerCase();
-            students = students.filter(s => {
-                return (s.name?.toLowerCase().includes(q)) ||
-                    schoolSearchTerms(s).some(t => t.toLowerCase().includes(q)) ||
-                    (s.student_phone?.includes(q)) ||
-                    (s.parent_phone_1?.includes(q)) ||
-                    (s.enrollments || []).some(e => enrollmentCode(e).toLowerCase().includes(q)) ||
-                    (s.enrollments || []).some(e => { const t = state.classSettings[enrollmentCode(e)]?.teacher; return t && getTeacherName(t).toLowerCase().includes(q); });
-            });
+            students = students.filter(s => studentMatchesQuery(s, q, { enroll: true, phone: true, teacher: true }));
         }
         if (state.currentSubFilter.size > 0 && !state.currentSubFilter.has('all')) {
             students = students.filter(s => {
@@ -238,14 +246,7 @@ export function getFilteredStudents() {
     // 검색어 필터
     if (state.searchQuery) {
         const q = state.searchQuery.trim().toLowerCase();
-        students = students.filter(s => {
-            return (s.name?.toLowerCase().includes(q)) ||
-                schoolSearchTerms(s).some(t => t.toLowerCase().includes(q)) ||
-                (s.student_phone?.includes(q)) ||
-                (s.parent_phone_1?.includes(q)) ||
-                s.enrollments.some(e => enrollmentCode(e).toLowerCase().includes(q)) ||
-                s.enrollments.some(e => { const t = state.classSettings[enrollmentCode(e)]?.teacher; return t && getTeacherName(t).toLowerCase().includes(q); });
-        });
+        students = students.filter(s => studentMatchesQuery(s, q, { enroll: true, phone: true, teacher: true }));
     }
 
     // 모든 카테고리 필터를 AND로 적용
@@ -353,11 +354,7 @@ export function getFilteredStudents() {
             let filtered = visitStudents;
             if (state.searchQuery) {
                 const q = state.searchQuery.trim().toLowerCase();
-                filtered = filtered.filter(s => {
-                    return (s.name?.toLowerCase().includes(q)) ||
-                        schoolSearchTerms(s).some(t => t.toLowerCase().includes(q)) ||
-                        s.enrollments.some(e => enrollmentCode(e).toLowerCase().includes(q));
-                });
+                filtered = filtered.filter(s => studentMatchesQuery(s, q, { enroll: true }));
             }
             students = [...students, ...filtered];
         }
@@ -442,12 +439,7 @@ export function renderListPanel() {
     if (state.searchQuery && state.searchQuery.trim().length >= 2) {
         const q = state.searchQuery.trim().toLowerCase();
         const consultStudents = state.allStudents
-            .filter(s => s.status === '상담' && (
-                s.name?.toLowerCase().includes(q) ||
-                schoolSearchTerms(s).some(t => t.toLowerCase().includes(q)) ||
-                s.student_phone?.includes(q) ||
-                s.parent_phone_1?.includes(q)
-            ))
+            .filter(s => s.status === '상담' && studentMatchesQuery(s, q, { phone: true }))
             .map(s => ({ ...s, id: s.docId }));
         consultMatchCount = consultStudents.length;
         const searchId = ++state._contactSearchId;

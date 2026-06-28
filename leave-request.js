@@ -854,42 +854,45 @@ function _checkLegacyReturnTarget(r, willFinalize) {
 }
 
 // 교수부 승인 토글
-export async function teacherApproveLeaveRequest(docId, studentId) {
+// 교수부/행정부 승인 토글 (공유). 두 승인은 필드명·라벨만 다르고 로직은 대칭이다.
+// 한쪽이 이미 승인된 상태에서 다른 쪽이 승인하면 최종 승인(status:'approved')되며,
+// 학생 상태 전이는 Cloud Function(onLeaveRequestApproved)이 처리한다.
+async function _approveLeave(docId, studentId, { byField, atField, otherByField, label, otherLabel }) {
     const r = state.leaveRequests.find(lr => lr.docId === docId);
     if (!r) return;
     // 토글: 이미 승인 → 취소
-    if (r.teacher_approved_by) {
-        if (!confirm(`${r.student_name} — 교수부 승인을 취소하시겠습니까?`)) return;
+    if (r[byField]) {
+        if (!confirm(`${r.student_name} — ${label} 승인을 취소하시겠습니까?`)) return;
         try {
-            await auditUpdate(doc(db, 'leave_requests', docId), { teacher_approved_by: deleteField(), teacher_approved_at: deleteField() });
+            await auditUpdate(doc(db, 'leave_requests', docId), { [byField]: deleteField(), [atField]: deleteField() });
             const lrIdx = state.leaveRequests.findIndex(lr => lr.docId === docId);
-            if (lrIdx >= 0) { delete state.leaveRequests[lrIdx].teacher_approved_by; delete state.leaveRequests[lrIdx].teacher_approved_at; }
+            if (lrIdx >= 0) { delete state.leaveRequests[lrIdx][byField]; delete state.leaveRequests[lrIdx][atField]; }
             showSaveIndicator('saved');
             renderSubFilters();
             if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) renderLeaveRequestList();
             if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
-        } catch (err) { alert('교수부 승인 취소 실패: ' + err.message); }
+        } catch (err) { alert(`${label} 승인 취소 실패: ` + err.message); }
         return;
     }
     const typeLabel = `${r.request_type}${r.leave_sub_type ? ' (' + r.leave_sub_type + ')' : ''}`;
-    const isFinal = !!r.approved_by;
+    const isFinal = !!r[otherByField];
     // 레거시 가드 (최종 승인 시점에만 체크)
     if (!_checkLegacyReturnTarget(r, isFinal)) return;
     const confirmMsg = isFinal
-        ? `⚠️ ${r.student_name} — ${typeLabel}\n\n행정부 승인이 이미 완료되어, 교수부 승인 시 최종 승인 처리됩니다.\n학생 상태가 변경됩니다. 진행하시겠습니까?`
-        : `${r.student_name} — ${typeLabel}\n교수부 승인하시겠습니까?`;
+        ? `⚠️ ${r.student_name} — ${typeLabel}\n\n${otherLabel} 승인이 이미 완료되어, ${label} 승인 시 최종 승인 처리됩니다.\n학생 상태가 변경됩니다. 진행하시겠습니까?`
+        : `${r.student_name} — ${typeLabel}\n${label} 승인하시겠습니까?`;
     if (!confirm(confirmMsg)) return;
 
     try {
-        const updates = { teacher_approved_by: state.currentUser?.email || '', teacher_approved_at: serverTimestamp() };
-        if (r.approved_by) updates.status = 'approved';
+        const updates = { [byField]: state.currentUser?.email || '', [atField]: serverTimestamp() };
+        if (r[otherByField]) updates.status = 'approved';
         await auditUpdate(doc(db, 'leave_requests', docId), updates);
 
         const lrIdx = state.leaveRequests.findIndex(lr => lr.docId === docId);
         if (lrIdx >= 0) {
-            state.leaveRequests[lrIdx].teacher_approved_by = state.currentUser?.email || '';
-            state.leaveRequests[lrIdx].teacher_approved_at = new Date();
-            if (r.approved_by) state.leaveRequests[lrIdx].status = 'approved';
+            state.leaveRequests[lrIdx][byField] = state.currentUser?.email || '';
+            state.leaveRequests[lrIdx][atField] = new Date();
+            if (r[otherByField]) state.leaveRequests[lrIdx].status = 'approved';
         }
 
         // 최종 승인된 경우 학생 상태 전이는 Cloud Function(onLeaveRequestApproved)이 처리
@@ -898,61 +901,18 @@ export async function teacherApproveLeaveRequest(docId, studentId) {
         if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) renderLeaveRequestList();
         if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
     } catch (err) {
-        alert('교수부 승인 실패: ' + err.message);
+        alert(`${label} 승인 실패: ` + err.message);
         console.error(err);
     }
 }
+
+// 교수부 승인 토글
+export const teacherApproveLeaveRequest = (docId, studentId) =>
+    _approveLeave(docId, studentId, { byField: 'teacher_approved_by', atField: 'teacher_approved_at', otherByField: 'approved_by', label: '교수부', otherLabel: '행정부' });
 
 // 행정부 승인 토글
-export async function approveLeaveRequest(docId, studentId) {
-    const r = state.leaveRequests.find(lr => lr.docId === docId);
-    if (!r) return;
-    // 토글: 이미 승인 → 취소
-    if (r.approved_by) {
-        if (!confirm(`${r.student_name} — 행정부 승인을 취소하시겠습니까?`)) return;
-        try {
-            await auditUpdate(doc(db, 'leave_requests', docId), { approved_by: deleteField(), approved_at: deleteField() });
-            const lrIdx = state.leaveRequests.findIndex(lr => lr.docId === docId);
-            if (lrIdx >= 0) { delete state.leaveRequests[lrIdx].approved_by; delete state.leaveRequests[lrIdx].approved_at; }
-            showSaveIndicator('saved');
-            renderSubFilters();
-            if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) renderLeaveRequestList();
-            if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
-        } catch (err) { alert('행정부 승인 취소 실패: ' + err.message); }
-        return;
-    }
-
-    const typeLabel = `${r.request_type}${r.leave_sub_type ? ' (' + r.leave_sub_type + ')' : ''}`;
-    const isFinal = !!r.teacher_approved_by;
-    // 레거시 가드 (최종 승인 시점에만 체크)
-    if (!_checkLegacyReturnTarget(r, isFinal)) return;
-    const confirmMsg = isFinal
-        ? `⚠️ ${r.student_name} — ${typeLabel}\n\n교수부 승인이 이미 완료되어, 행정부 승인 시 최종 승인 처리됩니다.\n학생 상태가 변경됩니다. 진행하시겠습니까?`
-        : `${r.student_name} — ${typeLabel}\n행정부 승인하시겠습니까?`;
-    if (!confirmMsg || !confirm(confirmMsg)) return;
-
-    try {
-        const updates = { approved_by: state.currentUser?.email || '', approved_at: serverTimestamp() };
-        if (r.teacher_approved_by) updates.status = 'approved';
-        await auditUpdate(doc(db, 'leave_requests', docId), updates);
-
-        const lrIdx = state.leaveRequests.findIndex(lr => lr.docId === docId);
-        if (lrIdx >= 0) {
-            state.leaveRequests[lrIdx].approved_by = state.currentUser?.email || '';
-            state.leaveRequests[lrIdx].approved_at = new Date();
-            if (r.teacher_approved_by) state.leaveRequests[lrIdx].status = 'approved';
-        }
-
-        // 최종 승인된 경우 학생 상태 전이는 Cloud Function(onLeaveRequestApproved)이 처리
-        showSaveIndicator('saved');
-        renderSubFilters();
-        if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) renderLeaveRequestList();
-        if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
-    } catch (err) {
-        alert('행정부 승인 실패: ' + err.message);
-        console.error(err);
-    }
-}
+export const approveLeaveRequest = (docId, studentId) =>
+    _approveLeave(docId, studentId, { byField: 'approved_by', atField: 'approved_at', otherByField: 'teacher_approved_by', label: '행정부', otherLabel: '교수부' });
 
 // ─── 재등원 / 휴원복귀 모달 (공용) ──────────────────────────────────────────
 
