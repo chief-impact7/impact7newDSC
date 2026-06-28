@@ -67,16 +67,19 @@ export function useDashboardData(user, startDate, endDate) {
         const reqId = ++reqIdRef.current;   // 빠른 기간 변경 시 이전 요청 응답이 최신을 덮지 않도록. F-09
         setLoading(true);
         setError(null);
+        // 일별 뷰에선 fetchDashboardDailyLogData가 같은 날 daily_records를 이미 읽으므로
+        // range 조회를 생략하고 그 결과를 재사용한다(동일 데이터 2회 read 제거).
+        const isDaily = startDate === endDate;
         Promise.all([
             fetchDailyChecksRange(startDate, endDate),
-            fetchDailyRecordsRange(startDate, endDate),
+            isDaily ? Promise.resolve(null) : fetchDailyRecordsRange(startDate, endDate),
             fetchPostponedTasksRange(startDate, endDate),
-            startDate === endDate ? fetchDashboardDailyLogData(startDate) : Promise.resolve(null),
+            isDaily ? fetchDashboardDailyLogData(startDate) : Promise.resolve(null),
         ])
             .then(([c, records, p, log]) => {
                 if (reqId !== reqIdRef.current) return;
                 setChecks(c);
-                setDailyRecords(records);
+                setDailyRecords(records ?? log?.dailyRecords ?? []);
                 setPostponed(p);
                 if (log) setDailyLog(log);
                 else setDailyLog(emptyDailyLogData());
