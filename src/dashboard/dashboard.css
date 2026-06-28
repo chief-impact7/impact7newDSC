@@ -122,6 +122,25 @@ body {
 .dash-link:hover { text-decoration: underline; color: var(--primary); }
 .dash-link.active { color: var(--primary); font-weight: 700; cursor: default; }
 .dash-link.active:hover { text-decoration: none; }
+/* 로그북↔상담 세그먼트 토글 — dash-link 재사용 시 두 버튼이 맞붙어 클릭이 빗나가던 문제 해소. */
+.dash-view-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+.dash-view-toggle button {
+    font-size: 13px;
+    padding: 5px 14px;
+    border: none;
+    background: transparent;
+    color: var(--text-sec);
+    cursor: pointer;
+    line-height: 1.4;
+}
+.dash-view-toggle button + button { border-left: 1px solid var(--border); }
+.dash-view-toggle button:hover:not(.active) { background: rgba(0, 117, 74, 0.08); color: var(--primary); }
+.dash-view-toggle button.active { background: var(--primary); color: #fff; font-weight: 700; }
 .dash-header-right {
     display: flex;
     align-items: center;

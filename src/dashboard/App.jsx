@@ -280,8 +280,8 @@ export default function App() {
                     <h1 className="dash-title">Impact7 DSC</h1>
                     <a href="./" className="dash-link" target="_blank" rel="noopener">DSC</a>
                     <span className="dash-view-toggle" role="group" aria-label="화면 전환">
-                        <button type="button" className={`dash-link${view === 'logbook' ? ' active' : ''}`} aria-pressed={view === 'logbook'} onClick={() => setView('logbook')}>로그북</button>
-                        <button type="button" className={`dash-link${view === 'consult' ? ' active' : ''}`} aria-pressed={view === 'consult'} onClick={() => setView('consult')}>상담</button>
+                        <button type="button" className={view === 'logbook' ? 'active' : ''} aria-pressed={view === 'logbook'} onClick={() => setView('logbook')}>로그북</button>
+                        <button type="button" className={view === 'consult' ? 'active' : ''} aria-pressed={view === 'consult'} onClick={() => setView('consult')}>상담</button>
                     </span>
                     <a href="./messages.html" className="dash-link" target="_blank" rel="noopener">메시지</a>
                 </div>
