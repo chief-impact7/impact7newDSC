@@ -281,11 +281,12 @@ export async function saveFailFields(studentId, key, btnEl, config) {
     state.dailyRecords[studentId][config.actionField][key].updated_at = new Date().toISOString();
     if (config.reopenedSet) config.reopenedSet.delete(`${studentId}_${key}`);
     await saveFailAction(studentId, state.dailyRecords[studentId][config.actionField], key, config);
+    renderStudentDetail(studentId);
+    // 저장 확인 태그는 재렌더 "후"의 새 요소에 노출한다 — 재렌더 전에 켜면 곧바로 지워진다.
     if (config.savedTagInline) {
         const tag = document.getElementById(`hw-fail-saved-${studentId}-${key}`);
         if (tag) { tag.style.display = ''; setTimeout(() => tag.style.display = 'none', 2000); }
     }
-    renderStudentDetail(studentId);
 }
 
 // daily_records에만 fail_action 저장 (타입 선택 단계용, task 생성 없음)
