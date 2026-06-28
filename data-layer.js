@@ -96,7 +96,6 @@ export function initDataLayerDeps(deps) {
 
 // ─── Class Settings (영역 관리) ─────────────────────────────────────────────
 
-// state._classSettingsLoaded → state._classSettingsLoaded
 export async function loadClassSettings(force = false) {
     if (state._classSettingsLoaded && !force) return;
     try {
@@ -638,7 +637,6 @@ function _listenCollection(key, q, parser, onData) {
                 initialLoad = false;
                 resolve();
             } else {
-                console.log(`[${key}] 실시간 업데이트 수신`);
                 _realtimeRefreshUI();
             }
         }, (err) => {

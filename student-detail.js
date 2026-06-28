@@ -1419,7 +1419,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     const hasClinic = !!extraVisit.date || isPendingClinic;
     const isPastDate = state.selectedDate < todayStr();
     const clinicButtons = isPastDate
-        ? (hasClinic ? '' : '')
+        ? ''
         : `<span style="display:flex;gap:2px;">
             ${hasClinic ? `<button class="icon-btn" style="width:28px;height:28px;" aria-label="클리닉 삭제" onclick="clearExtraVisit('${escAttr(studentId)}')"><span class="material-symbols-outlined" style="font-size:18px;color:var(--danger);">close</span></button>` : ''}
             <button class="icon-btn" style="width:28px;height:28px;" aria-label="클리닉 추가" onclick="addExtraVisit('${escAttr(studentId)}')"><span class="material-symbols-outlined" style="font-size:18px;">add</span></button>

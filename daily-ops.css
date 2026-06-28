@@ -2355,40 +2355,6 @@ textarea.field-input {
   accent-color: var(--primary);
 }
 
-/* ===== Detail Memo Card (role memos in detail panel) ===== */
-.detail-role-memo {
-  padding: 8px 0;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.detail-role-memo:last-child {
-  border-bottom: none;
-}
-
-.detail-role-memo-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2px;
-}
-
-.detail-role-memo-sender {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--primary);
-}
-
-.detail-role-memo-date {
-  font-size: 11px;
-  color: var(--text-sec);
-}
-
-.detail-role-memo-content {
-  font-size: 13px;
-  color: var(--text-main);
-  word-break: break-word;
-}
-
 /* ===== Class Detail - Domain Chips ===== */
 .domain-chips-container {
   display: flex;

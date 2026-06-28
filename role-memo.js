@@ -446,44 +446,6 @@ export async function sendMemo() {
     }
 }
 
-function getStudentRoleMemos(studentId) {
-    return state.roleMemos.filter(m => m.type === 'student' && m.student_id === studentId);
-}
-
-export function renderStudentRoleMemoCard(studentId) {
-    const memos = getStudentRoleMemos(studentId);
-    const student = findStudent(studentId);
-
-    let memosHtml = '';
-    if (memos.length === 0) {
-        memosHtml = '<div class="detail-card-empty">이 학생에 대한 롤 메모 없음</div>';
-    } else {
-        memosHtml = memos.map(m => {
-            const timeStr = formatTimeKST(m.created_at);
-            return `<div class="detail-role-memo">
-                <div class="detail-role-memo-header">
-                    <span class="detail-role-memo-sender">${esc(staffLabel(m.sender_email))} (${esc(m.sender_role || '')})</span>
-                    <span class="detail-role-memo-date">${esc(timeStr)}</span>
-                </div>
-                <div class="detail-role-memo-content">${esc(m.content || '')}</div>
-            </div>`;
-        }).join('');
-    }
-
-    const sendBtn = `<button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="openMemoModal('${studentId}')">
-        <span class="material-symbols-outlined" style="font-size:16px;">add</span> 메모 보내기
-    </button>`;
-
-    return `<div class="detail-card">
-        <div class="detail-card-title">
-            <span class="material-symbols-outlined" style="color:#7b61ff;font-size:18px;">mail</span>
-            롤 메모 (${memos.length})
-        </div>
-        ${memosHtml}
-        ${sendBtn}
-    </div>`;
-}
-
 // ─── 메모 카드 (통합: 고정 + 오늘) ──────────────────────────────────────────
 export function normalizeStudentMemos(student) {
     if (!student.memo) return [];

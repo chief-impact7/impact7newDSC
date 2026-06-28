@@ -280,8 +280,6 @@ export async function saveTestFailFields(studentId, item, btnEl) {
     state.dailyRecords[studentId].test_fail_action[item].updated_at = new Date().toISOString();
     _reopenedTestItems.delete(`${studentId}_${item}`);
     await saveTestFailAction(studentId, state.dailyRecords[studentId].test_fail_action, item);
-    const tag = row.querySelector('.hw-fail-saved-tag');
-    if (tag) { tag.style.display = ''; setTimeout(() => tag.style.display = 'none', 2000); }
     renderStudentDetail(studentId);
 }
 

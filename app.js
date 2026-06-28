@@ -5,22 +5,18 @@ import {
     query, where
 } from 'firebase/firestore';
 import { auth, db, dataAuthReady } from './firebase-config.js';
-import { signInWithGoogle, logout, getGoogleAccessToken } from './auth.js';
+import { signInWithGoogle, logout } from './auth.js';
 import { initHelpGuide } from './help-guide.js';
 import { fetchAiBatchPerm } from './population-perms.js';
 import './ai-automation-settings.js'; // window.openAiAutomationSettings 등록 (side-effect import)
-import { todayStr, getDayName, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { auditUpdate, auditSet, normalizeImpact7Email } from './audit.js';
 import {
     state,
-    OX_CYCLE, VISIT_STATUS_CYCLE, DEFAULT_DOMAINS, KOREAN_CHAR_RE,
-    SV_SOURCE_MAP, SV_L3_KEYS, SOURCE_PRIORITY, SOURCE_SHORT,
-    LEAVE_STATUSES, NEW_STUDENT_DAYS, TEMP_FIELD_LABELS, LEVEL_SHORT,
-    DAY_ORDER, _subFilterBaseRef
+    _subFilterBaseRef
 } from './state.js';
 import {
-    esc, escAttr, decodeHtmlEntities, formatTime12h, renderTime12hOptions, nowTimeStr,
+    esc, escAttr, formatTime12h, renderTime12hOptions,
     showSaveIndicator, showToast, nextOXValue, oxDisplayClass,
     _attToggleClass, _toVisitStatus, _visitBtnStyles, _visitLabel,
     _stripYear, _fmtTs, _isNoShow, _renderRescheduleHistory
@@ -28,8 +24,7 @@ import {
 import {
     normalizeDays, branchFromStudent, matchesBranchFilter,
     enrollmentCode, allClassCodes, activeClassCodes, _enrollCodeList,
-    deriveNaesinCode, displayCodeFromCsKey, getActiveEnrollments, getStudentStartTime, isOnLeaveAt, isWithdrawnAt,
-    isNaesinActiveToday, isFreeSemesterActiveToday, isActiveNaesinBase, isPauseExpired, pauseExpiredDays,
+    deriveNaesinCode, displayCodeFromCsKey, getActiveEnrollments, getStudentStartTime,
     makeDailyRecordId, findStudent, buildSiblingMap
 } from './student-helpers.js';
 import {
@@ -54,7 +49,7 @@ import {
     toggleReturnConsult, updateReturnConsultNote,
     openLeaveRequestModal, onLeaveRequestTypeChange, searchLeaveRequestStudent, selectLeaveRequestStudentById,
     submitLeaveRequest, toggleCancelLeaveRequest, cancelScheduledLeave, cancelScheduledWithdrawal, teacherApproveLeaveRequest,
-    approveLeaveRequest, cancelLeaveRequest,
+    approveLeaveRequest,
     openReEnrollModal, openReturnFromLeaveModal, submitReturnFromLeave,
     retryFinalize
 } from './leave-request.js';
@@ -139,7 +134,7 @@ import {
     toggleMemoSection, toggleMemoPanel, setMemoTab, renderMemoPanel,
     expandMemo, toggleMemoPin, markMemoRead,
     openMemoModal, toggleMemoStudentField, searchMemoStudent, selectMemoStudent, sendMemo,
-    renderStudentRoleMemoCard, renderUnifiedMemoCard, normalizeStudentMemos,
+    renderUnifiedMemoCard, normalizeStudentMemos,
     addStudentMemo, deleteStudentMemo, toggleStudentMemoPin
 } from './role-memo.js';
 import {
@@ -183,10 +178,6 @@ import {
     renderFilterChips, removeFilterChip, clearAllFilters, setSubFilter,
     toggleClassDeleteMode, toggleClassDeleteSelect, setClassMgmtMode
 } from './filter-nav.js';
-// 디버그용 전역 노출 (DEV 환경에서만)
-if (import.meta.env?.DEV) {
-    window._debug = { get allStudents() { return state.allStudents; }, get dailyRecords() { return state.dailyRecords; }, get hwFailTasks() { return state.hwFailTasks; }, get testFailTasks() { return state.testFailTasks; } };
-}
 
 // 코드 분할 청크 로드 실패(주로 새 배포 후 stale-chunk — 구 탭이 옛 청크 해시를 못 찾음)
 // 전역 처리. Vite는 동적 import 청크를 못 가져오면 vite:preloadError를 발화한다.
@@ -270,7 +261,6 @@ window.cancelScheduledLeave = cancelScheduledLeave;
 window.cancelScheduledWithdrawal = cancelScheduledWithdrawal;
 window.teacherApproveLeaveRequest = teacherApproveLeaveRequest;
 window.approveLeaveRequest = approveLeaveRequest;
-window.cancelLeaveRequest = cancelLeaveRequest;
 window.openReEnrollModal = openReEnrollModal;
 window.openReturnFromLeaveModal = openReturnFromLeaveModal;
 window.submitReturnFromLeave = submitReturnFromLeave;
@@ -831,11 +821,7 @@ window.setBranchLevel = setBranchLevel;
 window.setBranchClass = setBranchClass;
 window.toggleAttendance = toggleAttendance;
 window.cycleVisitAttendance = cycleVisitAttendance;
-window.toggleHomework = toggleHomework;
-window.toggleHwDomainOX = toggleHwDomainOX;
 window.setClassCode = setClassCode;
-window.closeSidebar = closeSidebar;
-window.closeDetail = closeDetail;
 window.renderStudentDetail = renderStudentDetail;
 
 window.refreshData = async () => {
@@ -864,8 +850,6 @@ window.runOldRecordCleanup = async (force = false) => {
     renderListPanel();
     if (state.selectedStudentId) renderStudentDetail(state.selectedStudentId);
 };
-
-window.selectStudent = selectStudent;
 
 window.openFollowUpAction = (studentId, category) => {
     selectStudent(studentId);
@@ -900,25 +884,10 @@ window.cancelRetake = cancelRetake;
 window.openEnrollmentModal = openEnrollmentModal;
 window.saveEnrollment = saveEnrollment;
 window.saveStudentScheduledTime = saveStudentScheduledTime;
-window.selectNextHwClass = selectNextHwClass;
-window.openNextHwModal = openNextHwModal;
-window.saveNextHwFromModal = saveNextHwFromModal;
-window.saveNextHwNone = saveNextHwNone;
-window.openPersonalNextHwModal = openPersonalNextHwModal;
 window.saveExtraVisit = saveExtraVisit;
 window.addExtraVisit = addExtraVisit;
 window.clearExtraVisit = clearExtraVisit;
 window.renderClinicInputs = renderClinicInputs;
-window.addClassDomain = addClassDomain;
-window.removeClassDomain = removeClassDomain;
-window.resetClassDomains = resetClassDomains;
-window.addTestToSection = addTestToSection;
-window.removeTestFromSection = removeTestFromSection;
-window.addTestSection = addTestSection;
-window.removeTestSection = removeTestSection;
-window.resetTestSections = resetTestSections;
-window.resetTestSection = resetTestSection;
-window.saveClassDefaultTime = saveClassDefaultTime;
 
 // 롤/메모 관련 → role-memo.js에서 import
 initRoleMemoDeps({ renderStudentDetail, refreshDocuBadge });
@@ -1002,7 +971,6 @@ Object.defineProperties(window, {
     },
 });
 window.enrollmentCode = enrollmentCode;
-window.renderClassDetail = renderClassDetail;
 // _pendingClinicStudentId는 state로 이동(state._pendingClinicStudentId).
 // naesin.js 등은 window.state._pendingClinicStudentId로 접근.
 
@@ -1072,4 +1040,3 @@ window.migrateNaesinEnrollments = async function(save = false) {
     if (ok > 0) renderListPanel();
 };
 
-console.log('[DailyOps] App initialized.');

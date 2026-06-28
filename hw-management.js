@@ -63,13 +63,11 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
         `;
     }
 
-    const filteredDomains = failDomains;
-
     const descLabel = is1stOnly
         ? '숙제 1차 미통과 영역에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.'
         : '숙제 2차 미통과 영역에 \'등원 약속\' 또는 \'대체 숙제\'를 지정하세요.';
 
-    const rows = filteredDomains.map(domain => {
+    const rows = failDomains.map(domain => {
         const closedTask = state.hwFailTasks.find(t =>
             t.student_id === studentId && t.domain === domain
             && t.source_date === state.selectedDate
@@ -151,7 +149,7 @@ export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, m
         <div class="detail-card hw-fail-card">
             <div class="detail-card-title">
                 <span class="material-symbols-outlined" style="color:var(--danger);font-size:18px;">assignment_late</span>
-                ${titleLabel} (${filteredDomains.length}개 영역)
+                ${titleLabel} (${failDomains.length}개 영역)
             </div>
             <div class="hw-fail-desc" style="font-size:12px;color:var(--text-sec);margin-bottom:10px;">
                 ${descLabel}

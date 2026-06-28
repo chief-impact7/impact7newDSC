@@ -954,25 +954,6 @@ export async function approveLeaveRequest(docId, studentId) {
     }
 }
 
-export async function cancelLeaveRequest(docId, studentId) {
-    if (!confirm('요청을 취소하시겠습니까?')) return;
-    try {
-        await auditUpdate(doc(db, 'leave_requests', docId), {
-            status: 'cancelled'
-        });
-        state.leaveRequests = state.leaveRequests.filter(lr => lr.docId !== docId);
-        showSaveIndicator('saved');
-        renderSubFilters();
-        if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) {
-            renderLeaveRequestList();
-        }
-        if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
-    } catch (err) {
-        alert('취소 실패: ' + err.message);
-        console.error(err);
-    }
-}
-
 // ─── 재등원 / 휴원복귀 모달 (공용) ──────────────────────────────────────────
 
 let _returnModalStudentId = null;
