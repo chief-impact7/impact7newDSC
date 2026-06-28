@@ -248,3 +248,12 @@ hook이 없다면 `bash scripts/install-hooks.sh`로 설치한다.
 - 새 대화 시작 시: `.memory/MEMORY.md` 먼저 읽을 것
 - 메모리 저장 시: `.memory/`에 파일 생성하고 `.memory/MEMORY.md` 인덱스 업데이트
 
+
+## 프론트엔드 수렴 정책 (impact7 에코시스템)
+
+분열된 프레임워크(바닐라 DSC·DB / Svelte HR / Next exam)를 강제 통합하지 않고 **점진 수렴**한다.
+
+- **신규 화면·앱은 React(Next)로** 만든다. 기존 바닐라·Svelte는 강제 마이그레이션하지 않고 수명이 다할 때 React로 교체.
+- **공유 UI는 `@impact7/ui`** (`github:chief-impact7/impact7-ui`). React 앱은 컴포넌트 직접 import, 바닐라/Svelte 앱은 `@impact7/ui/mount` 어댑터로 부분 마운트(islands) — **반드시 `unmount`로 정리, 한 앱 *내부* 프레임워크 혼용 남발 금지**(ROI 높은 영역만).
+- **공유 레이어 재사용**: 디자인=`design-tokens.json` SSoT, 로직=`@impact7/shared`, 접근성=`a11y.css`/`a11y-dom.js`. 컴포넌트(렌더링)만 프레임워크 종속이므로 그 위 레이어는 항상 공유.
+- 토큰/공유DOM drift는 `impact7DB/.agents/hooks/check-design-tokens.mjs`·`check-shared-dom.mjs`(pre-push)가 차단.
