@@ -3,7 +3,7 @@
 
 import { getStudentStatusSummary, generateStudentReportAi } from './data-layer.js';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
-import { esc, showToast } from './ui-utils.js';
+import { esc, showToast, renderMarkdown } from './ui-utils.js';
 
 let _deps = {};
 let _generatingFor = null;
@@ -19,17 +19,6 @@ const STATUS_TONE = {
   caution: { label: '주의', cls: 'tone-caution' },
   risk: { label: '위험', cls: 'tone-risk' },
 };
-
-function renderMarkdown(md) {
-  if (!md) return '<em>아직 AI 분석 전</em>';
-  return esc(md)
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/\n\n(?=(?:[-*]|\d+\.|\*\*))/g, '\n')
-    .replace(/^### (.+)$/gm, '<h5>$1</h5>')
-    .replace(/^## (.+)$/gm, '<h4>$1</h4>')
-    .replace(/^# (.+)$/gm, '<h3>$1</h3>')
-    .replace(/\n/g, '<br>');
-}
 
 function renderList(title, items) {
   if (!Array.isArray(items) || items.length === 0) return '';

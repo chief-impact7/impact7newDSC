@@ -9,6 +9,8 @@ export function normalizeDays(day) {
     return day.split(/[,·\s]+/).map(d => d.replace('요일', '').trim()).filter(Boolean);
 }
 
+export const isValidDateStr = (d) => d && /^\d{4}-/.test(d);
+
 export function enrollmentCode(e) {
     if (!e) return '';
     return `${e.level_symbol || ''}${e.class_number || ''}`.trim();

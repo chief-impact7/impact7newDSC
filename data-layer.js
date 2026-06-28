@@ -11,7 +11,7 @@ import { httpsCallable } from 'firebase/functions';
 import { db, functions } from './firebase-config.js';
 import { auditUpdate, auditSet, auditAdd, auditDelete, batchUpdate, batchSet, READ_ONLY } from './audit.js';
 import { parseDateKST, toDateStrKST, todayStr, getDayName } from './src/shared/firestore-helpers.js';
-import { state, DEFAULT_DOMAINS, LEAVE_STATUSES } from './state.js';
+import { state, DEFAULT_DOMAINS, LEAVE_STATUSES, DEFAULT_TEST_SECTIONS } from './state.js';
 import { showSaveIndicator, showToast } from './ui-utils.js';
 import { openKoreanDatePicker } from './date-picker.js';
 import { normalizeDays, enrollmentCode, branchFromStudent, makeDailyRecordId, getActiveEnrollments } from './student-helpers.js';
@@ -199,10 +199,6 @@ export function getStudentDomains(studentId) {
 }
 
 export function getStudentTestItems(studentId) {
-    const DEFAULT_TEST_SECTIONS = {
-        '기반학습테스트': ['Vo', 'Id', 'ISC'],
-        '리뷰테스트': []
-    };
     const student = state.allStudents.find(s => s.docId === studentId);
     if (!student) return { sections: JSON.parse(JSON.stringify(DEFAULT_TEST_SECTIONS)), flat: [] };
     const merged = {};

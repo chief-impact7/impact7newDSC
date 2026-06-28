@@ -18,10 +18,10 @@ import {
 } from './consultation-filter.js';
 import { buildConsultationPayload } from './consultation-payload.js';
 import { generateConsultationTitle } from './consultation-ai.js';
-import { enrollmentCode } from './student-helpers.js';
+import { enrollmentCode, isValidDateStr } from './student-helpers.js';
 import { PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
-import { esc } from './ui-utils.js';
+import { esc, renderMarkdown } from './ui-utils.js';
 
 let _deps = {};
 let _activeSubtab = 'input';  // 'input' | 'search'
@@ -42,12 +42,11 @@ const METHODS = ['전화', '문자', '대면', '기타'];
 // (getActiveEnrollments는 내신 활성 시 정규를 내신으로 치환해 코드가 비어버릴 수 있음)
 function consultClassCodes(student, dateStr) {
   const today = dateStr || new Date().toISOString().slice(0, 10);
-  const validDate = (d) => d && /^\d{4}-/.test(d);
   const codes = (student?.enrollments || [])
     .filter(e => {
       if (e.class_type === '내신') return false;
-      if (validDate(e.start_date) && e.start_date > today) return false;
-      if (validDate(e.end_date) && e.end_date < today) return false;
+      if (isValidDateStr(e.start_date) && e.start_date > today) return false;
+      if (isValidDateStr(e.end_date) && e.end_date < today) return false;
       return true;
     })
     .map(e => enrollmentCode(e))
@@ -105,18 +104,6 @@ function renderInputForm(studentId, readonly) {
       </div>
     </div>
   `;
-}
-
-function renderMarkdown(md) {
-  // 단순 변환: 줄바꿈 → <br>, ##/### → h*. 본격 마크다운 처리는 v2.
-  if (!md) return '<em>아직 AI 분석 전</em>';
-  return esc(md)
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/\n\n(?=(?:[-*]|\d+\.|\*\*))/g, '\n')
-    .replace(/^### (.+)$/gm, '<h5>$1</h5>')
-    .replace(/^## (.+)$/gm, '<h4>$1</h4>')
-    .replace(/^# (.+)$/gm, '<h3>$1</h3>')
-    .replace(/\n/g, '<br>');
 }
 
 function formatGeneratedAt(value) {

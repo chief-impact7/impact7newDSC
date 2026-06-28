@@ -9,12 +9,14 @@ import {
     normalizeDays, enrollmentCode, branchFromStudent, allClassCodes,
     makeDailyRecordId, buildNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE,
     resolveNaesinCsKey, displayCodeFromCsKey, isWithdrawnAt, isOnLeaveAt,
+    isValidDateStr,
 } from './student-core.js';
 
 export {
     normalizeDays, enrollmentCode, branchFromStudent, allClassCodes,
     makeDailyRecordId, buildNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE,
     resolveNaesinCsKey, displayCodeFromCsKey, isWithdrawnAt, isOnLeaveAt,
+    isValidDateStr,
 };
 
 // 휴원 기간 만료 판정 (실제 오늘 KST 기준).
@@ -112,8 +114,7 @@ export function deriveNaesinCode(student, enrollment) {
 export function isActiveNaesinBase(e, dateStr) {
     if (e.class_type !== '정규' && e.class_type !== '자유학기') return false;
     const today = dateStr || todayStr();
-    const validDate = (d) => d && /^\d{4}-/.test(d);
-    if (validDate(e.end_date) && e.end_date < today) return false;                          // 죽은 정규
+    if (isValidDateStr(e.end_date) && e.end_date < today) return false;                          // 죽은 정규
     if (e.class_type === '정규' && !(Array.isArray(e.day) && e.day.length)) return false;   // 요일 없는 정규
     return true;
 }
@@ -126,14 +127,13 @@ export function getActiveEnrollments(s, dateStr) {
     const enrollments = s.enrollments || [];
     if (enrollments.length === 0) return [];
     const today = dateStr || todayStr();
-    const validDate = (d) => d && /^\d{4}-/.test(d);
 
     // 1) start_date가 미래 또는 end_date가 과거인 enrollment 제외
     //    - 정규는 end_date 없으면 유지
     //    - start_date 없는 옛 데이터는 유지 (호환성)
     const current = enrollments.filter(e => {
-        if (validDate(e.start_date) && e.start_date > today) return false; // 아직 시작 안 함
-        if (validDate(e.end_date) && e.end_date < today) return false;     // 이미 종료
+        if (isValidDateStr(e.start_date) && e.start_date > today) return false; // 아직 시작 안 함
+        if (isValidDateStr(e.end_date) && e.end_date < today) return false;     // 이미 종료
         return true;
     });
 
@@ -152,10 +152,9 @@ export function getActiveEnrollments(s, dateStr) {
 // (미시작·종료 제외)를 적용한 뒤 넘겨, '내신 라벨'과 '파생 등원일정'이 항상 일치한다.
 export function isNaesinActiveToday(s, dateStr) {
     const today = dateStr || todayStr();
-    const validDate = (d) => d && /^\d{4}-/.test(d);
     const current = (s.enrollments || []).filter(e =>
-        !(validDate(e.start_date) && e.start_date > today) &&
-        !(validDate(e.end_date) && e.end_date < today));
+        !(isValidDateStr(e.start_date) && e.start_date > today) &&
+        !(isValidDateStr(e.end_date) && e.end_date < today));
     return isNaesinActiveAt(current, {
         classSettings: state.classSettings,
         dateStr: today,
@@ -165,11 +164,10 @@ export function isNaesinActiveToday(s, dateStr) {
 
 export function isFreeSemesterActiveToday(s, dateStr) {
     const today = dateStr || todayStr();
-    const validDate = (d) => d && /^\d{4}-/.test(d);
     const enrollments = s.enrollments || [];
-    const current = enrollments.filter(e => !validDate(e.end_date) || e.end_date >= today);
+    const current = enrollments.filter(e => !isValidDateStr(e.end_date) || e.end_date >= today);
     return current.some(e => {
-        if (e.class_type === '자유학기' && validDate(e.start_date) && e.start_date <= today) return true;
+        if (e.class_type === '자유학기' && isValidDateStr(e.start_date) && e.start_date <= today) return true;
         const cs = state.classSettings[enrollmentCode(e)];
         if (cs?.free_start && cs?.free_end && cs.free_start <= today && cs.free_end >= today) return true;
         return false;

@@ -5,7 +5,7 @@
 import { doc, writeBatch } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { auditUpdate, auditSet, batchUpdate, batchSet } from './audit.js';
-import { state } from './state.js';
+import { state, DEFAULT_TEST_SECTIONS } from './state.js';
 import { esc, escAttr, showSaveIndicator, oxDisplayClass, formatTime12h, renderTime12hSelect, _stripYear } from './ui-utils.js';
 import { makeDailyRecordId, branchFromStudent } from './student-helpers.js';
 import { staffLabel } from '@impact7/shared/staff-label';
@@ -22,13 +22,6 @@ export function initTestManagementDeps(deps) {
     checkCanEditGrading = deps.checkCanEditGrading;
     getClassDomains = deps.getClassDomains;
 }
-
-// ─── 상수 ──────────────────────────────────────────────────────────────────
-
-const DEFAULT_TEST_SECTIONS = {
-    '기반학습테스트': ['Vo', 'Id', 'ISC'],
-    '리뷰테스트': []
-};
 
 // ─── getClassTestSections ──────────────────────────────────────────────────
 

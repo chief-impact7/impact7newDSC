@@ -138,6 +138,18 @@ export function _isNoShow(t) {
         && t.scheduled_date && t.scheduled_date < state.selectedDate;
 }
 
+// ─── Markdown Renderer ─────────────────────────────────────────────────────
+export function renderMarkdown(md) {
+    if (!md) return '<em>아직 AI 분석 전</em>';
+    return esc(md)
+        .replace(/\n{3,}/g, '\n\n')
+        .replace(/\n\n(?=(?:[-*]|\d+\.|\*\*))/g, '\n')
+        .replace(/^### (.+)$/gm, '<h5>$1</h5>')
+        .replace(/^## (.+)$/gm, '<h4>$1</h4>')
+        .replace(/^# (.+)$/gm, '<h3>$1</h3>')
+        .replace(/\n/g, '<br>');
+}
+
 export function _renderRescheduleHistory(history) {
     if (!history || !Array.isArray(history) || history.length === 0) return '';
     const sorted = [...history].sort((a, b) => (b.rescheduled_at || '').localeCompare(a.rescheduled_at || ''));

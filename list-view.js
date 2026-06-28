@@ -8,7 +8,7 @@ import { getDayName, todayStr, studentShortLabel, PAST_STUDENT_STATUSES, finalAp
 import {
     branchFromStudent, matchesBranchFilter, enrollmentCode, allClassCodes, _enrollCodeList,
     deriveNaesinCode, getActiveEnrollments, getStudentStartTime, isOnLeaveAt, isWithdrawnAt,
-    isNaesinActiveToday, isFreeSemesterActiveToday, isPauseExpired, pauseExpiredDays
+    isNaesinActiveToday, isFreeSemesterActiveToday, isPauseExpired, pauseExpiredDays, isValidDateStr,
 } from './student-helpers.js';
 import { schoolSearchTerms } from './school-normalizer.js';
 import { esc, escAttr, formatTime12h, oxDisplayClass } from './ui-utils.js';
@@ -142,11 +142,10 @@ export function getFilteredStudents() {
     // 기간 중 정규를 숨기므로 raw enrollments에서 직접 조회.
     if (state.currentCategory === 'class_mgmt') {
         const today = state.selectedDate;
-        const validDate = (d) => d && /^\d{4}-/.test(d);
         const isActiveRegular = (e) =>
             (e.class_type === '정규' || e.class_type === '자유학기') &&
             e.class_number &&
-            !(validDate(e.end_date) && e.end_date < today);
+            !(isValidDateStr(e.end_date) && e.end_date < today);
         let students = state.allStudents.filter(s =>
             !isWithdrawnAt(s, today) && (s.enrollments || []).some(isActiveRegular)
         );

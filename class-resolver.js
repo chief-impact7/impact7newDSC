@@ -7,7 +7,7 @@ import { getDayName, todayStr, studentLevel } from './src/shared/firestore-helpe
 import {
     normalizeDays, branchFromStudent, matchesBranchFilter,
     enrollmentCode, displayCodeFromCsKey, getActiveEnrollments,
-    isOnLeaveAt, isWithdrawnAt, isActiveNaesinBase
+    isOnLeaveAt, isWithdrawnAt, isActiveNaesinBase, isValidDateStr,
 } from './student-helpers.js';
 
 // ─── 반 관리 헬퍼 ────────────────────────────────────────────────────────────
@@ -79,15 +79,14 @@ export function getFreeSemesterClassStudents(classCode) {
 // (정규 || 자유학기) + class_number 화이트리스트 (feedback_naesin_regular_identification.md).
 export function getRegularClassStudents(classCode, includePending = false) {
     const today = state.selectedDate;
-    const validDate = (d) => d && /^\d{4}-/.test(d);
     return state.allStudents.filter(s => {
         if (isWithdrawnAt(s, today)) return false;
         if (!matchesBranchFilter(s)) return false;
         return (s.enrollments || []).some(e => {
             if (!((e.class_type === '정규' || e.class_type === '자유학기') && e.class_number)) return false;
-            if (validDate(e.end_date) && e.end_date < today) return false;
+            if (isValidDateStr(e.end_date) && e.end_date < today) return false;
             // 등원예정(start_date 미래)은 출결에선 제외, 반 설정(includePending)에선 포함
-            if (!includePending && validDate(e.start_date) && e.start_date > today) return false;
+            if (!includePending && isValidDateStr(e.start_date) && e.start_date > today) return false;
             return enrollmentCode(e) === classCode;
         });
     });

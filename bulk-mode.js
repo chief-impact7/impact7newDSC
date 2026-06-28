@@ -94,9 +94,7 @@ export function renderBulkSummary() {
     const count = students.length;
 
     // 이름 목록 (최대 10명)
-    const nameList = count <= 10
-        ? students.map(s => esc(s.name)).join(', ')
-        : students.slice(0, 10).map(s => esc(s.name)).join(', ') + ` 외 ${count - 10}명`;
+    const nameList = summarizeNames(students.map(s => esc(s.name)), 10);
 
     // 공통 소속
     const branches = [...new Set(students.map(s => branchFromStudent(s)).filter(Boolean))];
@@ -212,6 +210,10 @@ export function toggleStudentCheckbox(docId, checked) {
 }
 
 // ─── Bulk Action Modal ───────────────────────────────────────────────────────
+function summarizeNames(names, max = 5) {
+    return names.length <= max ? names.join(', ') : names.slice(0, max).join(', ') + ` 외 ${names.length - max}명`;
+}
+
 let _bulkModalType = null;   // 'attendance' | 'ox'
 let _bulkModalField = null;  // hw_domains_1st etc.
 let _bulkModalDomain = null; // 'Gr' etc.
@@ -225,7 +227,7 @@ export function openBulkModal(type, field, domain) {
 
     const count = state.selectedStudentIds.size;
     const names = [...state.selectedStudentIds].map(id => state.allStudents.find(s => s.docId === id)?.name).filter(Boolean);
-    const nameList = names.length <= 5 ? names.join(', ') : names.slice(0, 5).join(', ') + ` 외 ${names.length - 5}명`;
+    const nameList = summarizeNames(names);
 
     const modal = document.getElementById('bulk-confirm-modal');
     const titleEl = document.getElementById('bulk-confirm-title');
@@ -344,7 +346,7 @@ export function openBulkMemo() {
     if (state.selectedStudentIds.size === 0) { alert('학생을 선택하세요.'); return; }
     const count = state.selectedStudentIds.size;
     const names = [...state.selectedStudentIds].map(id => state.allStudents.find(s => s.docId === id)?.name).filter(Boolean);
-    const nameList = names.length <= 5 ? names.join(', ') : names.slice(0, 5).join(', ') + ` 외 ${names.length - 5}명`;
+    const nameList = summarizeNames(names);
     document.getElementById('bulk-memo-desc').textContent = `${count}명 선택: ${nameList}`;
     document.getElementById('bulk-memo-text').value = '';
     document.getElementById('bulk-memo-modal').style.display = 'flex';
@@ -378,7 +380,7 @@ export function openBulkNotify() {
     if (state.selectedStudentIds.size === 0) { alert('학생을 선택하세요.'); return; }
     const count = state.selectedStudentIds.size;
     const names = [...state.selectedStudentIds].map(id => state.allStudents.find(s => s.docId === id)?.name).filter(Boolean);
-    const nameList = names.length <= 5 ? names.join(', ') : names.slice(0, 5).join(', ') + ` 외 ${names.length - 5}명`;
+    const nameList = summarizeNames(names);
     document.getElementById('bulk-notify-desc').textContent = `${count}명 선택: ${nameList}`;
     document.getElementById('bulk-notify-text').value = '';
     document.getElementById('bulk-notify-modal').style.display = 'flex';
