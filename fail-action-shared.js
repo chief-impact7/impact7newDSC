@@ -313,6 +313,10 @@ async function _saveFailActionOnly(studentId, failAction, config) {
 export async function saveFailAction(studentId, failAction, onlyDomain, config) {
     const docId = makeDailyRecordId(studentId, state.selectedDate);
     const student = state.allStudents.find(s => s.docId === studentId);
+    const stateTasks = state[config.stateTasksKey];
+    // 저장 실패 시 낙관적 캐시 롤백용 스냅샷 (OX·homework 경로와 동일 방어).
+    const prevAction = state.dailyRecords[studentId]?.[config.actionField];
+    const prevTasks = stateTasks.map(t => ({ ...t }));
     try {
         await auditSet(doc(db, 'daily_records', docId), {
             student_id: studentId,
@@ -323,7 +327,6 @@ export async function saveFailAction(studentId, failAction, onlyDomain, config) 
         if (!state.dailyRecords[studentId]) state.dailyRecords[studentId] = { student_id: studentId, date: state.selectedDate };
         state.dailyRecords[studentId][config.actionField] = failAction;
 
-        const stateTasks = state[config.stateTasksKey];
         const taskEntries = Object.entries(failAction).filter(([key, action]) => action.type && (!onlyDomain || key === onlyDomain));
         const taskChecks = taskEntries.map(([key, action]) => {
             const taskDocId = `${config.docIdPrefix}${studentId}_${key}_${state.selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
@@ -384,6 +387,16 @@ export async function saveFailAction(studentId, failAction, onlyDomain, config) 
 
         showSaveIndicator('saved');
     } catch (err) {
+        // 낙관적 캐시 롤백: task 배열을 저장 전으로 복원해 유령 pending task를 막는다.
+        // action 맵은 복사본을 넘기는 호출(clearFailType)에서 복원된다. saveFailFields는
+        // 같은 객체를 in-place 편집 후 넘겨 self-assign이라 필드편집까지는 못 되돌리지만,
+        // 에러 경로이고 전역 인디케이터로 실패가 표시된다(다중 배치도 onSnapshot이 자가 치유).
+        stateTasks.length = 0;
+        for (const t of prevTasks) stateTasks.push(t);
+        if (state.dailyRecords[studentId]) {
+            if (prevAction === undefined) delete state.dailyRecords[studentId][config.actionField];
+            else state.dailyRecords[studentId][config.actionField] = prevAction;
+        }
         console.error(`${config.actionField} 저장 실패:`, err);
         showSaveIndicator('error');
     }
