@@ -15,6 +15,7 @@ import { uniquePlanningEnrollments } from './class-setup-enrollment.js';
 import { esc } from './ui-utils.js';
 import { enrollmentCode } from './student-core.js';
 import { wizardData, allStudents, showToast, popPerms } from './class-setup-state.js';
+import { csvCell, safeCell } from './src/shared/csv.js';
 
 // mode: '정규' (자유학기 포함) | '내신'
 export function initPlanner(mode) {
@@ -385,14 +386,3 @@ function compareDayKey(a, b) {
     return score(a) - score(b) || a.localeCompare(b, 'ko');
 }
 
-// 셀 내용이 =, +, -, @, 탭, CR로 시작하면 Excel/Sheets가 수식으로 평가하므로
-// 작은따옴표 prefix를 부착해 텍스트로 강제한다 (CSV/XLSX 공용).
-const FORMULA_TRIGGER = /^[=+\-@\t\r]/;
-function safeCell(value) {
-    const s = String(value ?? '');
-    return FORMULA_TRIGGER.test(s) ? "'" + s : s;
-}
-
-function csvCell(value) {
-    return `"${safeCell(value).replace(/"/g, '""')}"`;
-}

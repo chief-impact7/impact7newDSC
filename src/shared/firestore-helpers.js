@@ -1,5 +1,5 @@
 import {
-    collection, getDocs, query, where, Timestamp
+    collection, getDocs, query, where, orderBy, Timestamp
 } from 'firebase/firestore';
 import {
     currentSchool,
@@ -404,4 +404,18 @@ export function addDays(dateStr, days) {
     const d = parseDateKST(dateStr);
     d.setDate(d.getDate() + days);
     return toDateStrKST(d);
+}
+
+// 기간 내 모든 상담 조회(학생 무관). date는 'YYYY-MM-DD' 문자열 단일 필드 범위 +
+// 동일 필드 orderBy → 복합 인덱스 불필요. 권한: consultations read = isAuthorized.
+export async function fetchConsultationsForRange(startDate, endDate) {
+    if (!startDate || !endDate) return [];
+    const q = query(
+        collection(db, 'consultations'),
+        where('date', '>=', startDate),
+        where('date', '<=', endDate),
+        orderBy('date', 'desc'),
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
