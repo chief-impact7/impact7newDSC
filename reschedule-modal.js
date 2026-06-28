@@ -8,7 +8,8 @@ import { state } from './state.js';
 import {
     esc, formatTime12h, renderTime12hOptions, showSaveIndicator, _stripYear
 } from './ui-utils.js';
-import { auditUpdate, batchUpdate } from './audit.js';
+import { auditUpdate, batchUpdate, batchSet } from './audit.js';
+import { makeDailyRecordId } from './student-helpers.js';
 import { staffLabel } from '@impact7/shared/staff-label';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
@@ -129,6 +130,7 @@ async function _saveBulkReschedule(items, newDate, newTime, reason, studentId) {
     try {
         const batch = writeBatch(db);
         const applyLocal = [];
+        const drDocs = new Map(); // daily_records docId -> { [actionField]: { [domain]: fieldUpdate } }
         for (const { collection: col, task: t } of items) {
             const isAlt = t.type === '대체숙제';
             const entry = {
@@ -144,6 +146,16 @@ async function _saveBulkReschedule(items, newDate, newTime, reason, studentId) {
             if (!isAlt) update.scheduled_time = newTime || '';
             batchUpdate(batch, doc(db, col, t.docId), update);
 
+            // daily_records 후속대책 영속화(#3) — task의 source_date 문서에 도메인 단위로 모은다.
+            if (t.source_date) {
+                const af = col === 'test_fail_tasks' ? 'test_fail_action' : 'hw_fail_action';
+                const drId = makeDailyRecordId(t.student_id, t.source_date);
+                if (!drDocs.has(drId)) drDocs.set(drId, { student_id: t.student_id, date: t.source_date });
+                const data = drDocs.get(drId);
+                if (!data[af]) data[af] = {};
+                data[af][t.domain] = isAlt ? { scheduled_date: newDate } : { scheduled_date: newDate, scheduled_time: newTime || '' };
+            }
+
             applyLocal.push(() => {
                 t.scheduled_date = newDate;
                 if (!isAlt) t.scheduled_time = newTime || '';
@@ -157,6 +169,7 @@ async function _saveBulkReschedule(items, newDate, newTime, reason, studentId) {
                 }
             });
         }
+        for (const [drId, data] of drDocs) batchSet(batch, doc(db, 'daily_records', drId), data, { merge: true });
         await batch.commit();
         applyLocal.forEach(fn => fn());
 
@@ -255,11 +268,26 @@ export async function saveReschedule() {
 
     showSaveIndicator('saving');
     try {
-        await auditUpdate(doc(db, col, docId), {
+        // task 업데이트와 daily_records 후속대책 영속화를 한 batch로 원자 처리한다.
+        // 분리 write 시 두 번째가 실패하면 task=새날짜·daily_records=옛날짜로 갈려 #3가 재발한다.
+        const batch = writeBatch(db);
+        batchUpdate(batch, doc(db, col, docId), {
             scheduled_date: newDate,
             scheduled_time: newTime || '',
             reschedule_history: arrayUnion(entry)
         });
+        // daily_records 후속대책에도 새 날짜를 영속화(#3) — 리로드 후 옛 날짜로 되돌아가
+        // 카드 재저장 시 reschedule가 덮어써지던 문제 방지. 액션은 task의 source_date 문서에 산다.
+        // merge:true는 도메인 단위 deep-merge라 같은 액션의 type/alt_hw·타 도메인을 보존한다.
+        if (t.source_date) {
+            const actionField = col === 'test_fail_tasks' ? 'test_fail_action' : 'hw_fail_action';
+            const drFieldUpdate = { scheduled_date: newDate };
+            if (t.type !== '대체숙제') drFieldUpdate.scheduled_time = newTime || '';
+            batchSet(batch, doc(db, 'daily_records', makeDailyRecordId(t.student_id, t.source_date)),
+                { student_id: t.student_id, date: t.source_date, [actionField]: { [t.domain]: drFieldUpdate } }, { merge: true });
+        }
+        await batch.commit();
+
         // 로컬 캐시 업데이트: hw_fail_tasks
         t.scheduled_date = newDate;
         t.scheduled_time = newTime || '';
