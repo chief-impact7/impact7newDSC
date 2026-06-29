@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth, dataAuthReady } from '../../firebase-config.js';
+import { auth, dataAuthReady, ensureAppCheck } from '../../firebase-config.js';
 import { signInWithGoogle, logout } from '../../auth.js';
 import { useStudents, useDashboardData, useConsultations } from './hooks/useFirestore.js';
 import { branchFromStudent, enrollmentCode, todayStr, fetchSemesterSettings, getSemestersForDate, studentGradeKey } from '../shared/firestore-helpers.js';
@@ -145,6 +145,11 @@ export default function App() {
     const { students, loading: studentsLoading, error } = useStudents(user);
     const { checks, dailyRecords, postponed, dailyLog, loading: dataLoading, error: dashError } = useDashboardData(user, startDate, endDate);
     const { consultations, loading: consultLoading } = useConsultations(user, startDate, endDate, view === 'consult');
+
+    // 첫 데이터 로드 이후 App Check init — reCAPTCHA 토큰 발급이 초기 read를 막지 않게(미강제 단계).
+    useEffect(() => {
+        if (user && !studentsLoading && !dataLoading) ensureAppCheck();
+    }, [user, studentsLoading, dataLoading]);
     // 선택 날짜 기준 학기 감지
     const currentSemesters = useMemo(() =>
         getSemestersForDate(startDate, semesterSettings),

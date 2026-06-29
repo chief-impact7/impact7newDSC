@@ -1,5 +1,4 @@
 import { initializeApp } from 'firebase/app';
-import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import { getAuth, initializeAuth, inMemoryPersistence, onIdTokenChanged, connectAuthEmulator } from 'firebase/auth';
 import {
     getFirestore, connectFirestoreEmulator,
@@ -41,25 +40,27 @@ const dataApp = initializeApp(firebaseConfig, 'dsc');
 export { app };
 
 // App Check — Firestore/Functions/Storage 요청에 App Check 토큰을 동봉(미강제 단계).
-// dataApp이 db/functions/storage 호출 주체이므로 dataApp에 부착한다.
-// ReCaptcha Enterprise는 DOM이 필요하므로 브라우저(document 존재)에서만 init한다.
-// node:test/vitest 등 비브라우저 환경에서 firebase-config import 시 크래시 방지(운영 무영향).
-if (typeof document !== 'undefined') {
-    // 로컬 개발: 디버그 토큰 활성화(콘솔에 출력된 토큰을 App Check에 등록해야 로컬서 동작). 운영 무영향.
+// 초기 로딩 회귀(2026-06)를 두 가지로 첫 read 임계경로에서 완전히 분리한다:
+//  (1) app-check + reCAPTCHA 코드를 동적 import해 초기 청크(auth ~684KB)에서 제외,
+//  (2) requestIdleCallback 휴리스틱(첫 read보다 먼저 발화 가능) 대신, 호출처(app.js/App.jsx)가
+//      첫 데이터 read·페인트 이후 ensureAppCheck()를 명시 호출.
+// 미강제(enforcement off) 단계라 첫 요청에 토큰이 없어도 백엔드가 거부하지 않으므로 무방.
+// node:test/vitest 등 비브라우저 환경에서는 호출되지 않는다(운영 무영향).
+// ⚠️ 강제 전환 시 앱 부팅 즉시 init으로 되돌릴 것(첫 요청부터 토큰 필요).
+let _appCheckStarted = false;
+export async function ensureAppCheck() {
+    if (_appCheckStarted || typeof document === 'undefined') return;
+    _appCheckStarted = true;
+    // 로컬 개발: 디버그 토큰 활성화(콘솔 출력 토큰을 App Check에 등록해야 로컬서 동작). 운영 무영향.
     if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
         // @ts-ignore
         self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
     }
-    // App Check init을 첫 데이터 read 임계경로에서 분리한다. reCAPTCHA Enterprise 토큰 발급
-    // (원격 왕복)이 초기 students/records read를 블록해 로딩이 느려지던 회귀(2026-06) 해소.
-    // 미강제(enforcement off) 단계라 첫 요청에 토큰이 없어도 백엔드가 거부하지 않으므로 무방.
-    // ⚠️ 강제 전환 시 이 지연을 제거하고 동기 init으로 되돌릴 것(첫 요청부터 토큰 필요).
-    const initAppCheck = () => initializeAppCheck(dataApp, {
+    const { initializeAppCheck, ReCaptchaEnterpriseProvider } = await import('firebase/app-check');
+    initializeAppCheck(dataApp, {
         provider: new ReCaptchaEnterpriseProvider('6LcS4ywtAAAAADd8BBiFo_Fd4XXiXT1Uf3gHGxYl'),
         isTokenAutoRefreshEnabled: true,
     });
-    if ('requestIdleCallback' in window) requestIdleCallback(initAppCheck, { timeout: 3000 });
-    else setTimeout(initAppCheck, 1500);
 }
 
 export const auth = getAuth(app);

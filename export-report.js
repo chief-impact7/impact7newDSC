@@ -20,11 +20,23 @@ export function initExportReportDeps(deps) {
 }
 
 let _pickerApiLoaded = false;
-function loadPickerApi() {
-    return new Promise((resolve) => {
-        if (_pickerApiLoaded) { resolve(); return; }
-        gapi.load('picker', () => { _pickerApiLoaded = true; resolve(); });
+// api.js를 async로 로드하므로(초기 render-blocking 제거), export 클릭 시점에 gapi가
+// 아직 없을 수 있다 — 준비될 때까지 대기한 뒤 picker를 로드한다.
+function waitForGapi() {
+    return new Promise((resolve, reject) => {
+        if (window.gapi) return resolve();
+        const start = Date.now();
+        const t = setInterval(() => {
+            if (window.gapi) { clearInterval(t); resolve(); }
+            else if (Date.now() - start > 8000) { clearInterval(t); reject(new Error('Google API(api.js) 로드 실패')); }
+        }, 50);
     });
+}
+async function loadPickerApi() {
+    if (_pickerApiLoaded) return;
+    await waitForGapi();
+    await new Promise(resolve => gapi.load('picker', resolve));
+    _pickerApiLoaded = true;
 }
 
 function pickDriveFolder() {

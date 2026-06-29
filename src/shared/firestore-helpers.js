@@ -1,5 +1,5 @@
 import {
-    collection, getDocs, query, where, orderBy, Timestamp
+    collection, getDocs, getDocsFromCache, query, where, orderBy, Timestamp
 } from 'firebase/firestore';
 import {
     currentSchool,
@@ -51,18 +51,15 @@ export function getSemestersForDate(dateStr, semesterSettings) {
     );
 }
 
-// 학생 전체 목록 (재원 학생만 — 퇴원 제외, 상담 포함)
-export async function fetchStudents() {
-    const [activeSnap, specialSnap] = await Promise.all([
-        getDocs(query(
-            collection(db, 'students'),
-            where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원', '상담'])
-        )),
-        getDocs(query(
-            collection(db, 'students'),
-            where('status2', '==', '특강')
-        )),
-    ]);
+// 학생 전체 목록 쿼리 (재원 학생만 — 퇴원 제외, 상담 포함) + 특강(status2).
+function studentQueries() {
+    return [
+        query(collection(db, 'students'), where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원', '상담'])),
+        query(collection(db, 'students'), where('status2', '==', '특강')),
+    ];
+}
+
+function mergeStudentSnaps(activeSnap, specialSnap) {
     const list = [];
     const seenIds = new Set();
     const addDoc = (docSnap) => {
@@ -76,6 +73,24 @@ export async function fetchStudents() {
     specialSnap.forEach(addDoc);
     list.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
     return list;
+}
+
+export async function fetchStudents() {
+    const [activeSnap, specialSnap] = await Promise.all(studentQueries().map(q => getDocs(q)));
+    return mergeStudentSnaps(activeSnap, specialSnap);
+}
+
+// 디스크 캐시(persistentLocalCache)에서 즉시 — 새로고침 시 네트워크 왕복 없이 선표시.
+// 캐시 미스/빈 경우 null(호출측이 서버 결과를 기다림). getDocs는 온라인에서 항상 서버 우선이라
+// 캐시가 있어도 무시되므로, 재방문 즉시 표시를 위해 명시적으로 cache를 먼저 읽는다.
+export async function fetchStudentsFromCache() {
+    try {
+        const [activeSnap, specialSnap] = await Promise.all(studentQueries().map(q => getDocsFromCache(q)));
+        if (activeSnap.size + specialSnap.size === 0) return null;
+        return mergeStudentSnaps(activeSnap, specialSnap);
+    } catch {
+        return null;
+    }
 }
 
 // 특정 날짜의 daily_checks

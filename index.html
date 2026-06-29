@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Impact7 DSC</title>
+    <!-- Firebase 백엔드 preconnect — 첫 auth/read의 DNS+TLS 핸드셰이크를 병렬화 -->
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://securetoken.googleapis.com" crossorigin>
     <!-- Google Sans + Roboto -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
@@ -11,7 +15,8 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block" />
     <link rel="stylesheet" href="daily-ops.css">
     <link rel="stylesheet" href="a11y.css">
-    <script src="https://apis.google.com/js/api.js"></script>
+    <!-- Drive 폴더 피커(export-report)에서만 사용 — 초기 파싱을 막지 않게 async (loadPickerApi가 준비 대기) -->
+    <script src="https://apis.google.com/js/api.js" async></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>

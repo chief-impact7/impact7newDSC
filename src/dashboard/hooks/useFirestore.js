@@ -3,6 +3,7 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../../firebase-config.js';
 import {
     fetchStudents,
+    fetchStudentsFromCache,
     fetchDailyChecksRange,
     fetchDailyRecordsRange,
     fetchPostponedTasksRange,
@@ -38,15 +39,23 @@ export function useStudents(user) {
 
     useEffect(() => {
         if (!user) { setStudents([]); setLoading(false); setError(null); return; }
+        let cancelled = false;
         setLoading(true);
         setError(null);
+        // 1) 디스크 캐시에서 즉시 선표시 — 새로고침 시 네트워크 왕복을 기다리지 않게.
+        fetchStudentsFromCache().then(cached => {
+            if (!cancelled && cached) { setStudents(cached); setLoading(false); }
+        }).catch(() => {});
+        // 2) 서버 최신으로 갱신.
         fetchStudents()
-            .then(list => setStudents(list))
+            .then(list => { if (!cancelled) { setStudents(list); setError(null); } })
             .catch(err => {
+                if (cancelled) return;
                 console.error('[useStudents]', err);
                 setError(err);
             })
-            .finally(() => setLoading(false));
+            .finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
     }, [user]);
 
     return { students, loading, error };
