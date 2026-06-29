@@ -37,6 +37,27 @@ export function groupByStudent(list) {
   return [...map.values()].sort((a, b) => a.key.localeCompare(b.key, 'ko'));
 }
 
+// 상담자(강사)명별 묶음, 상담자명 ko 오름차순, 묶음 내 date desc.
+export function groupByTeacher(list) {
+  const map = new Map();
+  for (const c of list) {
+    const k = c.teacher_name || '(미상)';
+    if (!map.has(k)) map.set(k, { key: k, items: [] });
+    map.get(k).items.push(c);
+  }
+  for (const g of map.values()) {
+    g.items.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  }
+  return [...map.values()].sort((a, b) => a.key.localeCompare(b.key, 'ko'));
+}
+
+// 그룹 배열을 키워드로 필터(그룹 key 부분일치, 소문자). 키워드 비면 원본.
+export function filterGroupsByKeyword(groups, keyword) {
+  const kw = (keyword || '').trim().toLowerCase();
+  if (!kw) return groups;
+  return groups.filter(g => String(g.key || '').toLowerCase().includes(kw));
+}
+
 // studentInfoById: { [studentId]: { gradeLabel, classLabel } }
 export function toRow(c, studentInfoById = {}) {
   const info = studentInfoById[c.student_id] || {};

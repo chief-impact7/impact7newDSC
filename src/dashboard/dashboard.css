@@ -1395,14 +1395,30 @@ body {
     margin-bottom: 16px;
     overflow: hidden;
 }
-.consult-group-head {
-    display: flex; align-items: baseline; gap: 8px;
+.consult-group > summary.consult-group-head {
+    display: flex; align-items: center; gap: 8px;
     padding: 12px 16px;
     background: var(--bg);
-    border-bottom: 1px solid var(--border);
+    cursor: pointer; user-select: none; list-style: none;
 }
+.consult-group > summary.consult-group-head::-webkit-details-marker { display: none; }
+.consult-group-head:hover { background: var(--border-light); }
+.consult-group[open] > summary.consult-group-head { border-bottom: 1px solid var(--border); }
 .consult-group-head strong { font-size: 14px; font-variant-numeric: tabular-nums; }
 .consult-group-count { color: var(--text-sec); font-size: 12px; }
+.consult-group-chevron {
+    font-size: 20px; color: var(--text-sec); flex-shrink: 0;
+    transition: transform .15s ease;
+}
+.consult-group[open] .consult-group-chevron { transform: rotate(90deg); }
+
+.consult-search {
+    height: 34px; padding: 0 12px;
+    border: 1px solid var(--border); border-radius: 8px;
+    font-size: 13px; background: var(--surface); color: var(--text);
+    min-width: 180px;
+}
+.consult-search:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-light); }
 
 .consult-table-wrap { overflow-x: auto; }
 .consult-table { width: 100%; border-collapse: collapse; font-size: 13px; }

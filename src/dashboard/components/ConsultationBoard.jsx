@@ -3,11 +3,18 @@ import { branchFromStudent, enrollmentCode, allClassCodes } from '../../../stude
 import { studentGradeKey, studentShortLabel } from '../../shared/firestore-helpers.js';
 import { downloadCsv } from '../../shared/csv.js';
 import {
-    filterByStudentIds, groupByDate, groupByStudent, toCsvRows, CONSULTATION_COLUMNS,
+    filterByStudentIds, groupByDate, groupByStudent, groupByTeacher,
+    filterGroupsByKeyword, toCsvRows, CONSULTATION_COLUMNS,
 } from '../lib/consultation-view.js';
 
 // 상담 형태별 배지 색 — 전화/대면/문자를 한눈에 구분.
 const METHOD_CLASS = { '전화': 'method-call', '대면': 'method-visit', '문자': 'method-sms' };
+
+const MODES = [
+    { key: 'date', label: '일자별', unit: '일' },
+    { key: 'student', label: '학생별', unit: '명', searchPlaceholder: '학생 이름 검색' },
+    { key: 'teacher', label: '상담자별', unit: '명', searchPlaceholder: '상담자 이름 검색' },
+];
 
 // 학생 마스터에서 학년/대표반 라벨 추출(읽기 전용; 파생 재구현 아님).
 function buildStudentInfo(students) {
@@ -29,9 +36,12 @@ function Tag({ value, className = '' }) {
 export default function ConsultationBoard({
     consultations, students, branchFilter, classFilter, gradeFilter, startDate, endDate,
 }) {
-    const [groupMode, setGroupMode] = useState('date'); // 'date' | 'student'
+    const [groupMode, setGroupMode] = useState('date'); // 'date' | 'student' | 'teacher'
+    const [search, setSearch] = useState('');
 
     const studentInfo = useMemo(() => buildStudentInfo(students), [students]);
+    const mode = MODES.find(m => m.key === groupMode);
+    const canSearch = groupMode !== 'date';
 
     // 소속/학년/반 필터 → 허용 student id. 필터가 하나도 없으면 전체(null).
     const hasFilter = Boolean(branchFilter || classFilter || gradeFilter?.size);
@@ -52,13 +62,19 @@ export default function ConsultationBoard({
         [consultations, allowedIds],
     );
 
-    const groups = useMemo(
-        () => (groupMode === 'date' ? groupByDate(visible) : groupByStudent(visible)),
-        [groupMode, visible],
-    );
+    const groups = useMemo(() => {
+        const g = groupMode === 'date' ? groupByDate(visible)
+            : groupMode === 'student' ? groupByStudent(visible)
+            : groupByTeacher(visible);
+        return canSearch ? filterGroupsByKeyword(g, search) : g;
+    }, [groupMode, visible, search, canSearch]);
+
+    const exportRows = useMemo(() => groups.flatMap(g => g.items), [groups]);
+
+    const changeMode = (m) => { setGroupMode(m); setSearch(''); };
 
     const handleExport = () => {
-        downloadCsv(`상담내역_${startDate}_${endDate}.csv`, CONSULTATION_COLUMNS, toCsvRows(visible, studentInfo));
+        downloadCsv(`상담내역_${startDate}_${endDate}.csv`, CONSULTATION_COLUMNS, toCsvRows(exportRows, studentInfo));
     };
 
     const gradeClassOf = (c) => {
@@ -70,28 +86,36 @@ export default function ConsultationBoard({
         <div className="consult-board">
             <div className="consult-board-bar">
                 <span className="dash-view-toggle" role="group" aria-label="묶음 기준">
-                    <button type="button" className={groupMode === 'date' ? 'active' : ''} aria-pressed={groupMode === 'date'} onClick={() => setGroupMode('date')}>일자별</button>
-                    <button type="button" className={groupMode === 'student' ? 'active' : ''} aria-pressed={groupMode === 'student'} onClick={() => setGroupMode('student')}>학생별</button>
+                    {MODES.map(m => (
+                        <button key={m.key} type="button" className={groupMode === m.key ? 'active' : ''}
+                            aria-pressed={groupMode === m.key} onClick={() => changeMode(m.key)}>{m.label}</button>
+                    ))}
                 </span>
-                <span className="consult-count">총 {visible.length}건</span>
-                <button type="button" className="consult-export" onClick={handleExport} disabled={!visible.length} aria-label="CSV 다운로드">
+                {canSearch && (
+                    <input type="text" className="consult-search" value={search}
+                        placeholder={mode.searchPlaceholder} aria-label={mode.searchPlaceholder}
+                        onChange={e => setSearch(e.target.value)} />
+                )}
+                <span className="consult-count">총 {exportRows.length}건 · {groups.length}{mode.unit}</span>
+                <button type="button" className="consult-export" onClick={handleExport} disabled={!exportRows.length} aria-label="CSV 다운로드">
                     <span className="material-symbols-outlined" aria-hidden="true">download</span>
                     CSV 다운로드
                 </button>
             </div>
 
-            {!visible.length ? (
+            {!groups.length ? (
                 <div className="consult-empty">
                     <span className="material-symbols-outlined" aria-hidden="true">forum</span>
-                    <span>기간 내 상담이 없습니다.</span>
+                    <span>{search ? '검색 결과가 없습니다.' : '기간 내 상담이 없습니다.'}</span>
                 </div>
             ) : (
                 groups.map(group => (
-                    <section key={group.studentId || group.key} className="consult-group">
-                        <div className="consult-group-head">
+                    <details key={group.studentId || group.key} className="consult-group" open={Boolean(search)}>
+                        <summary className="consult-group-head">
+                            <span className="consult-group-chevron material-symbols-outlined" aria-hidden="true">chevron_right</span>
                             <strong>{group.key || '(미상)'}</strong>
                             <span className="consult-group-count">{group.items.length}건</span>
-                        </div>
+                        </summary>
                         <div className="consult-table-wrap">
                             <table className="consult-table">
                                 <thead>
@@ -116,7 +140,7 @@ export default function ConsultationBoard({
                                 </tbody>
                             </table>
                         </div>
-                    </section>
+                    </details>
                 ))
             )}
         </div>

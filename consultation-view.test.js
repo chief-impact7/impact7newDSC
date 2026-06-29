@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  filterByStudentIds, groupByDate, groupByStudent, toRow, toCsvRows, CONSULTATION_COLUMNS,
+  filterByStudentIds, groupByDate, groupByStudent, groupByTeacher,
+  filterGroupsByKeyword, toRow, toCsvRows, CONSULTATION_COLUMNS,
 } from './src/dashboard/lib/consultation-view.js';
 
 const sample = [
@@ -25,6 +26,20 @@ test('groupByStudent: 학생명 오름차순, 묶음 내 date desc', () => {
   const g = groupByStudent(sample);
   assert.deepEqual(g.map(x => x.key), ['김가', '이나']);
   assert.deepEqual(g[0].items.map(c => c.date), ['2026-06-29', '2026-06-28']);
+});
+
+test('groupByTeacher: 상담자명 오름차순, 묶음 내 date desc', () => {
+  const g = groupByTeacher(sample);
+  assert.deepEqual(g.map(x => x.key), ['강사A', '강사B']);
+  assert.equal(g[0].items.length, 2);
+  assert.deepEqual(g[0].items.map(c => c.date), ['2026-06-29', '2026-06-28']);
+});
+
+test('filterGroupsByKeyword: 그룹 key 부분일치(빈 키워드는 전체)', () => {
+  const g = groupByStudent(sample);
+  assert.deepEqual(filterGroupsByKeyword(g, '이나').map(x => x.key), ['이나']);
+  assert.equal(filterGroupsByKeyword(g, '').length, 2);
+  assert.equal(filterGroupsByKeyword(g, 'xyz').length, 0);
 });
 
 test('toRow: 컬럼 순서대로, 학년/반은 studentInfo에서 조인', () => {
