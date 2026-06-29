@@ -1366,3 +1366,80 @@ body {
 }
 .msg-badge.msg-retry { background: #fff3e0; color: #b26a00; }
 .msg-badge.msg-failed { background: #fce8e6; color: var(--danger); }
+
+/* ── 상담 조회 탭 ─────────────────────────────────────────── */
+.consult-board { padding: 16px 0; }
+.consult-board-bar {
+    display: flex; align-items: center; gap: 12px;
+    flex-wrap: wrap; margin-bottom: 16px;
+}
+.consult-count { color: var(--text-sec); font-size: 13px; font-variant-numeric: tabular-nums; }
+.consult-export {
+    margin-left: auto;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px;
+    border: 1px solid var(--primary); border-radius: 8px;
+    background: transparent; color: var(--primary);
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: background .15s, color .15s;
+}
+.consult-export:hover:not(:disabled) { background: var(--primary); color: #fff; }
+.consult-export:disabled { opacity: .4; cursor: not-allowed; }
+.consult-export .material-symbols-outlined { font-size: 18px; }
+
+.consult-group {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+.consult-group-head {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 12px 16px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+}
+.consult-group-head strong { font-size: 14px; font-variant-numeric: tabular-nums; }
+.consult-group-count { color: var(--text-sec); font-size: 12px; }
+
+.consult-table-wrap { overflow-x: auto; }
+.consult-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.consult-table thead th {
+    text-align: left; font-weight: 600; color: var(--text-sec);
+    padding: 9px 12px; white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+}
+.consult-table td {
+    padding: 11px 12px;
+    border-bottom: 1px solid var(--border-light);
+    vertical-align: top;
+}
+.consult-table tbody tr:last-child td { border-bottom: 0; }
+.consult-table tbody tr:hover { background: var(--bg); }
+.consult-c-date { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--text-sec); }
+.consult-c-name { font-weight: 600; white-space: nowrap; }
+.consult-c-sec { color: var(--text-sec); white-space: nowrap; }
+.consult-c-title { min-width: 130px; font-weight: 500; }
+.consult-c-memo {
+    white-space: pre-wrap; line-height: 1.65;
+    min-width: 260px; max-width: 540px; color: var(--text);
+}
+
+.consult-tag {
+    display: inline-block; padding: 2px 9px; border-radius: 999px;
+    font-size: 12px; white-space: nowrap;
+    background: var(--bg); color: var(--text-sec); border: 1px solid var(--border);
+}
+.consult-tag.method-call  { background: #e8eaf6; color: #3949ab; border-color: transparent; }
+.consult-tag.method-visit { background: #e6f4ea; color: var(--success); border-color: transparent; }
+.consult-tag.method-sms   { background: #fff3e0; color: #b26a00; border-color: transparent; }
+.consult-tag.target-parent { background: #f3e8fd; color: #7e22ce; border-color: transparent; }
+
+.consult-empty {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    padding: 56px 20px; color: var(--text-third);
+}
+.consult-empty .material-symbols-outlined { font-size: 40px; opacity: .5; }

@@ -3,8 +3,11 @@ import { branchFromStudent, enrollmentCode, allClassCodes } from '../../../stude
 import { studentGradeKey, studentShortLabel } from '../../shared/firestore-helpers.js';
 import { downloadCsv } from '../../shared/csv.js';
 import {
-    filterByStudentIds, groupByDate, groupByStudent, toRow, toCsvRows, CONSULTATION_COLUMNS,
+    filterByStudentIds, groupByDate, groupByStudent, toCsvRows, CONSULTATION_COLUMNS,
 } from '../lib/consultation-view.js';
+
+// 상담 형태별 배지 색 — 전화/대면/문자를 한눈에 구분.
+const METHOD_CLASS = { '전화': 'method-call', '대면': 'method-visit', '문자': 'method-sms' };
 
 // 학생 마스터에서 학년/대표반 라벨 추출(읽기 전용; 파생 재구현 아님).
 function buildStudentInfo(students) {
@@ -16,6 +19,11 @@ function buildStudentInfo(students) {
         };
     }
     return info;
+}
+
+function Tag({ value, className = '' }) {
+    if (!value) return <span className="consult-c-sec">—</span>;
+    return <span className={`consult-tag ${className}`}>{value}</span>;
 }
 
 export default function ConsultationBoard({
@@ -53,51 +61,61 @@ export default function ConsultationBoard({
         downloadCsv(`상담내역_${startDate}_${endDate}.csv`, CONSULTATION_COLUMNS, toCsvRows(visible, studentInfo));
     };
 
+    const gradeClassOf = (c) => {
+        const info = studentInfo[c.student_id] || {};
+        return [info.gradeLabel, info.classLabel].filter(Boolean).join(' · ');
+    };
+
     return (
         <div className="consult-board">
-            <div className="consult-board-bar" style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '12px 0' }}>
-                <div className="consult-group-toggle" role="group" aria-label="묶음 기준">
-                    <button type="button" aria-pressed={groupMode === 'date'} onClick={() => setGroupMode('date')}>일자별</button>
-                    <button type="button" aria-pressed={groupMode === 'student'} onClick={() => setGroupMode('student')}>학생별</button>
-                </div>
-                <span style={{ color: 'var(--text-sec)' }}>총 {visible.length}건</span>
-                <button type="button" className="dash-text-btn" style={{ marginLeft: 'auto' }}
-                    onClick={handleExport} disabled={!visible.length} aria-label="CSV 다운로드">
+            <div className="consult-board-bar">
+                <span className="dash-view-toggle" role="group" aria-label="묶음 기준">
+                    <button type="button" className={groupMode === 'date' ? 'active' : ''} aria-pressed={groupMode === 'date'} onClick={() => setGroupMode('date')}>일자별</button>
+                    <button type="button" className={groupMode === 'student' ? 'active' : ''} aria-pressed={groupMode === 'student'} onClick={() => setGroupMode('student')}>학생별</button>
+                </span>
+                <span className="consult-count">총 {visible.length}건</span>
+                <button type="button" className="consult-export" onClick={handleExport} disabled={!visible.length} aria-label="CSV 다운로드">
+                    <span className="material-symbols-outlined" aria-hidden="true">download</span>
                     CSV 다운로드
                 </button>
             </div>
 
             {!visible.length ? (
-                <div className="consult-empty" style={{ padding: 20, color: 'var(--text-sec)' }}>기간 내 상담 없음</div>
+                <div className="consult-empty">
+                    <span className="material-symbols-outlined" aria-hidden="true">forum</span>
+                    <span>기간 내 상담이 없습니다.</span>
+                </div>
             ) : (
                 groups.map(group => (
-                    <section key={group.studentId || group.key} className="consult-group" style={{ marginBottom: 18 }}>
-                        <h4 style={{ margin: '8px 0' }}>{group.key || '(미상)'} <small>({group.items.length}건)</small></h4>
-                        <table className="consult-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                                <tr>
-                                    {CONSULTATION_COLUMNS.map(col => (
-                                        <th key={col} scope="col" style={{ textAlign: 'left', borderBottom: '1px solid var(--border)', padding: '4px 6px', whiteSpace: 'nowrap' }}>{col}</th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {group.items.map(c => {
-                                    const cells = toRow(c, studentInfo);
-                                    return (
+                    <section key={group.studentId || group.key} className="consult-group">
+                        <div className="consult-group-head">
+                            <strong>{group.key || '(미상)'}</strong>
+                            <span className="consult-group-count">{group.items.length}건</span>
+                        </div>
+                        <div className="consult-table-wrap">
+                            <table className="consult-table">
+                                <thead>
+                                    <tr>
+                                        {CONSULTATION_COLUMNS.map(col => <th key={col} scope="col">{col}</th>)}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {group.items.map(c => (
                                         <tr key={c.id}>
-                                            {cells.map((cell, i) => (
-                                                <td key={i} style={{
-                                                    borderBottom: '1px solid var(--border)', padding: '4px 6px',
-                                                    whiteSpace: i === cells.length - 1 ? 'pre-wrap' : 'nowrap',
-                                                    verticalAlign: 'top',
-                                                }}>{cell}</td>
-                                            ))}
+                                            <td className="consult-c-date">{c.date || ''}</td>
+                                            <td className="consult-c-name">{c.student_name || ''}</td>
+                                            <td className="consult-c-sec">{gradeClassOf(c) || '—'}</td>
+                                            <td className="consult-c-sec">{c.teacher_name || '—'}</td>
+                                            <td><Tag value={c.target} className={c.target === '학부모' ? 'target-parent' : ''} /></td>
+                                            <td><Tag value={c.method} className={METHOD_CLASS[c.method] || ''} /></td>
+                                            <td><Tag value={c.consultation_type} /></td>
+                                            <td className="consult-c-title">{c.title || '—'}</td>
+                                            <td className="consult-c-memo">{c.text || ''}</td>
                                         </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </section>
                 ))
             )}
