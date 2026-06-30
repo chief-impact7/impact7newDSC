@@ -57,6 +57,7 @@
 .mc-vars { display: flex; gap: 5px; }
 .mc-var-btn { font-size: 11px; border: 1px solid #cfe9df; background: #e8f5ef; color: #0a6e49; border-radius: 6px; padding: 2px 7px; cursor: pointer; font-family: inherit; }
 .mc-var-btn:hover { background: #d6ede2; }
+.mc-var-btn:disabled { opacity: .55; cursor: default; }
 
 /* 템플릿 불러오기/저장 바 */
 .mc-tpl { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }

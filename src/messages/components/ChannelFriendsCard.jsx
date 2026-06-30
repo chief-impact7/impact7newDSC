@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { syncChannelFriends, getChannelFriends } from '../../../data-layer.js';
+import { downloadCsv } from '../../shared/csv.js';
 
 const onlyDigits = (v) => String(v ?? '').replace(/\D/g, '');
 const isValid = (d) => d.length >= 9 && d.length <= 11;
@@ -46,9 +47,20 @@ export default function ChannelFriendsCard({ students = [] }) {
     return (students || [])
       .filter((s) => isEnrollableStatus(s.status))
       // 서버 resolveRecipientPhone과 동일하게 parent_1 → parent_2 폴백 번호로 대조.
-      .map((s) => ({ id: s.id, name: s.name, phone: onlyDigits(s.parent_phone_1) || onlyDigits(s.parent_phone_2) }))
+      .map((s) => ({ id: s.id, name: s.name, status: s.status, phone: onlyDigits(s.parent_phone_1) || onlyDigits(s.parent_phone_2) }))
       .filter((s) => s.phone && !friends.has(s.phone));
   }, [students, friends]);
+
+  function onExportCsv() {
+    if (!unjoined.length) return;
+    // 파일명 날짜는 KST 기준(toISOString의 UTC면 자정 직후 하루 어긋남). sv-SE 로케일이 YYYY-MM-DD를 준다.
+    const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
+    downloadCsv(
+      `미가입_재원생학부모_${today}_${unjoined.length}명.csv`,
+      ['이름', '상태', '학부모번호'],
+      unjoined.map((s) => [s.name, s.status, s.phone]),
+    );
+  }
 
   return (
     <section className="mc-section">
@@ -61,8 +73,9 @@ export default function ChannelFriendsCard({ students = [] }) {
           <button className="mc-send" disabled={busy} onClick={onUpload}>{busy ? '동기화 중…' : '친구목록 업로드'}</button>
           {msg && <span className="mc-field-label" role="status" aria-live="polite">{msg}</span>}
         </div>
-        <div className="bulk-cart" style={{ marginTop: 14 }}>
+        <div className="bulk-cart" style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
           <span>미가입 재원생 학부모 {friends ? `${unjoined.length}명` : '…'}</span>
+          <button type="button" className="mc-var-btn" disabled={!unjoined.length} onClick={onExportCsv}>전체 CSV 내보내기</button>
         </div>
         <ul className="bulk-picked">
           {unjoined.slice(0, 100).map((s) => (
