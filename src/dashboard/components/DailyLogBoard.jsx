@@ -752,13 +752,27 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                     ))}
                 </div>
             ) : viewMode === 'state' ? (
-                <div className="daily-log-alt-view">
-                    {Object.entries(groupByState(stateStudents, dailyByStudent)).map(([group, list]) => (
-                        <div key={group} className="daily-log-state-group">
-                            <div className="state-group-label">{group}</div>
-                            <div className="state-group-names">{list.map(s => s.student_name ?? s.name).join(', ')}</div>
-                        </div>
-                    ))}
+                <div className="daily-log-main-card">
+                    <div className="daily-log-accordion">
+                        {Object.entries(groupByState(stateStudents, dailyByStudent)).map(([group, list]) => (
+                            <details key={group} className="daily-log-details">
+                                <summary>
+                                    <span className="material-symbols-outlined daily-log-chev" aria-hidden="true">chevron_right</span>
+                                    <div className="daily-log-group-title">
+                                        <strong>{group}</strong>
+                                    </div>
+                                    <div className="daily-log-counts">
+                                        <span className="daily-log-pill info">{list.length}명</span>
+                                    </div>
+                                </summary>
+                                <div className="daily-log-state-names">
+                                    {list.map((s, i) => (
+                                        <span key={s.student_id ?? i} className="daily-log-name-chip">{s.student_name ?? s.name}</span>
+                                    ))}
+                                </div>
+                            </details>
+                        ))}
+                    </div>
                 </div>
             ) : null}
         </div>
