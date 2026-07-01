@@ -317,7 +317,7 @@ export async function fetchDashboardDailyLogData(date) {
             type: data.type,
             occurred_at: data.occurred_at?.toDate().toISOString() ?? null,
         };
-    });
+    }).filter(e => e.occurred_at);
     return {
         dailyRecords,
         tempAttendances,

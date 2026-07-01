@@ -29,6 +29,7 @@ const emptyDailyLogData = () => ({
     absenceRecords: [],
     leaveRequests: [],
     classSettings: {},
+    attendanceEvents: [],
 });
 
 // 학생 목록 로드 (앱 시작 시 1회)

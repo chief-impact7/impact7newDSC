@@ -7,6 +7,7 @@ import { staffLabel } from '@impact7/shared/staff-label';
 import { sortByProcessed, arrivalOrder, departureOrder, groupByState } from '@impact7/shared/attendance-log';
 
 const ATTENDED_STATUSES = new Set(['출석', '지각', '조퇴']);
+const ALT_VIEW_STATUSES = new Set(['재원', '실휴원', '가휴원']);
 const DEFAULT_ATTENDANCE_LABELS = new Set(['정규', '특강', '내신', '자유', '자유학기', '비정규', '미확인']);
 const WITHDRAW_REQUEST_TYPES = new Set(['퇴원요청', '휴원→퇴원']);
 const LEAVE_REQUEST_TYPES = new Set(['휴원요청', '퇴원→휴원', '휴원연장']);
@@ -48,7 +49,7 @@ const teacherNameForClass = (classSettings, code) => shortEmailName(classSetting
 const isoToHHMM = iso => {
     if (!iso) return '';
     const d = new Date(iso);
-    return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' });
 };
 const teacherNamesForClasses = (classSettings, codes) => {
     const names = codes.map(code => teacherNameForClass(classSettings, code)).filter(Boolean);
@@ -636,16 +637,30 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
     const regularEntries = Object.entries(data.groups.regular).sort(([a], [b]) => a.localeCompare(b, 'ko'));
     const regularRows = regularEntries.flatMap(([, rows]) => rows);
 
-    const attendanceEvents = dailyLog?.attendanceEvents ?? [];
-    const dailyByStudent = {};
-    (dailyLog?.dailyRecords ?? []).forEach(r => {
-        dailyByStudent[r.student_id] = {
-            day_state: r.day_state,
-            attendance: { status: r.attendance?.status }
+    const { attendanceEvents, dailyByStudent, stateStudents } = useMemo(() => {
+        // 대체 뷰(처리순/등원순/귀가순/상태별) 모집단: 재원·실휴원·가휴원 + 활성 branch/grade 필터, 퇴원 제외
+        const altStudents = students.filter(s =>
+            ALT_VIEW_STATUSES.has(s.status) &&
+            !isWithdrawnAt(s, date) &&
+            (!branchFilter || branchFromStudent(s) === branchFilter) &&
+            (!gradeFilter?.size || gradeFilter.has(studentGradeKey(s)))
+        );
+        const altStudentIds = new Set(altStudents.map(s => s.id));
+        const events = (dailyLog?.attendanceEvents ?? []).filter(e => altStudentIds.has(e.student_id));
+        const byStudent = {};
+        (dailyLog?.dailyRecords ?? []).forEach(r => {
+            byStudent[r.student_id] = {
+                day_state: r.day_state,
+                attendance: { status: r.attendance?.status }
+            };
+        });
+        // groupByState는 s.student_id로 조회하나 students 원소는 .id만 가짐 → student_id 키 부여 필수(정렬 아님)
+        return {
+            attendanceEvents: events,
+            dailyByStudent: byStudent,
+            stateStudents: altStudents.map(s => ({ ...s, student_id: s.id })),
         };
-    });
-    // groupByState는 s.student_id로 dailyByStudent를 조회하나 students 원소는 .id만 가짐 → 키 정렬 필수
-    const stateStudents = students.map(s => ({ ...s, student_id: s.id }));
+    }, [students, dailyLog, branchFilter, gradeFilter, date]);
 
     return (
         <div className="daily-log-page">
