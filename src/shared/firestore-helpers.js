@@ -298,6 +298,7 @@ export async function fetchDashboardDailyLogData(date) {
         absenceRecords,
         leaveRequests,
         classSettings,
+        attendanceEventsSnap,
     ] = await Promise.all([
         fetchDailyRecordsForDate(date),
         fetchTempAttendancesForDate(date),
@@ -306,7 +307,17 @@ export async function fetchDashboardDailyLogData(date) {
         fetchAbsenceRecordsForDailyLog(date),
         fetchApprovedLeaveRequestsForDate(date),
         fetchClassSettingsMap(),
+        getDocs(query(collection(db, 'attendance_events'), where('date_kst', '==', date))).catch(() => null),
     ]);
+    const attendanceEvents = (attendanceEventsSnap?.docs ?? []).map(d => {
+        const data = d.data();
+        return {
+            student_id: data.student_id,
+            student_name: data.student_name,
+            type: data.type,
+            occurred_at: data.occurred_at?.toDate().toISOString() ?? null,
+        };
+    });
     return {
         dailyRecords,
         tempAttendances,
@@ -315,6 +326,7 @@ export async function fetchDashboardDailyLogData(date) {
         absenceRecords,
         leaveRequests,
         classSettings,
+        attendanceEvents,
     };
 }
 

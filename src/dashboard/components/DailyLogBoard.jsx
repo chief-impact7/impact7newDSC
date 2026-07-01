@@ -1,9 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { getDayName, studentGradeKey, studentShortLabel, normalizeAttendanceLabel } from '../../shared/firestore-helpers.js';
 import { branchFromStudent, resolveNaesinCsKey, displayCodeFromCsKey, isOnLeaveAt, isWithdrawnAt } from '../../../student-helpers.js';
 import { applyNaesinFreeDerivation } from '@impact7/shared/enrollment-derivation';
 import { computeExpectedArrival } from '@impact7/shared/expected-arrival';
 import { staffLabel } from '@impact7/shared/staff-label';
+import { sortByProcessed, arrivalOrder, departureOrder, groupByState } from '@impact7/shared/attendance-log';
 
 const ATTENDED_STATUSES = new Set(['출석', '지각', '조퇴']);
 const DEFAULT_ATTENDANCE_LABELS = new Set(['정규', '특강', '내신', '자유', '자유학기', '비정규', '미확인']);
@@ -44,6 +45,11 @@ const fmtTime = (value) => {
 };
 const shortEmailName = (value) => staffLabel(text(value));
 const teacherNameForClass = (classSettings, code) => shortEmailName(classSettings?.[code]?.teacher);
+const isoToHHMM = iso => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+};
 const teacherNamesForClasses = (classSettings, codes) => {
     const names = codes.map(code => teacherNameForClass(classSettings, code)).filter(Boolean);
     return [...new Set(names)].join(', ');
@@ -623,14 +629,43 @@ function SideList({ title, icon, rows, type, hideEmptyBody = false }) {
 }
 
 export default function DailyLogBoard({ students, dailyLog, branchFilter, classFilter, gradeFilter, date }) {
+    const [viewMode, setViewMode] = useState('classes');
     const data = useMemo(() =>
         buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilter, date }),
     [students, dailyLog, branchFilter, classFilter, gradeFilter, date]);
     const regularEntries = Object.entries(data.groups.regular).sort(([a], [b]) => a.localeCompare(b, 'ko'));
     const regularRows = regularEntries.flatMap(([, rows]) => rows);
 
+    const attendanceEvents = dailyLog?.attendanceEvents ?? [];
+    const dailyByStudent = {};
+    (dailyLog?.dailyRecords ?? []).forEach(r => {
+        dailyByStudent[r.student_id] = {
+            day_state: r.day_state,
+            attendance: { status: r.attendance?.status }
+        };
+    });
+    // groupByState는 s.student_id로 dailyByStudent를 조회하나 students 원소는 .id만 가짐 → 키 정렬 필수
+    const stateStudents = students.map(s => ({ ...s, student_id: s.id }));
+
     return (
         <div className="daily-log-page">
+            <div className="daily-log-view-toggle">
+                {[
+                    { key: 'classes', label: '반별' },
+                    { key: 'processed', label: '처리순' },
+                    { key: 'arrival', label: '등원순' },
+                    { key: 'departure', label: '귀가순' },
+                    { key: 'state', label: '상태별' },
+                ].map(({ key, label }) => (
+                    <button
+                        key={key}
+                        className={`daily-log-toggle-btn${viewMode === key ? ' active' : ''}`}
+                        onClick={() => setViewMode(key)}
+                    >
+                        {label}
+                    </button>
+                ))}
+            </div>
             <div className="daily-log-summary">
                 <SummaryCard icon="groups" label="전체 예정" value={data.summary.total} note={`정규 ${data.summary.regular} / 비정규 ${data.summary.irregular} / 내신 ${data.summary.naesin} / 자유학기 ${data.summary.free} / 특강 ${data.summary.special}`} />
                 <SummaryCard icon="science" label="진단평가" value={data.summary.diagnostic} />
@@ -643,33 +678,74 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                 <SummaryCard icon="pause_circle" label="휴원중" value={data.summary.leave} note="현재 휴원(가/실휴원) 학생 수" />
             </div>
 
-            <div className="daily-log-work-area">
-                <div className="daily-log-main-card">
-                    <div className="daily-log-main-head">
-                        <div>
-                            <span className="material-symbols-outlined" aria-hidden="true">view_list</span>
-                            학생별 일일 로그
+            {viewMode === 'classes' ? (
+                <div className="daily-log-work-area">
+                    <div className="daily-log-main-card">
+                        <div className="daily-log-main-head">
+                            <div>
+                                <span className="material-symbols-outlined" aria-hidden="true">view_list</span>
+                                학생별 일일 로그
+                            </div>
+                            <span>{fmtDate(date)} ({getDayName(date)})</span>
                         </div>
-                        <span>{fmtDate(date)} ({getDayName(date)})</span>
+                        <div className="daily-log-accordion">
+                            <AccordionGroup groupKey="diagnostic" rows={data.groups.diagnostic} />
+                            <AccordionGroup groupKey="regular" rows={regularRows}>
+                                <ClassGroupedRows groupKey="regular" rows={regularRows} entries={regularEntries} empty="정규 학생 없음" />
+                            </AccordionGroup>
+                            {OPTIONAL_GROUPS.map(key => (
+                                <AccordionGroup key={key} groupKey={key} rows={data.groups[key]} />
+                            ))}
+                        </div>
                     </div>
-                    <div className="daily-log-accordion">
-                        <AccordionGroup groupKey="diagnostic" rows={data.groups.diagnostic} />
-                        <AccordionGroup groupKey="regular" rows={regularRows}>
-                            <ClassGroupedRows groupKey="regular" rows={regularRows} entries={regularEntries} empty="정규 학생 없음" />
-                        </AccordionGroup>
-                        {OPTIONAL_GROUPS.map(key => (
-                            <AccordionGroup key={key} groupKey={key} rows={data.groups[key]} />
-                        ))}
-                    </div>
-                </div>
 
-                <aside className="daily-log-side-stack">
-                    <SideList title="퇴원 명단" icon="logout" rows={data.withdrawalRows} type="withdrawal" hideEmptyBody />
-                    <SideList title="휴원 명단" icon="pause_circle" rows={data.leaveRows} type="leave" hideEmptyBody />
-                    <SideList title="결석 명단" icon="person_off" rows={data.absentRows} type="absent" hideEmptyBody />
-                    <SideList title="지각 명단" icon="schedule" rows={data.lateRows} type="late" hideEmptyBody />
-                </aside>
-            </div>
+                    <aside className="daily-log-side-stack">
+                        <SideList title="퇴원 명단" icon="logout" rows={data.withdrawalRows} type="withdrawal" hideEmptyBody />
+                        <SideList title="휴원 명단" icon="pause_circle" rows={data.leaveRows} type="leave" hideEmptyBody />
+                        <SideList title="결석 명단" icon="person_off" rows={data.absentRows} type="absent" hideEmptyBody />
+                        <SideList title="지각 명단" icon="schedule" rows={data.lateRows} type="late" hideEmptyBody />
+                    </aside>
+                </div>
+            ) : viewMode === 'processed' ? (
+                <div className="daily-log-alt-view">
+                    {sortByProcessed(attendanceEvents).map((e, i) => (
+                        <div key={i} className="daily-log-event-row">
+                            <span className="evt-time">{isoToHHMM(e.occurred_at)}</span>
+                            <span className="evt-name">{e.student_name}</span>
+                            <span className="evt-type">{e.type}</span>
+                        </div>
+                    ))}
+                </div>
+            ) : viewMode === 'arrival' ? (
+                <div className="daily-log-alt-view">
+                    {arrivalOrder(attendanceEvents, dailyByStudent).map((e, i) => (
+                        <div key={i} className="daily-log-event-row">
+                            <span className="evt-time">{isoToHHMM(e.occurred_at)}</span>
+                            <span className="evt-name">{e.student_name}</span>
+                            <span className="evt-type">{e.late ? '지각' : '등원'}</span>
+                        </div>
+                    ))}
+                </div>
+            ) : viewMode === 'departure' ? (
+                <div className="daily-log-alt-view">
+                    {departureOrder(attendanceEvents).map((e, i) => (
+                        <div key={i} className="daily-log-event-row">
+                            <span className="evt-time">{isoToHHMM(e.occurred_at)}</span>
+                            <span className="evt-name">{e.student_name}</span>
+                            <span className="evt-type">하원</span>
+                        </div>
+                    ))}
+                </div>
+            ) : viewMode === 'state' ? (
+                <div className="daily-log-alt-view">
+                    {Object.entries(groupByState(stateStudents, dailyByStudent)).map(([group, list]) => (
+                        <div key={group} className="daily-log-state-group">
+                            <div className="state-group-label">{group}</div>
+                            <div className="state-group-names">{list.map(s => s.student_name ?? s.name).join(', ')}</div>
+                        </div>
+                    ))}
+                </div>
+            ) : null}
         </div>
     );
 }
