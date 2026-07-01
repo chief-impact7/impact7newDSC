@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { getDayName, studentGradeKey, studentShortLabel, normalizeAttendanceLabel } from '../../shared/firestore-helpers.js';
 import { branchFromStudent, resolveNaesinCsKey, displayCodeFromCsKey, isOnLeaveAt, isWithdrawnAt } from '../../../student-helpers.js';
 import { applyNaesinFreeDerivation } from '@impact7/shared/enrollment-derivation';
+import { computeExpectedArrival } from '@impact7/shared/expected-arrival';
 import { staffLabel } from '@impact7/shared/staff-label';
 
 const ATTENDED_STATUSES = new Set(['출석', '지각', '조퇴']);
@@ -48,48 +49,7 @@ const teacherNamesForClasses = (classSettings, codes) => {
     return [...new Set(names)].join(', ');
 };
 
-function startTime(enrollment, dayName, classSettings) {
-    const code = classCode(enrollment);
-    return enrollment?.schedule?.[dayName]
-        || (enrollment?.class_type === '자유학기' ? classSettings[code]?.free_schedule?.[dayName] : '')
-        || classSettings[code]?.schedule?.[dayName]
-        || enrollment?.start_time
-        || enrollment?.time
-        || classSettings[code]?.default_time
-        || '';
-}
-
-function earliestExpectedTime({ enrollments, dayName, classSettings, rec, hwTasks, testTasks, absences, date }) {
-    const times = [];
-    enrollments.forEach(enrollment => {
-        const time = startTime(enrollment, dayName, classSettings);
-        if (time) times.push(time);
-    });
-    hwTasks.forEach(task => {
-        if (task.type === '등원' && task.scheduled_date === date && task.scheduled_time) times.push(task.scheduled_time);
-    });
-    testTasks.forEach(task => {
-        if (task.type === '등원' && task.scheduled_date === date && task.scheduled_time) times.push(task.scheduled_time);
-    });
-    [rec.hw_fail_action, rec.test_fail_action].forEach(actionMap => {
-        Object.values(actionMap || {}).forEach(action => {
-            if (action.type === '등원' && action.scheduled_date === date && action.scheduled_time) times.push(action.scheduled_time);
-        });
-    });
-    if (rec.extra_visit?.date === date && rec.extra_visit.time) times.push(rec.extra_visit.time);
-    absences.forEach(absence => {
-        if (
-            absence.resolution === '보충'
-            && absence.makeup_date === date
-            && absence.status !== 'closed'
-            && absence.makeup_status !== '미등원'
-            && absence.makeup_time
-        ) {
-            times.push(absence.makeup_time);
-        }
-    });
-    return times.sort()[0] || '';
-}
+// 등원 예정시각 계산은 @impact7/shared/expected-arrival(computeExpectedArrival)로 이관.
 
 function mapByStudent(rows) {
     const map = new Map();
@@ -281,9 +241,8 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
             rec.departure?.status ? `${normalizeAttendanceLabel(rec.departure.status)}${rec.departure.time ? ` ${fmtTime(rec.departure.time)}` : ''}` : '',
             rec.extra_visit?.date === date ? `비정규: ${rec.extra_visit.reason || '클리닉'} ${fmtTime(rec.extra_visit.time)}` : '',
         ].filter(Boolean).join(' / ');
-        const expectedTime = earliestExpectedTime({
-            enrollments: todayEnrolls,
-            dayName,
+        const expectedTime = computeExpectedArrival({
+            enrollments: student.enrollments,
             classSettings,
             rec,
             hwTasks: studentHwTasks,
