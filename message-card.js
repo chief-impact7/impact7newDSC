@@ -1,13 +1,13 @@
-// 학생 상세의 [메시지] 탭 — 개별 발송. 정보성 안내(알림톡 템플릿) 또는 홍보(브랜드 메시지).
+// 학생 상세의 [메시지] 탭 — 개별 발송. 정보성 안내(알림톡 템플릿) / 자유 안내(친구=카톡·비친구=문자) / 홍보(브랜드 메시지).
 // 수신 대상(학생/학부모1/학부모2/기타) 선택. 대규모/다수 발송은 별도 화면.
 // 권한·광고 규제는 서버 callable이 검증한다.
 
-import { sendParentNotice, createPromoCampaign, getStudentMessages } from './data-layer.js';
+import { sendParentNotice, createPromoCampaign, getStudentMessages, sendDailyReport } from './data-layer.js';
 import { ATTENDANCE_ACTIONS } from '@impact7/shared/attendance-action';
 import { esc, escAttr } from './ui-utils.js';
 
 let _deps = {};
-let _mode = 'notice'; // 'notice' | 'promo'
+let _mode = 'notice'; // 'notice'(템플릿 안내) | 'free'(자유 안내) | 'promo'(홍보)
 let _recipientField = 'parent_1'; // 'student' | 'parent_1' | 'parent_2' | 'other'
 let _sending = false;
 // 멱등키 — 폼 단위로 안정 유지(응답 타임아웃 후 재시도의 중복 발송 차단), 발송 성공 시 재발급.
@@ -42,7 +42,7 @@ const QUICK_ACTIONS = [
 
 const PROMO_PLACEHOLDER = '(광고)[임팩트세븐학원]\n\n안내 내용을 입력하세요.\n\n무료수신거부 080-000-0000';
 
-const KIND_LABEL = { attendance: '출결', parent_notice: '안내', promo: '홍보' };
+const KIND_LABEL = { attendance: '출결', parent_notice: '안내', promo: '홍보', report: '안내', direct: '문자' };
 const CHANNEL_LABEL = { kakao: '알림톡', sms: 'SMS', lms: 'LMS', mms: 'MMS' };
 
 // deps: { getStudent(id) → {name, student_phone, parent_phone_*, other_phone}, toast(msg, type), readonly }
@@ -87,6 +87,7 @@ export function renderMessageTab(studentId) {
         : '<div style="color:#c82014;margin-bottom:12px;">등록된 연락처가 없어 발송할 수 없습니다.</div>'}
       <div style="display:flex;gap:8px;margin-bottom:14px;">
         <button type="button" class="btn msg-mode-btn" data-mode="notice" aria-pressed="${_mode === 'notice'}">정보성 안내</button>
+        <button type="button" class="btn msg-mode-btn" data-mode="free" aria-pressed="${_mode === 'free'}">자유 안내</button>
         <button type="button" class="btn msg-mode-btn" data-mode="promo" aria-pressed="${_mode === 'promo'}">홍보(광고)</button>
       </div>
       <div id="msg-form"></div>
@@ -180,6 +181,13 @@ function renderForm(studentId, hasRecipient, readonly) {
     sel.addEventListener('change', renderVars);
     renderVars();
     document.getElementById('msg-send').addEventListener('click', () => sendNotice(studentId, sel));
+  } else if (_mode === 'free') {
+    form.innerHTML = `
+      <div style="font-size:13px;color:#777;margin-bottom:6px;">템플릿 없는 정보성 자유 내용입니다. 채널 가입자는 카카오톡으로, 미가입자는 문자로 발송됩니다. (광고성 내용은 '홍보' 모드를 사용하세요)</div>
+      <textarea id="msg-content" class="field-input" aria-label="자유 안내 본문" rows="6" style="width:100%;box-sizing:border-box;" placeholder="보낼 내용을 입력하세요." ${dis}></textarea>
+      <button type="button" id="msg-send" class="btn btn-primary" style="margin-top:12px;" ${dis}>메시지 발송</button>
+    `;
+    document.getElementById('msg-send').addEventListener('click', () => sendFree(studentId));
   } else {
     form.innerHTML = `
       <div style="font-size:13px;color:#777;margin-bottom:6px;">광고는 본문에 (광고) 표기와 무료수신거부 안내가 있어야 합니다.</div>
@@ -230,6 +238,19 @@ async function sendPromo(studentId) {
     }),
     '브랜드 메시지 발송을 요청했습니다.',
     () => { _promoReqId = null; scheduleHistoryReload(studentId); },
+  );
+}
+
+// 자유 안내(템플릿 없음) — 친구=정보형 BMS(카톡), 비친구=문자. sendDailyReport가 서버에서 분기.
+// 멱등키 없이 재발송 허용(더블클릭은 _sending으로 차단) — parent-message.js 정책과 동일.
+async function sendFree(studentId) {
+  if (_sending) return;
+  const content = document.getElementById('msg-content').value.trim();
+  if (!content) { _deps.toast?.('내용을 입력하세요.', 'error'); return; }
+  await doSend(
+    () => sendDailyReport({ studentId, content, recipientField: _recipientField }),
+    '발송을 요청했습니다. (미도달 시 문자로 자동 전환)',
+    () => scheduleHistoryReload(studentId),
   );
 }
 
