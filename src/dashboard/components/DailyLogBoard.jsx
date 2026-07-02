@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { getDayName, studentGradeKey, studentShortLabel, normalizeAttendanceLabel } from '../../shared/firestore-helpers.js';
 import { branchFromStudent, resolveNaesinCsKey, displayCodeFromCsKey, isOnLeaveAt, isWithdrawnAt } from '../../../student-helpers.js';
 import { applyNaesinFreeDerivation } from '@impact7/shared/enrollment-derivation';
-import { computeExpectedArrival } from '@impact7/shared/expected-arrival';
+import { computeExpectedArrival, isLate } from '@impact7/shared/expected-arrival';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { sortByProcessed, arrivalOrder, departureOrder, groupByState } from '@impact7/shared/attendance-log';
 
@@ -55,6 +55,21 @@ const teacherNamesForClasses = (classSettings, codes) => {
     const names = codes.map(code => teacherNameForClass(classSettings, code)).filter(Boolean);
     return [...new Set(names)].join(', ');
 };
+// 상태별 뷰의 '미등원'을 등원전/지각으로 세분. 지각 판정은 shared isLate(예정+유예 초과)를 재사용하되
+// 실제 등원시각 대신 '현재 시각'을 넘겨 "지금이 예정+유예를 지났는가"로 판정한다.
+// 예정시각 없음(오늘 수업 없음)은 어느 그룹에도 넣지 않는다.
+function splitPendingGroup(groups, { arrivalByStudent, nowHHMM, enabled }) {
+    if (!enabled) return groups;
+    const { 미등원: pending = [], ...rest } = groups;
+    const before = [];
+    const late = [];
+    for (const s of pending) {
+        const expected = arrivalByStudent?.[s.student_id];
+        if (!expected) continue;
+        (isLate(nowHHMM, expected) ? late : before).push(s);
+    }
+    return { 등원전: before, 지각: late, ...rest };
+}
 
 // 등원 예정시각 계산은 @impact7/shared/expected-arrival(computeExpectedArrival)로 이관.
 
@@ -637,7 +652,7 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
     const regularEntries = Object.entries(data.groups.regular).sort(([a], [b]) => a.localeCompare(b, 'ko'));
     const regularRows = regularEntries.flatMap(([, rows]) => rows);
 
-    const { attendanceEvents, dailyByStudent, stateStudents } = useMemo(() => {
+    const { attendanceEvents, dailyByStudent, stateStudents, arrivalByStudent } = useMemo(() => {
         // 대체 뷰(처리순/등원순/귀가순/상태별) 모집단: 재원·실휴원·가휴원 + 활성 branch/grade 필터, 퇴원 제외
         const altStudents = students.filter(s =>
             ALT_VIEW_STATUSES.has(s.status) &&
@@ -654,13 +669,37 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                 attendance: { status: r.attendance?.status }
             };
         });
+        // 미등원 세분(등원전/지각)용 학생별 등원 예정시각 — computeExpectedArrival이 오늘요일 필터까지 처리('' = 오늘 등원예정 아님)
+        const classSettings = dailyLog?.classSettings ?? {};
+        const recMap = new Map((dailyLog?.dailyRecords ?? []).map(r => [r.student_id, r]));
+        const hwMap = mapByStudent(dailyLog?.hwFailTasks ?? []);
+        const testMap = mapByStudent(dailyLog?.testFailTasks ?? []);
+        const absMap = mapByStudent(dailyLog?.absenceRecords ?? []);
+        const arrival = {};
+        altStudents.forEach(s => {
+            arrival[s.id] = computeExpectedArrival({
+                enrollments: s.enrollments,
+                classSettings,
+                rec: recMap.get(s.id) || {},
+                hwTasks: hwMap.get(s.id) || [],
+                testTasks: testMap.get(s.id) || [],
+                absences: absMap.get(s.id) || [],
+                date,
+            });
+        });
         // groupByState는 s.student_id로 조회하나 students 원소는 .id만 가짐 → student_id 키 부여 필수(정렬 아님)
         return {
             attendanceEvents: events,
             dailyByStudent: byStudent,
             stateStudents: altStudents.map(s => ({ ...s, student_id: s.id })),
+            arrivalByStudent: arrival,
         };
     }, [students, dailyLog, branchFilter, gradeFilter, date]);
+
+    // '미등원' → 등원전/지각 세분은 오늘 조회일 때만(과거·미래는 현재시각 비교가 무의미).
+    const nowKST = new Date();
+    const isTodayView = date === nowKST.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+    const nowHHMM = nowKST.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' });
 
     return (
         <div className="daily-log-page">
@@ -754,7 +793,10 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
             ) : viewMode === 'state' ? (
                 <div className="daily-log-main-card">
                     <div className="daily-log-accordion">
-                        {Object.entries(groupByState(stateStudents, dailyByStudent)).map(([group, list]) => (
+                        {Object.entries(splitPendingGroup(
+                            groupByState(stateStudents, dailyByStudent),
+                            { arrivalByStudent, nowHHMM, enabled: isTodayView },
+                        )).map(([group, list]) => (
                             <details key={group} className="daily-log-details">
                                 <summary>
                                     <span className="material-symbols-outlined daily-log-chev" aria-hidden="true">chevron_right</span>
