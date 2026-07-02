@@ -812,6 +812,18 @@ body {
     overflow: hidden;
 }
 
+/* 미도착(연락) 그룹 — 연락 대상임을 경고색으로 강조 */
+.daily-log-details.contact {
+    border: 1px solid #f0c674;
+    box-shadow: 0 0 0 1px #fbe4b0 inset, var(--daily-shadow);
+}
+.daily-log-details.contact .daily-log-side-note a {
+    font-weight: 700;
+    color: #b46a00;
+    text-decoration: none;
+}
+.daily-log-details.contact .daily-log-side-note a:hover { text-decoration: underline; }
+
 /* 상태별 아코디언 body — 이름을 칩으로 */
 .daily-log-state-names {
     display: flex;

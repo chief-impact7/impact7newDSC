@@ -4,6 +4,7 @@ import { branchFromStudent, resolveNaesinCsKey, displayCodeFromCsKey, isOnLeaveA
 import { applyNaesinFreeDerivation } from '@impact7/shared/enrollment-derivation';
 import { computeExpectedArrival, isLate } from '@impact7/shared/expected-arrival';
 import { staffLabel } from '@impact7/shared/staff-label';
+import { formatPhone } from '@impact7/shared/phone';
 import { sortByProcessed, arrivalOrder, departureOrder, groupByState } from '@impact7/shared/attendance-log';
 
 const ATTENDED_STATUSES = new Set(['출석', '지각', '조퇴']);
@@ -55,20 +56,25 @@ const teacherNamesForClasses = (classSettings, codes) => {
     const names = codes.map(code => teacherNameForClass(classSettings, code)).filter(Boolean);
     return [...new Set(names)].join(', ');
 };
-// 상태별 뷰의 '미등원'을 등원전/지각으로 세분. 지각 판정은 shared isLate(예정+유예 초과)를 재사용하되
+// 약속시간에 오지 않아 따로 연락해야 하는 그룹 — 렌더에서 연락처 상세를 펼쳐 보여준다.
+const CONTACT_GROUP = '미도착(연락)';
+// 연락은 학부모 우선(parent_phone_1 → parent_phone_2 → student_phone).
+const contactPhone = (s) => s.parent_phone_1 || s.parent_phone_2 || s.student_phone || '';
+
+// 상태별 뷰의 '미등원'을 등원전/미도착으로 세분. 지각 판정은 shared isLate(예정+유예 초과)를 재사용하되
 // 실제 등원시각 대신 '현재 시각'을 넘겨 "지금이 예정+유예를 지났는가"로 판정한다.
 // 예정시각 없음(오늘 수업 없음)은 어느 그룹에도 넣지 않는다.
 function splitPendingGroup(groups, { arrivalByStudent, nowHHMM, enabled }) {
     if (!enabled) return groups;
     const { 미등원: pending = [], ...rest } = groups;
     const before = [];
-    const late = [];
+    const contact = [];
     for (const s of pending) {
         const expected = arrivalByStudent?.[s.student_id];
         if (!expected) continue;
-        (isLate(nowHHMM, expected) ? late : before).push(s);
+        (isLate(nowHHMM, expected) ? contact : before).push(s);
     }
-    return { 등원전: before, 지각: late, ...rest };
+    return { 등원전: before, [CONTACT_GROUP]: contact, ...rest };
 }
 
 // 등원 예정시각 계산은 @impact7/shared/expected-arrival(computeExpectedArrival)로 이관.
@@ -644,6 +650,31 @@ function SideList({ title, icon, rows, type, hideEmptyBody = false }) {
     );
 }
 
+// 미도착(연락) 그룹 — 연락처(tel 링크)와 예정시각을 함께 노출해 바로 전화할 수 있게 한다.
+function ContactList({ rows, arrivalByStudent }) {
+    if (!rows.length) return <div className="daily-log-empty">연락할 학생 없음</div>;
+    return (
+        <div className="daily-log-side-list">
+            {rows.map((s, i) => {
+                const phone = contactPhone(s);
+                return (
+                    <div key={s.student_id ?? i} className="daily-log-side-item">
+                        <div className="daily-log-side-top">
+                            <strong>{s.student_name ?? s.name}</strong>
+                            <span>{[studentShortLabel(s), `예정 ${fmtTime(arrivalByStudent[s.student_id])}`].filter(Boolean).join(' · ')}</span>
+                        </div>
+                        <div className="daily-log-side-note">
+                            {phone
+                                ? <a href={`tel:${String(phone).replace(/[^0-9+]/g, '')}`}>{formatPhone(phone)}</a>
+                                : '연락처 없음'}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
 export default function DailyLogBoard({ students, dailyLog, branchFilter, classFilter, gradeFilter, date }) {
     const [viewMode, setViewMode] = useState('classes');
     const data = useMemo(() =>
@@ -669,7 +700,7 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                 attendance: { status: r.attendance?.status }
             };
         });
-        // 미등원 세분(등원전/지각)용 학생별 등원 예정시각 — computeExpectedArrival이 오늘요일 필터까지 처리('' = 오늘 등원예정 아님)
+        // 미등원 세분(등원전/미도착)용 학생별 등원 예정시각 — computeExpectedArrival이 오늘요일 필터까지 처리('' = 오늘 등원예정 아님)
         const classSettings = dailyLog?.classSettings ?? {};
         const recMap = new Map((dailyLog?.dailyRecords ?? []).map(r => [r.student_id, r]));
         const hwMap = mapByStudent(dailyLog?.hwFailTasks ?? []);
@@ -696,7 +727,7 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
         };
     }, [students, dailyLog, branchFilter, gradeFilter, date]);
 
-    // '미등원' → 등원전/지각 세분은 오늘 조회일 때만(과거·미래는 현재시각 비교가 무의미).
+    // '미등원' → 등원전/미도착 세분은 오늘 조회일 때만(과거·미래는 현재시각 비교가 무의미).
     const nowKST = new Date();
     const isTodayView = date === nowKST.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
     const nowHHMM = nowKST.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' });
@@ -796,24 +827,31 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                         {Object.entries(splitPendingGroup(
                             groupByState(stateStudents, dailyByStudent),
                             { arrivalByStudent, nowHHMM, enabled: isTodayView },
-                        )).map(([group, list]) => (
-                            <details key={group} className="daily-log-details">
-                                <summary>
-                                    <span className="material-symbols-outlined daily-log-chev" aria-hidden="true">chevron_right</span>
-                                    <div className="daily-log-group-title">
-                                        <strong>{group}</strong>
-                                    </div>
-                                    <div className="daily-log-counts">
-                                        <span className="daily-log-pill info">{list.length}명</span>
-                                    </div>
-                                </summary>
-                                <div className="daily-log-state-names">
-                                    {list.map((s, i) => (
-                                        <span key={s.student_id ?? i} className="daily-log-name-chip">{s.student_name ?? s.name}</span>
-                                    ))}
-                                </div>
-                            </details>
-                        ))}
+                        )).map(([group, list]) => {
+                            const isContact = group === CONTACT_GROUP;
+                            return (
+                                <details key={group} className={`daily-log-details${isContact ? ' contact' : ''}`} open={isContact && list.length > 0 ? true : undefined}>
+                                    <summary>
+                                        <span className="material-symbols-outlined daily-log-chev" aria-hidden="true">chevron_right</span>
+                                        <div className="daily-log-group-title">
+                                            <strong>{group}</strong>
+                                        </div>
+                                        <div className="daily-log-counts">
+                                            <span className={`daily-log-pill ${isContact ? 'warn' : 'info'}`}>{list.length}명</span>
+                                        </div>
+                                    </summary>
+                                    {isContact ? (
+                                        <ContactList rows={list} arrivalByStudent={arrivalByStudent} />
+                                    ) : (
+                                        <div className="daily-log-state-names">
+                                            {list.map((s, i) => (
+                                                <span key={s.student_id ?? i} className="daily-log-name-chip">{s.student_name ?? s.name}</span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </details>
+                            );
+                        })}
                     </div>
                 </div>
             ) : null}
