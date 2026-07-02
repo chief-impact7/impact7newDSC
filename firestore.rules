@@ -29,6 +29,7 @@ service cloud.firestore {
     }
     function isOwner() { return isLoggedIn() && getUserRole() == 'owner'; }
     function isDirector() { return isLoggedIn() && getUserRole() in ['owner', 'principal']; }
+    function isManager() { return isLoggedIn() && getUserRole() == 'manager'; }
     function isStaff() { return isLoggedIn() && getUserRole() == 'staff'; }
     function isShortTerm() { return isLoggedIn() && getUserRole() == 'shortterm'; }
     // AI 일괄 생성(비용 발생) 권한: director 등급 이상. isDirector는 'director' role을 포함하지 않으므로 별도 헬퍼.
@@ -49,6 +50,28 @@ service cloud.firestore {
         && request.auth.token.email_verified == true
         && (request.auth.token.email.matches('.*@gw\\.impact7\\.kr$')
             || request.auth.token.email.matches('.*@impact7\\.kr$'));
+    }
+
+    // =========================================================================
+    // [HR] 통합 staff 공개 온보딩·서명 토큰 검증 헬퍼 (다토큰)
+    // Firestore rules는 컬렉션 경로를 변수화하지 못하므로 호출부에서 완성된 path를
+    // 넘기고, exists()로 get()을 가드해 미존재 컬렉션 분기가 OR 평가를 깨지 않게 한다.
+    // =========================================================================
+    function hrOnboardingTokenValid(tokenPath) {
+      return exists(tokenPath)
+        && get(tokenPath).data.status == 'pending'
+        && get(tokenPath).data.expiresAt > request.time;
+    }
+    function hrSigningTokenValid(tokenPath, contractId) {
+      return exists(tokenPath)
+        && get(tokenPath).data.contractId == contractId
+        && get(tokenPath).data.status == 'pending'
+        && get(tokenPath).data.expiresAt > request.time;
+    }
+    function hrSigningTokenForContract(tokenPath, contractId) {
+      return exists(tokenPath)
+        && get(tokenPath).data.contractId == contractId
+        && get(tokenPath).data.expiresAt > request.time;
     }
 
     // =========================================================================
@@ -92,11 +115,12 @@ service cloud.firestore {
           'return_consult_done_by', 'return_consult_done_at',
           'updated_at', 'updated_by', 'withdrawal_date',
           'status_changed_at', 'status_changed_by', 'status_previous',
-          'nameNormalized', 'studentNumber', 'studentNumberSource', 'studentNumberIssuedAt'
+          'nameNormalized', 'studentNumber', 'studentNumberSource', 'studentNumberIssuedAt',
+          'studentNumberHistory'
         ];
         return request.resource.data.keys().hasOnly(allowed);
       }
-      // withinFieldLimit는 allowed 목록 크기(48)와 맞춘다 — 과거 36은 hasOnly가 이미 허용한
+      // withinFieldLimit는 allowed 목록 크기(49)와 맞춘다 — 과거 36은 hasOnly가 이미 허용한
       // 필드를 다 채운 정상 문서를 조용히 거부했음(O-04). allowed 확장 시 이 값도 함께 올린다.
 
       // DB/DSC: 읽기+쓰기, Director: 읽기만
@@ -111,13 +135,13 @@ service cloud.firestore {
       allow create: if isAuthorized()
         && hasRequiredStudentFields()
         && hasOnlyAllowedStudentFields()
-        && withinFieldLimit(48)
+        && withinFieldLimit(49)
         && enrollmentStatusConsistent();
 
       allow update: if isAuthorized()
         && hasRequiredStudentFields()
         && hasOnlyAllowedStudentFields()
-        && withinFieldLimit(48)
+        && withinFieldLimit(49)
         && (!resource.data.keys().hasAny(['status']) || request.resource.data.keys().hasAny(['status']))
         && enrollmentStatusConsistent();
 
@@ -853,7 +877,8 @@ service cloud.firestore {
     // [Director] 단기 인원
     // =========================================================================
     match /shortTermStaff/{docId} {
-      allow read: if isDirector() || isShortTerm();
+      // 레거시 단기 컬렉션(통합 staff로 마이그레이션됨). manager도 전체 열람(staff와 일관).
+      allow read: if isDirector() || isManager() || isShortTerm();
       allow write: if isDirector() || isShortTerm();
 
       // 비인증: 토큰 기반 등록 (필수 필드 + hasOnly + 토큰 검증)
@@ -889,16 +914,23 @@ service cloud.firestore {
     // [Director] Staff + 서브컬렉션
     // =========================================================================
     match /staff/{staffId} {
-      allow read: if isLoggedIn();
-      allow write: if isDirector();
+      // PII 보호: 전 직원 신원 정보(주민번호·계좌·연락처)를 director+manager만 전체 열람.
+      // shortterm은 단기 부서 문서만 읽을 수 있다(LIST는 department==단기로 제약된 쿼리여야 통과).
+      allow read: if isDirector() || isManager()
+        || (isShortTerm() && resource.data.department == '단기');
+      allow write: if isDirector() || isManager();
 
-      // 온보딩: 비인증 사용자가 유효한 토큰으로 staff 문서 생성
+      // 온보딩: 비인증 사용자가 유효한 토큰으로 staff 문서 생성 (통합: 교사/행정/단기 3종 토큰)
+      // hasOnly = 교사필드 ∪ {position(행정)} ∪ {department, affiliation, interviewDate, resignationDate} ∪ {phoneKey, englishName(키오스크 매칭/표시, 무권한)}.
+      // 권한 부여 필드(role 등)는 목록에 없으므로 온보딩 create로 권한 주입 불가.
       allow create: if request.resource.data.status == 'onboarding'
         && request.resource.data.keys().hasAll(['tokenId'])
-        && request.resource.data.keys().hasOnly(['name', 'phone', 'email', 'residentNumber', 'birthDate', 'address', 'subject', 'bankInfo', 'taxInfo', 'documents', 'staffType', 'status', 'joinDate', 'onboardingCompletedAt', 'memo', 'tokenId'])
-        && exists(/databases/$(database)/documents/onboardingTokens/$(request.resource.data.tokenId))
-        && get(/databases/$(database)/documents/onboardingTokens/$(request.resource.data.tokenId)).data.status == 'pending'
-        && get(/databases/$(database)/documents/onboardingTokens/$(request.resource.data.tokenId)).data.expiresAt > request.time;
+        && request.resource.data.keys().hasOnly(['name', 'phone', 'email', 'residentNumber', 'birthDate', 'address', 'subject', 'bankInfo', 'taxInfo', 'documents', 'staffType', 'status', 'joinDate', 'onboardingCompletedAt', 'memo', 'tokenId', 'position', 'department', 'affiliation', 'interviewDate', 'resignationDate', 'phoneKey', 'englishName'])
+        && (
+          hrOnboardingTokenValid(/databases/$(database)/documents/onboardingTokens/$(request.resource.data.tokenId))
+          || hrOnboardingTokenValid(/databases/$(database)/documents/employeeOnboardingTokens/$(request.resource.data.tokenId))
+          || hrOnboardingTokenValid(/databases/$(database)/documents/shortTermTokens/$(request.resource.data.tokenId))
+        );
 
       // 비인증 staff 읽기는 getHrPublicToken callable로 이전(G03) — 공개 get 제거.
 
@@ -908,15 +940,16 @@ service cloud.firestore {
         allow write: if isDirector();
 
         // 비인증 계약서 읽기는 getHrPublicToken callable로 이전(G03). 서명 update만 유지.
-        // ready→signed: 계약서 서명 (contractSigningToken 검증)
+        // ready→signed: 계약서 서명 (통합: 교사 contractSigningTokens 또는 행정 employeeContractSigningTokens)
         allow update: if resource.data.status == 'ready'
           && request.resource.data.status == 'signed'
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['signatures', 'status', 'updatedAt', 'signedPdfUrl', 'signingTokenId'])
           && 'signingTokenId' in request.resource.data
-          && get(/databases/$(database)/documents/contractSigningTokens/$(request.resource.data.signingTokenId)).data.contractId == contractId
-          && get(/databases/$(database)/documents/contractSigningTokens/$(request.resource.data.signingTokenId)).data.status == 'pending'
-          && get(/databases/$(database)/documents/contractSigningTokens/$(request.resource.data.signingTokenId)).data.expiresAt > request.time;
+          && (
+            hrSigningTokenValid(/databases/$(database)/documents/contractSigningTokens/$(request.resource.data.signingTokenId), contractId)
+            || hrSigningTokenValid(/databases/$(database)/documents/employeeContractSigningTokens/$(request.resource.data.signingTokenId), contractId)
+          );
         // signed/salary_agreement_sent→자기자신: 급여약정서 서명 (salaryAgreementToken 검증, status 불변)
         // status는 director가 'salary_agreement_sent'로 바꾼 뒤 강사가 서명하므로 두 상태 모두 허용
         allow update: if resource.data.status in ['signed', 'salary_agreement_sent']
@@ -929,13 +962,16 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/salaryAgreementTokens/$(request.resource.data.agreementTokenId)).data.expiresAt > request.time;
         // signed/salary_agreement_sent→자기자신: signedPdfUrl 재업로드 수리 (서명 후 PDF 업로드 실패 복구용)
         // 기존 signingToken이 같은 contractId를 가리키고 유효기간 내이면 허용. signature·status는 불변.
+        // 통합: 교사 contractSigningTokens 또는 행정 employeeContractSigningTokens (서명 후 status는 pending 아님).
         allow update: if resource.data.status in ['signed', 'salary_agreement_sent']
           && request.resource.data.status == resource.data.status
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['signedPdfUrl', 'updatedAt'])
           && 'signingTokenId' in resource.data
-          && get(/databases/$(database)/documents/contractSigningTokens/$(resource.data.signingTokenId)).data.contractId == contractId
-          && get(/databases/$(database)/documents/contractSigningTokens/$(resource.data.signingTokenId)).data.expiresAt > request.time;
+          && (
+            hrSigningTokenForContract(/databases/$(database)/documents/contractSigningTokens/$(resource.data.signingTokenId), contractId)
+            || hrSigningTokenForContract(/databases/$(database)/documents/employeeContractSigningTokens/$(resource.data.signingTokenId), contractId)
+          );
       }
 
       match /assignments/{id} {
@@ -1032,7 +1068,9 @@ service cloud.firestore {
     // [Director] Employees + 서브컬렉션
     // =========================================================================
     match /employees/{employeeId} {
-      allow read: if isLoggedIn();
+      // 레거시 컬렉션(통합 staff로 마이그레이션됨, 클라 read 없음). staff와 동일하게 PII read 차단:
+      // director+manager만. isLoggedIn() 개방은 staff 잠금(#5)을 우회하는 동일 PII 노출이라 닫는다.
+      allow read: if isDirector() || isManager();
       allow write: if isDirector();
       allow create: if request.resource.data.status == 'onboarding'
         && request.resource.data.keys().hasAll(['tokenId'])
@@ -1275,14 +1313,21 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // 태블릿 출결 이벤트 로그 — 서버(Admin SDK)·tabletCheckin callable 전용
+    // 태블릿 출결 이벤트 로그 — 쓰기는 서버(Admin SDK)·tabletCheckin callable 전용; 읽기는 직원 인증 허용.
     match /attendance_events/{docId} {
-      allow read, write: if false;
+      allow read: if isAuthorized();
+      allow write: if false;
     }
 
     // 키오스크 단말 정책(departure_policy) — 정책은 서버가 deviceId로 조회·적용
     match /kiosk_devices/{deviceId} {
       allow read, write: if false;
+    }
+
+    // 직원 출퇴근 기록 — 서버(Admin SDK)만 기록, 조회는 원장급(HR 월별 조회).
+    match /staff_attendance/{docId} {
+      allow read: if isDirector() || isManager();
+      allow write: if false;
     }
 
     // 메시지 발송 로그 — 대시보드 read 허용, 쓰기는 Admin SDK 전용
