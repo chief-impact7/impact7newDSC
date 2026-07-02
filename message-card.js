@@ -20,6 +20,8 @@ const NOTICE_TEMPLATES = {
   tuition: { label: '수강료 납부 안내', vars: ['해당월', '납부금액', '납부기한'] },
   exam: { label: '시험·성적 안내', vars: ['시험명', '안내내용'] },
   notice: { label: '휴원·일정 안내', vars: ['안내내용', '적용일자'] },
+  study: { label: '학습 안내', vars: ['안내내용'] },
+  makeup: { label: '보강 안내', vars: ['보강일시', '보강내용'] },
 };
 
 // 백엔드 recipientPhone.js의 RECIPIENT_FIELDS와 일치.
