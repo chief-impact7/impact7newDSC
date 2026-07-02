@@ -63,7 +63,8 @@ const contactPhone = (s) => s.parent_phone_1 || s.parent_phone_2 || s.student_ph
 
 // 상태별 뷰의 '미등원'을 등원전/미도착으로 세분. 지각 판정은 shared isLate(예정+유예 초과)를 재사용하되
 // 실제 등원시각 대신 '현재 시각'을 넘겨 "지금이 예정+유예를 지났는가"로 판정한다.
-// 실제로 오늘 올 학생만 대상 — 오늘 등원예정 아님·휴원·결석 확정 학생은 두 그룹 모두에서 제외한다.
+// 실제로 오늘 올 학생만 대상 — 오늘 등원예정 아님·휴원, 그리고 출결이 이미 기록된
+// (결석·기타 등 비등원 처리 포함) 학생은 연락 대상이 아니므로 두 그룹 모두에서 제외한다.
 function splitPendingGroup(groups, { arrivalByStudent, dailyByStudent, nowHHMM, date, enabled }) {
     if (!enabled) return groups;
     const { 미등원: pending = [], ...rest } = groups;
@@ -73,7 +74,9 @@ function splitPendingGroup(groups, { arrivalByStudent, dailyByStudent, nowHHMM, 
         const expected = arrivalByStudent?.[s.student_id];
         if (!expected) continue;
         if (isOnLeaveAt(s, date)) continue;
-        if (dailyByStudent?.[s.student_id]?.attendance?.status === '결석') continue;
+        // status가 실제 출결값(출석/지각/조퇴/결석/기타…)이면 이미 처리됨 — 반유형 기본라벨은 미처리로 통과.
+        const st = dailyByStudent?.[s.student_id]?.attendance?.status;
+        if (st && !DEFAULT_ATTENDANCE_LABELS.has(st)) continue;
         (isLate(nowHHMM, expected) ? contact : before).push(s);
     }
     return { 등원전: before, [CONTACT_GROUP]: contact, ...rest };
