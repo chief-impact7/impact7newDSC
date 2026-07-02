@@ -4,7 +4,7 @@
 import { state } from './state.js';
 import { geminiModel } from './firebase-ai.js';
 import { parseDateKST, getDayName } from './src/shared/firestore-helpers.js';
-import { esc, decodeHtmlEntities, formatTime12h, showSaveIndicator } from './ui-utils.js';
+import { esc, decodeHtmlEntities, formatTime12h, showSaveIndicator, isKakaoNightKST } from './ui-utils.js';
 import { enrollmentCode } from './student-helpers.js';
 import { sendDailyReport, addConsultation } from './data-layer.js';
 import { buildConsultationPayload } from './consultation-payload.js';
@@ -497,6 +497,11 @@ async function _doSend(logConsultation) {
     // 학부모 알림 작성엔 날짜 UI가 없으므로 발송일(오늘) 기준 — 대시보드 선택일(state.selectedDate)과 무관.
     const sendDate = todayKST();
     const recipientField = document.getElementById('parent-msg-recipient')?.value || 'parent_1';
+    // 야간(20:50~08:00)엔 카카오가 친구 대상 카톡을 차단 — 발송자에게 지금 문자/내일 카톡 예약을 묻는다.
+    let reserveIfNight = false;
+    if (isKakaoNightKST()) {
+        reserveIfNight = confirm('지금은 카카오톡 발송 제한 시간(밤 8:50~오전 8시)입니다.\n\n[확인] 채널 가입 학부모는 내일 오전 8시에 카카오톡으로 발송 (미가입자는 지금 문자)\n[취소] 지금 바로 문자로 발송');
+    }
     _sendingReport = true;
     btnIds.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
     try {
@@ -506,10 +511,16 @@ async function _doSend(logConsultation) {
             studentId: parentMsgStudentId,
             content,
             recipientField,
+            reserveIfNight,
         });
-        let msg = res?.joined
-            ? '카카오톡으로 발송 접수되었습니다. (미도달 시 잠시 후 문자로 자동 전환)'
-            : '채널 미가입이라 안내 문자로 발송했습니다.';
+        let msg;
+        if (reserveIfNight && res?.scheduledDate) {
+            msg = '예약했습니다 — 가입자는 내일 오전 8시 카카오톡으로 발송됩니다.';
+        } else if (res?.joined) {
+            msg = '카카오톡으로 발송 접수되었습니다. (미도달 시 잠시 후 문자로 자동 전환)';
+        } else {
+            msg = '채널 미가입이라 안내 문자로 발송했습니다.';
+        }
 
         // 상담 기록은 발송 성공 후 저장.
         if (logConsultation) {

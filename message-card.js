@@ -4,7 +4,7 @@
 
 import { sendParentNotice, createPromoCampaign, getStudentMessages, sendDailyReport } from './data-layer.js';
 import { ATTENDANCE_ACTIONS } from '@impact7/shared/attendance-action';
-import { esc, escAttr } from './ui-utils.js';
+import { esc, escAttr, isKakaoNightKST } from './ui-utils.js';
 
 let _deps = {};
 let _mode = 'notice'; // 'notice'(템플릿 안내) | 'free'(자유 안내) | 'promo'(홍보)
@@ -247,9 +247,17 @@ async function sendFree(studentId) {
   if (_sending) return;
   const content = document.getElementById('msg-content').value.trim();
   if (!content) { _deps.toast?.('내용을 입력하세요.', 'error'); return; }
+  // 야간(20:50~08:00)엔 카카오가 친구 대상 카톡(브랜드메시지)을 차단한다. 발송자에게 처리 방식을 묻는다.
+  let reserveIfNight = false;
+  if (isKakaoNightKST()) {
+    reserveIfNight = confirm('지금은 카카오톡 발송 제한 시간(밤 8:50~오전 8시)입니다.\n\n[확인] 채널 가입 학부모는 내일 오전 8시에 카카오톡으로 발송 (미가입자는 지금 문자)\n[취소] 지금 바로 문자로 발송');
+  }
   await doSend(
-    () => sendDailyReport({ studentId, content, recipientField: _recipientField }),
-    '발송을 요청했습니다. (미도달 시 문자로 자동 전환)',
+    () => sendDailyReport({ studentId, content, recipientField: _recipientField, reserveIfNight }),
+    // 실제 예약 여부는 서버 응답(scheduledDate: 친구+야간만 non-null)으로 판정 — 경계 시계 스큐 오표기 방지.
+    (res) => (reserveIfNight && res?.scheduledDate)
+      ? '예약했습니다 — 가입자는 내일 오전 8시 카카오톡, 미가입자는 지금 문자로 발송됩니다.'
+      : '발송을 요청했습니다. (미도달 시 문자로 자동 전환)',
     () => scheduleHistoryReload(studentId),
   );
 }
@@ -260,8 +268,8 @@ async function doSend(fn, okMsg, onSuccess) {
   _sending = true;
   if (btn) btn.disabled = true;
   try {
-    await fn();
-    _deps.toast?.(okMsg, 'success');
+    const res = await fn();
+    _deps.toast?.(typeof okMsg === 'function' ? okMsg(res) : okMsg, 'success');
     onSuccess?.();
   } catch (err) {
     _deps.toast?.(err?.message || '발송에 실패했습니다.', 'error');
