@@ -8,6 +8,7 @@ import { esc, decodeHtmlEntities, formatTime12h, showSaveIndicator } from './ui-
 import { enrollmentCode } from './student-helpers.js';
 import { sendDailyReport, addConsultation } from './data-layer.js';
 import { buildConsultationPayload } from './consultation-payload.js';
+import { todayKST } from '@impact7/shared/datetime';
 
 let _sendingReport = false;
 
@@ -467,6 +468,8 @@ async function _doSend(logConsultation) {
     if (!content) { alert('발송할 내용이 없습니다.'); return; }
 
     const btnIds = ['parent-msg-send-btn', 'parent-msg-send-log-btn'];
+    // 학부모 알림 작성엔 날짜 UI가 없으므로 발송일(오늘) 기준 — 대시보드 선택일(state.selectedDate)과 무관.
+    const sendDate = todayKST();
     _sendingReport = true;
     btnIds.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
     try {
@@ -475,7 +478,7 @@ async function _doSend(logConsultation) {
             content,
             recipientField: 'parent_1',
             // 학생·날짜당 1회 멱등 — 같은 날 재클릭 시 서버가 duplicate 반환(중복 발송 차단).
-            requestId: `report_${parentMsgStudentId}_${state.selectedDate || ''}`,
+            requestId: `report_${parentMsgStudentId}_${sendDate}`,
         });
         let msg = res?.duplicate ? '이미 발송된 요청입니다.'
             : res?.joined ? '카카오톡(브랜드메시지)으로 발송 접수되었습니다.'
@@ -483,30 +486,26 @@ async function _doSend(logConsultation) {
 
         // 상담 기록은 새로 발송된 경우에만 저장(중복 요청이면 이미 기록됐을 수 있어 건너뜀).
         if (logConsultation && !res?.duplicate) {
-            if (!state.selectedDate) {
-                msg += ' · (날짜 정보가 없어 상담은 저장되지 않음 — 상담 탭에서 수동 저장하세요)';
-            } else {
-                try {
-                    const student = getStudent?.(parentMsgStudentId) || {};
-                    const teacher = getCurrentTeacher?.() || {};
-                    await addConsultation(buildConsultationPayload({
-                        studentId: parentMsgStudentId,
-                        studentName: student.name || '',
-                        className: '',
-                        teacherId: teacher.id || '',
-                        teacherName: teacher.name || '',
-                        date: state.selectedDate,
-                        target: '학부모',
-                        method: '문자',
-                        consultationType: '정기',
-                        text: content,
-                        title: '',
-                    }));
-                    msg += ' · 상담 기록 저장됨';
-                } catch (e) {
-                    console.error('상담 기록 저장 실패:', e);
-                    msg += ' · (상담 저장 실패 — 상담 탭에서 수동 저장하세요: ' + (e?.message || e) + ')';
-                }
+            try {
+                const student = getStudent?.(parentMsgStudentId) || {};
+                const teacher = getCurrentTeacher?.() || {};
+                await addConsultation(buildConsultationPayload({
+                    studentId: parentMsgStudentId,
+                    studentName: student.name || '',
+                    className: '',
+                    teacherId: teacher.id || '',
+                    teacherName: teacher.name || '',
+                    date: sendDate,
+                    target: '학부모',
+                    method: '문자',
+                    consultationType: '정기',
+                    text: content,
+                    title: '',
+                }));
+                msg += ' · 상담 기록 저장됨';
+            } catch (e) {
+                console.error('상담 기록 저장 실패:', e);
+                msg += ' · (상담 저장 실패 — 상담 탭에서 수동 저장하세요: ' + (e?.message || e) + ')';
             }
         }
         alert(msg);
