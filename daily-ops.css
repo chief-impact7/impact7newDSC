@@ -3068,10 +3068,12 @@ textarea.field-input {
 
 .parent-msg-footer {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 12px 20px;
   border-top: 1px solid var(--border);
   justify-content: flex-end;
+  align-items: center;
 }
 
 .parent-msg-footer button {
@@ -3084,6 +3086,31 @@ textarea.field-input {
   display: flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 수신 대상 선택 — footer 위 별도 행(버튼과 공간 경쟁 방지) */
+.parent-msg-recipient-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px 0;
+}
+
+.parent-msg-recipient-label {
+  font-size: 13px;
+  color: var(--text-sec);
+}
+
+.parent-msg-recipient-row select {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  background: var(--surface, #fff);
+  color: var(--text-main);
+  cursor: pointer;
 }
 
 .parent-msg-btn-copy {

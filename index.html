@@ -793,6 +793,10 @@
                         placeholder="직접 메시지를 작성하세요..."></textarea>
                 </div>
             </div>
+            <div class="parent-msg-recipient-row">
+                <span class="parent-msg-recipient-label">수신 대상</span>
+                <select id="parent-msg-recipient" title="수신 대상"></select>
+            </div>
             <div class="parent-msg-footer">
                 <span class="parent-msg-copied" id="parent-msg-copied" style="display:none;">
                     <span class="material-symbols-outlined" style="font-size:14px;">check</span>
@@ -806,10 +810,6 @@
                     <span class="material-symbols-outlined" style="font-size:16px;">content_copy</span>
                     복사
                 </button>
-                <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:#555;">
-                    수신
-                    <select id="parent-msg-recipient" title="수신 대상" style="padding:4px 6px;border:1px solid #ccc;border-radius:4px;font-size:12px;"></select>
-                </label>
                 <button class="parent-msg-btn-copy" id="parent-msg-send-btn" style="background:#0b7a52;color:#fff;border-color:#0b7a52;" onclick="sendParentMessage()">
                     <span class="material-symbols-outlined" style="font-size:16px;">send</span>
                     발송

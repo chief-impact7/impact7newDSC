@@ -500,19 +500,19 @@ async function _doSend(logConsultation) {
     _sendingReport = true;
     btnIds.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
     try {
+        // 멱등키를 두지 않는다 — 같은 날 수정본 재발송을 허용. 더블클릭 중복은 _sendingReport
+        // 플래그 + 버튼 disabled로 막는다(응답 전까지 재진입 불가).
         const res = await sendDailyReport({
             studentId: parentMsgStudentId,
             content,
             recipientField,
-            // 학생·대상·날짜당 1회 멱등 — 같은 대상 재클릭은 duplicate로 막고, 다른 대상엔 별도 발송 허용.
-            requestId: `report_${parentMsgStudentId}_${recipientField}_${sendDate}`,
         });
-        let msg = res?.duplicate ? '이미 발송된 요청입니다.'
-            : res?.joined ? '카카오톡(브랜드메시지)으로 발송 접수되었습니다.'
-            : '학부모가 채널 미가입이라 가입 안내 문자를 발송했습니다.';
+        let msg = res?.joined
+            ? '카카오톡으로 발송 접수되었습니다. (미도달 시 잠시 후 문자로 자동 전환)'
+            : '채널 미가입이라 안내 문자로 발송했습니다.';
 
-        // 상담 기록은 새로 발송된 경우에만 저장(중복 요청이면 이미 기록됐을 수 있어 건너뜀).
-        if (logConsultation && !res?.duplicate) {
+        // 상담 기록은 발송 성공 후 저장.
+        if (logConsultation) {
             try {
                 const student = getStudent?.(parentMsgStudentId) || {};
                 const teacher = getCurrentTeacher?.() || {};
