@@ -63,8 +63,8 @@ const contactPhone = (s) => s.parent_phone_1 || s.parent_phone_2 || s.student_ph
 
 // 상태별 뷰의 '미등원'을 등원전/미도착으로 세분. 지각 판정은 shared isLate(예정+유예 초과)를 재사용하되
 // 실제 등원시각 대신 '현재 시각'을 넘겨 "지금이 예정+유예를 지났는가"로 판정한다.
-// 예정시각 없음(오늘 수업 없음)은 어느 그룹에도 넣지 않는다.
-function splitPendingGroup(groups, { arrivalByStudent, nowHHMM, enabled }) {
+// 실제로 오늘 올 학생만 대상 — 오늘 등원예정 아님·휴원·결석 확정 학생은 두 그룹 모두에서 제외한다.
+function splitPendingGroup(groups, { arrivalByStudent, dailyByStudent, nowHHMM, date, enabled }) {
     if (!enabled) return groups;
     const { 미등원: pending = [], ...rest } = groups;
     const before = [];
@@ -72,6 +72,8 @@ function splitPendingGroup(groups, { arrivalByStudent, nowHHMM, enabled }) {
     for (const s of pending) {
         const expected = arrivalByStudent?.[s.student_id];
         if (!expected) continue;
+        if (isOnLeaveAt(s, date)) continue;
+        if (dailyByStudent?.[s.student_id]?.attendance?.status === '결석') continue;
         (isLate(nowHHMM, expected) ? contact : before).push(s);
     }
     return { 등원전: before, [CONTACT_GROUP]: contact, ...rest };
@@ -826,7 +828,7 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                     <div className="daily-log-accordion">
                         {Object.entries(splitPendingGroup(
                             groupByState(stateStudents, dailyByStudent),
-                            { arrivalByStudent, nowHHMM, enabled: isTodayView },
+                            { arrivalByStudent, dailyByStudent, nowHHMM, date, enabled: isTodayView },
                         )).map(([group, list]) => {
                             const isContact = group === CONTACT_GROUP;
                             return (
