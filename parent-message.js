@@ -12,6 +12,29 @@ import { todayKST } from '@impact7/shared/datetime';
 
 let _sendingReport = false;
 
+// 백엔드 recipientPhone.js의 RECIPIENT_FIELDS와 일치. 번호가 있는 대상만 노출한다.
+const RECIPIENT_OPTIONS = [
+    { field: 'student', label: '학생', key: 'student_phone' },
+    { field: 'parent_1', label: '학부모1', key: 'parent_phone_1' },
+    { field: 'parent_2', label: '학부모2', key: 'parent_phone_2' },
+    { field: 'other', label: '기타', key: 'other_phone' },
+];
+const onlyDigits = (v) => String(v ?? '').replace(/\D/g, '');
+
+// 학생 번호 유무에 따라 수신 대상 select를 채운다. 기본 선택은 학부모1(있으면), 없으면 첫 가용.
+function populateRecipientSelect(studentId) {
+    const sel = document.getElementById('parent-msg-recipient');
+    if (!sel) return;
+    const student = getStudent?.(studentId) || {};
+    const available = RECIPIENT_OPTIONS.filter((o) => onlyDigits(student[o.key]));
+    const opts = available.length ? available : RECIPIENT_OPTIONS.filter((o) => o.field === 'parent_1');
+    sel.innerHTML = opts.map((o) => {
+        const tail = onlyDigits(student[o.key]).slice(-4);
+        return `<option value="${o.field}">${o.label}${tail ? ` (${tail})` : ''}</option>`;
+    }).join('');
+    sel.value = available.some((o) => o.field === 'parent_1') ? 'parent_1' : (available[0]?.field ?? 'parent_1');
+}
+
 // ─── 의존성 주입 (daily-ops.js에서 init 호출) ──────────────────────────────
 let getStudentDomains, getStudentTestItems, getStudentChecklistStatus, getStudent, getCurrentTeacher;
 
@@ -411,6 +434,9 @@ export function openParentMessageModal(studentId) {
     if (noteInput) noteInput.value = '';
     const manualText = document.getElementById('parent-msg-manual-text');
     if (manualText) manualText.value = '';
+
+    // 수신 대상 select — 학생 번호 유무 반영, 기본 학부모1.
+    populateRecipientSelect(studentId);
 }
 
 export async function regenerateParentMessage() {
@@ -457,7 +483,7 @@ export function copyParentMessage() {
     });
 }
 
-// 일일 리포트 발송 — 친구면 정보형 BMS, 비친구면 가입 안내 SMS(서버가 분기). 수신 대상은 학부모1.
+// 일일 리포트 발송 — 친구면 정보형 BMS, 비친구면 가입 안내 SMS(서버가 분기). 수신 대상은 select(parent-msg-recipient)에서 선택, 기본 학부모1.
 // logConsultation=true면 발송 성공 후 상담 기록에 자동 저장(형태='문자').
 async function _doSend(logConsultation) {
     if (_sendingReport || !parentMsgStudentId) return;
@@ -470,15 +496,16 @@ async function _doSend(logConsultation) {
     const btnIds = ['parent-msg-send-btn', 'parent-msg-send-log-btn'];
     // 학부모 알림 작성엔 날짜 UI가 없으므로 발송일(오늘) 기준 — 대시보드 선택일(state.selectedDate)과 무관.
     const sendDate = todayKST();
+    const recipientField = document.getElementById('parent-msg-recipient')?.value || 'parent_1';
     _sendingReport = true;
     btnIds.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
     try {
         const res = await sendDailyReport({
             studentId: parentMsgStudentId,
             content,
-            recipientField: 'parent_1',
-            // 학생·날짜당 1회 멱등 — 같은 날 재클릭 시 서버가 duplicate 반환(중복 발송 차단).
-            requestId: `report_${parentMsgStudentId}_${sendDate}`,
+            recipientField,
+            // 학생·대상·날짜당 1회 멱등 — 같은 대상 재클릭은 duplicate로 막고, 다른 대상엔 별도 발송 허용.
+            requestId: `report_${parentMsgStudentId}_${recipientField}_${sendDate}`,
         });
         let msg = res?.duplicate ? '이미 발송된 요청입니다.'
             : res?.joined ? '카카오톡(브랜드메시지)으로 발송 접수되었습니다.'
@@ -496,7 +523,7 @@ async function _doSend(logConsultation) {
                     teacherId: teacher.id || '',
                     teacherName: teacher.name || '',
                     date: sendDate,
-                    target: '학부모',
+                    target: recipientField === 'student' ? '학생' : '학부모',
                     method: '문자',
                     consultationType: '정기',
                     text: content,
