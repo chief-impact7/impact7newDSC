@@ -302,6 +302,14 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // [DSC] 미등원 안내 발송 멱등 기록 — 로그북 '미도착(연락)' 발송 상태 표시용.
+    // write는 서버(sendAbsenceNotice callable / absenceNoticeSweeper)만, 클라는 read만.
+    // =========================================================================
+    match /absence_notices/{docId} {
+      allow read: if isAuthorized();
+    }
+
+    // =========================================================================
     // [DSC] Retake Schedule (재시/보충 일정)
     // =========================================================================
     match /retake_schedule/{docId} {
@@ -1322,6 +1330,12 @@ service cloud.firestore {
     // 키오스크 단말 정책(departure_policy) — 정책은 서버가 deviceId로 조회·적용
     match /kiosk_devices/{deviceId} {
       allow read, write: if false;
+    }
+
+    // 직원 근태 설정 — 매니저 이상 read/write. 서버 callable도 Admin SDK로 우회.
+    match /settings/{docId} {
+      allow read: if isDirector() || isManager();
+      allow write: if isDirector() || isManager();
     }
 
     // 직원 출퇴근 기록 — 서버(Admin SDK)만 기록, 조회는 원장급(HR 월별 조회).
