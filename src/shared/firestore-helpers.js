@@ -299,6 +299,7 @@ export async function fetchDashboardDailyLogData(date) {
         leaveRequests,
         classSettings,
         attendanceEventsSnap,
+        absenceNoticesSnap,
     ] = await Promise.all([
         fetchDailyRecordsForDate(date),
         fetchTempAttendancesForDate(date),
