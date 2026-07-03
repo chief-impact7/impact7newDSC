@@ -20,7 +20,7 @@ const NOTICE_TEMPLATES = {
   tuition: { label: '수강료 납부 안내', vars: ['해당월', '납부금액', '납부기한'] },
   exam: { label: '시험·성적 안내', vars: ['시험명', '안내내용'] },
   notice: { label: '휴원·일정 안내', vars: ['안내내용', '적용일자'] },
-  study: { label: '학습 안내', vars: ['안내내용'] },
+  // study(학습 안내)는 카카오 반려로 드롭다운에서 임시 숨김 — 수업 리포트 템플릿 승인 후 복원/대체 예정.
   makeup: { label: '보강 안내', vars: ['보강일시', '보강내용'] },
 };
 
