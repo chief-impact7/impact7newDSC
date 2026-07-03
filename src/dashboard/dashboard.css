@@ -1145,6 +1145,27 @@ body {
     line-height: 1.45;
 }
 
+/* 미도착(연락) 미등원 알림톡 수동 발송 버튼 / 발송됨 배지 */
+.absence-send-btn {
+    margin-left: 8px;
+    padding: 2px 8px;
+    font-size: 11px;
+    border: 1px solid #006241;
+    color: #006241;
+    background: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.absence-send-btn:hover:not(:disabled) { background: #006241; color: #fff; }
+.absence-send-btn:disabled { opacity: .55; cursor: default; }
+.absence-sent-badge {
+    margin-left: 8px;
+    font-size: 11px;
+    color: #00754A;
+    white-space: nowrap;
+}
+
 /* OX 배지 */
 .ox-badge {
     display: inline-block;

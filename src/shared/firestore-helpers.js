@@ -308,6 +308,7 @@ export async function fetchDashboardDailyLogData(date) {
         fetchApprovedLeaveRequestsForDate(date),
         fetchClassSettingsMap(),
         getDocs(query(collection(db, 'attendance_events'), where('date_kst', '==', date))).catch(() => null),
+        getDocs(query(collection(db, 'absence_notices'), where('date', '==', date))).catch(() => null),
     ]);
     const attendanceEvents = (attendanceEventsSnap?.docs ?? []).map(d => {
         const data = d.data();
@@ -318,6 +319,8 @@ export async function fetchDashboardDailyLogData(date) {
             occurred_at: data.occurred_at?.toDate().toISOString() ?? null,
         };
     }).filter(e => e.occurred_at);
+    // 미등원 안내 발송 완료 학생 id — 로그북 '미도착(연락)'에서 '발송됨' 표시용.
+    const absenceNoticeIds = (absenceNoticesSnap?.docs ?? []).map(d => d.data().student_id).filter(Boolean);
     return {
         dailyRecords,
         tempAttendances,
@@ -327,6 +330,7 @@ export async function fetchDashboardDailyLogData(date) {
         leaveRequests,
         classSettings,
         attendanceEvents,
+        absenceNoticeIds,
     };
 }
 

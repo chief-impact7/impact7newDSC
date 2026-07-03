@@ -1,4 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../../../firebase-config.js';
 import { getDayName, studentGradeKey, studentShortLabel, normalizeAttendanceLabel } from '../../shared/firestore-helpers.js';
 import { branchFromStudent, resolveNaesinCsKey, displayCodeFromCsKey, isOnLeaveAt, isWithdrawnAt } from '../../../student-helpers.js';
 import { applyNaesinFreeDerivation } from '@impact7/shared/enrollment-derivation';
@@ -655,23 +657,36 @@ function SideList({ title, icon, rows, type, hideEmptyBody = false }) {
     );
 }
 
-// 미도착(연락) 그룹 — 연락처(tel 링크)와 예정시각을 함께 노출해 바로 전화할 수 있게 한다.
-function ContactList({ rows, arrivalByStudent }) {
+// 미도착(연락) 그룹 — 연락처(tel 링크)·예정시각과 함께, 사람이 확인 후 누르는 미등원 알림톡 발송
+// 버튼을 노출한다(발송 완료 학생은 '발송됨' 배지). 자동 스윕 대신 수동 발송으로 오탐을 줄인다.
+function ContactList({ rows, arrivalByStudent, sentIds, sending, onSend }) {
     if (!rows.length) return <div className="daily-log-empty">연락할 학생 없음</div>;
     return (
         <div className="daily-log-side-list">
             {rows.map((s, i) => {
                 const phone = contactPhone(s);
+                const sid = s.student_id;
+                const sent = sentIds?.has(sid);
                 return (
-                    <div key={s.student_id ?? i} className="daily-log-side-item">
+                    <div key={sid ?? i} className="daily-log-side-item">
                         <div className="daily-log-side-top">
                             <strong>{s.student_name ?? s.name}</strong>
-                            <span>{[studentShortLabel(s), `예정 ${fmtTime(arrivalByStudent[s.student_id])}`].filter(Boolean).join(' · ')}</span>
+                            <span>{[studentShortLabel(s), `예정 ${fmtTime(arrivalByStudent[sid])}`].filter(Boolean).join(' · ')}</span>
                         </div>
                         <div className="daily-log-side-note">
                             {phone
                                 ? <a href={`tel:${String(phone).replace(/[^0-9+]/g, '')}`}>{formatPhone(phone)}</a>
                                 : '연락처 없음'}
+                            {phone && onSend && (sent
+                                ? <span className="absence-sent-badge">알림톡 발송됨 ✓</span>
+                                : <button
+                                    type="button"
+                                    className="absence-send-btn"
+                                    disabled={!!sending}
+                                    onClick={() => onSend(sid, arrivalByStudent[sid])}
+                                >
+                                    {sending === sid ? '발송 중…' : '미등원 알림톡'}
+                                </button>)}
                         </div>
                     </div>
                 );
@@ -682,6 +697,31 @@ function ContactList({ rows, arrivalByStudent }) {
 
 export default function DailyLogBoard({ students, dailyLog, branchFilter, classFilter, gradeFilter, date }) {
     const [viewMode, setViewMode] = useState('classes');
+
+    // 미등원 안내 수동 발송(미도착 연락). 발송완료 = 서버 absence_notices(dailyLog.absenceNoticeIds)
+    // + 이번 세션 로컬 발송분(optimistic)을 합쳐 '발송됨'으로 표시한다(자동 스윕과 멱등 컬렉션 공유).
+    const sendAbsenceCallable = useMemo(() => httpsCallable(functions, 'sendAbsenceNotice'), []);
+    const [absenceSentLocal, setAbsenceSentLocal] = useState(() => new Set());
+    const [absenceSending, setAbsenceSending] = useState(null);
+    // 조회일이 바뀌면 optimistic 발송분을 초기화 — 어제 발송이 오늘 화면에 거짓 '발송됨'으로 새지 않게.
+    useEffect(() => { setAbsenceSentLocal(new Set()); }, [date]);
+    const absenceSentIds = useMemo(() => {
+        const s = new Set(dailyLog?.absenceNoticeIds ?? []);
+        absenceSentLocal.forEach((id) => s.add(id));
+        return s;
+    }, [dailyLog, absenceSentLocal]);
+    const handleSendAbsence = async (studentId, expectedTime) => {
+        if (!studentId || absenceSending) return;
+        setAbsenceSending(studentId);
+        try {
+            await sendAbsenceCallable({ studentId, expectedTime: expectedTime ?? '' });
+            setAbsenceSentLocal((prev) => new Set(prev).add(studentId));
+        } catch (e) {
+            alert('미등원 알림톡 발송 실패: ' + (e?.message || e));
+        } finally {
+            setAbsenceSending(null);
+        }
+    };
     const data = useMemo(() =>
         buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilter, date }),
     [students, dailyLog, branchFilter, classFilter, gradeFilter, date]);
@@ -846,7 +886,7 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                                         </div>
                                     </summary>
                                     {isContact ? (
-                                        <ContactList rows={list} arrivalByStudent={arrivalByStudent} />
+                                        <ContactList rows={list} arrivalByStudent={arrivalByStudent} sentIds={absenceSentIds} sending={absenceSending} onSend={handleSendAbsence} />
                                     ) : (
                                         <div className="daily-log-state-names">
                                             {list.map((s, i) => (
