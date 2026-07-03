@@ -320,8 +320,15 @@ export async function fetchDashboardDailyLogData(date) {
             occurred_at: data.occurred_at?.toDate().toISOString() ?? null,
         };
     }).filter(e => e.occurred_at);
-    // 미등원 안내 발송 완료 학생 id — 로그북 '미도착(연락)'에서 '발송됨' 표시용.
-    const absenceNoticeIds = (absenceNoticesSnap?.docs ?? []).map(d => d.data().student_id).filter(Boolean);
+    // 미등원 안내 발송 학생별 결과 — 로그북 '미도착(연락)' 배지(발송중/발송됨/실패)용.
+    // delivery_status는 onAbsenceNoticeQueueUpdated(impact7DB) 트리거가 채우기 전엔 없을 수 있어
+    // 문서 존재 자체를 'pending'으로 폴백한다(발송 요청은 됐으나 아직 결과 미반영).
+    const absenceNoticeStatus = {};
+    (absenceNoticesSnap?.docs ?? []).forEach(d => {
+        const data = d.data();
+        if (!data.student_id) return;
+        absenceNoticeStatus[data.student_id] = data.delivery_status ?? 'pending';
+    });
     return {
         dailyRecords,
         tempAttendances,
@@ -331,7 +338,7 @@ export async function fetchDashboardDailyLogData(date) {
         leaveRequests,
         classSettings,
         attendanceEvents,
-        absenceNoticeIds,
+        absenceNoticeStatus,
     };
 }
 

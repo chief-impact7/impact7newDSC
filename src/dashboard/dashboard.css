@@ -1165,6 +1165,8 @@ body {
     color: #00754A;
     white-space: nowrap;
 }
+.absence-sent-badge.pending { color: #8a6d00; }
+.absence-sent-badge.failed { color: #c82014; }
 
 /* OX 배지 */
 .ox-badge {

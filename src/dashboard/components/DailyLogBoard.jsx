@@ -657,16 +657,28 @@ function SideList({ title, icon, rows, type, hideEmptyBody = false }) {
     );
 }
 
+// 미등원 알림톡 발송 상태 배지 — delivery_status(message_queue 최종 결과가 absence_notices에
+// 반영된 값)별 표시. pending/processing/failed_retryable은 아직 결과 미확정이라 묶어서 보여준다
+// (새로고침 시에만 갱신 — 실시간 리스너 아님. impact7DB syncAbsenceNoticeDeliveryStatus 참고).
+const ABSENCE_STATUS_META = {
+    pending: { label: '발송 처리중…', cls: 'pending' },
+    processing: { label: '발송 처리중…', cls: 'pending' },
+    failed_retryable: { label: '재시도 중…', cls: 'pending' },
+    sent: { label: '알림톡 발송됨 ✓', cls: 'sent' },
+    failed_permanent: { label: '발송 실패 ⚠', cls: 'failed' },
+};
+
 // 미도착(연락) 그룹 — 연락처(tel 링크)·예정시각과 함께, 사람이 확인 후 누르는 미등원 알림톡 발송
-// 버튼을 노출한다(발송 완료 학생은 '발송됨' 배지). 자동 스윕 대신 수동 발송으로 오탐을 줄인다.
-function ContactList({ rows, arrivalByStudent, sentIds, sending, onSend }) {
+// 버튼을 노출한다(발송 완료/실패 학생은 상태 배지). 자동 스윕 대신 수동 발송으로 오탐을 줄인다.
+function ContactList({ rows, arrivalByStudent, statusById, sending, onSend }) {
     if (!rows.length) return <div className="daily-log-empty">연락할 학생 없음</div>;
     return (
         <div className="daily-log-side-list">
             {rows.map((s, i) => {
                 const phone = contactPhone(s);
                 const sid = s.student_id;
-                const sent = sentIds?.has(sid);
+                const status = statusById?.get(sid);
+                const meta = status ? (ABSENCE_STATUS_META[status] ?? { label: status, cls: 'pending' }) : null;
                 return (
                     <div key={sid ?? i} className="daily-log-side-item">
                         <div className="daily-log-side-top">
@@ -677,8 +689,8 @@ function ContactList({ rows, arrivalByStudent, sentIds, sending, onSend }) {
                             {phone
                                 ? <a href={`tel:${String(phone).replace(/[^0-9+]/g, '')}`}>{formatPhone(phone)}</a>
                                 : '연락처 없음'}
-                            {phone && onSend && (sent
-                                ? <span className="absence-sent-badge">알림톡 발송됨 ✓</span>
+                            {phone && onSend && (meta
+                                ? <span className={`absence-sent-badge ${meta.cls}`}>{meta.label}</span>
                                 : <button
                                     type="button"
                                     className="absence-send-btn"
@@ -698,17 +710,18 @@ function ContactList({ rows, arrivalByStudent, sentIds, sending, onSend }) {
 export default function DailyLogBoard({ students, dailyLog, branchFilter, classFilter, gradeFilter, date }) {
     const [viewMode, setViewMode] = useState('classes');
 
-    // 미등원 안내 수동 발송(미도착 연락). 발송완료 = 서버 absence_notices(dailyLog.absenceNoticeIds)
-    // + 이번 세션 로컬 발송분(optimistic)을 합쳐 '발송됨'으로 표시한다(자동 스윕과 멱등 컬렉션 공유).
+    // 미등원 안내 수동 발송(미도착 연락). 상태 = 서버 absence_notices(dailyLog.absenceNoticeStatus,
+    // 발송 결과 delivery_status 반영) + 이번 세션 로컬 발송분(optimistic, 결과 미확정이라 'pending')을
+    // 합쳐 배지로 표시한다(자동 스윕과 멱등 컬렉션 공유). 실시간 리스너가 아니라 새로고침 시에만 갱신.
     const sendAbsenceCallable = useMemo(() => httpsCallable(functions, 'sendAbsenceNotice'), []);
     const [absenceSentLocal, setAbsenceSentLocal] = useState(() => new Set());
     const [absenceSending, setAbsenceSending] = useState(null);
-    // 조회일이 바뀌면 optimistic 발송분을 초기화 — 어제 발송이 오늘 화면에 거짓 '발송됨'으로 새지 않게.
+    // 조회일이 바뀌면 optimistic 발송분을 초기화 — 어제 발송이 오늘 화면에 거짓 배지로 새지 않게.
     useEffect(() => { setAbsenceSentLocal(new Set()); }, [date]);
-    const absenceSentIds = useMemo(() => {
-        const s = new Set(dailyLog?.absenceNoticeIds ?? []);
-        absenceSentLocal.forEach((id) => s.add(id));
-        return s;
+    const absenceStatusById = useMemo(() => {
+        const m = new Map(Object.entries(dailyLog?.absenceNoticeStatus ?? {}));
+        absenceSentLocal.forEach((id) => { if (!m.has(id)) m.set(id, 'pending'); });
+        return m;
     }, [dailyLog, absenceSentLocal]);
     const handleSendAbsence = async (studentId, expectedTime) => {
         if (!studentId || absenceSending) return;
@@ -886,7 +899,7 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                                         </div>
                                     </summary>
                                     {isContact ? (
-                                        <ContactList rows={list} arrivalByStudent={arrivalByStudent} sentIds={absenceSentIds} sending={absenceSending} onSend={handleSendAbsence} />
+                                        <ContactList rows={list} arrivalByStudent={arrivalByStudent} statusById={absenceStatusById} sending={absenceSending} onSend={handleSendAbsence} />
                                     ) : (
                                         <div className="daily-log-state-names">
                                             {list.map((s, i) => (
