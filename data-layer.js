@@ -1064,11 +1064,26 @@ export async function manageMessageFailure(payload) {
   return res.data;
 }
 
-// 학생별 발송 내역(message_logs 최신순).
-export async function getStudentMessages(studentId) {
-  const callable = httpsCallable(functions, 'getStudentMessages');
-  const res = await callable({ studentId });
+// 태블릿 출결 체크인과 동일 경로 — DSC 상세패널의 수동 등하원 처리(출결 기록+알림톡을 한 번에).
+// { studentNumber }만 주면 조회(오늘 상태·가능 액션), studentId+action까지 주면 확정.
+export async function tabletCheckin(payload) {
+  const callable = httpsCallable(functions, 'tabletCheckin');
+  const res = await callable(payload);
   return res.data;
+}
+
+// 미등원 안내 수동 발송 — 로그북 '미도착(연락)' 버튼과 같은 멱등 컬렉션(absence_notices) 공유.
+export async function sendAbsenceNotice(payload) {
+  const callable = httpsCallable(functions, 'sendAbsenceNotice');
+  const res = await callable(payload);
+  return res.data;
+}
+
+// 오늘 미등원 안내 발송 여부 — 로그북 배지와 동일 소스(absence_notices/{sid}_{date}).
+export async function getAbsenceNoticeToday(studentId) {
+  const snap = await getDoc(doc(db, 'absence_notices', `${studentId}_${todayStr()}`));
+  if (!snap.exists()) return { exists: false, deliveryStatus: null };
+  return { exists: true, deliveryStatus: snap.data().delivery_status ?? null };
 }
 
 // ─── AI 자동화 설정 (automation_settings/student_report) ──────────────────────

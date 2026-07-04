@@ -2,7 +2,10 @@
 // 수신 대상(학생/학부모1/학부모2/기타) 선택. 대규모/다수 발송은 별도 화면.
 // 권한·광고 규제는 서버 callable이 검증한다.
 
-import { sendParentNotice, createPromoCampaign, getStudentMessages, sendDailyReport } from './data-layer.js';
+import {
+  sendParentNotice, createPromoCampaign, sendDailyReport,
+  tabletCheckin, sendAbsenceNotice, getAbsenceNoticeToday, getRecipientMessageHistory,
+} from './data-layer.js';
 import { ATTENDANCE_ACTIONS } from '@impact7/shared/attendance-action';
 import { esc, escAttr, isKakaoNightKST } from './ui-utils.js';
 
@@ -10,6 +13,7 @@ let _deps = {};
 let _mode = 'notice'; // 'notice'(템플릿 안내) | 'free'(자유 안내) | 'promo'(홍보)
 let _recipientField = 'parent_1'; // 'student' | 'parent_1' | 'parent_2' | 'other'
 let _sending = false;
+let _quickBusy = false;
 // 멱등키 — 폼 단위로 안정 유지(응답 타임아웃 후 재시도의 중복 발송 차단), 발송 성공 시 재발급.
 let _noticeReqId = null;
 let _promoReqId = null;
@@ -32,32 +36,43 @@ const RECIPIENT_OPTIONS = [
   { field: 'other', label: '기타', key: 'other_phone' },
 ];
 
-// 등하원 빠른 발송 — 현재 시각으로 즉시 알림톡(parent_notice 템플릿 arrival/departure/out/return).
+// 등하원 빠른 처리 — 태블릿을 찍지 않은 학생의 수동 처리. tabletCheckin과 같은 서버 경로를 타므로
+// 출결 기록과 알림톡 발송이 함께 되고, 태블릿에서 이미 처리한 액션은 상태머신이 막는다(버튼 비활성).
 const QUICK_ACTIONS = [
   { key: 'arrival', label: ATTENDANCE_ACTIONS.arrival },
-  { key: 'departure', label: ATTENDANCE_ACTIONS.departure },
   { key: 'out', label: ATTENDANCE_ACTIONS.out },
   { key: 'return', label: ATTENDANCE_ACTIONS.return },
+  { key: 'departure', label: ATTENDANCE_ACTIONS.departure },
 ];
+// 로그북 미도착(연락) 배지와 같은 의미(absence_notices.delivery_status).
+const ABSENCE_STATUS_LABEL = {
+  sent: '미등원 알림톡 발송됨 ✓',
+  failed_permanent: '미등원 알림톡 실패 ⚠',
+};
 
 const PROMO_PLACEHOLDER = '(광고)[임팩트세븐학원]\n\n안내 내용을 입력하세요.\n\n무료수신거부 080-000-0000';
 
-const KIND_LABEL = { attendance: '출결', parent_notice: '안내', promo: '홍보', report: '안내', direct: '문자' };
-const CHANNEL_LABEL = { kakao: '알림톡', sms: 'SMS', lms: 'LMS', mms: 'MMS' };
+const KIND_LABEL = {
+  attendance: '출결', parent_notice: '안내', report: '안내', parent_bms: '안내',
+  promo: '홍보', promo_sms: '홍보 문자', direct: '문자', bulk_info: '단체 안내',
+};
+// 발송 이력 상태 배지 — message_queue status 전체 커버(메시지센터와 동일 의미).
+const HISTORY_STATUS = {
+  pending: { label: '대기', bg: '#eef1f4', fg: '#5f6b76' },
+  processing: { label: '처리중', bg: '#eef1f4', fg: '#5f6b76' },
+  awaiting_delivery_result: { label: '확인중', bg: '#eef1f4', fg: '#5f6b76' },
+  sent: { label: '발송완료', bg: '#e6f4ea', fg: '#1e7e34' },
+  failed_retryable: { label: '재시도 대기', bg: '#fff3e0', fg: '#b26a00' },
+  failed_permanent: { label: '실패', bg: '#fce8e6', fg: '#c82014' },
+  converted_to_sms: { label: '문자 전환', bg: '#e8f0fe', fg: '#1a56b8' },
+  archived: { label: '보관됨', bg: '#f1f3f4', fg: '#80868b' },
+};
+const HISTORY_LIMIT = 50;
 
-// deps: { getStudent(id) → {name, student_phone, parent_phone_*, other_phone}, toast(msg, type), readonly }
+// deps: { getStudent(id) → {name, studentNumber, student_phone, parent_phone_*, other_phone}, toast(msg, type), readonly }
 export function initMessageCardDeps(deps) { _deps = deps; }
 
 function onlyDigits(v) { return String(v ?? '').replace(/\D/g, ''); }
-
-// 현재 시각(KST 가정 — DSC 사용자 브라우저)을 '오전/오후 h:mm'으로. 등하원 #{시각} 변수값.
-function nowTimeKST() {
-  const d = new Date();
-  const h = d.getHours();
-  const ap = h < 12 ? '오전' : '오후';
-  const h12 = h % 12 || 12;
-  return `${ap} ${h12}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
 
 export function renderMessageTab(studentId) {
   const el = document.getElementById('message-tab');
@@ -104,20 +119,32 @@ export function renderMessageTab(studentId) {
   loadHistory(studentId);
 }
 
-function formatLogTime(iso) {
-  const d = new Date(iso);
+function formatLogTime(v) {
+  const d = new Date(v);
   if (Number.isNaN(d.getTime())) return '';
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+// ─── 최근 발송 내역 — 수신자별 타임라인(message_queue 기반, 본문 포함) ────────────
+
 function renderHistoryItem(it) {
-  const ok = it.status === 'sent';
-  const statusTxt = ok ? '성공' : '실패';
-  const color = ok ? '#00754A' : '#c82014';
-  const left = `${esc(KIND_LABEL[it.kind] || it.kind || '')} · ${esc(CHANNEL_LABEL[it.channel] || it.channel || '-')}`;
-  return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0efea;font-size:13px;">
-    <span>${left}</span>
-    <span><span style="color:${color};">${esc(statusTxt)}</span> <span style="color:#999;">${esc(formatLogTime(it.createdAt))}</span></span>
+  const st = HISTORY_STATUS[it.status] || { label: it.status || '-', bg: '#eef1f4', fg: '#5f6b76' };
+  const content = it.content
+    ? esc(it.content)
+    : `<i style="color:#aaa;">${it.piiPurged ? '(보존기간 경과로 본문 삭제됨)' : '(본문 없음)'}</i>`;
+  const meta = [
+    formatLogTime(it.createdAt),
+    it.recipientMasked || '',
+    it.lastErrorCode ? `오류 ${it.lastErrorCode}` : '',
+  ].filter(Boolean).join(' · ');
+  return `<div class="msg-hist-item" role="button" tabindex="0" aria-expanded="false"
+      style="padding:8px 11px;border:1px solid #eceae4;border-radius:9px;margin-bottom:6px;background:#fff;cursor:pointer;">
+    <div style="display:flex;align-items:center;gap:7px;min-width:0;">
+      <span style="flex-shrink:0;font-size:11px;font-weight:700;color:#00754A;background:#eef7f2;padding:2px 9px;border-radius:10px;">${esc(KIND_LABEL[it.kind] || it.kind || '-')}</span>
+      <span class="msg-hist-content" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;color:#333;">${content}</span>
+      <span style="flex-shrink:0;font-size:11px;font-weight:700;color:${st.fg};background:${st.bg};padding:2px 9px;border-radius:10px;">${esc(st.label)}</span>
+    </div>
+    <div style="font-size:11.5px;color:#9a958c;margin-top:3px;">${esc(meta)}</div>
   </div>`;
 }
 
@@ -126,12 +153,30 @@ async function loadHistory(studentId) {
   if (!box) return;
   box.innerHTML = '<div style="color:#888;font-size:13px;">발송 내역 불러오는 중…</div>';
   try {
-    const { items } = await getStudentMessages(studentId);
+    const { items } = await getRecipientMessageHistory({ studentId, limit: HISTORY_LIMIT });
     if (!items || !items.length) {
       box.innerHTML = '<div style="color:#888;font-size:13px;">발송 내역이 없습니다.</div>';
       return;
     }
-    box.innerHTML = `<div style="font-weight:600;margin-bottom:8px;">최근 발송 내역</div>${items.map(renderHistoryItem).join('')}`;
+    const capNote = items.length >= HISTORY_LIMIT ? ` — 최근 ${HISTORY_LIMIT}건만 표시` : '';
+    box.innerHTML = `
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px;">
+        <span style="font-weight:600;">최근 발송 내역</span>
+        <span style="font-size:12px;color:#999;">${items.length}건${capNote} · 알림톡 본문은 발송 후 7일까지</span>
+      </div>
+      ${items.map(renderHistoryItem).join('')}`;
+    // 행 클릭/엔터 → 본문 한 줄 미리보기 ↔ 전체 펼침.
+    box.querySelectorAll('.msg-hist-item').forEach((row) => {
+      const toggle = () => {
+        const c = row.querySelector('.msg-hist-content');
+        const expanded = c.style.whiteSpace !== 'nowrap';
+        c.style.whiteSpace = expanded ? 'nowrap' : 'pre-wrap';
+        c.style.wordBreak = expanded ? '' : 'break-word';
+        row.setAttribute('aria-expanded', String(!expanded));
+      };
+      row.addEventListener('click', toggle);
+      row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+    });
   } catch (err) {
     box.innerHTML = `<div style="color:#c82014;font-size:13px;">내역 조회 실패: ${esc(err?.message || '')}</div>`;
   }
@@ -158,18 +203,27 @@ function renderForm(studentId, hasRecipient, readonly) {
     const opts = Object.entries(NOTICE_TEMPLATES)
       .map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join('');
     const quickBtns = QUICK_ACTIONS.map((q) =>
-      `<button type="button" class="btn msg-quick" data-key="${escAttr(q.key)}" style="background:#006241;color:#fff;" ${dis}>${esc(q.label)}</button>`,
+      `<button type="button" class="btn msg-quick" data-action="${escAttr(q.label)}" style="background:#006241;color:#fff;" disabled>${esc(q.label)}</button>`,
     ).join('');
     form.innerHTML = `
-      <div style="margin-bottom:6px;color:#555;">등하원 빠른 발송 (현재 시각)</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">${quickBtns}</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <span style="color:#555;">등하원 빠른 처리</span>
+        <span id="msg-day-state" style="font-size:11px;font-weight:700;color:#5f6b76;background:#eef1f4;padding:2px 9px;border-radius:10px;">상태 확인 중…</span>
+      </div>
+      <div id="msg-quick-row" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px;">
+        ${quickBtns}
+        <span id="msg-absence-slot"></span>
+      </div>
+      <div style="font-size:12px;color:#999;margin-bottom:14px;">태블릿을 찍지 않은 학생의 수동 처리 — 알림톡 발송과 함께 출결에도 기록됩니다.</div>
       <hr style="border:none;border-top:1px solid #eee;margin:0 0 14px;">
       <label style="display:block;margin-bottom:6px;">안내 종류</label>
       <select id="msg-template" class="field-input" style="margin-bottom:12px;">${opts}</select>
       <div id="msg-vars"></div>
       <button type="button" id="msg-send" class="btn btn-primary" style="margin-top:12px;" ${dis}>알림톡 발송</button>
     `;
-    form.querySelectorAll('.msg-quick').forEach((b) => b.addEventListener('click', () => sendQuick(studentId, b.dataset.key)));
+    form.querySelectorAll('.msg-quick').forEach((b) =>
+      b.addEventListener('click', () => sendQuickAttendance(studentId, b.dataset.action)));
+    loadQuickState(studentId, readonly);
     const sel = document.getElementById('msg-template');
     const renderVars = () => {
       const def = NOTICE_TEMPLATES[sel.value];
@@ -198,19 +252,100 @@ function renderForm(studentId, hasRecipient, readonly) {
   }
 }
 
-// 등하원 빠른 발송 — 현재 시각으로 즉시. 의도적 반복(등원→하원 등)이 가능하므로 멱등키는 매번 새로 발급(더블클릭만 _sending으로 차단).
-async function sendQuick(studentId, templateKey) {
-  if (_sending) return;
-  await doSend(
-    () => sendParentNotice({
-      studentId, templateKey,
-      variables: { 시각: nowTimeKST() },
-      recipientField: _recipientField,
-      requestId: `${templateKey}_${studentId}_${Date.now()}`,
-    }),
-    '알림톡 발송을 요청했습니다.',
-    () => scheduleHistoryReload(studentId),
-  );
+// ─── 등하원 빠른 처리 — 태블릿과 같은 상태머신·같은 출결 기록 ─────────────────────
+
+// 오늘 상태(태블릿 lookup)와 미등원 발송 여부를 읽어 버튼 활성/배지를 갱신한다.
+// 태블릿에서 이미 등원했으면 등원 버튼이 비활성화되는 것도 이 로직(allowedActions)이다.
+async function loadQuickState(studentId, readonly) {
+  const student = _deps.getStudent?.(studentId) || {};
+  const studentNumber = String(student.studentNumber ?? '').trim();
+  const [lookup, absence] = await Promise.all([
+    studentNumber ? tabletCheckin({ studentNumber }).catch(() => null) : Promise.resolve(null),
+    getAbsenceNoticeToday(studentId).catch(() => null),
+  ]);
+  const cand = lookup?.candidates?.find((c) => c.studentId === studentId) || null;
+  const allowed = new Set(cand?.allowedActions ?? []);
+  // '아직 미등원' 판정은 상태 문자열 비교 대신 서버가 계산한 가능 액션으로 —
+  // 등원이 가능한 상태(NONE)가 곧 미등원이다(문자열 로컬 상수 금지, AGENTS.md).
+  const beforeArrival = allowed.has(ATTENDANCE_ACTIONS.arrival);
+
+  const stateEl = document.getElementById('msg-day-state');
+  if (stateEl) {
+    stateEl.textContent = cand ? `오늘: ${cand.dayState}` : '출결 대상 아님';
+    if (cand && !beforeArrival) {
+      stateEl.style.color = '#1e7e34';
+      stateEl.style.background = '#e6f4ea';
+    }
+  }
+  document.querySelectorAll('.msg-quick').forEach((b) => {
+    const ok = !readonly && cand && allowed.has(b.dataset.action);
+    b.disabled = !ok || _quickBusy;
+    b.style.opacity = ok ? '1' : '.45';
+    b.title = ok ? '' : (cand
+      ? `현재 상태(${cand.dayState})에서는 처리할 수 없습니다`
+      : '학생번호가 없거나 출결 대상(재원·휴원)이 아닙니다');
+  });
+
+  const slot = document.getElementById('msg-absence-slot');
+  if (!slot) return;
+  if (absence?.exists) {
+    const label = ABSENCE_STATUS_LABEL[absence.deliveryStatus] || '미등원 알림톡 처리중…';
+    const ok = absence.deliveryStatus === 'sent';
+    slot.innerHTML = `<span style="display:inline-flex;align-items:center;font-size:12px;font-weight:700;padding:6px 12px;border-radius:10px;background:${ok ? '#e6f4ea' : '#fff3e0'};color:${ok ? '#1e7e34' : '#b26a00'};">${esc(label)}</span>`;
+    return;
+  }
+  const canAbsence = !readonly && cand && beforeArrival;
+  slot.innerHTML = `<button type="button" id="msg-absence-btn" class="btn"
+      style="background:#b3261e;color:#fff;${canAbsence ? '' : 'opacity:.45;'}"
+      ${canAbsence && !_quickBusy ? '' : 'disabled'}
+      title="${canAbsence ? '' : '아직 등원하지 않은 학생에게만 보낼 수 있습니다'}">미등원 알림톡</button>`;
+  document.getElementById('msg-absence-btn')?.addEventListener('click', () => sendAbsenceQuick(studentId, readonly));
+}
+
+// 등하원 수동 처리 — tabletCheckin 확정 호출(출결 기록 + 알림톡 enqueue가 서버 트랜잭션 하나).
+// 상태머신·연타 멱등은 서버가 보장하므로 클라는 이중 클릭만 막는다.
+async function sendQuickAttendance(studentId, actionLabel) {
+  if (_quickBusy) return;
+  const student = _deps.getStudent?.(studentId) || {};
+  _quickBusy = true;
+  document.querySelectorAll('.msg-quick').forEach((b) => { b.disabled = true; });
+  try {
+    const res = await tabletCheckin({
+      studentNumber: String(student.studentNumber ?? '').trim(),
+      studentId, action: actionLabel, source: 'dsc',
+    });
+    if (res.result === 'duplicate') {
+      _deps.toast?.('방금 처리된 출결입니다.', 'error');
+    } else {
+      _deps.toast?.(`${actionLabel} 처리 완료 — 출결 기록${res.queued ? ' + 알림톡 발송' : ' (연락처 없어 알림톡 생략)'}`, 'success');
+      scheduleHistoryReload(studentId);
+    }
+  } catch (err) {
+    _deps.toast?.(err?.message || `${actionLabel} 처리에 실패했습니다.`, 'error');
+  } finally {
+    _quickBusy = false;
+    loadQuickState(studentId, _deps.readonly === true);
+  }
+}
+
+// 미등원 알림톡 — 로그북 '미도착(연락)'과 같은 서버 멱등(absence_notices)이라 어느 쪽에서 보내든
+// 다른 쪽에도 '발송됨'으로 반영된다.
+async function sendAbsenceQuick(studentId, readonly) {
+  if (_quickBusy) return;
+  _quickBusy = true;
+  try {
+    const res = await sendAbsenceNotice({ studentId });
+    if (res.alreadySent) _deps.toast?.('오늘 이미 미등원 안내를 발송했습니다.', 'error');
+    else {
+      _deps.toast?.('미등원 알림톡 발송을 요청했습니다.', 'success');
+      scheduleHistoryReload(studentId);
+    }
+  } catch (err) {
+    _deps.toast?.(err?.message || '미등원 안내 발송에 실패했습니다.', 'error');
+  } finally {
+    _quickBusy = false;
+    loadQuickState(studentId, readonly);
+  }
 }
 
 async function sendNotice(studentId, sel) {
