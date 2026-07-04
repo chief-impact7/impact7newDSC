@@ -108,23 +108,24 @@ export function renderMessageTab(studentId) {
 
   _consent = student.message_consent ? { ...student.message_consent } : {};
 
+  const modeBtnStyle = 'padding:4px 12px;font-size:12.5px;';
   el.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:12px;">
-      <div class="card" style="padding:11px 16px;">
-        ${hasRecipient
-          ? `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:8px;"><span style="color:#555;">수신 대상</span>${recipientRadios}</div>`
-          : '<div style="color:#c82014;margin-bottom:8px;">등록된 연락처가 없어 발송할 수 없습니다.</div>'}
-        <div id="msg-consent" style="border-top:1px solid #f0efea;padding-top:8px;"></div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="card" style="padding:7px 14px;">
+        <div id="msg-consent"></div>
       </div>
-      <div class="card" style="padding:13px 16px;">
-        <div style="display:flex;gap:8px;margin-bottom:10px;">
-          <button type="button" class="btn msg-mode-btn" data-mode="notice" aria-pressed="${_mode === 'notice'}">정보성 안내</button>
-          <button type="button" class="btn msg-mode-btn" data-mode="free" aria-pressed="${_mode === 'free'}">자유 안내</button>
-          <button type="button" class="btn msg-mode-btn" data-mode="promo" aria-pressed="${_mode === 'promo'}">홍보(광고)</button>
+      <div class="card" style="padding:9px 14px;">
+        ${hasRecipient
+          ? `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px;font-size:13px;"><span style="color:#555;">수신</span>${recipientRadios}</div>`
+          : '<div style="color:#c82014;margin-bottom:6px;font-size:13px;">등록된 연락처가 없어 발송할 수 없습니다.</div>'}
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+          <button type="button" class="btn msg-mode-btn" data-mode="notice" style="${modeBtnStyle}" aria-pressed="${_mode === 'notice'}">정보성 안내</button>
+          <button type="button" class="btn msg-mode-btn" data-mode="free" style="${modeBtnStyle}" aria-pressed="${_mode === 'free'}">자유 안내</button>
+          <button type="button" class="btn msg-mode-btn" data-mode="promo" style="${modeBtnStyle}" aria-pressed="${_mode === 'promo'}">홍보(광고)</button>
         </div>
         <div id="msg-form"></div>
       </div>
-      <div class="card" style="padding:13px 16px;">
+      <div class="card" style="padding:9px 14px;">
         <div id="msg-history"></div>
       </div>
     </div>
@@ -174,21 +175,21 @@ function renderConsentStrip(studentId, readonly) {
     const c = _consent?.[field];
     const consented = c?.optedIn === true && !c.revokedAt;
     const btn = readonly ? '' : (consented
-      ? `<button type="button" class="btn msg-consent-btn" data-target="${target}" data-opt="0" style="font-size:12px;padding:2px 10px;background:#fff;color:#c82014;border:1px solid #e5b9b5;border-radius:12px;">철회</button>`
-      : `<button type="button" class="btn msg-consent-btn" data-target="${target}" data-opt="1" style="font-size:12px;padding:2px 10px;background:#fff;color:#00754A;border:1px solid #bcd8cb;border-radius:12px;">동의 기록</button>`);
-    return `<span style="display:inline-flex;align-items:center;gap:6px;">
+      ? `<button type="button" class="btn msg-consent-btn" data-target="${target}" data-opt="0" style="font-size:11.5px;padding:1px 9px;background:#fff;color:#c82014;border:1px solid #e5b9b5;border-radius:12px;">철회</button>`
+      : `<button type="button" class="btn msg-consent-btn" data-target="${target}" data-opt="1" style="font-size:11.5px;padding:1px 9px;background:#fff;color:#00754A;border:1px solid #bcd8cb;border-radius:12px;">동의</button>`);
+    return `<span style="display:inline-flex;align-items:center;gap:5px;">
       <b style="color:#555;font-weight:600;">${esc(label)}</b> ${consentStatusHtml(c)} ${btn}
     </span>`;
   }).join('<span style="color:#ddd;">|</span>');
+  // 상세 설명(정보성 무관·개인정보 동의 내역)은 툴팁으로 — 한 줄 유지가 우선.
+  const privacyTxt = privacy?.agreed
+    ? `개인정보 동의 ${[consentDate(privacy.at), CONSENT_SOURCE_LABEL[privacy.source] || privacy.source || ''].filter(Boolean).join(' · ')}`
+    : '개인정보 동의 기록 없음';
   box.innerHTML = `
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;">
+    <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:12.5px;"
+         title="출결·안내 등 정보성 메시지는 광고 동의와 무관하게 발송됩니다">
       <span style="font-weight:700;color:#555;">광고 수신동의</span>${rows}
-    </div>
-    <div style="font-size:11.5px;color:#9a958c;margin-top:4px;">
-      개인정보 수집·이용 동의: ${privacy?.agreed
-        ? `동의 ${esc([consentDate(privacy.at), CONSENT_SOURCE_LABEL[privacy.source] || privacy.source || ''].filter(Boolean).join(' · '))}`
-        : '기록 없음'}
-      <span style="margin-left:6px;">— 출결·안내 등 정보성 메시지는 광고 동의와 무관하게 발송됩니다</span>
+      <span style="margin-left:auto;font-size:11px;color:#9a958c;">${esc(privacyTxt)}</span>
     </div>`;
   box.querySelectorAll('.msg-consent-btn').forEach((b) =>
     b.addEventListener('click', () => setConsent(studentId, b.dataset.target, b.dataset.opt === '1', readonly)));
@@ -233,13 +234,13 @@ function renderHistoryItem(it) {
     it.lastErrorCode ? `오류 ${it.lastErrorCode}` : '',
   ].filter(Boolean).join(' · ');
   return `<div class="msg-hist-item" role="button" tabindex="0" aria-expanded="false"
-      style="padding:8px 11px;border:1px solid #eceae4;border-radius:9px;margin-bottom:6px;background:#fff;cursor:pointer;">
-    <div style="display:flex;align-items:center;gap:7px;min-width:0;">
-      <span style="flex-shrink:0;font-size:11px;font-weight:700;color:#00754A;background:#eef7f2;padding:2px 9px;border-radius:10px;">${esc(KIND_LABEL[it.kind] || it.kind || '-')}</span>
-      <span class="msg-hist-content" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;color:#333;">${content}</span>
-      <span style="flex-shrink:0;font-size:11px;font-weight:700;color:${st.fg};background:${st.bg};padding:2px 9px;border-radius:10px;">${esc(st.label)}</span>
+      style="padding:6px 10px;border:1px solid #eceae4;border-radius:8px;margin-bottom:5px;background:#fff;cursor:pointer;">
+    <div style="display:flex;align-items:center;gap:6px;min-width:0;">
+      <span style="flex-shrink:0;font-size:11px;font-weight:700;color:#00754A;background:#eef7f2;padding:1px 8px;border-radius:10px;">${esc(KIND_LABEL[it.kind] || it.kind || '-')}</span>
+      <span class="msg-hist-content" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;color:#333;">${content}</span>
+      <span style="flex-shrink:0;font-size:11px;font-weight:700;color:${st.fg};background:${st.bg};padding:1px 8px;border-radius:10px;">${esc(st.label)}</span>
     </div>
-    <div style="font-size:11.5px;color:#9a958c;margin-top:3px;">${esc(meta)}</div>
+    <div style="font-size:11px;color:#9a958c;margin-top:2px;">${esc(meta)}</div>
   </div>`;
 }
 
@@ -253,11 +254,11 @@ async function loadHistory(studentId) {
       box.innerHTML = '<div style="color:#888;font-size:13px;">발송 내역이 없습니다.</div>';
       return;
     }
-    const capNote = items.length >= HISTORY_LIMIT ? ` — 최근 ${HISTORY_LIMIT}건만 표시` : '';
+    const capNote = items.length >= HISTORY_LIMIT ? ` (최근 ${HISTORY_LIMIT}건)` : '';
     box.innerHTML = `
-      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px;">
-        <span style="font-weight:600;">최근 발송 내역</span>
-        <span style="font-size:12px;color:#999;">${items.length}건${capNote} · 알림톡 본문은 발송 후 7일까지</span>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
+        <span style="font-weight:600;font-size:13.5px;">최근 발송 내역</span>
+        <span style="font-size:11.5px;color:#999;" title="알림톡 본문은 개인정보 보존기간(발송 후 7일)까지 표시됩니다">${items.length}건${capNote} · 본문 7일 보관</span>
       </div>
       <div style="max-height:320px;overflow-y:auto;padding-right:2px;">${items.map(renderHistoryItem).join('')}</div>`;
     // 행 클릭/엔터 → 본문 한 줄 미리보기 ↔ 전체 펼침.
@@ -298,23 +299,23 @@ function renderForm(studentId, hasRecipient, readonly) {
     const opts = Object.entries(NOTICE_TEMPLATES)
       .map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join('');
     const quickBtns = QUICK_ACTIONS.map((q) =>
-      `<button type="button" class="btn msg-quick" data-action="${escAttr(q.label)}" style="background:#006241;color:#fff;" disabled>${esc(q.label)}</button>`,
+      `<button type="button" class="btn msg-quick" data-action="${escAttr(q.label)}" style="background:#006241;color:#fff;padding:4px 11px;font-size:12.5px;" disabled>${esc(q.label)}</button>`,
     ).join('');
     form.innerHTML = `
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-        <span style="color:#555;">등하원 빠른 처리</span>
-        <span id="msg-day-state" style="font-size:11px;font-weight:700;color:#5f6b76;background:#eef1f4;padding:2px 9px;border-radius:10px;">상태 확인 중…</span>
-      </div>
-      <div id="msg-quick-row" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:3px;">
+      <div id="msg-quick-row" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;"
+           title="태블릿을 찍지 않은 학생의 수동 처리 — 알림톡 발송과 함께 출결에도 기록됩니다">
+        <span style="color:#555;font-size:12.5px;">등하원</span>
+        <span id="msg-day-state" style="font-size:11px;font-weight:700;color:#5f6b76;background:#eef1f4;padding:2px 8px;border-radius:10px;">확인 중…</span>
         ${quickBtns}
         <span id="msg-absence-slot"></span>
       </div>
-      <div style="font-size:12px;color:#999;margin-bottom:9px;">태블릿을 찍지 않은 학생의 수동 처리 — 알림톡 발송과 함께 출결에도 기록됩니다.</div>
-      <hr style="border:none;border-top:1px solid #eee;margin:0 0 9px;">
-      <label style="display:block;margin-bottom:4px;">안내 종류</label>
-      <select id="msg-template" class="field-input" style="margin-bottom:8px;">${opts}</select>
-      <div id="msg-vars"></div>
-      <button type="button" id="msg-send" class="btn btn-primary" style="margin-top:10px;" ${dis}>알림톡 발송</button>
+      <hr style="border:none;border-top:1px solid #eee;margin:0 0 8px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <label for="msg-template" style="white-space:nowrap;font-size:12.5px;color:#555;margin:0;">안내 종류</label>
+        <select id="msg-template" class="field-input" style="flex:1;margin:0;padding:5px 8px;font-size:13px;">${opts}</select>
+      </div>
+      <div id="msg-vars" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:6px;"></div>
+      <button type="button" id="msg-send" class="btn btn-primary" style="margin-top:8px;padding:6px 16px;" ${dis}>알림톡 발송</button>
     `;
     form.querySelectorAll('.msg-quick').forEach((b) =>
       b.addEventListener('click', () => sendQuickAttendance(studentId, b.dataset.action)));
@@ -323,8 +324,9 @@ function renderForm(studentId, hasRecipient, readonly) {
     const renderVars = () => {
       const def = NOTICE_TEMPLATES[sel.value];
       document.getElementById('msg-vars').innerHTML = def.vars.map((key) =>
-        `<label style="display:block;margin:6px 0 3px;">${esc(key)}</label>
-         <input type="text" class="field-input msg-var" data-key="${escAttr(key)}" ${dis}>`,
+        `<label style="display:flex;flex-direction:column;gap:2px;margin:0;font-size:12px;color:#666;">${esc(key)}
+           <input type="text" class="field-input msg-var" data-key="${escAttr(key)}" style="margin:0;padding:5px 8px;font-size:13px;" ${dis}>
+         </label>`,
       ).join('');
     };
     sel.addEventListener('change', renderVars);
@@ -332,16 +334,16 @@ function renderForm(studentId, hasRecipient, readonly) {
     document.getElementById('msg-send').addEventListener('click', () => sendNotice(studentId, sel));
   } else if (_mode === 'free') {
     form.innerHTML = `
-      <div style="font-size:13px;color:#777;margin-bottom:6px;">템플릿 없는 정보성 자유 내용입니다. 채널 가입자는 카카오톡으로, 미가입자는 문자로 발송됩니다. (광고성 내용은 '홍보' 모드를 사용하세요)</div>
-      <textarea id="msg-content" class="field-input" aria-label="자유 안내 본문" rows="6" style="width:100%;box-sizing:border-box;" placeholder="보낼 내용을 입력하세요." ${dis}></textarea>
-      <button type="button" id="msg-send" class="btn btn-primary" style="margin-top:10px;" ${dis}>메시지 발송</button>
+      <div style="font-size:12px;color:#999;margin-bottom:5px;">가입자는 카카오톡, 미가입자는 문자로 발송 (광고성은 '홍보' 모드)</div>
+      <textarea id="msg-content" class="field-input" aria-label="자유 안내 본문" rows="4" style="width:100%;box-sizing:border-box;margin:0;" placeholder="보낼 내용을 입력하세요." ${dis}></textarea>
+      <button type="button" id="msg-send" class="btn btn-primary" style="margin-top:8px;padding:6px 16px;" ${dis}>메시지 발송</button>
     `;
     document.getElementById('msg-send').addEventListener('click', () => sendFree(studentId));
   } else {
     form.innerHTML = `
-      <div style="font-size:13px;color:#777;margin-bottom:6px;">광고는 본문에 (광고) 표기와 무료수신거부 안내가 있어야 합니다.</div>
-      <textarea id="msg-content" class="field-input" aria-label="홍보 메시지 본문" rows="6" style="width:100%;box-sizing:border-box;" placeholder="${escAttr(PROMO_PLACEHOLDER)}" ${dis}></textarea>
-      <button type="button" id="msg-send" class="btn btn-primary" style="margin-top:10px;" ${dis}>브랜드 메시지 발송</button>
+      <div style="font-size:12px;color:#999;margin-bottom:5px;">광고는 본문에 (광고) 표기와 무료수신거부 안내 필수</div>
+      <textarea id="msg-content" class="field-input" aria-label="홍보 메시지 본문" rows="4" style="width:100%;box-sizing:border-box;margin:0;" placeholder="${escAttr(PROMO_PLACEHOLDER)}" ${dis}></textarea>
+      <button type="button" id="msg-send" class="btn btn-primary" style="margin-top:8px;padding:6px 16px;" ${dis}>브랜드 메시지 발송</button>
     `;
     document.getElementById('msg-send').addEventListener('click', () => sendPromo(studentId));
   }
@@ -386,12 +388,12 @@ async function loadQuickState(studentId, readonly) {
   if (absence?.exists) {
     const label = ABSENCE_STATUS_LABEL[absence.deliveryStatus] || '미등원 알림톡 처리중…';
     const ok = absence.deliveryStatus === 'sent';
-    slot.innerHTML = `<span style="display:inline-flex;align-items:center;font-size:12px;font-weight:700;padding:6px 12px;border-radius:10px;background:${ok ? '#e6f4ea' : '#fff3e0'};color:${ok ? '#1e7e34' : '#b26a00'};">${esc(label)}</span>`;
+    slot.innerHTML = `<span style="display:inline-flex;align-items:center;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:10px;background:${ok ? '#e6f4ea' : '#fff3e0'};color:${ok ? '#1e7e34' : '#b26a00'};">${esc(label)}</span>`;
     return;
   }
   const canAbsence = !readonly && cand && beforeArrival;
   slot.innerHTML = `<button type="button" id="msg-absence-btn" class="btn"
-      style="background:#b3261e;color:#fff;${canAbsence ? '' : 'opacity:.45;'}"
+      style="background:#b3261e;color:#fff;padding:4px 11px;font-size:12.5px;${canAbsence ? '' : 'opacity:.45;'}"
       ${canAbsence && !_quickBusy ? '' : 'disabled'}
       title="${canAbsence ? '' : '아직 등원하지 않은 학생에게만 보낼 수 있습니다'}">미등원 알림톡</button>`;
   document.getElementById('msg-absence-btn')?.addEventListener('click', () => sendAbsenceQuick(studentId, readonly));
