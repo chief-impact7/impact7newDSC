@@ -20,15 +20,21 @@ service firebase.storage {
     }
 
     // === impact7HR ===
-    // H-01: HR 파일은 전부 callable(hrUpload*/hrGetFileUrl, Admin SDK 우회) 경유로 전환됨.
-    // 직접 client 접근 전면 차단 — 도메인 직원이면 모든 계약·서명·경비를 read/write하던
-    // 과도한 권한을 닫는다. 역할/토큰 검증·크기·MIME은 서버 callable이 강제한다.
+    // H-01: HR 파일 I/O는 전부 callable(hrUpload*/hrGetFileUrl/hrDeleteFile, Admin SDK 우회)
+    // 경유로 전환됨 — HR 클라이언트엔 firebase/storage 사용이 전무하다. 클라이언트 직접 접근은
+    // 전면 차단(if false)하고, 역할·토큰·크기(<20MB)·MIME은 서버 callable이 강제한다.
+    // 실사용 Storage 경로: staff/{staffId}, contracts/, entities/{entityId}.
     match /staff/{staffId}/{allPaths=**} {
       allow read, write: if false;
     }
     match /contracts/{allPaths=**} {
       allow read, write: if false;
     }
+    match /entities/{entityId}/{allPaths=**} {
+      allow read, write: if false;
+    }
+    // 레거시(현재 Storage 미사용): 경비는 Firestore `expenses` 컬렉션, 서명은 Firestore에
+    // base64 data URL로 저장된다. 혹시 남은 옛 객체를 위한 방어용 차단으로만 유지.
     match /expenses/{expenseId}/{allPaths=**} {
       allow read, write: if false;
     }
