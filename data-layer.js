@@ -120,9 +120,13 @@ export async function loadTeachers() {
         const cutoff = Timestamp.fromDate(new Date(Date.now() - 15 * 24 * 60 * 60 * 1000));
         const q = query(collection(db, 'teachers'), where('last_login', '>=', cutoff));
         const snap = await getDocs(q);
-        // 구(@gw)·신 메일 중복은 사람당 1건(신메일 우선) — @impact7/shared teacher-label 규약
+        // 구(@gw)·신 메일 중복은 사람당 1건(신메일 우선) — @impact7/shared teacher-label 규약.
+        // homeroom_eligible=false(HR 교수부 퇴직·비교수부)는 담임 후보에서 제외.
         const byEmail = new Map();
-        snap.forEach(d => byEmail.set(d.id, { email: d.id, ...d.data() }));
+        snap.forEach(d => {
+            if (d.data().homeroom_eligible === false) return;
+            byEmail.set(d.id, { email: d.id, ...d.data() });
+        });
         state.teachersList = canonicalizeTeacherEmails([...byEmail.keys()]).map(email => byEmail.get(email));
         state.teachersList.sort((a, b) => getTeacherName(a.email).localeCompare(getTeacherName(b.email), 'ko'));
         console.log(`[loadTeachers] ${state.teachersList.length}명 (15일 내)`);

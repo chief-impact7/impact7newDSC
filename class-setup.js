@@ -110,9 +110,14 @@ const teacherLabelOf = (email) => teacherDisplayName(staffLabel(email)) || staff
 
 async function loadTeachers() {
     const snap = await getDocs(collection(db, 'teachers'));
-    // 구(@gw)·신 메일 중복은 사람당 1건(신메일 우선)
+    // 구(@gw)·신 메일 중복은 사람당 1건(신메일 우선).
+    // homeroom_eligible은 HR 교수부 재직 여부를 함수가 미러한 필드 — false(퇴직·비교수부)만 제외
+    // (필드 미계산 신규 문서는 트리거 반영 전까지 노출 유지).
     const byEmail = new Map();
-    snap.forEach(d => byEmail.set(d.id, { email: d.id, ...d.data() }));
+    snap.forEach(d => {
+        if (d.data().homeroom_eligible === false) return;
+        byEmail.set(d.id, { email: d.id, ...d.data() });
+    });
     teachersList.length = 0;
     canonicalizeTeacherEmails([...byEmail.keys()]).forEach(email => teachersList.push(byEmail.get(email)));
     teachersList.sort((a, b) =>
