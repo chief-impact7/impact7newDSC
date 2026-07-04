@@ -21,6 +21,7 @@ import { createPromoteEnrollPending } from '@impact7/shared/promote-enroll';
 import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 import { deriveStudentNumber, studentNumberIdentityKey } from '@impact7/shared/student-number';
 import { staffLabel } from '@impact7/shared/staff-label';
+import { canonicalizeTeacherEmails, teacherDisplayName } from '@impact7/shared/teacher-label';
 
 const _promoteEnrollPending = createPromoteEnrollPending(
     { db, writeBatch, doc, collection, serverTimestamp },
@@ -119,8 +120,10 @@ export async function loadTeachers() {
         const cutoff = Timestamp.fromDate(new Date(Date.now() - 15 * 24 * 60 * 60 * 1000));
         const q = query(collection(db, 'teachers'), where('last_login', '>=', cutoff));
         const snap = await getDocs(q);
-        state.teachersList = [];
-        snap.forEach(d => state.teachersList.push({ email: d.id, ...d.data() }));
+        // 구(@gw)·신 메일 중복은 사람당 1건(신메일 우선) — @impact7/shared teacher-label 규약
+        const byEmail = new Map();
+        snap.forEach(d => byEmail.set(d.id, { email: d.id, ...d.data() }));
+        state.teachersList = canonicalizeTeacherEmails([...byEmail.keys()]).map(email => byEmail.get(email));
         state.teachersList.sort((a, b) => getTeacherName(a.email).localeCompare(getTeacherName(b.email), 'ko'));
         console.log(`[loadTeachers] ${state.teachersList.length}명 (15일 내)`);
     } catch (err) {
@@ -143,7 +146,8 @@ export async function trackTeacherLogin(user) {
 }
 
 export function getTeacherName(email) {
-    return staffLabel(email);
+    // 이메일 로컬파트 = 영어이름 소문자 — 첫 글자만 대문자로 ('edward@…' → 'Edward')
+    return teacherDisplayName(staffLabel(email)) || staffLabel(email);
 }
 
 // ─── Class Next Homework (반별 다음숙제) ────────────────────────────────────

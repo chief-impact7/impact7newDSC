@@ -9,6 +9,7 @@
 import { getDayName, studentShortLabel, todayStr } from './src/shared/firestore-helpers.js';
 import { ENROLLABLE_STATUSES, isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { staffLabel } from '@impact7/shared/staff-label';
+import { isSameTeacher, teacherDisplayName } from '@impact7/shared/teacher-label';
 import { db } from './firebase-config.js';
 import { doc, getDoc, getDocFromServer, writeBatch } from 'firebase/firestore';
 import { auditUpdate, auditSet, batchUpdate, READ_ONLY } from './audit.js';
@@ -891,9 +892,10 @@ function renderNaesinClassDetail(csKey) {
     // 담당
     const teachersList = window.teachersList || [];
     const currentTeacher = cs.teacher || '';
+    // 폴백도 표시 규약(첫 글자 대문자) 유지, 저장값이 구메일이어도 동일인 매칭 — teacher-label 규약
     const teacherOptions = teachersList.map(t => {
-        const name = window.getTeacherName?.(t.email) || staffLabel(t.email);
-        return `<option value="${_escAttr(t.email)}" ${t.email === currentTeacher ? 'selected' : ''}>${_esc(name)}</option>`;
+        const name = window.getTeacherName?.(t.email) || teacherDisplayName(staffLabel(t.email)) || staffLabel(t.email);
+        return `<option value="${_escAttr(t.email)}" ${isSameTeacher(t.email, currentTeacher) ? 'selected' : ''}>${_esc(name)}</option>`;
     }).join('');
 
     // 기간

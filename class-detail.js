@@ -7,6 +7,7 @@ import { db, auth } from './firebase-config.js';
 import { todayStr } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditDelete, batchUpdate, batchSet, READ_ONLY, normalizeImpact7Email } from './audit.js';
 import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
+import { isSameTeacher } from '@impact7/shared/teacher-label';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { imeInputAttrs } from '@impact7/shared/ime-input';
 import { state, DAY_ORDER, DEFAULT_DOMAINS, DEFAULT_TEST_SECTIONS } from './state.js';
@@ -288,13 +289,14 @@ export function renderClassDetail(classCode) {
     // ④ 담당/부담당 배정
     const currentTeacher = state.classSettings[classCode]?.teacher || '';
     const currentSubTeacher = state.classSettings[classCode]?.sub_teacher || '';
+    // 저장값이 구메일(@gw)이어도 정규화된 목록과 동일인 매칭 — @impact7/shared teacher-label 규약
     const teacherOptions = state.teachersList.map(t => {
         const name = getTeacherName(t.email);
-        return `<option value="${escAttr(t.email)}" ${t.email === currentTeacher ? 'selected' : ''}>${esc(name)}</option>`;
+        return `<option value="${escAttr(t.email)}" ${isSameTeacher(t.email, currentTeacher) ? 'selected' : ''}>${esc(name)}</option>`;
     }).join('');
     const subTeacherOptions = state.teachersList.map(t => {
         const name = getTeacherName(t.email);
-        return `<option value="${escAttr(t.email)}" ${t.email === currentSubTeacher ? 'selected' : ''}>${esc(name)}</option>`;
+        return `<option value="${escAttr(t.email)}" ${isSameTeacher(t.email, currentSubTeacher) ? 'selected' : ''}>${esc(name)}</option>`;
     }).join('');
 
     const teacherCard = `

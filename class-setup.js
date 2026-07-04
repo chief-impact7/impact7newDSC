@@ -20,6 +20,7 @@ import { schoolSearchTerms } from './school-normalizer.js';
 import { batchSet, batchUpdate, normalizeImpact7Email } from './audit.js';
 import { recordTeacherChange } from './teacher-history.js';
 import { staffLabel } from '@impact7/shared/staff-label';
+import { canonicalizeTeacherEmails, teacherDisplayName } from '@impact7/shared/teacher-label';
 import { hasActiveRegularClass } from './class-setup-enrollment.js';
 import { esc } from './ui-utils.js';
 import {
@@ -104,18 +105,24 @@ async function loadStudents() {
     _applyStudentDocs(snap);
 }
 
+// 담임 표시 규약(@impact7/shared teacher-label): 이메일 로컬파트 첫 글자 대문자 ('edward@…' → 'Edward')
+const teacherLabelOf = (email) => teacherDisplayName(staffLabel(email)) || staffLabel(email);
+
 async function loadTeachers() {
     const snap = await getDocs(collection(db, 'teachers'));
+    // 구(@gw)·신 메일 중복은 사람당 1건(신메일 우선)
+    const byEmail = new Map();
+    snap.forEach(d => byEmail.set(d.id, { email: d.id, ...d.data() }));
     teachersList.length = 0;
-    snap.forEach(d => teachersList.push({ email: d.id, ...d.data() }));
+    canonicalizeTeacherEmails([...byEmail.keys()]).forEach(email => teachersList.push(byEmail.get(email)));
     teachersList.sort((a, b) =>
-        staffLabel(a.email).localeCompare(staffLabel(b.email), 'ko')
+        teacherLabelOf(a.email).localeCompare(teacherLabelOf(b.email), 'ko')
     );
     // 선생님 드롭다운 채우기
     const sel = document.getElementById('input-teacher');
     sel.innerHTML = '<option value="">선택</option>' +
         teachersList.map(t =>
-            `<option value="${esc(t.email)}">${esc(staffLabel(t.email))}</option>`
+            `<option value="${esc(t.email)}">${esc(teacherLabelOf(t.email))}</option>`
         ).join('');
 }
 
