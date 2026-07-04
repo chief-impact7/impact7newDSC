@@ -30,8 +30,12 @@ export async function saveMessageExtras({ footer, channelInvite }) {
   }, { merge: true });
 }
 
-// 본문 끝에 문구를 덧붙인다(이미 포함돼 있으면 그대로 — 중복 방지).
-export function appendLine(content, line) {
-  if (!line || content.includes(line)) return content;
-  return content.trim() ? content.replace(/\s*$/, '') + '\n\n' + line : line;
+// 본문 + 체크된 부가 문구(채널 안내·꼬리말)를 발송 본문으로 합성.
+// 본문에 이미 같은 문구가 있으면 중복 첨부하지 않는다.
+export function composeWithExtras(content, extras = []) {
+  const parts = [content.trim()];
+  for (const line of extras) {
+    if (line && !content.includes(line)) parts.push(line);
+  }
+  return parts.filter(Boolean).join('\n\n');
 }

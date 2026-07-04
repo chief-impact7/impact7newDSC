@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { sendDirectMessage } from '../../../data-layer.js';
 import { messageMeta, normalizePhones } from '../message-format.js';
 import { parsePhonesFromFile, sampleCsv } from '../message-import.js';
-import { getMessageExtras, saveMessageExtras, appendLine, DEFAULT_CHANNEL_INVITE } from '../sms-extras.js';
+import { getMessageExtras, saveMessageExtras, composeWithExtras, DEFAULT_CHANNEL_INVITE } from '../sms-extras.js';
 import TemplateBar from './TemplateBar.jsx';
 
 function newReqId() {
@@ -23,6 +23,8 @@ export default function DirectSmsCard() {
   const [footer, setFooter] = useState('');            // 공유 꼬리말(로드된 값)
   const [invite, setInvite] = useState(DEFAULT_CHANNEL_INVITE); // 채널 안내(설정||기본)
   const [inviteCustom, setInviteCustom] = useState(''); // 채널 안내 설정 원본(''=기본 사용)
+  const [withInvite, setWithInvite] = useState(false); // ☑ 채널 가입 안내 첨부
+  const [withFooter, setWithFooter] = useState(false); // ☑ 학원 꼬리말 첨부
   const [setupOpen, setSetupOpen] = useState(false);    // 문구 설정 패널
   const [footerDraft, setFooterDraft] = useState('');
   const [inviteDraft, setInviteDraft] = useState('');
@@ -40,11 +42,6 @@ export default function DirectSmsCard() {
   }, []);
 
   function resetReqId() { reqIdRef.current = newReqId(); }
-
-  function insertLine(line) {
-    setText((t) => appendLine(t, line));
-    resetReqId();
-  }
   async function onSaveSetup() {
     if (setupBusy) return;
     setSetupBusy(true);
@@ -90,16 +87,19 @@ export default function DirectSmsCard() {
     URL.revokeObjectURL(url);
   }
 
+  // 체크된 부가 문구를 합성한 실제 발송 본문 — 글자수·SMS/LMS 판정·발송 모두 이 값을 쓴다.
+  const effectiveText = composeWithExtras(text, [withInvite ? invite : '', withFooter ? footer : '']);
+
   async function onSend() {
     if (sending) return;
-    if (!text.trim()) { setMsg('내용을 입력하세요.'); return; }
+    if (!effectiveText.trim()) { setMsg('내용을 입력하세요.'); return; }
     if (!recipients.trim()) { setMsg('수신번호를 입력하세요.'); return; }
     if (when === 'schedule' && !scheduledAt) { setMsg('예약 시각을 입력하세요.'); return; }
     const phoneCount = new Set(normalizePhones(recipients)).size;
     if (phoneCount > MAX_RECIPIENTS) { setMsg(`한 번에 최대 ${MAX_RECIPIENTS}명까지 발송할 수 있습니다 (현재 ${phoneCount}명). 대상을 나눠 보내세요.`); return; }
     setSending(true); setMsg('');
     try {
-      const payload = { recipients, text, requestId: reqIdRef.current };
+      const payload = { recipients, text: effectiveText, requestId: reqIdRef.current };
       if (when === 'schedule') payload.scheduledAt = scheduledAt.slice(0, 16).replace('T', ' ') + ':00';
       const res = await sendDirectMessage(payload);
       if (res.duplicate) {
@@ -115,8 +115,9 @@ export default function DirectSmsCard() {
     }
   }
 
-  const meta = messageMeta(text);
+  const meta = messageMeta(effectiveText);
   const count = new Set(normalizePhones(recipients)).size;
+  const attachedLines = [withInvite ? invite : '', withFooter ? footer : ''].filter((l) => l && !text.includes(l));
 
   return (
     <section className="mc-section">
@@ -145,11 +146,23 @@ export default function DirectSmsCard() {
             <textarea aria-label="메시지 내용" className="mc-textarea" value={text}
               onChange={(e) => { setText(e.target.value); resetReqId(); }}
               placeholder="안내 내용을 입력하세요." />
-            <div className="mc-vars" style={{ marginTop: 6 }}>
-              <button type="button" className="mc-var-btn" title={invite} onClick={() => insertLine(invite)}>+ 채널 가입 안내</button>
-              <button type="button" className="mc-var-btn" title={footer || '꼬리말이 아직 없습니다 — 문구 설정에서 등록'} disabled={!footer} onClick={() => insertLine(footer)}>+ 학원 꼬리말</button>
+            <div className="mc-vars" style={{ marginTop: 6, alignItems: 'center' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, margin: 0, cursor: 'pointer' }} title={invite}>
+                <input type="checkbox" checked={withInvite} onChange={(e) => { setWithInvite(e.target.checked); resetReqId(); }} />
+                채널 가입 안내
+              </label>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, margin: 0, cursor: footer ? 'pointer' : 'default', opacity: footer ? 1 : 0.5 }}
+                title={footer || '꼬리말이 아직 없습니다 — 문구 설정에서 등록'}>
+                <input type="checkbox" checked={withFooter} disabled={!footer} onChange={(e) => { setWithFooter(e.target.checked); resetReqId(); }} />
+                학원 꼬리말
+              </label>
               <button type="button" className="mc-var-btn" onClick={() => { setFooterDraft(footer); setInviteDraft(inviteCustom); setSetupOpen(!setupOpen); }}>문구 설정⚙</button>
             </div>
+            {attachedLines.length > 0 && (
+              <div style={{ marginTop: 5, border: '1px dashed #cfd8d2', borderRadius: 8, padding: '6px 9px', background: '#fafcfb', fontSize: 12, color: '#5f6b76', whiteSpace: 'pre-wrap' }}>
+                {attachedLines.join('\n\n')}
+              </div>
+            )}
             {setupOpen && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6, border: '1px solid #e3e8e5', borderRadius: 8, padding: '8px 10px', background: '#fafaf7' }}>
                 <label className="mc-field-label" style={{ margin: 0 }}>채널 가입 안내 문구 — 자동 전환 문자에도 적용 (비우면 기본 문구)</label>
