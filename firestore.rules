@@ -116,12 +116,15 @@ service cloud.firestore {
           'updated_at', 'updated_by', 'withdrawal_date',
           'status_changed_at', 'status_changed_by', 'status_previous',
           'nameNormalized', 'studentNumber', 'studentNumberSource', 'studentNumberIssuedAt',
-          'studentNumberHistory'
+          'studentNumberHistory',
+          'message_consent'
         ];
         return request.resource.data.keys().hasOnly(allowed);
       }
-      // withinFieldLimit는 allowed 목록 크기(49)와 맞춘다 — 과거 36은 hasOnly가 이미 허용한
+      // withinFieldLimit는 allowed 목록 크기(50)와 맞춘다 — 과거 36은 hasOnly가 이미 허용한
       // 필드를 다 채운 정상 문서를 조용히 거부했음(O-04). allowed 확장 시 이 값도 함께 올린다.
+      // message_consent는 서버(promoConsent/optOut080Sync)가 admin으로 기록 — 누락 시 보유 학생의
+      // 모든 클라 편집이 hasOnly+필드한도 위반으로 조용히 거부됨(school_* 사고와 동일 클래스).
 
       // DB/DSC: 읽기+쓰기, Director: 읽기만
       allow read: if isAuthorized();
@@ -135,13 +138,13 @@ service cloud.firestore {
       allow create: if isAuthorized()
         && hasRequiredStudentFields()
         && hasOnlyAllowedStudentFields()
-        && withinFieldLimit(49)
+        && withinFieldLimit(50)
         && enrollmentStatusConsistent();
 
       allow update: if isAuthorized()
         && hasRequiredStudentFields()
         && hasOnlyAllowedStudentFields()
-        && withinFieldLimit(49)
+        && withinFieldLimit(50)
         && (!resource.data.keys().hasAny(['status']) || request.resource.data.keys().hasAny(['status']))
         && enrollmentStatusConsistent();
 
@@ -894,8 +897,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['name', 'phone', 'email', 'residentNumber', 'address', 'bank', 'accountNumber', 'accountHolder', 'createdAt', 'tokenId', 'status'])
         && request.resource.data.name is string
         && request.resource.data.phone is string
-        && exists(/databases/$(database)/documents/shortTermTokens/$(request.resource.data.tokenId))
-        && get(/databases/$(database)/documents/shortTermTokens/$(request.resource.data.tokenId)).data.status == 'pending';
+        && hrOnboardingTokenValid(/databases/$(database)/documents/shortTermTokens/$(request.resource.data.tokenId));
 
       match /contracts/{contractId} {
         allow read: if isDirector() || isShortTerm();
@@ -1332,6 +1334,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // 키오스크 전역 설정(조회 PIN·잠금 상태) — 서버 전용. PIN이 클라에 노출되지 않게 한다.
+    match /kiosk_settings/{docId} {
+      allow read, write: if false;
+    }
+
     // 직원 근태 설정 — 매니저 이상 read/write. 서버 callable도 Admin SDK로 우회.
     match /settings/{docId} {
       allow read: if isDirector() || isManager();
@@ -1348,6 +1355,15 @@ service cloud.firestore {
     match /message_logs/{id} {
       allow read: if isAuthorized();
       allow write: if false;
+    }
+
+    // 메시지 템플릿(자주 쓰는 문구) — 전 직원 공유 저장소. 개인정보 없는 문안만 담는다.
+    match /message_templates/{id} {
+      allow read, delete: if isAuthorized();
+      allow create, update: if isAuthorized()
+        && request.resource.data.keys().hasOnly(['title', 'content', 'updated_by', 'updated_at'])
+        && request.resource.data.title is string && request.resource.data.title.size() <= 100
+        && request.resource.data.content is string && request.resource.data.content.size() <= 5000;
     }
 
     // 홍보(광고) 캠페인 — 서버(createPromoCampaign callable) 전용 쓰기.
