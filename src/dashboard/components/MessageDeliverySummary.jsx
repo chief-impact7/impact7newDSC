@@ -26,6 +26,7 @@ const CHANNEL_META = {
 function MessageDeliverySummary({ data, students, loading, onReload }) {
     const [retrying, setRetrying] = useState(null);
     const [retryError, setRetryError] = useState('');
+    const [expandedId, setExpandedId] = useState(null); // 본문 펼침 상태(한 번에 하나)
 
     // 이름은 fetchStudents 범위(재원생)로만 해석된다. 퇴원생 등 범위 밖이면 doc id 원문을
     // 노출하지 않고 마스킹된 수신자 또는 '(이름 미확인)'으로 표시.
@@ -156,6 +157,21 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                         {f.lastErrorCode ? ` · ${f.lastErrorCode}` : ''}
                                         {f.updatedAt ? ` · ${formatDateTimeKST(f.updatedAt)}` : ''}
                                     </span>
+                                    {f.content ? (
+                                        <button
+                                            type="button"
+                                            className={`msg-failure-content${expandedId === f.id ? ' expanded' : ''}`}
+                                            title={expandedId === f.id ? '접기' : '본문 전체 보기'}
+                                            aria-expanded={expandedId === f.id}
+                                            onClick={() => setExpandedId(expandedId === f.id ? null : f.id)}
+                                        >
+                                            {f.content}
+                                        </button>
+                                    ) : (
+                                        <span className="msg-failure-content msg-failure-content-empty">
+                                            {f.piiPurged ? '(보존기간 경과로 본문 삭제됨)' : '(본문 없음)'}
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="msg-failure-side">
                                     <span className={`msg-badge msg-${f.status === 'failed_permanent' ? 'failed' : 'retry'}`}>
