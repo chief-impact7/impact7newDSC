@@ -2,6 +2,7 @@
 // daily-ops.js에서 추출한 일괄 처리 관련 함수
 // Phase 4-2
 
+import { msIcon } from './ms-icon.js';
 import { state } from './state.js';
 import { esc, escAttr, showSaveIndicator, showToast, oxDisplayClass } from './ui-utils.js';
 import { branchFromStudent } from './student-helpers.js';
@@ -103,28 +104,28 @@ export function renderBulkSummary() {
     summaryEl.innerHTML = `
         <div class="bulk-summary-header">
             <div class="bulk-summary-avatar">
-                <span class="material-symbols-outlined">groups</span>
+                ${msIcon('groups')}
             </div>
             <div class="bulk-summary-info">
                 <h2 class="bulk-summary-title">${count}명 선택됨</h2>
                 ${commonBranch ? `<span class="tag">${esc(commonBranch)}</span>` : ''}
             </div>
             <button class="icon-btn detail-close-btn" onclick="exitBulkMode()" title="벌크 모드 종료" aria-label="벌크 모드 종료">
-                <span class="material-symbols-outlined">close</span>
+                ${msIcon('close')}
             </button>
         </div>
         <div class="bulk-summary-names">${nameList}</div>
         <div class="bulk-summary-actions">
             <button class="btn btn-secondary bulk-summary-action-btn" onclick="openBulkAttendanceFromSummary()">
-                <span class="material-symbols-outlined" style="font-size:18px;">event_available</span>
+                ${msIcon('event_available', '', 'style="font-size:18px;"')}
                 일괄 출결
             </button>
             <button class="btn btn-secondary bulk-summary-action-btn" onclick="openBulkOXFromSummary('hw')">
-                <span class="material-symbols-outlined" style="font-size:18px;">menu_book</span>
+                ${msIcon('menu_book', '', 'style="font-size:18px;"')}
                 일괄 숙제OX
             </button>
             <button class="btn btn-secondary bulk-summary-action-btn" onclick="openBulkOXFromSummary('test')">
-                <span class="material-symbols-outlined" style="font-size:18px;">quiz</span>
+                ${msIcon('quiz', '', 'style="font-size:18px;"')}
                 일괄 테스트OX
             </button>
         </div>`;
@@ -333,7 +334,7 @@ export function toggleGroupView() {
     localStorage.setItem('dsc_groupViewMode', state.groupViewMode);
     const btn = document.getElementById('group-view-btn');
     if (btn) {
-        btn.querySelector('.material-symbols-outlined').textContent = labels[state.groupViewMode];
+        btn.querySelector('.material-symbols-outlined').outerHTML = msIcon(labels[state.groupViewMode]);
         btn.title = titles[state.groupViewMode];
         btn.classList.toggle('active', state.groupViewMode !== 'none');
     }

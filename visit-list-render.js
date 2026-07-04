@@ -5,6 +5,7 @@
 // `renderDepartureCheckList`, `clearVisitCache`를 import하여 사용한다.
 // Injection: `getStudentChecklistStatus`, `renderFilterChips`는 daily-ops.js에서 주입.
 
+import { msIcon } from './ms-icon.js';
 import {
     state,
     SV_SOURCE_MAP, SOURCE_PRIORITY, SOURCE_SHORT, KOREAN_CHAR_RE
@@ -386,7 +387,7 @@ export function renderScheduledVisitList() {
 
     if (visits.length === 0) {
         container.innerHTML = `<div class="empty-state">
-            <span class="material-symbols-outlined">event_available</span>
+            ${msIcon('event_available')}
             <p>비정규 항목이 없습니다</p>
         </div>`;
         return;
@@ -535,7 +536,7 @@ export function renderEnrollPendingOnly() {
 
     if (visits.length === 0) {
         container.innerHTML = `<div class="empty-state">
-            <span class="material-symbols-outlined">event_available</span>
+            ${msIcon('event_available')}
             <p>등원예정 학생이 없습니다</p>
         </div>`;
         return;
@@ -582,7 +583,7 @@ export function renderDepartureCheckList() {
 
     if (students.length === 0) {
         container.innerHTML = `<div class="empty-state">
-            <span class="material-symbols-outlined">fact_check</span>
+            ${msIcon('fact_check')}
             <p>해당하는 학생이 없습니다</p>
         </div>`;
         return;

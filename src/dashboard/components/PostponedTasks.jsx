@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from 'react';
+import { Icon } from '@impact7/ui';
+import { ICON_NAME } from '../icon-map.js';
 
 const STATUS_MAP = {
     '전체': null,
@@ -46,7 +48,7 @@ export default function PostponedTasks({ tasks }) {
         <div className="dash-card postponed">
             <div className="dash-card-header">
                 <span>
-                    <span className="material-symbols-outlined">pending_actions</span>
+                    <Icon name={ICON_NAME.pending_actions} size={20} className="material-symbols-outlined" />
                     밀린과업
                 </span>
                 <span className="dash-card-header-meta">

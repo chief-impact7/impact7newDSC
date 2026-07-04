@@ -1,4 +1,6 @@
 import React, { useMemo } from 'react';
+import { Icon } from '@impact7/ui';
+import { ICON_NAME } from '../icon-map.js';
 import ReactECharts from '../echarts.jsx';
 
 const COLORS = { 출석: '#188038', 결석: '#d93025', 지각: '#f9ab00', 조퇴: '#e67e22' };
@@ -98,7 +100,7 @@ function AttendanceSummary({ checks, startDate, endDate }) {
         <div className="dash-card attendance">
             <div className="dash-card-header">
                 <span>
-                    <span className="material-symbols-outlined">groups</span>
+                    <Icon name={ICON_NAME.groups} size={20} className="material-symbols-outlined" />
                     출결 현황
                 </span>
                 <span className="dash-card-header-meta">

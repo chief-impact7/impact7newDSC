@@ -1,6 +1,7 @@
 // ─── 학부모 알림 메시지 생성 ────────────────────────────────────────────────
 // daily-ops.js에서 분리 (Phase 2-1)
 
+import { msIcon } from './ms-icon.js';
 import { state } from './state.js';
 import { geminiModel } from './firebase-ai.js';
 import { parseDateKST, getDayName } from './src/shared/firestore-helpers.js';
@@ -457,7 +458,7 @@ export async function regenerateParentMessage() {
         } catch (err) {
             console.error('메시지 재생성 실패:', err);
             if (loadingEl) loadingEl.innerHTML = `
-                <span class="material-symbols-outlined" style="font-size:28px;color:var(--danger);">error</span>
+                ${msIcon('error', '', 'style="font-size:28px;color:var(--danger);"')}
                 메시지 생성에 실패했습니다.<br><span style="font-size:11px;">${esc(err.message)}</span>`;
         }
     } else {

@@ -2,6 +2,7 @@
 // daily-ops.js에서 추출한 결석대장 관련 함수
 // Phase 3-2
 
+import { msIcon } from './ms-icon.js';
 import { doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { auditUpdate, auditSet, batchUpdate, batchSet } from './audit.js';
@@ -123,8 +124,8 @@ export function renderAbsenceLedgerList() {
         const isActive = r.student_id === state.selectedStudentId;
         const validityBadge = _renderValidityBadge(r.reason_valid);
         const consultBtn = r.consultation_done
-            ? '<span class="material-symbols-outlined" style="font-size:14px;color:var(--success);">check_circle</span>'
-            : `<button class="btn-icon" style="padding:2px;" onclick="event.stopPropagation(); toggleConsultation('${escAttr(r.docId)}', '${escAttr(r.student_id)}')" title="상담 완료 처리"><span class="material-symbols-outlined" style="font-size:14px;color:var(--text-sec);">phone_callback</span></button>`;
+            ? msIcon('check_circle', '', 'style="font-size:14px;color:var(--success);"')
+            : `<button class="btn-icon" style="padding:2px;" onclick="event.stopPropagation(); toggleConsultation('${escAttr(r.docId)}', '${escAttr(r.student_id)}')" title="상담 완료 처리">${msIcon('phone_callback', '', 'style="font-size:14px;color:var(--text-sec);"')}</button>`;
 
         const classMeta = _getAbsenceClassMeta(r);
         const _teacherEmail = state.classSettings[classMeta.settingsKey]?.teacher;
@@ -408,7 +409,7 @@ export async function reopenAbsenceMakeup(docId, studentId) {
 
 function _renderStepBadge(number, isDone, primaryColor = 'var(--primary)') {
     const bg = isDone ? 'var(--success)' : primaryColor;
-    const check = isDone ? '<span class="material-symbols-outlined" style="font-size:14px;color:var(--success);">check</span>' : '';
+    const check = isDone ? msIcon('check', '', 'style="font-size:14px;color:var(--success);"') : '';
     return `<span style="background:${bg};color:#fff;border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;">${number}</span> ${check}`;
 }
 
@@ -506,17 +507,17 @@ export function renderAbsenceRecordCard(studentId) {
                     makeupActions = `
                         <button class="hw-fail-type-btn active" style="background:var(--success);border-color:var(--success);font-size:11px;"
                             onclick="completeAbsenceMakeup('${escAttr(r.docId)}', '${escAttr(studentId)}')">
-                            <span class="material-symbols-outlined" style="font-size:13px;">check_circle</span>보충완료
+                            ${msIcon('check_circle', '', 'style="font-size:13px;"')}보충완료
                         </button>
                         <button class="hw-fail-type-btn" style="font-size:11px;background:#dc2626;border-color:#dc2626;color:#fff;"
                             onclick="markAbsenceNoShow('${escAttr(r.docId)}', '${escAttr(studentId)}')">
-                            <span class="material-symbols-outlined" style="font-size:13px;">person_off</span>미등원
+                            ${msIcon('person_off', '', 'style="font-size:13px;"')}미등원
                         </button>`;
                 } else if (r.makeup_status === '미등원') {
                     makeupActions = `
                         <button class="hw-fail-type-btn" style="font-size:11px;background:#7c3aed;border-color:#7c3aed;color:#fff;"
                             onclick="openAbsenceRescheduleModal('${escAttr(r.docId)}', '${escAttr(studentId)}')">
-                            <span class="material-symbols-outlined" style="font-size:13px;">event</span>재예약
+                            ${msIcon('event', '', 'style="font-size:13px;"')}재예약
                         </button>
                         <button class="hw-fail-type-btn" style="font-size:11px;"
                             onclick="switchToSettlement('${escAttr(r.docId)}', '${escAttr(studentId)}')">정산전환</button>`;
@@ -525,7 +526,7 @@ export function renderAbsenceRecordCard(studentId) {
                         <span style="font-size:11px;color:var(--success);font-weight:600;">보충 완료됨</span>
                         <button class="hw-fail-type-btn" style="font-size:11px;background:#7c3aed;border-color:#7c3aed;color:#fff;margin-left:4px;"
                             onclick="reopenAbsenceMakeup('${escAttr(r.docId)}', '${escAttr(studentId)}')">
-                            <span class="material-symbols-outlined" style="font-size:13px;">event</span>재예약
+                            ${msIcon('event', '', 'style="font-size:13px;"')}재예약
                         </button>`;
                 }
             }
@@ -582,11 +583,11 @@ export function renderAbsenceRecordCard(studentId) {
         const actionBtn = stage3Done
             ? `<button class="hw-fail-type-btn" style="font-size:11px;"
                     onclick="event.preventDefault(); showSaveIndicator('saved');">
-                    <span class="material-symbols-outlined" style="font-size:13px;">edit</span>수정
+                    ${msIcon('edit', '', 'style="font-size:13px;"')}수정
                 </button>`
             : `<button class="hw-fail-type-btn" style="font-size:11px;background:var(--primary);border-color:var(--primary);color:#fff;"
                     onclick="this.closest('.pending-task-row').classList.remove('expanded'); showSaveIndicator('saved');">
-                    <span class="material-symbols-outlined" style="font-size:13px;">save</span>저장
+                    ${msIcon('save', '', 'style="font-size:13px;"')}저장
                 </button>`;
 
         const stage4Html = `
@@ -600,7 +601,7 @@ export function renderAbsenceRecordCard(studentId) {
                     ${actionBtn}
                     <button class="hw-fail-type-btn" style="font-size:11px;background:#6b7280;border-color:#6b7280;color:#fff;"
                         onclick="closeAbsenceRecord('${escAttr(r.docId)}', '${escAttr(studentId)}')">
-                        <span class="material-symbols-outlined" style="font-size:13px;">archive</span>행정완료
+                        ${msIcon('archive', '', 'style="font-size:13px;"')}행정완료
                     </button>
                 </div>
             </div>`;
@@ -613,7 +614,7 @@ export function renderAbsenceRecordCard(studentId) {
                         ${esc(classMeta.displayCode)} · ${esc(_stripYear(r.absence_date))}
                         ${validityBadge}
                     </span>
-                    <span class="pending-task-arrow material-symbols-outlined" style="font-size:16px;color:var(--text-sec);">expand_more</span>
+                    ${msIcon('expand_more', 'pending-task-arrow', 'style="font-size:16px;color:var(--text-sec);"')}
                 </div>
                 <div class="pending-task-expand">
                     ${stage1Html}
@@ -627,7 +628,7 @@ export function renderAbsenceRecordCard(studentId) {
     return `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:#dc2626;font-size:18px;">event_busy</span>
+                ${msIcon('event_busy', '', 'style="color:#dc2626;font-size:18px;"')}
                 결석대장 <span style="font-size:12px;color:var(--text-sec);">(${records.length}건)</span>
             </div>
             ${rows}

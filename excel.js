@@ -1,3 +1,4 @@
+import { msIcon } from './ms-icon.js';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
     collection, getDocs, doc,
@@ -656,7 +657,7 @@ function renderCards(rows) {
     container.innerHTML = '';
 
     if (rows.length === 0) {
-        container.innerHTML = '<div class="empty-state"><span class="material-symbols-outlined">event_busy</span><p>해당 날짜에 수업이 없습니다.</p></div>';
+        container.innerHTML = '<div class="empty-state">' + msIcon('event_busy') + '<p>해당 날짜에 수업이 없습니다.</p></div>';
         return;
     }
 

@@ -1,4 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import { Icon } from '@impact7/ui';
+import { ICON_NAME } from '../icon-map.js';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../../firebase-config.js';
 import { getDayName, studentGradeKey, studentShortLabel, normalizeAttendanceLabel } from '../../shared/firestore-helpers.js';
@@ -482,7 +484,7 @@ function SummaryCard({ icon, label, value, note }) {
     return (
         <div className="daily-log-metric">
             <div className="daily-log-metric-label">
-                <span className="material-symbols-outlined" aria-hidden="true">{icon}</span>
+                <Icon name={ICON_NAME[icon]} size={19} className="material-symbols-outlined" aria-hidden="true" />
                 {label}
             </div>
             <div className="daily-log-metric-value">{value}</div>
@@ -579,7 +581,7 @@ function ClassGroup({ groupKey, classCode, rows, open = false }) {
     return (
         <details className="daily-log-class-details" open={open}>
             <summary>
-                <span className="material-symbols-outlined daily-log-class-chev" aria-hidden="true">chevron_right</span>
+                <Icon name={ICON_NAME.chevron_right} size={20} className="daily-log-class-chev" aria-hidden="true" />
                 <strong>{classGroupTitle(groupKey, displayCode)}</strong>
                 <span>{rows.length}명 · 지각 {late} · 결석 {absent} · 이슈 {issues}</span>
             </summary>
@@ -608,7 +610,7 @@ function AccordionGroup({ groupKey, rows, children, open = false }) {
     return (
         <details className="daily-log-details" open={open}>
             <summary>
-                <span className="material-symbols-outlined daily-log-chev" aria-hidden="true">chevron_right</span>
+                <Icon name={ICON_NAME.chevron_right} size={24} className="daily-log-chev" aria-hidden="true" />
                 <div className="daily-log-group-title">
                     <strong>{GROUP_LABELS[groupKey]}</strong>
                 </div>
@@ -631,7 +633,7 @@ function SideList({ title, icon, rows, type, hideEmptyBody = false }) {
         <div className={`daily-log-side-card ${type}`}>
             <div className={`daily-log-side-head ${type}`}>
                 <div>
-                    <span className="material-symbols-outlined" aria-hidden="true">{icon}</span>
+                    <Icon name={ICON_NAME[icon]} size={24} aria-hidden="true" />
                     {title}
                 </div>
                 <span>{rows.length}명</span>
@@ -826,7 +828,7 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                     <div className="daily-log-main-card">
                         <div className="daily-log-main-head">
                             <div>
-                                <span className="material-symbols-outlined" aria-hidden="true">view_list</span>
+                                <Icon name={ICON_NAME.view_list} size={24} aria-hidden="true" />
                                 학생별 일일 로그
                             </div>
                             <span>{fmtDate(date)} ({getDayName(date)})</span>
@@ -890,7 +892,7 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                             return (
                                 <details key={group} className={`daily-log-details${isContact ? ' contact' : ''}`} open={isContact && list.length > 0 ? true : undefined}>
                                     <summary>
-                                        <span className="material-symbols-outlined daily-log-chev" aria-hidden="true">chevron_right</span>
+                                        <Icon name={ICON_NAME.chevron_right} size={24} className="daily-log-chev" aria-hidden="true" />
                                         <div className="daily-log-group-title">
                                             <strong>{group}</strong>
                                         </div>

@@ -1,6 +1,7 @@
 // 학생 상세의 [상담] 탭 렌더링 + 입력 저장 + 조회.
 // data-layer.js 의 상담 헬퍼를 활용.
 
+import { msIcon } from './ms-icon.js';
 import {
   addConsultation,
   updateConsultationTitle,
@@ -130,7 +131,7 @@ function renderAiCollapseButton(kind) {
   const collapsed = _aiCollapsed[kind] === true;
   return `
     <button class="consult-collapse-btn" onclick="onToggleConsultationAiCard('${kind}')" title="${collapsed ? '펼치기' : '접기'}" aria-label="${collapsed ? '펼치기' : '접기'}">
-      <span class="material-symbols-outlined">${collapsed ? 'expand_more' : 'expand_less'}</span>
+      ${msIcon(collapsed ? 'expand_more' : 'expand_less')}
     </button>
   `;
 }

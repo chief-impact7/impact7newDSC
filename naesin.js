@@ -6,6 +6,7 @@
  *   - src/shared/firestore-helpers.js의 getDayName
  */
 
+import { msIcon } from './ms-icon.js';
 import { getDayName, studentShortLabel, todayStr } from './src/shared/firestore-helpers.js';
 import { ENROLLABLE_STATUSES, isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { staffLabel } from '@impact7/shared/staff-label';
@@ -174,7 +175,7 @@ export function renderNaesinList() {
     let listHtml;
     if (items.length === 0) {
         listHtml = `<div class="empty-state">
-            <span class="material-symbols-outlined">school</span>
+            ${msIcon('school')}
             <p>내신 학생이 없습니다</p>
         </div>`;
     } else {
@@ -232,7 +233,7 @@ function _renderRemoveFromClassCard(studentId, key, displayLabel, handlerName) {
         <div class="detail-card">
             <button class="btn btn-secondary" style="width:100%;color:var(--danger);border-color:var(--danger);"
                 onclick="window.${handlerName}('${_escAttr(studentId)}', '${_escAttr(key)}')">
-                <span class="material-symbols-outlined" style="font-size:16px;">person_remove</span>
+                ${msIcon('person_remove', '', 'style="font-size:16px;"')}
                 ${_esc(displayLabel)} 반에서 제거
             </button>
         </div>`;
@@ -254,7 +255,7 @@ function _renderClinicCard(studentId, extraVisit, selectedDate) {
         : '<div class="detail-card-empty">클리닉 예정 없음</div>';
     const buttonsHtml = isPastDate ? '' : `
         <span style="display:flex;gap:2px;align-items:center;">
-            ${hasClinic ? `<div class="card-add-btn" style="color:var(--danger);" onclick="window.clearExtraVisit('${_escAttr(studentId)}')">×</div>` : ''}
+            ${hasClinic ? `<div class="card-add-btn" style="color:var(--danger);" role="button" tabindex="0" data-keyclick aria-label="추가방문 삭제" onclick="window.clearExtraVisit('${_escAttr(studentId)}')">${msIcon('close', '', 'style="font-size:16px;"')}</div>` : ''}
             <div class="card-add-btn" onclick="window.openNaesinClinic('${_escAttr(studentId)}')">+</div>
         </span>`;
 
@@ -262,7 +263,7 @@ function _renderClinicCard(studentId, extraVisit, selectedDate) {
         <div class="detail-card">
             <div class="detail-card-title detail-card-title-row">
                 <span style="display:flex;align-items:center;gap:6px;">
-                    <span class="material-symbols-outlined">schedule</span>
+                    ${msIcon('schedule')}
                     클리닉
                     ${statusHtml}
                 </span>
@@ -342,7 +343,7 @@ export function renderNaesinDetail(studentId) {
     const attHtml = `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined">how_to_reg</span>
+                ${msIcon('how_to_reg')}
                 출결
             </div>
             <div class="naesin-att-row">${attButtons}</div>
@@ -400,7 +401,7 @@ export function renderNaesinDetail(studentId) {
     const schedHtml = `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined">calendar_today</span>
+                ${msIcon('calendar_today')}
                 등원요일·시간
             </div>
             <div class="naesin-day-chips">${dayTogglesHtml}</div>
@@ -668,7 +669,7 @@ export function renderTeukangDetail(studentId) {
     const attHtml = `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined">how_to_reg</span>
+                ${msIcon('how_to_reg')}
                 출결
             </div>
             <div class="naesin-att-row">${attButtons}</div>
@@ -705,7 +706,7 @@ export function renderTeukangDetail(studentId) {
     const schedHtml = `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined">calendar_today</span>
+                ${msIcon('calendar_today')}
                 등원요일 · 시간
             </div>
             <div class="naesin-day-chips">${dayTogglesHtml || '<div class="detail-card-empty">반 스케줄 없음</div>'}</div>
@@ -935,7 +936,7 @@ function renderNaesinClassDetail(csKey) {
             <div class="naesin-day-badge ${badgeCls}" ${badgeInactive}>${_esc(day)}</div>
             <input type="time" class="field-input" value="${_escAttr(time)}" style="width:120px;"
                 onchange="window.saveNaesinClassSchedule('${_escAttr(csKey)}', '${_escAttr(day)}', this.value)">
-            ${time ? `<button style="font-size:11px;color:var(--danger);cursor:pointer;border:none;background:none;" onclick="window.saveNaesinClassSchedule('${_escAttr(csKey)}', '${_escAttr(day)}', '')">삭제</button>` : ''}
+            ${time ? msIcon('delete', '', `style="font-size:16px;color:var(--danger);cursor:pointer;" role="button" tabindex="0" data-keyclick aria-label="삭제" onclick="window.saveNaesinClassSchedule('${_escAttr(csKey)}', '${_escAttr(day)}', '')"`) : ''}
         </div>`;
     }).join('');
 
@@ -944,7 +945,7 @@ function renderNaesinClassDetail(csKey) {
     cardsContainer.innerHTML = `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">person</span>
+                ${msIcon('person', '', 'style="color:var(--primary);font-size:18px;"')}
                 담당 배정
             </div>
             <select class="field-input" style="width:100%;" onchange="window.saveNaesinClassTeacher('${_escAttr(csKey)}', this.value)">
@@ -955,7 +956,7 @@ function renderNaesinClassDetail(csKey) {
 
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">date_range</span>
+                ${msIcon('date_range', '', 'style="color:var(--primary);font-size:18px;"')}
                 내신 기간
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
@@ -969,7 +970,7 @@ function renderNaesinClassDetail(csKey) {
 
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">schedule</span>
+                ${msIcon('schedule', '', 'style="color:var(--primary);font-size:18px;"')}
                 등원요일 · 시간
             </div>
             <div style="font-size:11px;color:var(--text-sec);margin-bottom:8px;">시간을 입력하면 해당 요일이 활성화됩니다</div>

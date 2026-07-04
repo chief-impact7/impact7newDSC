@@ -2,6 +2,7 @@
 // daily-ops.js에서 추출한 롤/메모 관련 함수
 // Phase 3-6
 
+import { msIcon } from './ms-icon.js';
 import { collection, doc, getDoc, getDocs, query, where, serverTimestamp, arrayUnion } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { todayStr } from './src/shared/firestore-helpers.js';
@@ -165,11 +166,11 @@ export function toggleMemoSection() {
     const icon = document.getElementById('memo-expand-icon');
     if (panel.style.display === 'none') {
         panel.style.display = '';
-        icon.textContent = 'expand_less';
+        icon.outerHTML = msIcon('expand_less', 'expand-icon', 'id="memo-expand-icon"');
         renderMemoPanel();
     } else {
         panel.style.display = 'none';
-        icon.textContent = 'expand_more';
+        icon.outerHTML = msIcon('expand_more', 'expand-icon', 'id="memo-expand-icon"');
     }
 }
 
@@ -180,7 +181,7 @@ export function toggleMemoPanel() {
     // 이미 열려있으면 닫기
     if (panel.style.display !== 'none') {
         panel.style.display = 'none';
-        icon.textContent = 'expand_more';
+        icon.outerHTML = msIcon('expand_more', 'expand-icon', 'id="memo-expand-icon"');
         return;
     }
 
@@ -194,7 +195,7 @@ export function toggleMemoPanel() {
 
     // 패널 열기
     panel.style.display = '';
-    icon.textContent = 'expand_less';
+    icon.outerHTML = msIcon('expand_less', 'expand-icon', 'id="memo-expand-icon"');
     renderMemoPanel();
 }
 
@@ -257,7 +258,7 @@ function renderMemoList(container) {
                         ${dateLabel}
                         <span class="memo-item-date">${esc(timeStr)}</span>
                         <button class="memo-pin-btn${isPinned ? ' active' : ''}" onclick="event.stopPropagation();toggleMemoPin('${m.docId}',${!isPinned})" title="${pinTitle}">
-                            <span class="material-symbols-outlined" style="font-size:16px;">${pinIcon}</span>
+                            ${msIcon(pinIcon, '', 'style="font-size:16px;"')}
                         </button>
                     </span>
                 </div>
@@ -269,7 +270,7 @@ function renderMemoList(container) {
 
     // 모든 롤에서 메모 보내기 버튼
     html += `<button class="memo-send-btn" onclick="openMemoModal()">
-        <span class="material-symbols-outlined" style="font-size:18px;">add</span>
+        ${msIcon('add', '', 'style="font-size:18px;"')}
         메모 보내기
     </button>`;
 
@@ -514,8 +515,8 @@ export function renderUnifiedMemoCard(studentId) {
                 <div class="student-memo-bottom">
                     <span class="student-memo-meta">${esc(meta)}</span>
                     <span class="student-memo-actions">
-                        <span class="material-symbols-outlined student-memo-btn" role="button" tabindex="0" data-keyclick aria-label="${m.pinned ? '고정 해제' : '고정'}" title="${m.pinned ? '고정 해제' : '고정'}" onclick="toggleStudentMemoPin('${escAttr(studentId)}',${m._idx})">${pinIcon}</span>
-                        <span class="material-symbols-outlined student-memo-btn delete" role="button" tabindex="0" data-keyclick aria-label="메모 삭제" title="삭제" onclick="deleteStudentMemo('${escAttr(studentId)}',${m._idx})">close</span>
+                        ${msIcon(pinIcon, 'student-memo-btn', `role="button" tabindex="0" data-keyclick aria-label="${m.pinned ? '고정 해제' : '고정'}" title="${m.pinned ? '고정 해제' : '고정'}" onclick="toggleStudentMemoPin('${escAttr(studentId)}',${m._idx})"`)}
+                        ${msIcon('close', 'student-memo-btn delete', `role="button" tabindex="0" data-keyclick aria-label="메모 삭제" title="삭제" onclick="deleteStudentMemo('${escAttr(studentId)}',${m._idx})"`)}
                     </span>
                 </div>
             </div>`;
@@ -525,11 +526,11 @@ export function renderUnifiedMemoCard(studentId) {
     return `<div class="detail-card">
         <div class="detail-card-title" style="display:flex;align-items:center;justify-content:space-between;">
             <span style="display:flex;align-items:center;gap:6px;">
-                <span class="material-symbols-outlined" style="color:var(--text-sec);font-size:18px;">sticky_note_2</span>
+                ${msIcon('sticky_note_2', '', 'style="color:var(--text-sec);font-size:18px;"')}
                 메모
             </span>
             <button class="icon-btn" style="width:28px;height:28px;" aria-label="메모 추가" onclick="document.getElementById('memo-add-row-${escAttr(studentId)}').style.display=document.getElementById('memo-add-row-${escAttr(studentId)}').style.display==='none'?'':'none'" title="메모 추가">
-                <span class="material-symbols-outlined" style="font-size:20px;">add</span>
+                ${msIcon('add', '', 'style="font-size:20px;"')}
             </button>
         </div>
         <div class="student-memo-add" id="memo-add-row-${escAttr(studentId)}" style="display:none;">

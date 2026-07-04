@@ -20,6 +20,7 @@
 //   hidePendingFromForm : false(hw) | true(test) — pending은 폼에서 숨기고 "모두 처리됨"
 //   reopenedSet       : null(hw) | Set(test)     — 명시적 편집요청 추적 set
 //   selectFn/clearFn/saveFieldsFn : onclick에 들어갈 window 전역 함수명
+import { msIcon } from './ms-icon.js';
 import { doc, writeBatch } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { auditUpdate, auditSet, batchSet, batchUpdate } from './audit.js';
@@ -62,7 +63,7 @@ export function renderFailActionCard({ studentId, items, d2nd, failAction, mode 
         return `
             <div class="detail-card hw-fail-card">
                 <div class="detail-card-title">
-                    <span class="material-symbols-outlined" style="color:var(--success);font-size:18px;">check_circle</span>
+                    ${msIcon('check_circle', '', 'style="color:var(--success);font-size:18px;"')}
                     ${titleLabel}
                 </div>
                 <div class="detail-card-empty" style="color:var(--success);">✅ ${passLabel}</div>
@@ -84,7 +85,7 @@ export function renderFailActionCard({ studentId, items, d2nd, failAction, mode 
             return `
             <div class="detail-card hw-fail-card">
                 <div class="detail-card-title">
-                    <span class="material-symbols-outlined" style="color:var(--success);font-size:18px;">task_alt</span>
+                    ${msIcon('task_alt', '', 'style="color:var(--success);font-size:18px;"')}
                     ${titleLabel}
                 </div>
                 <div class="detail-card-empty" style="color:var(--text-sec);">모두 처리됨</div>
@@ -128,11 +129,11 @@ export function renderFailActionCard({ studentId, items, d2nd, failAction, mode 
                     <div class="hw-fail-type-btns">
                         <button class="hw-fail-type-btn ${isVisit ? 'active' : ''}" aria-pressed="${isVisit}"
                             onclick="${config.selectFn}('${escAttr(studentId)}', '${escapedKey}', '등원', this)">
-                            <span class="material-symbols-outlined" style="font-size:13px;">directions_walk</span>등원
+                            ${msIcon('directions_walk', '', 'style="font-size:13px;"')}등원
                         </button>
                         <button class="hw-fail-type-btn ${isAlt ? 'active' : ''}" aria-pressed="${isAlt}"
                             onclick="${config.selectFn}('${escAttr(studentId)}', '${escapedKey}', '대체숙제', this)">
-                            <span class="material-symbols-outlined" style="font-size:13px;">edit_note</span>대체숙제
+                            ${msIcon('edit_note', '', 'style="font-size:13px;"')}대체숙제
                         </button>
                         ${type ? `<button class="hw-fail-type-btn hw-fail-clear-btn"
                             onclick="${config.clearFn}('${escAttr(studentId)}', '${escapedKey}')">${hasPendingTask ? '삭제' : '취소'}</button>` : ''}
@@ -153,7 +154,7 @@ export function renderFailActionCard({ studentId, items, d2nd, failAction, mode 
                         </div>
                         <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc(staffLabel(action.handler || state.currentUser?.email || ''))}</div>
                         <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="${config.saveFieldsFn}('${escAttr(studentId)}', '${escapedKey}', this)">
-                            <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
+                            ${msIcon('save', '', 'style="font-size:16px;"')} 저장
                         </button>
                     </div>
                 ` : isAlt ? `
@@ -168,7 +169,7 @@ export function renderFailActionCard({ studentId, items, d2nd, failAction, mode 
                         </div>
                         <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">담당: ${esc(staffLabel(action.handler || state.currentUser?.email || ''))}</div>
                         <button class="btn btn-primary btn-sm detail-save-btn" style="margin-top:6px;" onclick="${config.saveFieldsFn}('${escAttr(studentId)}', '${escapedKey}', this)">
-                            <span class="material-symbols-outlined" style="font-size:16px;">save</span> 저장
+                            ${msIcon('save', '', 'style="font-size:16px;"')} 저장
                         </button>
                     </div>
                 ` : ''}${savedTag ? `
@@ -181,7 +182,7 @@ export function renderFailActionCard({ studentId, items, d2nd, failAction, mode 
     return `
         <div class="detail-card hw-fail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--danger);font-size:18px;">${config.cardIcon}</span>
+                ${msIcon(config.cardIcon, '', 'style="color:var(--danger);font-size:18px;"')}
                 ${titleLabel} (${count}${config.countSuffix})
             </div>
             <div class="hw-fail-desc" style="font-size:12px;color:var(--text-sec);margin-bottom:10px;">

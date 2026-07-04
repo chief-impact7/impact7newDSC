@@ -42,6 +42,11 @@ body {
   background: var(--surface);
 }
 
+/* Google Fonts Material Symbols 링크 제거(SVG 아이콘 전환) 후 기본 크기 복원 —
+   원래 그 스택시트가 .material-symbols-outlined에 기본 제공하던 font-size:24px를
+   지역 규칙 없는 아이콘에도 유지한다. 더 구체적인 선택자가 있으면 그쪽이 이긴다. */
+.material-symbols-outlined { font-size: 24px; line-height: 1; }
+
 /* ===== Login ===== */
 .login-screen {
   display: flex;

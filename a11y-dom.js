@@ -11,7 +11,8 @@ export function installKeyboardActivation(selector) {
         const el = e.target.closest(selector);
         if (!el || el !== e.target) return;
         e.preventDefault();
-        el.click();
+        // SVGElement에는 .click()이 없어(HTMLElement 전용) dispatchEvent로 통일 — 아이콘 svg가 role=button을 가질 때도 동작
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
 }
 

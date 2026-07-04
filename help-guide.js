@@ -1,4 +1,5 @@
 /* ── Help Guide Modal ─────────────────────────────────────────────────── */
+import { msIcon } from './ms-icon.js';
 
 const TABS = [
     { id: 'basics', label: '기본 사용법', icon: 'play_circle' },
@@ -13,7 +14,7 @@ const TABS = [
     return `
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">login</span>
+          ${msIcon('login')}
           로그인
         </h3>
         <ol class="help-guide-steps">
@@ -25,7 +26,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">calendar_month</span>
+          ${msIcon('calendar_month')}
           날짜 이동
         </h3>
         <p class="help-guide-desc">
@@ -36,7 +37,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">search</span>
+          ${msIcon('search')}
           학생 검색
         </h3>
         <p class="help-guide-desc">상단 검색창에서 다양한 방식으로 학생을 찾을 수 있습니다.</p>
@@ -53,7 +54,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">person</span>
+          ${msIcon('person')}
           학생 상세보기
         </h3>
         <ol class="help-guide-steps">
@@ -65,7 +66,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">view_module</span>
+          ${msIcon('view_module')}
           뷰 전환
         </h3>
         <p class="help-guide-desc">
@@ -79,7 +80,7 @@ const TABS = [
     return `
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">event_available</span>
+          ${msIcon('event_available')}
           출결 관리
         </h3>
         <p class="help-guide-desc">학생 카드의 출결 버튼으로 상태를 변경합니다.</p>
@@ -91,7 +92,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">task_alt</span>
+          ${msIcon('task_alt')}
           숙제 관리
         </h3>
         <p class="help-guide-desc">
@@ -105,7 +106,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">grading</span>
+          ${msIcon('grading')}
           테스트 관리
         </h3>
         <ul class="help-guide-list">
@@ -116,7 +117,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">event_repeat</span>
+          ${msIcon('event_repeat')}
           재시/보강 등록
         </h3>
         <p class="help-guide-desc">
@@ -126,7 +127,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">auto_stories</span>
+          ${msIcon('auto_stories')}
           다음 숙제 입력
         </h3>
         <p class="help-guide-desc">
@@ -136,7 +137,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">person</span>
+          ${msIcon('person')}
           담당/부담당 배정
         </h3>
         <ol class="help-guide-steps">
@@ -151,7 +152,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">sticky_note_2</span>
+          ${msIcon('sticky_note_2')}
           메모
         </h3>
         <ul class="help-guide-list">
@@ -162,7 +163,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">family_restroom</span>
+          ${msIcon('family_restroom')}
           학부모 알림
         </h3>
         <p class="help-guide-desc">
@@ -173,7 +174,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">checklist</span>
+          ${msIcon('checklist')}
           일괄 선택 모드
         </h3>
         <ol class="help-guide-steps">
@@ -184,7 +185,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">download</span>
+          ${msIcon('download')}
           일일현황표 다운로드
         </h3>
         <ol class="help-guide-steps">
@@ -200,7 +201,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">person_add</span>
+          ${msIcon('person_add')}
           진단평가
         </h3>
         <p class="help-guide-desc">
@@ -210,7 +211,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">save</span>
+          ${msIcon('save')}
           자동 저장
         </h3>
         <p class="help-guide-desc">
@@ -225,7 +226,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">event_available</span>
+          ${msIcon('event_available')}
           출결 (L1)
         </h3>
         <p class="help-guide-desc">전체 학생의 출결 현황을 봅니다.</p>
@@ -236,7 +237,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">task_alt</span>
+          ${msIcon('task_alt')}
           숙제 (L1)
         </h3>
         <p class="help-guide-desc">숙제 제출 현황을 봅니다.</p>
@@ -247,7 +248,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">grading</span>
+          ${msIcon('grading')}
           테스트 (L1)
         </h3>
         <p class="help-guide-desc">테스트 현황을 봅니다.</p>
@@ -258,7 +259,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">smart_toy</span>
+          ${msIcon('smart_toy')}
           자동화 (L1)
         </h3>
         <p class="help-guide-desc">
@@ -268,7 +269,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">location_city</span>
+          ${msIcon('location_city')}
           소속 (L1)
         </h3>
         <ul class="help-guide-list">
@@ -279,7 +280,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">class</span>
+          ${msIcon('class')}
           반 관리 (L1)
         </h3>
         <p class="help-guide-desc">반별 설정을 관리합니다.</p>
@@ -293,7 +294,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">admin_panel_settings</span>
+          ${msIcon('admin_panel_settings')}
           행정 (L1)
         </h3>
         <p class="help-guide-desc">휴원/퇴원 행정 업무를 관리합니다. L2 필터로 세부 기능을 선택합니다.</p>
@@ -339,7 +340,7 @@ const TABS = [
 
       <section class="help-guide-section">
         <h3 class="help-guide-section-title">
-          <span class="material-symbols-outlined">label</span>
+          ${msIcon('label')}
           필터 칩
         </h3>
         <p class="help-guide-desc">
@@ -390,9 +391,9 @@ const TABS = [
         (f) => `
       <details class="help-guide-faq-item">
         <summary class="help-guide-faq-q">
-          <span class="material-symbols-outlined">help</span>
+          ${msIcon('help')}
           ${f.q}
-          <span class="material-symbols-outlined help-guide-faq-chevron">expand_more</span>
+          ${msIcon('expand_more', 'help-guide-faq-chevron')}
         </summary>
         <div class="help-guide-faq-a">${f.a}</div>
       </details>
@@ -421,7 +422,7 @@ const TABS = [
       (t, i) => `
       <button class="help-guide-tab${i === 0 ? ' help-guide-tab--active' : ''}"
               data-tab="${t.id}" role="tab" aria-selected="${i === 0}">
-        <span class="material-symbols-outlined">${t.icon}</span>
+        ${msIcon(t.icon)}
         <span>${t.label}</span>
       </button>`
     ).join('');
@@ -430,11 +431,11 @@ const TABS = [
       <div class="help-guide-modal">
         <header class="help-guide-header">
           <h2 class="help-guide-title">
-            <span class="material-symbols-outlined">menu_book</span>
+            ${msIcon('menu_book')}
             사용 가이드
           </h2>
           <button class="help-guide-close" aria-label="닫기">
-            <span class="material-symbols-outlined">close</span>
+            ${msIcon('close')}
           </button>
         </header>
         <nav class="help-guide-tabs" role="tablist">${tabsHTML}</nav>

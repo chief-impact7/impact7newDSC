@@ -1,6 +1,7 @@
 // ─── List View ──────────────────────────────────────────────────────────────
 // daily-ops.js에서 분리한 학생 필터링 파이프라인 + 리스트 패널 렌더링 (클러스터 3+4)
 
+import { msIcon } from './ms-icon.js';
 import {
     state, LEAVE_STATUSES, SV_L3_KEYS, DEFAULT_TONE, REGULAR_CLASS_TYPES
 } from './state.js';
@@ -471,7 +472,7 @@ export function renderListPanel() {
 
     if (students.length === 0 && consultMatchCount === 0 && enrollPendingCount === 0) {
         container.innerHTML = `<div class="empty-state">
-            <span class="material-symbols-outlined">person_search</span>
+            ${msIcon('person_search')}
             <p>해당하는 학생이 없습니다</p>
         </div>`;
         return;
@@ -806,15 +807,15 @@ export function renderListPanel() {
         const hasAltHw = pendingTasks.some(t => t.type === '대체숙제');
         const hasVisit = pendingTasks.some(t => t.type === '등원');
         const hwFailIconHtml = hasAltHw
-            ? `<span class="hw-fail-badge hw-fail-alt" title="대체숙제 있음"><span class="material-symbols-outlined" style="font-size:14px;">edit_note</span></span>`
+            ? `<span class="hw-fail-badge hw-fail-alt" title="대체숙제 있음">${msIcon('edit_note', '', 'style="font-size:14px;"')}</span>`
             : hasVisit
-            ? `<span class="hw-fail-badge hw-fail-visit" title="등원 예약 있음"><span class="material-symbols-outlined" style="font-size:14px;">directions_walk</span></span>`
+            ? `<span class="hw-fail-badge hw-fail-visit" title="등원 예약 있음">${msIcon('directions_walk', '', 'style="font-size:14px;"')}</span>`
             : '';
 
         // 형제 아이콘
         const hasSibling = state.siblingMap[s.docId]?.size > 0;
         const siblingNames = hasSibling ? [...state.siblingMap[s.docId]].map(sid => state.allStudents.find(x => x.docId === sid)?.name).filter(Boolean).join(', ') : '';
-        const siblingIcon = hasSibling ? `<span class="item-icon item-icon-sibling" title="형제: ${esc(siblingNames)}"><span class="material-symbols-outlined">group</span></span>` : '';
+        const siblingIcon = hasSibling ? `<span class="item-icon item-icon-sibling" title="형제: ${esc(siblingNames)}">${msIcon('group')}</span>` : '';
 
         // 담당 뱃지 (첫 번째 반코드 기준)
         const todayCodes = getActiveEnrollments(s, state.selectedDate).filter(e => e.day.includes(dayN)).map(e => enrollmentCode(e));
@@ -862,7 +863,7 @@ export function renderListPanel() {
             const category = isHw1stFilter ? 'homework' : 'test';
             const hasFail1st = Object.values(rec[field] || {}).some(v => v && v !== 'O');
             if (hasFail1st) {
-                followUpBtnHtml = `<button class="follow-up-btn" title="후속대책" aria-label="후속대책" onclick="event.stopPropagation(); openFollowUpAction('${escAttr(s.docId)}', '${category}')"><span class="material-symbols-outlined" style="font-size:16px;">assignment_late</span></button>`;
+                followUpBtnHtml = `<button class="follow-up-btn" title="후속대책" aria-label="후속대책" onclick="event.stopPropagation(); openFollowUpAction('${escAttr(s.docId)}', '${category}')">${msIcon('assignment_late', '', 'style="font-size:16px;"')}</button>`;
             }
         }
 

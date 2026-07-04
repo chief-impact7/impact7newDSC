@@ -2,6 +2,7 @@
 // daily-ops.js에서 추출한 숙제 관리 관련 함수
 // Phase 3-4
 
+import { msIcon } from './ms-icon.js';
 import { state } from './state.js';
 import { esc, escAttr, formatTime12h, nextOXValue, oxDisplayClass, _stripYear, _isNoShow, _renderRescheduleHistory } from './ui-utils.js';
 import { enrollmentCode, getActiveEnrollments, matchesBranchFilter } from './student-helpers.js';
@@ -89,7 +90,7 @@ export function renderPendingTasksCard(studentId, tasks) {
         const bulkBtn = dateKey && count >= 2
             ? `<button class="hw-fail-type-btn" style="background:#7c3aed;border-color:#7c3aed;color:#fff;font-size:11px;padding:2px 8px;"
                     onclick="openBulkRescheduleModal('${escAttr(studentId)}', '${escAttr(dateKey)}')">
-                    <span class="material-symbols-outlined" style="font-size:13px;">event</span>묶음 재지정
+                    ${msIcon('event', '', 'style="font-size:13px;"')}묶음 재지정
                 </button>`
             : '';
         return `<div style="display:flex;align-items:center;justify-content:space-between;margin:8px 0 2px;font-size:12px;font-weight:600;color:var(--text-sec);">
@@ -125,7 +126,7 @@ export function renderPendingTasksCard(studentId, tasks) {
         // 재지정 버튼 — 모든 pending task에 노출 (대체숙제는 모달이 시간 필드 자동 숨김)
         const rescheduleBtn = `<button class="hw-fail-type-btn" style="background:#7c3aed;border-color:#7c3aed;color:#fff;font-size:11px;"
                     onclick="openRescheduleModal('${escAttr(collection)}', '${escAttr(t.docId)}', '${escAttr(studentId)}')">
-                    <span class="material-symbols-outlined" style="font-size:13px;">event</span>재지정
+                    ${msIcon('event', '', 'style="font-size:13px;"')}재지정
                 </button>`;
 
         // 재지정 이력
@@ -139,7 +140,7 @@ export function renderPendingTasksCard(studentId, tasks) {
             <div class="${rowClass}" data-task-idx="${idx}">
                 <div class="pending-task-summary" role="button" tabindex="0" data-keyclick aria-expanded="false" onclick="this.parentElement.classList.toggle('expanded'); this.setAttribute('aria-expanded', String(this.parentElement.classList.contains('expanded')))">
                     <span>${summary}</span>
-                    <span class="pending-task-arrow material-symbols-outlined" style="font-size:16px;color:var(--text-sec);">expand_more</span>
+                    ${msIcon('expand_more', 'pending-task-arrow', 'style="font-size:16px;color:var(--text-sec);"')}
                 </div>
                 <div class="pending-task-expand">
                     <div class="pending-task-detail">${detail}</div>
@@ -147,11 +148,11 @@ export function renderPendingTasksCard(studentId, tasks) {
                     <div class="pending-task-actions">
                         <button class="hw-fail-type-btn active" style="background:var(--success);border-color:var(--success);font-size:11px;"
                             onclick="${completeFunc}('${escAttr(t.docId)}', '${escAttr(studentId)}')">
-                            <span class="material-symbols-outlined" style="font-size:13px;">check_circle</span>완료
+                            ${msIcon('check_circle', '', 'style="font-size:13px;"')}완료
                         </button>
                         <button class="hw-fail-type-btn hw-fail-clear-btn" style="font-size:11px;"
                             onclick="${cancelFunc}('${escAttr(t.docId)}', '${escAttr(studentId)}')">
-                            <span class="material-symbols-outlined" style="font-size:13px;">cancel</span>취소
+                            ${msIcon('cancel', '', 'style="font-size:13px;"')}취소
                         </button>
                         ${rescheduleBtn}
                     </div>
@@ -164,7 +165,7 @@ export function renderPendingTasksCard(studentId, tasks) {
     return `
         <div class="detail-card" style="border-color:#fef3c7;">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:#d97706;font-size:18px;">pending_actions</span>
+                ${msIcon('pending_actions', '', 'style="color:#d97706;font-size:18px;"')}
                 밀린 Task (${tasks.length})
             </div>
             ${taskRows}
@@ -187,7 +188,7 @@ export function renderNextHwClassList() {
 
     if (classCodes.length === 0) {
         container.innerHTML = `<div class="empty-state">
-            <span class="material-symbols-outlined">school</span>
+            ${msIcon('school')}
             <p>오늘 수업이 있는 반이 없습니다</p>
         </div>`;
         return;
@@ -391,7 +392,7 @@ export function renderNextHwClassDetail(classCode) {
         <!-- 다음숙제 입력 카드 -->
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">edit_note</span>
+                ${msIcon('edit_note', '', 'style="color:var(--primary);font-size:18px;"')}
                 다음숙제 입력
             </div>
             <div class="next-hw-domain-chips" style="margin-bottom:12px;">
@@ -417,7 +418,7 @@ export function renderNextHwClassDetail(classCode) {
         <!-- 학생 목록 카드 -->
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--text-sec);font-size:18px;">group</span>
+                ${msIcon('group', '', 'style="color:var(--text-sec);font-size:18px;"')}
                 소속 학생 (${classStudents.length}명)
             </div>
             ${classStudents.length === 0

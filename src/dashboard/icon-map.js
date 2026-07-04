@@ -1,0 +1,32 @@
+// dashboard·messages(React) 전용 material 이름 → @impact7/ui ICON_PATHS 키 매핑.
+// 바닐라 JS 쪽 브릿지(../../ms-icon.js)와 동일한 이름 규약을 쓰되, React 트리에서는
+// 문자열 svg 대신 @impact7/ui의 <Icon> 컴포넌트를 직접 쓴다(dangerouslySetInnerHTML 불필요).
+export const ICON_NAME = {
+  groups: 'userGroup',
+  chevron_right: 'chevronRight',
+  chevron_left: 'chevronLeft',
+  view_list: 'listBullet',
+  error: 'exclamationCircle',
+  event_note: 'documentText',
+  menu_book: 'bookOpen',
+  replay: 'arrowPath',
+  download: 'download',
+  forum: 'chatBubbleLeftRight',
+  pending_actions: 'ellipsisHorizontalCircle',
+  quiz: 'clipboardDocumentList',
+  today: 'calendar',
+  monitoring: 'presentationChartLine',
+  send: 'paperAirplane',
+  refresh: 'arrowPath',
+  expand_less: 'chevronUp',
+  expand_more: 'chevronDown',
+  science: 'beaker',
+  how_to_reg: 'identification',
+  schedule: 'clock',
+  person_off: 'userMinus',
+  assignment_late: 'exclamationCircle',
+  logout: 'logout',
+  pause_circle: 'pauseCircle',
+  fact_check: 'documentCheck',
+  event_available: 'checkBadge',
+};

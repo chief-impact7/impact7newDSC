@@ -1,6 +1,7 @@
 // ─── Filter / Navigation ────────────────────────────────────────────────────
 // daily-ops.js에서 분리한 필터/내비게이션 UI (클러스터 1: 좌측 트리 + 칩)
 
+import { msIcon } from './ms-icon.js';
 import { state, SV_SOURCE_MAP } from './state.js';
 import { getDayName, studentLevel, ATTENDANCE_ACTIONS, normalizeAttendanceLabel, finalApprovalDate } from './src/shared/firestore-helpers.js';
 import {
@@ -121,7 +122,7 @@ export function updateL1ExpandIcons() {
         // branch, class_mgmt는 별도 관리
         if (el.dataset.category === 'branch' || el.dataset.category === 'class_mgmt') return;
         const isActive = el.dataset.category === state.currentCategory;
-        icon.textContent = (isActive && state.l2Expanded) ? 'expand_less' : 'expand_more';
+        icon.outerHTML = msIcon((isActive && state.l2Expanded) ? 'expand_less' : 'expand_more', 'nav-l1-expand');
     });
 }
 
@@ -218,7 +219,7 @@ export function renderSubFilters() {
             const isExpanded = parentOrChildActive ? 'l2-expanded' : '';
             const parentClass = f.children ? 'l2-parent' : '';
             const expandIcon = f.children
-                ? `<span class="material-symbols-outlined l2-expand-icon">${parentOrChildActive ? 'expand_less' : 'expand_more'}</span>`
+                ? `${msIcon(parentOrChildActive ? 'expand_less' : 'expand_more', 'l2-expand-icon')}`
                 : '';
             const { count, total } = getSubFilterCount(f.key);
             const badge = _countBadge(f.key, count, total);
@@ -289,7 +290,7 @@ export function renderBranchFilter() {
         html += `<div class="nav-l2 l2-parent ${parentActive} ${expanded}" data-filter="${b.key}" onclick="setBranch('${b.key}')">
             ${esc(b.label)}
             ${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
-            <span class="material-symbols-outlined l2-expand-icon">${isBranchSelected ? 'expand_less' : 'expand_more'}</span>
+            ${msIcon(isBranchSelected ? 'expand_less' : 'expand_more', 'l2-expand-icon')}
         </div>`;
 
         if (isBranchSelected) {
@@ -322,7 +323,7 @@ export function renderBranchFilter() {
 
     // 소속 L1 expand 아이콘 업데이트
     const icon = branchL1.querySelector('.nav-l1-expand');
-    if (icon) icon.textContent = isExpanded ? 'expand_less' : 'expand_more';
+    if (icon) icon.outerHTML = msIcon(isExpanded ? 'expand_less' : 'expand_more', 'nav-l1-expand');
 
     // 소속 선택 시 L1에 시각적 표시
     branchL1.classList.toggle('has-filter', !!state.selectedBranch);
@@ -337,7 +338,7 @@ function _renderL3Chip(code, displayLabel, count, mode) {
         ? `window.toggleClassDeleteSelect('${escAttr(mode)}', '${escAttr(code)}')`
         : `setClassCode('${escAttr(code)}')`;
     const checkbox = isDeleteMode
-        ? `<span class="material-symbols-outlined" style="font-size:16px;margin-right:4px;color:${isSelected ? '#dc2626' : '#9ca3af'};">${isSelected ? 'check_box' : 'check_box_outline_blank'}</span>`
+        ? msIcon(isSelected ? 'check_box' : 'check_box_outline_blank', '', `style="font-size:16px;margin-right:4px;color:${isSelected ? '#dc2626' : '#9ca3af'}"`)
         : '';
     const selectedStyle = isSelected ? 'background:#fef2f2;color:#b91c1c;' : '';
     return `<div class="nav-l2 nav-l3 ${isActive}" style="${selectedStyle}" onclick="${onclick}">
@@ -384,7 +385,7 @@ export function renderClassCodeFilter() {
     // 정규 L2
     html += `<div class="nav-l2 l2-parent ${regExpanded ? 'active l2-expanded' : ''}" onclick="window.setClassMgmtMode('regular')">
         정규<span class="nav-l2-count">${regular.length}</span>
-        <span class="material-symbols-outlined l2-expand-icon">${regExpanded ? 'expand_less' : 'expand_more'}</span>
+        ${msIcon(regExpanded ? 'expand_less' : 'expand_more', 'l2-expand-icon')}
     </div>`;
     if (regExpanded) {
         html += regular.map(code => _renderL3Chip(code, code, getClassMgmtCount(code), 'regular')).join('');
@@ -393,7 +394,7 @@ export function renderClassCodeFilter() {
     // 자유학기 L2
     html += `<div class="nav-l2 l2-parent ${freeExpanded ? 'active l2-expanded' : ''}" onclick="window.setClassMgmtMode('free')">
         자유학기<span class="nav-l2-count">${free.length}</span>
-        <span class="material-symbols-outlined l2-expand-icon">${freeExpanded ? 'expand_less' : 'expand_more'}</span>
+        ${msIcon(freeExpanded ? 'expand_less' : 'expand_more', 'l2-expand-icon')}
     </div>`;
     if (freeExpanded) {
         html += free.map(({ code, count }) => _renderL3Chip(code, code, count, 'free')).join('');
@@ -402,7 +403,7 @@ export function renderClassCodeFilter() {
     // 내신 L2
     html += `<div class="nav-l2 l2-parent ${naeExpanded ? 'active l2-expanded' : ''}" onclick="window.setClassMgmtMode('naesin')">
         내신<span class="nav-l2-count">${naesin.length}</span>
-        <span class="material-symbols-outlined l2-expand-icon">${naeExpanded ? 'expand_less' : 'expand_more'}</span>
+        ${msIcon(naeExpanded ? 'expand_less' : 'expand_more', 'l2-expand-icon')}
     </div>`;
     if (naeExpanded) {
         html += naesin.map(({ code, displayCode, count }) => _renderL3Chip(code, displayCode, count, 'naesin')).join('');
@@ -411,7 +412,7 @@ export function renderClassCodeFilter() {
     // 특강 L2
     html += `<div class="nav-l2 l2-parent ${tekExpanded ? 'active l2-expanded' : ''}" onclick="window.setClassMgmtMode('teukang')">
         특강<span class="nav-l2-count">${teukang.length}</span>
-        <span class="material-symbols-outlined l2-expand-icon">${tekExpanded ? 'expand_less' : 'expand_more'}</span>
+        ${msIcon(tekExpanded ? 'expand_less' : 'expand_more', 'l2-expand-icon')}
     </div>`;
     if (tekExpanded) {
         html += teukang.map(code => _renderL3Chip(code, code, getTeukangClassStudents(code).length, 'teukang')).join('');
@@ -423,7 +424,7 @@ export function renderClassCodeFilter() {
     container.style.display = isExpanded ? '' : 'none';
 
     const icon = classL1.querySelector('.nav-l1-expand');
-    if (icon) icon.textContent = isExpanded ? 'expand_less' : 'expand_more';
+    if (icon) icon.outerHTML = msIcon(isExpanded ? 'expand_less' : 'expand_more', 'nav-l1-expand');
 
     // 소속 트리에서 L4 반을 클릭하면 selectedBranchLevel + selectedClassCode가 동시에 활성된다.
     // 그 경우 반 설정 L1을 시각적으로 활성화하지 않아 트리 간 혼동을 방지.

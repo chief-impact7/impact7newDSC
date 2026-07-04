@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from 'react';
+import { Icon } from '@impact7/ui';
+import { ICON_NAME } from '../icon-map.js';
 import { RETEST_FIELDS } from '../constants.js';
 
 const INITIAL_ROWS = 10;
@@ -38,7 +40,7 @@ export default function RetestSummary({ checks }) {
         <div className="dash-card retest">
             <div className="dash-card-header">
                 <span>
-                    <span className="material-symbols-outlined">replay</span>
+                    <Icon name={ICON_NAME.replay} size={20} className="material-symbols-outlined" />
                     재시 현황
                 </span>
                 <span className="dash-card-header-meta">

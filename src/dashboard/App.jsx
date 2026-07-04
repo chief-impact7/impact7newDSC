@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import { Icon } from '@impact7/ui';
+import { ICON_NAME } from './icon-map.js';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, dataAuthReady } from '../../firebase-config.js';
 import { signInWithGoogle, logout } from '../../auth.js';
@@ -323,14 +325,14 @@ export default function App() {
                         <label>날짜</label>
                         <div className="dash-date-nav">
                             <button type="button" aria-label="이전 날" onClick={() => setBaseDate(addDays(normalizedBaseDate, -1))}>
-                                <span className="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+                                <Icon name={ICON_NAME.chevron_left} size={20} aria-hidden="true" />
                             </button>
                             <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, normalizedBaseDate, setBaseDate)}>{normalizedBaseDate}</button>
                             <button type="button" aria-label="다음 날" onClick={() => setBaseDate(addDays(normalizedBaseDate, 1))}>
-                                <span className="material-symbols-outlined" aria-hidden="true">chevron_right</span>
+                                <Icon name={ICON_NAME.chevron_right} size={20} aria-hidden="true" />
                             </button>
                             <button type="button" aria-label="오늘" onClick={() => setBaseDate(todayStr())} title="오늘">
-                                <span className="material-symbols-outlined" aria-hidden="true">today</span>
+                                <Icon name={ICON_NAME.today} size={20} aria-hidden="true" />
                             </button>
                         </div>
                     </div>
@@ -341,11 +343,11 @@ export default function App() {
                         <label>기준일</label>
                         <div className="dash-date-nav">
                             <button type="button" aria-label="이전 주" onClick={() => setBaseDate(addDays(normalizedBaseDate, -7))}>
-                                <span className="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+                                <Icon name={ICON_NAME.chevron_left} size={20} aria-hidden="true" />
                             </button>
                             <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, normalizedBaseDate, setBaseDate)}>{normalizedBaseDate}</button>
                             <button type="button" aria-label="다음 주" onClick={() => setBaseDate(addDays(normalizedBaseDate, 7))}>
-                                <span className="material-symbols-outlined" aria-hidden="true">chevron_right</span>
+                                <Icon name={ICON_NAME.chevron_right} size={20} aria-hidden="true" />
                             </button>
                             <button className="dash-text-btn" onClick={() => setBaseDate(todayStr())}>
                                 이번 주

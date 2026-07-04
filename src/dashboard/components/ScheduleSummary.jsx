@@ -1,4 +1,6 @@
 import React, { useMemo, useState, useCallback } from 'react';
+import { Icon } from '@impact7/ui';
+import { ICON_NAME } from '../icon-map.js';
 import { NEXT_HW_FIELDS } from '../constants.js';
 
 const INITIAL_ROWS = 5;
@@ -43,7 +45,7 @@ export default function ScheduleSummary({ checks }) {
         <div className="dash-card schedule">
             <div className="dash-card-header">
                 <span>
-                    <span className="material-symbols-outlined">event_note</span>
+                    <Icon name={ICON_NAME.event_note} size={20} className="material-symbols-outlined" />
                     다음 숙제/일정
                 </span>
                 <span className="dash-card-header-meta">

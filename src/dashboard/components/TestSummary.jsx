@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from 'react';
+import { Icon } from '@impact7/ui';
+import { ICON_NAME } from '../icon-map.js';
 import ReactECharts from '../echarts.jsx';
 import { TEST_FIELDS } from '../constants.js';
 
@@ -93,7 +95,7 @@ function TestSummary({ checks }) {
         <div className="dash-card test">
             <div className="dash-card-header">
                 <span>
-                    <span className="material-symbols-outlined">quiz</span>
+                    <Icon name={ICON_NAME.quiz} size={20} className="material-symbols-outlined" />
                     리뷰테스트 현황
                 </span>
             </div>
@@ -133,9 +135,7 @@ function TestSummary({ checks }) {
                                     className="dash-expand-btn"
                                     onClick={() => setShowStudents(v => !v)}
                                 >
-                                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
-                                        {showStudents ? 'expand_less' : 'expand_more'}
-                                    </span>
+                                    <Icon name={showStudents ? ICON_NAME.expand_less : ICON_NAME.expand_more} size={18} />
                                     학생별 점수 ({studentRows.length}명)
                                 </button>
                                 {showStudents && (

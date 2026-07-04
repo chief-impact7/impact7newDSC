@@ -3,6 +3,7 @@
 // 분리 출처: daily-ops.js (cluster C, Step 4)
 // Injection: `renderSubFilters`, `renderListPanel`, `_isNaesinClassCode`는 daily-ops.js에서 주입.
 
+import { msIcon } from './ms-icon.js';
 import {
     collection, getDocs, doc, getDoc,
     query, where, orderBy, limit, deleteField
@@ -270,19 +271,19 @@ function renderChecklistCard(studentId) {
     if (isDeparted) {
         departureSection = `
             <button class="departure-btn departed" disabled>
-                <span class="material-symbols-outlined" style="font-size:16px;">check_circle</span>
+                ${msIcon('check_circle', '', 'style="font-size:16px;"')}
                 하원 완료 (${formatTime12h(departure.time || '')})
             </button>`;
     } else if (canDepart) {
         departureSection = `
             <button class="departure-btn ready" onclick="confirmDeparture('${escAttr(studentId)}')">
-                <span class="material-symbols-outlined" style="font-size:16px;">logout</span>
+                ${msIcon('logout', '', 'style="font-size:16px;"')}
                 하원 확인
             </button>`;
     } else {
         departureSection = `
             <button class="departure-btn not-ready" onclick="confirmDeparture('${escAttr(studentId)}')">
-                <span class="material-symbols-outlined" style="font-size:16px;">logout</span>
+                ${msIcon('logout', '', 'style="font-size:16px;"')}
                 하원 확인 (미완료 ${pendingItems.length}건)
             </button>`;
     }
@@ -290,7 +291,7 @@ function renderChecklistCard(studentId) {
     const parentMsgBtn = `
         <button class="departure-btn not-ready" style="margin-top:6px;background:#f3e8ff;color:#7c3aed;border:1px solid #e9d5ff;"
             onclick="event.stopPropagation(); openParentMessageModal('${escAttr(studentId)}')">
-            <span class="material-symbols-outlined" style="font-size:16px;">sms</span>
+            ${msIcon('sms', '', 'style="font-size:16px;"')}
             학부모 알림 작성
         </button>`;
 
@@ -305,7 +306,7 @@ function renderChecklistCard(studentId) {
             <div class="checklist-items">
                 ${items.filter(i => i.key !== 'departure').map(i => `
                     <span class="checklist-item ${i.done ? 'done' : ''}">
-                        <span class="material-symbols-outlined checklist-icon">${i.done ? 'check_circle' : 'radio_button_unchecked'}</span>
+                        ${msIcon(i.done ? 'check_circle' : 'radio_button_unchecked', 'checklist-icon')}
                         ${esc(i.label)}
                     </span>
                 `).join('')}
@@ -667,7 +668,7 @@ function renderReportCard(records) {
     const attendanceHtml = `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">event_available</span>
+                ${msIcon('event_available', '', 'style="color:var(--primary);font-size:18px;"')}
                 출석 (${attendanceRows.length}일)
             </div>
             <table class="report-attendance-table">
@@ -733,7 +734,7 @@ function renderReportCard(records) {
         return `
             <div class="report-ox-section">
                 <div class="report-ox-title">
-                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">${icon}</span>
+                    ${msIcon(icon, '', 'style="font-size:16px;vertical-align:middle;"')}
                     ${esc(title)}
                 </div>
                 ${domains.map(d => {
@@ -850,7 +851,7 @@ function renderScoreTable(title, icon, rows, emptyText, columns) {
     return `
         <div class="detail-card score-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">${icon}</span>
+                ${msIcon(icon, '', 'style="color:var(--primary);font-size:18px;"')}
                 ${esc(title)}
             </div>
             ${rows.length === 0 ? `<div class="detail-card-empty">${esc(emptyText)}</div>` : `
@@ -1034,12 +1035,12 @@ function renderTempClassOverrideCard(studentId) {
     return `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--warning);font-size:18px;">swap_horiz</span>
+                ${msIcon('swap_horiz', '', 'style="color:var(--warning);font-size:18px;"')}
                 타반수업
             </div>
             ${listHtml}
             <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="openTempClassOverrideModal('${escAttr(studentId)}')">
-                <span class="material-symbols-outlined" style="font-size:14px;">add</span> 타반수업 추가
+                ${msIcon('add', '', 'style="font-size:14px;"')} 타반수업 추가
             </button>
         </div>
     `;
@@ -1170,7 +1171,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
             .filter(s => s.name)
         : [];
     const siblingHtml = siblings.length
-        ? `<span class="tag tag-sibling"><span class="material-symbols-outlined" style="font-size:13px;">group</span> ${
+        ? `<span class="tag tag-sibling">${msIcon('group', '', 'style="font-size:13px;"')} ${
             siblings.map(s => `<span style="cursor:pointer;text-decoration:underline;" role="link" tabindex="0" data-keyclick onclick="event.stopPropagation();selectStudent('${escAttr(s.id)}')">${esc(s.name)}</span>`).join(', ')
           }</span>`
         : '';
@@ -1232,7 +1233,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     const arrivalTimeHtml = (isLeaveStudent || isWithdrawn) ? '' : semesterEnrollments.length > 0 ? `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">schedule</span>
+                ${msIcon('schedule', '', 'style="color:var(--primary);font-size:18px;"')}
                 등원 일정
             </div>
             <div class="next-hw-detail-row">
@@ -1259,7 +1260,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
                     ${ct !== '정규' ? `<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:${ct === '내신' ? 'var(--warning)' : 'var(--info)'};color:#fff;">${esc(ct)}</span>` : ''}
                     <span style="font-size:12px;color:var(--text-sec);white-space:nowrap;">${esc(days)}</span>
                     <span style="font-size:13px;white-space:nowrap;">${displayTime ? esc(formatTime12h(displayTime)) : '-'}</span>
-                    ${idx >= 0 ? `<span class="material-symbols-outlined" style="font-size:14px;color:var(--text-sec);cursor:pointer;margin-left:auto;" role="button" tabindex="0" data-keyclick aria-label="수강 정보 편집" onclick="openEnrollmentModal('${escAttr(studentId)}', ${idx})">edit</span>` : ''}
+                    ${idx >= 0 ? msIcon('edit', '', `style="font-size:14px;color:var(--text-sec);cursor:pointer;margin-left:auto;" role="button" tabindex="0" data-keyclick aria-label="수강 정보 편집" onclick="openEnrollmentModal('${escAttr(studentId)}', ${idx})"`) : ''}
                 </div>`;
             }).join('')}
         </div>
@@ -1271,13 +1272,15 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     const reasonHtml = showReason ? `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:${
-                    attStatus === '결석' ? 'var(--danger)' :
-                    attStatus === '지각' ? 'var(--warning)' : 'var(--outline)'
-                };font-size:18px;">${
+                ${msIcon(
                     attStatus === '결석' ? 'cancel' :
-                    attStatus === '지각' ? 'schedule' : 'info'
-                }</span>
+                    attStatus === '지각' ? 'schedule' : 'info',
+                    '',
+                    `style="color:${
+                        attStatus === '결석' ? 'var(--danger)' :
+                        attStatus === '지각' ? 'var(--warning)' : 'var(--outline)'
+                    };font-size:18px;"`
+                )}
                 ${esc(attStatus)} 사유
             </div>
             <textarea class="field-input" aria-label="출결 사유" style="width:100%;min-height:48px;resize:vertical;"
@@ -1299,7 +1302,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     const domainHwHtml = !showStudyCards ? '' : `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">domain_verification</span>
+                ${msIcon('domain_verification', '', 'style="color:var(--primary);font-size:18px;"')}
                 영역별 숙제
             </div>
             ${!hasAnyDomain ? '<div class="detail-card-empty">영역 숙제 미입력</div>' : `
@@ -1343,7 +1346,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     const domainTestHtml = !showStudyCards ? '' : `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">quiz</span>
+                ${msIcon('quiz', '', 'style="color:var(--primary);font-size:18px;"')}
                 테스트 현황
             </div>
             ${!hasAnyTest ? '<div class="detail-card-empty">테스트 미입력</div>' : `
@@ -1390,7 +1393,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     const nextHwHtml = (isNaesinActive || uniqueClasses.length === 0) ? '' : `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">assignment</span>
+                ${msIcon('assignment', '', 'style="color:var(--primary);font-size:18px;"')}
                 다음숙제
             </div>
             ${uniqueClasses.map(cc => {
@@ -1410,7 +1413,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
                             <span class="next-hw-detail-label">${esc(d)}</span>
                             <span style="font-size:13px;color:${color};flex:1;">${esc(displayText)}</span>
                             ${hasPersonal ? '<span style="font-size:10px;color:var(--primary);">개인</span>' : ''}
-                            <span class="material-symbols-outlined" style="font-size:14px;color:var(--outline);">edit</span>
+                            ${msIcon('edit', '', 'style="font-size:14px;color:var(--outline);"')}
                         </div>`;
                     }).join('')}
                 </div>`;
@@ -1426,14 +1429,14 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     const clinicButtons = isPastDate
         ? ''
         : `<span style="display:flex;gap:2px;">
-            ${hasClinic ? `<button class="icon-btn" style="width:28px;height:28px;" aria-label="클리닉 삭제" onclick="clearExtraVisit('${escAttr(studentId)}')"><span class="material-symbols-outlined" style="font-size:18px;color:var(--danger);">close</span></button>` : ''}
-            <button class="icon-btn" style="width:28px;height:28px;" aria-label="클리닉 추가" onclick="addExtraVisit('${escAttr(studentId)}')"><span class="material-symbols-outlined" style="font-size:18px;">add</span></button>
+            ${hasClinic ? `<button class="icon-btn" style="width:28px;height:28px;" aria-label="클리닉 삭제" onclick="clearExtraVisit('${escAttr(studentId)}')">${msIcon('close', '', 'style="font-size:18px;color:var(--danger);"')}</button>` : ''}
+            <button class="icon-btn" style="width:28px;height:28px;" aria-label="클리닉 추가" onclick="addExtraVisit('${escAttr(studentId)}')">${msIcon('add', '', 'style="font-size:18px;"')}</button>
         </span>`;
     const extraVisitHtml = `
         <div class="detail-card">
             <div class="detail-card-title detail-card-title-row">
                 <span style="display:flex;align-items:center;gap:6px;">
-                    <span class="material-symbols-outlined" style="color:var(--primary);font-size:18px;">schedule</span>
+                    ${msIcon('schedule', '', 'style="color:var(--primary);font-size:18px;"')}
                     클리닉
                 </span>
                 ${clinicButtons}
@@ -1460,13 +1463,13 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
                 <span style="font-size:12px;color:var(--text-sec);">${esc(days)}</span>
                 ${time ? `<span style="font-size:12px;">${esc(formatTime12h(time))}</span>` : ''}
                 ${period ? `<span style="font-size:11px;color:var(--text-sec);">${esc(period)}</span>` : ''}
-                <span class="material-symbols-outlined" style="font-size:14px;color:var(--text-sec);cursor:pointer;margin-left:auto;" role="button" tabindex="0" data-keyclick aria-label="수강 정보 편집" onclick="openEnrollmentModal('${escAttr(studentId)}', ${idx})">edit</span>
+                ${msIcon('edit', '', `style="font-size:14px;color:var(--text-sec);cursor:pointer;margin-left:auto;" role="button" tabindex="0" data-keyclick aria-label="수강 정보 편집" onclick="openEnrollmentModal('${escAttr(studentId)}', ${idx})"`)}
             </div>`;
         }).join('');
         withdrawnHtml = `
             <div class="detail-card" style="border-left:3px solid #dc2626;">
                 <div class="detail-card-title">
-                    <span class="material-symbols-outlined" style="color:#dc2626;font-size:18px;">person_off</span>
+                    ${msIcon('person_off', '', 'style="color:#dc2626;font-size:18px;"')}
                     퇴원 정보
                 </div>
                 ${wdDate ? `<div style="font-size:13px;margin-bottom:6px;"><strong>퇴원일:</strong> ${esc(wdDate)}</div>` : ''}
@@ -1479,7 +1482,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
             </div>
             ${enrollInfo ? `<div class="detail-card">
                 <div class="detail-card-title">
-                    <span class="material-symbols-outlined" style="color:var(--text-sec);font-size:18px;">school</span>
+                    ${msIcon('school', '', 'style="color:var(--text-sec);font-size:18px;"')}
                     수강 이력
                 </div>
                 ${enrollInfo}

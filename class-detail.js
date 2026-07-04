@@ -2,6 +2,7 @@
 // daily-ops.js에서 추출한 반 관리 상세 + 타반수업 관련 함수
 // Phase 3-3
 
+import { msIcon } from './ms-icon.js';
 import { doc, getDoc, getDocFromServer, writeBatch, arrayUnion, deleteField, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from './firebase-config.js';
 import { todayStr } from './src/shared/firestore-helpers.js';
@@ -45,12 +46,12 @@ export function renderClassTempOverrideSection(classCode) {
         return `
             <div class="detail-card">
                 <div class="detail-card-title">
-                    <span class="material-symbols-outlined" style="color:var(--warning);font-size:18px;">swap_horiz</span>
+                    ${msIcon('swap_horiz', '', 'style="color:var(--warning);font-size:18px;"')}
                     임시 수업 학생
                 </div>
                 <div style="font-size:12px;color:var(--text-sec);padding:4px 0;">오늘 타반수업 학생 없음</div>
                 <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="openClassTempOverrideModal('${escAttr(classCode)}')">
-                    <span class="material-symbols-outlined" style="font-size:14px;">add</span> 타반 학생 추가
+                    ${msIcon('add', '', 'style="font-size:14px;"')} 타반 학생 추가
                 </button>
             </div>
         `;
@@ -58,7 +59,7 @@ export function renderClassTempOverrideSection(classCode) {
 
     const inHtml = overrideIn.map(o => `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 8px;background:#e3f2fd;border-radius:6px;">
-            <span class="material-symbols-outlined" style="font-size:16px;color:#1565c0;">arrow_forward</span>
+            ${msIcon('arrow_forward', '', 'style="font-size:16px;color:#1565c0;"')}
             <span style="font-size:13px;font-weight:600;">${esc(o.student_name)}</span>
             <span style="font-size:12px;color:var(--text-sec);">← ${esc(o.original_class_code)}</span>
             ${o.reason ? `<span style="font-size:11px;color:var(--text-third);">(${esc(o.reason)})</span>` : ''}
@@ -68,7 +69,7 @@ export function renderClassTempOverrideSection(classCode) {
 
     const outHtml = overrideOut.map(o => `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 8px;background:#fff3e0;border-radius:6px;">
-            <span class="material-symbols-outlined" style="font-size:16px;color:#e65100;">arrow_back</span>
+            ${msIcon('arrow_back', '', 'style="font-size:16px;color:#e65100;"')}
             <span style="font-size:13px;font-weight:600;">${esc(o.student_name)}</span>
             <span style="font-size:12px;color:var(--text-sec);">→ ${esc(o.target_class_code)}</span>
         </div>
@@ -77,13 +78,13 @@ export function renderClassTempOverrideSection(classCode) {
     return `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--warning);font-size:18px;">swap_horiz</span>
+                ${msIcon('swap_horiz', '', 'style="color:var(--warning);font-size:18px;"')}
                 임시 수업 학생
             </div>
             ${overrideIn.length > 0 ? `<div style="font-size:11px;font-weight:600;color:#1565c0;margin-bottom:4px;">들어오는 학생 (${overrideIn.length}명)</div>${inHtml}` : ''}
             ${overrideOut.length > 0 ? `<div style="font-size:11px;font-weight:600;color:#e65100;margin-bottom:4px;${overrideIn.length > 0 ? 'margin-top:8px;' : ''}">나가는 학생 (${overrideOut.length}명)</div>${outHtml}` : ''}
             <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="openClassTempOverrideModal('${escAttr(classCode)}')">
-                <span class="material-symbols-outlined" style="font-size:14px;">add</span> 타반 학생 추가
+                ${msIcon('add', '', 'style="font-size:14px;"')} 타반 학생 추가
             </button>
         </div>
     `;
@@ -102,7 +103,7 @@ export function openClassTempOverrideModal(classCode) {
             <div class="modal-header">
                 <h3 id="ovr-modal-title">타반 학생 추가 — ${esc(classCode)}</h3>
                 <button class="modal-close" aria-label="닫기" onclick="this.closest('.modal-overlay').remove()">
-                    <span class="material-symbols-outlined">close</span>
+                    ${msIcon('close')}
                 </button>
             </div>
             <div class="modal-body">
@@ -309,7 +310,7 @@ export function renderClassDetail(classCode) {
     const teacherCard = `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined">person</span>
+                ${msIcon('person')}
                 담당 배정
             </div>
             <div class="teacher-assign-grid">
@@ -354,7 +355,7 @@ export function renderClassDetail(classCode) {
 
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined">schedule</span>
+                ${msIcon('schedule')}
                 등원예정시간
             </div>
             <div class="arrival-bulk-row">
@@ -366,7 +367,7 @@ export function renderClassDetail(classCode) {
 
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined">category</span>
+                ${msIcon('category')}
                 영역숙제관리
             </div>
             <div class="domain-chips-container">${domainChips || '<span class="detail-card-empty">영역 없음</span>'}</div>
@@ -380,7 +381,7 @@ export function renderClassDetail(classCode) {
 
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined">quiz</span>
+                ${msIcon('quiz')}
                 테스트관리
             </div>
             ${testSectionsHtml}
@@ -432,7 +433,7 @@ function renderRegularClassDayCard(classCode) {
     return `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined">date_range</span>
+                ${msIcon('date_range')}
                 등원 요일
             </div>
             <div style="display:flex;gap:4px;flex-wrap:wrap;">${dayBtns}</div>
@@ -521,7 +522,7 @@ function renderClassScheduleCard(classCode) {
             <button class="icon-btn" style="width:28px;height:28px;"
                 onclick="toggleClassDay('${escAttr(classCode)}', '${escAttr(day)}', false)"
                 title="${esc(day)} 삭제">
-                <span class="material-symbols-outlined" style="font-size:16px;">close</span>
+                ${msIcon('close', '', 'style="font-size:16px;"')}
             </button>
         </div>
     `).join('');
@@ -535,7 +536,7 @@ function renderClassScheduleCard(classCode) {
     return `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined">date_range</span>
+                ${msIcon('date_range')}
                 ${esc(label)}
             </div>
             <div>
@@ -607,7 +608,7 @@ function renderFreeSemesterPeriodCard(classCode) {
     return `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined">date_range</span>
+                ${msIcon('date_range')}
                 자유학기 기간
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
@@ -652,7 +653,7 @@ function renderTeukangPeriodCard(classCode) {
     return `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined">date_range</span>
+                ${msIcon('date_range')}
                 특강 기간
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
@@ -995,13 +996,13 @@ export function renderClassDeleteCard(classCode, mode) {
     return `
         <div class="detail-card" style="border:1px solid #fecaca;background:#fef2f2;">
             <div class="detail-card-title" style="color:#b91c1c;">
-                <span class="material-symbols-outlined" style="color:#dc2626;">delete_forever</span>
+                ${msIcon('delete_forever', '', 'style="color:#dc2626;"')}
                 반 삭제
             </div>
             <div style="font-size:13px;color:#7f1d1d;line-height:1.6;margin-bottom:8px;">${esc(M.describe(count))}</div>
             <button class="btn" style="background:#dc2626;color:#fff;font-size:13px;"
                 onclick="confirmDeleteClass('${escAttr(classCode)}', '${escAttr(mode)}')">
-                <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">delete</span>
+                ${msIcon('delete', '', 'style="font-size:16px;vertical-align:middle;"')}
                 ${esc(label)} 반 삭제
             </button>
         </div>

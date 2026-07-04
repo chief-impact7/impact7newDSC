@@ -1,6 +1,7 @@
 // ─── 진단평가 모달 + CRUD ─────────────────────────────────────────────────
 // daily-ops.js에서 분리 (Phase 2-3)
 
+import { msIcon } from './ms-icon.js';
 import { collection, doc, getDoc, getDocs, query, where, serverTimestamp, arrayUnion, deleteField } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { state, TEMP_FIELD_LABELS } from './state.js';
@@ -66,7 +67,7 @@ export function renderTempAttendanceDetail(docId) {
         { icon: 'apartment', label: '소속', value: ta.branch },
         { icon: 'school', label: '학교', value: schoolLabel },
         { icon: 'phone_android', label: '학생 전화', value: ta.student_phone },
-        { icon: 'phone', label: '학부모 전화', value: ta.parent_phone_1 },
+        { icon: 'contact_phone', label: '학부모 전화', value: ta.parent_phone_1 },
         { icon: 'calendar_today', label: '예정 날짜', value: ta.temp_date },
         { icon: 'schedule', label: '예정 시간', value: ta.temp_time ? formatTime12h(ta.temp_time) : '' },
         { icon: 'edit_calendar', label: '입력일시', value: createdAtStr },
@@ -76,7 +77,7 @@ export function renderTempAttendanceDetail(docId) {
     const memoHtml = ta.memo ? `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:var(--primary);">sticky_note_2</span> 메모
+                ${msIcon('sticky_note_2', '', 'style="color:var(--primary);"')} 메모
             </div>
             <div style="padding:8px 0;color:var(--text-pri);white-space:pre-wrap;font-size:14px;">${esc(ta.memo)}</div>
         </div>
@@ -89,7 +90,7 @@ export function renderTempAttendanceDetail(docId) {
         editHistoryHtml = `
             <div class="detail-card">
                 <div class="detail-card-title">
-                    <span class="material-symbols-outlined" style="color:var(--warning);">history</span> 수정 이력 (${sorted.length}건)
+                    ${msIcon('history', '', 'style="color:var(--warning);"')} 수정 이력 (${sorted.length}건)
                 </div>
                 ${sorted.map(h => {
                     const dt = h.edited_at ? new Date(h.edited_at) : null;
@@ -113,19 +114,19 @@ export function renderTempAttendanceDetail(docId) {
     cardsContainer.innerHTML = `
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px;">
             <button class="btn btn-secondary" style="font-size:13px;padding:6px 14px;color:#dc2626;border-color:#dc2626;" onclick="cancelTempAttendance('${docId}')">
-                <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">cancel</span> 취소
+                ${msIcon('cancel', '', 'style="font-size:16px;vertical-align:middle;"')} 취소
             </button>
             <button class="btn btn-secondary" style="font-size:13px;padding:6px 14px;" onclick="openTempAttendanceForEdit('${docId}')">
-                <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">edit</span> 수정
+                ${msIcon('edit', '', 'style="font-size:16px;vertical-align:middle;"')} 수정
             </button>
         </div>
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined" style="color:#7c3aed;">info</span> 진단평가 정보
+                ${msIcon('info', '', 'style="color:#7c3aed;"')} 진단평가 정보
             </div>
             ${infoRows.map(r => `
                 <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
-                    <span class="material-symbols-outlined" style="font-size:18px;color:var(--text-sec);">${r.icon}</span>
+                    ${msIcon(r.icon, '', 'style="font-size:18px;color:var(--text-sec);"')}
                     <span style="font-size:13px;color:var(--text-sec);min-width:80px;">${esc(r.label)}</span>
                     <span style="font-size:14px;color:var(--text-pri);font-weight:500;">${esc(r.value)}</span>
                 </div>
@@ -442,7 +443,7 @@ function _showDuplicatePrompt(existing, pendingData) {
     box.innerHTML = `
         <div style="background:#fff7ed;border:1px solid #f59e0b;border-radius:8px;padding:12px;margin:8px 0;">
             <div style="display:flex;align-items:center;gap:6px;color:#b45309;font-weight:600;margin-bottom:6px;">
-                <span class="material-symbols-outlined" style="font-size:18px;">warning</span>
+                ${msIcon('warning', '', 'style="font-size:18px;"')}
                 동일 학생의 진단평가가 이미 예정되어 있습니다
             </div>
             <div style="color:#78350f;font-size:13px;line-height:1.6;">

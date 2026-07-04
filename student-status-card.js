@@ -1,6 +1,7 @@
 // 학생 상세의 종합 상태 카드: Firebase 출결·숙제·테스트·상담을 Gemini로 종합한 요약.
 // generateStudentReportAi(통합 Cloud Function)로 생성 → student_status_summaries 결과를 렌더.
 
+import { msIcon } from './ms-icon.js';
 import { getStudentStatusSummary, generateStudentReportAi } from './data-layer.js';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { esc, showToast, renderMarkdown } from './ui-utils.js';
@@ -53,7 +54,7 @@ function renderGapWarning(artifact) {
   const msg = (days == null)
     ? '상담 기록 없음 — 첫 상담 필요'
     : `최근 상담 후 ${days}일 경과 — 상담 공백 주의`;
-  return `<div class="status-gap-warning"><span class="material-symbols-outlined">warning</span>${esc(msg)}</div>`;
+  return `<div class="status-gap-warning">${msIcon('warning')}${esc(msg)}</div>`;
 }
 
 function renderCardBody(studentId, artifact) {
@@ -87,7 +88,7 @@ function cardHtml(studentId, artifact) {
       <div class="detail-card-title status-card-head">
         <span>AI 종합 상태 ${badge}</span>
         <button class="status-collapse-btn" onclick="onToggleStudentStatusCard()" title="${_collapsed ? '펼치기' : '접기'}" aria-label="${_collapsed ? '펼치기' : '접기'}">
-          <span class="material-symbols-outlined">${_collapsed ? 'expand_more' : 'expand_less'}</span>
+          ${msIcon(_collapsed ? 'expand_more' : 'expand_less')}
         </button>
       </div>
       ${_collapsed ? '' : renderCardBody(studentId, artifact)}

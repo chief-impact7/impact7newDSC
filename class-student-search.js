@@ -9,6 +9,7 @@
  *   createStudentSearcher({...})(k, q)  — 검색 실행 (호출자가 window 핸들러로 감쌈)
  */
 
+import { msIcon } from './ms-icon.js';
 import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { studentShortLabel } from './src/shared/firestore-helpers.js';
 import { _searchContactsDSC } from './past-search.js';
@@ -22,7 +23,7 @@ export function renderAddStudentCard({ key, idPrefix, searchHandlerName, footerT
     return `
         <div class="detail-card">
             <div class="detail-card-title">
-                <span class="material-symbols-outlined">person_add</span>
+                ${msIcon('person_add')}
                 학생 추가
             </div>
             <div class="domain-add-row">
@@ -57,7 +58,7 @@ export function createStudentSearcher({
                         <div style="font-weight:600;">${_esc(s.name)}</div>
                         <div style="font-size:11px;color:var(--text-sec);">${_esc(meta)}</div>
                     </div>
-                    <span class="material-symbols-outlined" style="font-size:18px;color:var(--primary);">add</span>
+                    ${msIcon('add', '', 'style="font-size:18px;color:var(--primary);"')}
                 </div>`;
     }
 

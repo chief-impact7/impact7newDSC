@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Icon } from '@impact7/ui';
+import { ICON_NAME } from '../icon-map.js';
 import ReactECharts from '../echarts.jsx';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../../firebase-config.js';
@@ -207,11 +209,11 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
         <div className="dash-card msg-delivery">
             <div className="dash-card-header">
                 <span>
-                    <span className="material-symbols-outlined" aria-hidden="true">send</span>
+                    <Icon name={ICON_NAME.send} size={20} className="material-symbols-outlined" aria-hidden="true" />
                     발송 현황 (출결 알림)
                 </span>
                 <button className={`msg-refresh-btn${loading ? ' loading' : ''}`} onClick={refresh} disabled={loading} title="새로고침">
-                    <span className="material-symbols-outlined" aria-hidden="true">refresh</span>
+                    <Icon name={ICON_NAME.refresh} size={16} className="material-symbols-outlined" aria-hidden="true" />
                     {loading ? '불러오는 중' : '새로고침'}
                 </button>
             </div>

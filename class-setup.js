@@ -1,3 +1,4 @@
+import { msIcon } from './ms-icon.js';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
     collection, getDocs, getDocsFromCache, doc, getDoc, writeBatch, arrayUnion, serverTimestamp
@@ -644,7 +645,7 @@ function renderSelectedStudents() {
                             <span class="selected-chip-meta">${esc(meta)}</span>
                         </div>
                         <button class="remove-btn" type="button" data-doc-id="${esc(s.docId)}" aria-label="${esc(s.name)} 제거">
-                            <span class="material-symbols-outlined" style="font-size:18px;">close</span>
+                            ${msIcon('close', '', 'style="font-size:18px;"')}
                         </button>
                     </div>`;
         }).join('');
@@ -791,7 +792,7 @@ window.submitWizard = async function () {
             }
             if (naesinStudents.length) {
                 const ok = confirm(`다음 학생은 현재 내신 기간입니다: ${naesinStudents.join(', ')}. 정규로만 추가하면 내신이 안 잡힙니다. 내신 반생성마법사로 배정하세요.\n그래도 계속하시겠습니까?`);
-                if (!ok) { btn.disabled = false; btn.innerHTML = '<span class="material-symbols-outlined">check</span> 반 생성'; return; }
+                if (!ok) { btn.disabled = false; btn.innerHTML = msIcon('check') + ' 반 생성'; return; }
             }
         }
 
@@ -840,7 +841,7 @@ window.submitWizard = async function () {
             );
             if (!ok) {
                 btn.disabled = false;
-                btn.innerHTML = '<span class="material-symbols-outlined">check</span> 반 생성';
+                btn.innerHTML = msIcon('check') + ' 반 생성';
                 return;
             }
         }
@@ -1003,7 +1004,7 @@ window.submitWizard = async function () {
         showToast(`생성 실패: ${err.message}`, 'error');
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<span class="material-symbols-outlined">check</span> 반 생성';
+        btn.innerHTML = msIcon('check') + ' 반 생성';
     }
 };
 

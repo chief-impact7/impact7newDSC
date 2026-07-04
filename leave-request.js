@@ -2,6 +2,7 @@
 // daily-ops.js에서 추출한 휴퇴원 요청 & 복귀 관련 함수
 // Phase 3-1
 
+import { msIcon } from './ms-icon.js';
 import { collection, doc, serverTimestamp, deleteField, writeBatch, getDocFromServer } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { parseDateKST, todayStr, finalApprovalDate } from './src/shared/firestore-helpers.js';
@@ -107,7 +108,7 @@ export function renderLeaveRequestList() {
     // 새 요청 버튼
     let html = `<div style="padding:8px 12px;">
         <button class="lr-btn lr-btn-tonal" style="width:100%;" onclick="openLeaveRequestModal()">
-            <span class="material-symbols-outlined">add</span> 새 요청
+            ${msIcon('add')} 새 요청
         </button>
     </div>`;
 
@@ -228,7 +229,7 @@ export function renderReturnUpcomingList() {
             const ddayLabel = daysLeft < 0 ? `만료 ${Math.abs(daysLeft)}일` : daysLeft === 0 ? 'D-Day' : `D-${daysLeft}`;
             const typeBadge = _leaveTypeBadgeOrFallback(lr, s.status);
             const consultDone = s.return_consult_done;
-            const consultIcon = `<span class="return-consult-icon material-symbols-outlined" title="복귀상담" style="color:${consultDone ? '#22c55e' : '#f59e0b'};" onclick="event.stopPropagation();toggleReturnConsult('${escAttr(s.docId)}')">${consultDone ? 'check_circle' : 'phone_in_talk'}</span>`;
+            const consultIcon = msIcon(consultDone ? 'check_circle' : 'phone_in_talk', 'return-consult-icon', `title="복귀상담" style="color:${consultDone ? '#22c55e' : '#f59e0b'}" onclick="event.stopPropagation();toggleReturnConsult('${escAttr(s.docId)}')"`);
 
             html += `<div class="list-item ${isActive ? 'active' : ''}${state.bulkMode ? ' bulk-mode' : ''}${state.selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}"
                 onclick="handleListItemClick(event,'${escAttr(s.docId)}',()=>selectReturnUpcomingStudent('${escAttr(s.docId)}'))">
@@ -338,7 +339,7 @@ export function renderReturnConsultCard(studentId) {
     const consultAt = student.return_consult_done_at ? _fmtTs(student.return_consult_done_at, true) : '';
 
     const checkboxHtml = `<div style="display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="toggleReturnConsult('${escAttr(studentId)}')">
-        <span class="material-symbols-outlined" style="font-size:22px;color:${consultDone ? '#22c55e' : '#9ca3af'};">${consultDone ? 'check_circle' : 'radio_button_unchecked'}</span>
+        ${msIcon(consultDone ? 'check_circle' : 'radio_button_unchecked', '', `style="font-size:22px;color:${consultDone ? '#22c55e' : '#9ca3af'}"`)}
         <span style="font-size:13px;font-weight:600;color:${consultDone ? '#22c55e' : 'var(--text-pri)'};">${consultDone ? '상담 완료' : '상담 미완료'}</span>
     </div>`;
 
@@ -353,7 +354,7 @@ export function renderReturnConsultCard(studentId) {
     return `
         <div class="detail-card" style="border-left:3px solid ${daysLeft <= 7 ? '#dc2626' : '#f59e0b'};">
             <div class="detail-card-title" style="display:flex;align-items:center;gap:8px;">
-                <span class="material-symbols-outlined" style="color:#2563eb;font-size:18px;">phone_callback</span>
+                ${msIcon('phone_callback', '', 'style="color:#2563eb;font-size:18px;"')}
                 복귀상담
                 <span class="return-dday ${ddayCls}" style="margin-left:auto;">${ddayLabel}</span>
             </div>
@@ -410,15 +411,15 @@ function _renderLRRow(r, idx, studentId) {
             <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:8px;">
                 <button class="lr-btn ${cDone ? 'lr-btn-filled' : 'lr-btn-outlined'}" style="${cDone ? '' : 'opacity:0.5;'}"
                     onclick="toggleCancelLeaveRequest('${escAttr(r.docId)}', '${escAttr(studentId)}')">
-                    <span class="material-symbols-outlined">${cDone ? 'cancel' : 'radio_button_unchecked'}</span>취소
+                    ${msIcon(cDone ? 'cancel' : 'radio_button_unchecked')}취소
                 </button>
                 <button class="lr-btn ${tDone ? 'lr-btn-filled' : 'lr-btn-outlined'}" style="${tDone ? '' : 'opacity:0.5;'}"
                     onclick="teacherApproveLeaveRequest('${escAttr(r.docId)}', '${escAttr(studentId)}')">
-                    <span class="material-symbols-outlined">${tDone ? 'check_circle' : 'radio_button_unchecked'}</span>교수부
+                    ${msIcon(tDone ? 'check_circle' : 'radio_button_unchecked')}교수부
                 </button>
                 <button class="lr-btn ${aDone ? 'lr-btn-filled' : 'lr-btn-outlined'}" style="${aDone ? '' : 'opacity:0.5;'}"
                     onclick="approveLeaveRequest('${escAttr(r.docId)}', '${escAttr(studentId)}')">
-                    <span class="material-symbols-outlined">${aDone ? 'check_circle' : 'radio_button_unchecked'}</span>행정부
+                    ${msIcon(aDone ? 'check_circle' : 'radio_button_unchecked')}행정부
                 </button>
             </div>`;
     }
@@ -434,8 +435,7 @@ function _renderLRRow(r, idx, studentId) {
         returnConsultHtml = `
             <div style="margin-top:8px;padding:8px;background:var(--bg-secondary);border-radius:6px;">
                 <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-                    <span class="return-consult-icon material-symbols-outlined" style="color:${consultColor};font-size:18px;cursor:pointer;"
-                        onclick="toggleReturnConsult('${escAttr(studentId)}')">${consultChecked}</span>
+                    ${msIcon(consultChecked, 'return-consult-icon', `style="color:${consultColor};font-size:18px;cursor:pointer;" onclick="toggleReturnConsult('${escAttr(studentId)}')"`)}
                     <span style="font-size:12px;font-weight:600;color:var(--text-sec);">복귀유도 상담</span>
                 </div>
                 <textarea style="width:100%;min-height:48px;border:1px solid var(--border);border-radius:4px;padding:6px 8px;font-size:12px;resize:vertical;box-sizing:border-box;"
@@ -448,7 +448,7 @@ function _renderLRRow(r, idx, studentId) {
         <div class="pending-task-row" data-lr-idx="${idx}" style="background:#f0f5ff;">
             <div class="pending-task-summary" onclick="this.parentElement.classList.toggle('expanded')">
                 <span>${typeBadge} ${_leaveRequestStatusBadge(r)} <span style="font-size:12px;color:var(--text-sec);margin-left:4px;">${esc(dateStr)}</span></span>
-                <span class="pending-task-arrow material-symbols-outlined" style="font-size:16px;color:var(--text-sec);">expand_more</span>
+                ${msIcon('expand_more', 'pending-task-arrow', 'style="font-size:16px;color:var(--text-sec);"')}
             </div>
             <div class="pending-task-expand">
                 ${errorHtml}
@@ -507,15 +507,15 @@ export function renderLeaveRequestCard(studentId) {
     let leaveBtn = '';
     if (isLeaveStu) {
         leaveBtn = `<button class="lr-btn lr-btn-tonal" style="${btnStyle}" onclick="openReturnFromLeaveModal('${escAttr(studentId)}')">
-            <span class="material-symbols-outlined" style="font-size:14px;">undo</span>복귀</button>`;
+            ${msIcon('undo', '', 'style="font-size:14px;"')}복귀</button>`;
     } else if (isScheduledLeave) {
         leaveBtn = `<button class="lr-btn lr-btn-tonal" style="${btnStyle}" onclick="cancelScheduledLeave('${escAttr(studentId)}')">
-            <span class="material-symbols-outlined" style="font-size:14px;">close</span>휴원취소</button>`;
+            ${msIcon('close', '', 'style="font-size:14px;"')}휴원취소</button>`;
     }
     if (leaveRecords.length > 0 || leaveBtn) {
         cards += `<div class="detail-card">
             <div class="detail-card-title" style="display:flex;align-items:center;gap:6px;">
-                <span class="material-symbols-outlined" style="color:#2563eb;font-size:18px;">description</span>
+                ${msIcon('description', '', 'style="color:#2563eb;font-size:18px;"')}
                 휴원요청서 <span style="font-size:12px;color:var(--text-sec);">(${leaveRecords.length}건)</span>
                 ${leaveBtn}
             </div>
@@ -526,15 +526,15 @@ export function renderLeaveRequestCard(studentId) {
     // 퇴원요청서 카드
     const withdrawBtn = isWithdrawnStu || isWithdrawalStarted
         ? `<button class="lr-btn lr-btn-tonal" style="${btnStyle}" onclick="openReEnrollModal('${escAttr(studentId)}')">
-            <span class="material-symbols-outlined" style="font-size:14px;">person_add</span>재등원</button>`
+            ${msIcon('person_add', '', 'style="font-size:14px;"')}재등원</button>`
         : futureWithdrawal
             ? `<button class="lr-btn lr-btn-tonal" style="${btnStyle}" onclick="cancelScheduledWithdrawal('${escAttr(studentId)}')">
-                <span class="material-symbols-outlined" style="font-size:14px;">close</span>퇴원취소</button>`
+                ${msIcon('close', '', 'style="font-size:14px;"')}퇴원취소</button>`
             : '';
     if (withdrawRecords.length > 0 || withdrawBtn) {
         cards += `<div class="detail-card">
             <div class="detail-card-title" style="display:flex;align-items:center;gap:6px;">
-                <span class="material-symbols-outlined" style="color:#dc2626;font-size:18px;">description</span>
+                ${msIcon('description', '', 'style="color:#dc2626;font-size:18px;"')}
                 퇴원요청서 <span style="font-size:12px;color:var(--text-sec);">(${withdrawRecords.length}건)</span>
                 ${withdrawBtn}
             </div>

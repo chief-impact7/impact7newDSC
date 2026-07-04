@@ -6,6 +6,7 @@
 //   - 서버 갱신(구독만): batch_active/progress_done/progress_total/last_run_* (절대 클라에서 쓰지 않음)
 //   - 콜러블 runStudentReportBatchManual(asia-northeast3): 지금 실행.
 
+import { msIcon } from './ms-icon.js';
 import { state } from './state.js';
 import {
   getAiAutomationSettings,
@@ -105,7 +106,7 @@ function modalHtml(cfg) {
       <div class="modal-header">
         <h3>AI 자동 생성 설정 — 학생 종합 리포트</h3>
         <button class="modal-close" onclick="closeAiAutomationSettings()">
-          <span class="material-symbols-outlined">close</span>
+          ${msIcon('close')}
         </button>
       </div>
       <div class="modal-body">

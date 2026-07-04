@@ -2,6 +2,7 @@
 // daily-ops.js에서 분리한 모달 로직 (클러스터 5: 일정/숙제/테스트/수강/타반)
 // 모달 전용 상태(_scheduleTargetIds, editingEnrollment)는 이 모듈에 캡슐화.
 
+import { msIcon } from './ms-icon.js';
 import { state } from './state.js';
 import { doc } from 'firebase/firestore';
 import { db } from './firebase-config.js';
@@ -36,7 +37,7 @@ export function openTempClassOverrideModal(studentId) {
             <div class="modal-header">
                 <h3>타반수업 추가 — ${esc(student.name)}</h3>
                 <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
-                    <span class="material-symbols-outlined">close</span>
+                    ${msIcon('close')}
                 </button>
             </div>
             <div class="modal-body">

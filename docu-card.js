@@ -1,4 +1,5 @@
 // 학생 상세의 [기록] 탭 — 휴퇴원요청서(이동) + 반성문 + 기타.
+import { msIcon } from './ms-icon.js';
 import {
   listStudentRecords, newRecordRef, createRecord, updateRecord, uploadRecordFile,
   deleteRecordFiles, deleteRecord,
@@ -25,18 +26,18 @@ export function initDocuCardDeps(deps) {
 function fileListHtml(files) {
   if (!files || !files.length) return '';
   return `<div class="docu-chips docu-record-files">${files.map(f =>
-    `<span class="docu-chip"><span class="material-symbols-outlined">image</span>${esc(f.name)}</span>`).join('')}</div>`;
+    `<span class="docu-chip">${msIcon('image')}${esc(f.name)}</span>`).join('')}</div>`;
 }
 
 function recordItemHtml(rec) {
   if (!_deps.readonly && _editingId === rec.id) return recordEditHtml(rec);
   const actions = _deps.readonly ? '' : `<div class="docu-record-actions">
-      <button class="icon-btn docu-edit-btn" title="수정" aria-label="수정" onclick="window.__docuEdit('${esc(rec.id)}')"><span class="material-symbols-outlined">edit</span></button>
-      <button class="icon-btn docu-del-btn" title="삭제" aria-label="삭제" onclick="window.__docuDelete('${esc(rec.id)}')"><span class="material-symbols-outlined">delete</span></button>
+      <button class="icon-btn docu-edit-btn" title="수정" aria-label="수정" onclick="window.__docuEdit('${esc(rec.id)}')">${msIcon('edit')}</button>
+      <button class="icon-btn docu-del-btn" title="삭제" aria-label="삭제" onclick="window.__docuDelete('${esc(rec.id)}')">${msIcon('delete')}</button>
     </div>`;
   return `<div class="docu-record-item" data-id="${esc(rec.id)}">
     <div class="docu-record-head">
-      <span class="docu-record-date"><span class="material-symbols-outlined">event</span>${esc(rec.occurred_at || '—')}</span>
+      <span class="docu-record-date">${msIcon('event')}${esc(rec.occurred_at || '—')}</span>
       ${actions}
     </div>
     ${rec.content ? `<div class="docu-record-content">${esc(rec.content)}</div>` : ''}
@@ -52,15 +53,15 @@ function recordEditHtml(rec) {
   const content = useBuf ? _editBuffer.content : (rec.content || '');
   const occurredAt = useBuf ? _editBuffer.occurred_at : (rec.occurred_at || '');
   const dateChip = occurredAt
-    ? `<span class="docu-chip docu-chip-date"><span class="material-symbols-outlined">event</span>${esc(occurredAt)}</span>`
+    ? `<span class="docu-chip docu-chip-date">${msIcon('event')}${esc(occurredAt)}</span>`
     : '';
   return `<div class="docu-record-item docu-editing" data-id="${id}">
     <textarea class="field-input docu-content docu-edit-content" maxlength="${MAX_CONTENT_LEN}" rows="2">${esc(content)}</textarea>
     <div class="docu-input-toolbar">
       <input type="date" class="docu-edit-date docu-visually-hidden" value="${esc(occurredAt)}" onchange="window.__docuEditChange('${id}')">
-      <button type="button" class="icon-btn docu-icon-btn" title="날짜 선택" aria-label="날짜 선택" onclick="window.__docuEditPickDate('${id}')"><span class="material-symbols-outlined">calendar_month</span></button>
+      <button type="button" class="icon-btn docu-icon-btn" title="날짜 선택" aria-label="날짜 선택" onclick="window.__docuEditPickDate('${id}')">${msIcon('calendar_month')}</button>
       <input type="file" class="docu-edit-file docu-visually-hidden" accept="image/*" multiple onchange="window.__docuEditChange('${id}')">
-      <button type="button" class="icon-btn docu-icon-btn" title="이미지 첨부" aria-label="이미지 첨부" onclick="window.__docuEditPickFile('${id}')"><span class="material-symbols-outlined">image</span></button>
+      <button type="button" class="icon-btn docu-icon-btn" title="이미지 첨부" aria-label="이미지 첨부" onclick="window.__docuEditPickFile('${id}')">${msIcon('image')}</button>
       <div class="docu-chips docu-edit-chips">${dateChip}</div>
       <button class="btn btn-primary btn-sm docu-edit-save" onclick="window.__docuEditSave('${id}')">저장</button>
       <button class="btn btn-secondary btn-sm" onclick="window.__docuEditCancel()">취소</button>
@@ -77,11 +78,11 @@ function sectionHtml(title, type, records, { icon = 'description', contentPlaceh
       <div class="docu-input-toolbar">
         <input type="date" class="docu-date-input docu-visually-hidden" onchange="window.__docuInputChange('${type}')">
         <button type="button" class="icon-btn docu-icon-btn" title="날짜 선택" aria-label="날짜 선택" onclick="window.__docuPickDate('${type}')">
-          <span class="material-symbols-outlined">calendar_month</span>
+          ${msIcon('calendar_month')}
         </button>
         <input type="file" class="docu-file-input docu-visually-hidden" accept="image/*" multiple onchange="window.__docuInputChange('${type}')">
         <button type="button" class="icon-btn docu-icon-btn" title="이미지 첨부" aria-label="이미지 첨부" onclick="window.__docuPickFile('${type}')">
-          <span class="material-symbols-outlined">image</span>
+          ${msIcon('image')}
         </button>
         <div class="docu-chips" data-chips="${type}"></div>
         <button class="btn btn-primary btn-sm docu-save-btn" onclick="window.__docuSave('${type}')">저장</button>
@@ -92,7 +93,7 @@ function sectionHtml(title, type, records, { icon = 'description', contentPlaceh
     ? `<div class="docu-record-list">${records.map(recordItemHtml).join('')}</div>`
     : '';
   return `<div class="detail-card">
-    <div class="detail-card-title"><span class="material-symbols-outlined">${icon}</span>${esc(title)}</div>
+    <div class="detail-card-title">${msIcon(icon)}${esc(title)}</div>
     ${input}
     ${listHtml}
   </div>`;
@@ -106,8 +107,8 @@ function renderChips(type) {
   const dateVal = box.querySelector('.docu-date-input')?.value || '';
   const files = box.querySelector('.docu-file-input')?.files;
   const parts = [];
-  if (dateVal) parts.push(`<span class="docu-chip docu-chip-date"><span class="material-symbols-outlined">event</span>${esc(dateVal)}</span>`);
-  for (const f of files || []) parts.push(`<span class="docu-chip"><span class="material-symbols-outlined">image</span>${esc(f.name)}</span>`);
+  if (dateVal) parts.push(`<span class="docu-chip docu-chip-date">${msIcon('event')}${esc(dateVal)}</span>`);
+  for (const f of files || []) parts.push(`<span class="docu-chip">${msIcon('image')}${esc(f.name)}</span>`);
   chipsEl.innerHTML = parts.join('');
 }
 
@@ -169,8 +170,8 @@ function renderEditChips(id) {
   const dateVal = box.querySelector('.docu-edit-date')?.value || '';
   const files = box.querySelector('.docu-edit-file')?.files;
   const parts = [];
-  if (dateVal) parts.push(`<span class="docu-chip docu-chip-date"><span class="material-symbols-outlined">event</span>${esc(dateVal)}</span>`);
-  for (const f of files || []) parts.push(`<span class="docu-chip"><span class="material-symbols-outlined">image</span>${esc(f.name)}</span>`);
+  if (dateVal) parts.push(`<span class="docu-chip docu-chip-date">${msIcon('event')}${esc(dateVal)}</span>`);
+  for (const f of files || []) parts.push(`<span class="docu-chip">${msIcon('image')}${esc(f.name)}</span>`);
   chipsEl.innerHTML = parts.join('');
 }
 

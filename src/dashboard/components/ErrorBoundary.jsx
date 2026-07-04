@@ -1,4 +1,6 @@
 import React from 'react';
+import { Icon } from '@impact7/ui';
+import { ICON_NAME } from '../icon-map.js';
 
 export default class ErrorBoundary extends React.Component {
     constructor(props) {
@@ -23,9 +25,7 @@ export default class ErrorBoundary extends React.Component {
             return (
                 <div role="alert" className="dash-card dash-error-card">
                     <div className="dash-card-body" style={{ textAlign: 'center', padding: '32px 18px' }}>
-                        <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: 36, color: 'var(--danger)', marginBottom: 8, display: 'block' }}>
-                            error
-                        </span>
+                        <Icon name={ICON_NAME.error} size={36} style={{ color: 'var(--danger)', marginBottom: 8, display: 'block' }} aria-hidden="true" />
                         <p style={{ color: 'var(--text-sec)', marginBottom: 16 }}>
                             이 섹션을 불러올 수 없습니다
                         </p>
