@@ -5,6 +5,7 @@
 import {
   sendParentNotice, createPromoCampaign, sendDailyReport,
   tabletCheckin, sendAbsenceNotice, getAbsenceNoticeToday, getRecipientMessageHistory,
+  setPromoConsent,
 } from './data-layer.js';
 import { ATTENDANCE_ACTIONS } from '@impact7/shared/attendance-action';
 import { esc, escAttr, isKakaoNightKST } from './ui-utils.js';
@@ -49,6 +50,16 @@ const ABSENCE_STATUS_LABEL = {
   sent: '미등원 알림톡 발송됨 ✓',
   failed_permanent: '미등원 알림톡 실패 ⚠',
 };
+
+// 광고 수신동의 — 번호 주인 단위. 서버 promoConsent.js(promo=보호자, promo_student=학생)와 필드 일치.
+const CONSENT_TARGETS = [
+  { target: 'parent', field: 'promo', label: '학부모' },
+  { target: 'student', field: 'promo_student', label: '학생' },
+];
+const CONSENT_SOURCE_LABEL = {
+  diagnostic_form: '진단평가 신청서', survey_form: '설문', admin: '관리자 입력', kakao_friend: '카카오 친구',
+};
+let _consent = null; // 현재 학생의 message_consent 사본(설정/철회 후 낙관 갱신)
 
 const PROMO_PLACEHOLDER = '(광고)[임팩트세븐학원]\n\n안내 내용을 입력하세요.\n\n무료수신거부 080-000-0000';
 
@@ -95,11 +106,14 @@ export function renderMessageTab(studentId) {
      </label>`,
   ).join('');
 
+  _consent = student.message_consent ? { ...student.message_consent } : {};
+
   el.innerHTML = `
     <div class="card" style="padding:16px;">
       ${hasRecipient
         ? `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:14px;"><span style="color:#555;">수신 대상</span>${recipientRadios}</div>`
         : '<div style="color:#c82014;margin-bottom:12px;">등록된 연락처가 없어 발송할 수 없습니다.</div>'}
+      <div id="msg-consent" style="border:1px solid #eceae4;border-radius:9px;padding:9px 12px;margin-bottom:14px;background:#fafaf7;"></div>
       <div style="display:flex;gap:8px;margin-bottom:14px;">
         <button type="button" class="btn msg-mode-btn" data-mode="notice" aria-pressed="${_mode === 'notice'}">정보성 안내</button>
         <button type="button" class="btn msg-mode-btn" data-mode="free" aria-pressed="${_mode === 'free'}">자유 안내</button>
@@ -109,6 +123,7 @@ export function renderMessageTab(studentId) {
       <div id="msg-history" style="margin-top:18px;"></div>
     </div>
   `;
+  renderConsentStrip(studentId, readonly);
   el.querySelectorAll('input[name="msg-recipient"]').forEach((r) => {
     r.addEventListener('change', () => { _recipientField = r.value; });
   });
@@ -123,6 +138,80 @@ function formatLogTime(v) {
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return '';
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+// ─── 광고 수신동의 표시·철회 — 개인정보 동의(표시)와 마케팅 동의(설정/철회)를 분리 ────
+
+// Firestore Timestamp(toDate)·Date·epoch 모두 'YYYY-MM-DD'로.
+function consentDate(ts) {
+  const d = ts?.toDate?.() ?? (ts != null ? new Date(ts.seconds ? ts.seconds * 1000 : ts) : null);
+  if (!d || Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function consentStatusHtml(c) {
+  if (c?.optedIn === true && !c.revokedAt) {
+    const src = CONSENT_SOURCE_LABEL[c.source] || c.source || '';
+    return `<span style="color:#00754A;font-weight:700;">동의</span> <span style="color:#999;">${esc([consentDate(c.at), src].filter(Boolean).join(' · '))}</span>`;
+  }
+  if (c?.revokedAt) {
+    return `<span style="color:#c82014;font-weight:700;">철회</span> <span style="color:#999;">${esc(consentDate(c.revokedAt))}</span>`;
+  }
+  return '<span style="color:#888;">미동의</span>';
+}
+
+function renderConsentStrip(studentId, readonly) {
+  const box = document.getElementById('msg-consent');
+  if (!box) return;
+  const privacy = _consent?.privacy;
+  const rows = CONSENT_TARGETS.map(({ target, field, label }) => {
+    const c = _consent?.[field];
+    const consented = c?.optedIn === true && !c.revokedAt;
+    const btn = readonly ? '' : (consented
+      ? `<button type="button" class="btn msg-consent-btn" data-target="${target}" data-opt="0" style="font-size:12px;padding:2px 10px;background:#fff;color:#c82014;border:1px solid #e5b9b5;border-radius:12px;">철회</button>`
+      : `<button type="button" class="btn msg-consent-btn" data-target="${target}" data-opt="1" style="font-size:12px;padding:2px 10px;background:#fff;color:#00754A;border:1px solid #bcd8cb;border-radius:12px;">동의 기록</button>`);
+    return `<span style="display:inline-flex;align-items:center;gap:6px;">
+      <b style="color:#555;font-weight:600;">${esc(label)}</b> ${consentStatusHtml(c)} ${btn}
+    </span>`;
+  }).join('<span style="color:#ddd;">|</span>');
+  box.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;">
+      <span style="font-weight:700;color:#555;">광고 수신동의</span>${rows}
+    </div>
+    <div style="font-size:11.5px;color:#9a958c;margin-top:4px;">
+      개인정보 수집·이용 동의: ${privacy?.agreed
+        ? `동의 ${esc([consentDate(privacy.at), CONSENT_SOURCE_LABEL[privacy.source] || privacy.source || ''].filter(Boolean).join(' · '))}`
+        : '기록 없음'}
+      <span style="margin-left:6px;">— 출결·안내 등 정보성 메시지는 광고 동의와 무관하게 발송됩니다</span>
+    </div>`;
+  box.querySelectorAll('.msg-consent-btn').forEach((b) =>
+    b.addEventListener('click', () => setConsent(studentId, b.dataset.target, b.dataset.opt === '1', readonly)));
+}
+
+async function setConsent(studentId, target, optedIn, readonly) {
+  if (_sending) return;
+  const label = CONSENT_TARGETS.find((t) => t.target === target)?.label || target;
+  const msg = optedIn
+    ? `${label} 대상 광고 수신동의를 기록할까요?\n(전화·서면 등으로 동의 의사를 확인한 경우에만)`
+    : `${label} 대상 광고 수신동의를 철회 처리할까요?\n철회하면 광고 발송 대상에서 영구 제외됩니다.`;
+  if (!confirm(msg)) return;
+  _sending = true;
+  try {
+    await setPromoConsent({ studentId, target, optedIn, source: 'admin' });
+    const field = CONSENT_TARGETS.find((t) => t.target === target)?.field;
+    if (field) {
+      _consent = {
+        ..._consent,
+        [field]: { optedIn, source: 'admin', at: new Date(), revokedAt: optedIn ? null : new Date() },
+      };
+    }
+    _deps.toast?.(optedIn ? `${label} 광고 수신동의를 기록했습니다.` : `${label} 광고 수신동의를 철회했습니다.`, 'success');
+  } catch (err) {
+    _deps.toast?.(err?.message || '동의 처리에 실패했습니다.', 'error');
+  } finally {
+    _sending = false;
+    renderConsentStrip(studentId, readonly);
+  }
 }
 
 // ─── 최근 발송 내역 — 수신자별 타임라인(message_queue 기반, 본문 포함) ────────────

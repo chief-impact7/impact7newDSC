@@ -1079,6 +1079,13 @@ export async function sendAbsenceNotice(payload) {
   return res.data;
 }
 
+// 광고 수신동의 설정/철회 — 번호 주인 단위(target: 'parent'|'student'). 직원 권한.
+export async function setPromoConsent(payload) {
+  const callable = httpsCallable(functions, 'setPromoConsent');
+  const res = await callable(payload);
+  return res.data;
+}
+
 // 오늘 미등원 안내 발송 여부 — 로그북 배지와 동일 소스(absence_notices/{sid}_{date}).
 export async function getAbsenceNoticeToday(studentId) {
   const snap = await getDoc(doc(db, 'absence_notices', `${studentId}_${todayStr()}`));
