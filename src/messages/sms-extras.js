@@ -19,17 +19,16 @@ export async function getMessageExtras() {
   return { footer, channelInviteCustom, channelInvite: channelInviteCustom || DEFAULT_CHANNEL_INVITE };
 }
 
-async function saveSetting(field, value) {
+// 두 문구를 한 번의 merge 쓰기로 저장(원자적 — 부분 실패로 반쪽만 저장되는 상태 방지).
+// channel_invite를 빈 값으로 저장하면 기본 문구로 복귀.
+export async function saveMessageExtras({ footer, channelInvite }) {
   await setDoc(SETTINGS_REF(), {
-    [field]: String(value ?? '').trim(),
+    sms_footer: String(footer ?? '').trim(),
+    channel_invite: String(channelInvite ?? '').trim(),
     updated_by: auth.currentUser?.email ?? null,
     updated_at: serverTimestamp(),
   }, { merge: true });
 }
-
-export const saveSmsFooter = (footer) => saveSetting('sms_footer', footer);
-// 빈 값으로 저장하면 기본 문구로 복귀.
-export const saveChannelInvite = (text) => saveSetting('channel_invite', text);
 
 // 본문 끝에 문구를 덧붙인다(이미 포함돼 있으면 그대로 — 중복 방지).
 export function appendLine(content, line) {

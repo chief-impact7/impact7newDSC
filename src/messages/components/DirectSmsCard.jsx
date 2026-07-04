@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { sendDirectMessage } from '../../../data-layer.js';
 import { messageMeta, normalizePhones } from '../message-format.js';
 import { parsePhonesFromFile, sampleCsv } from '../message-import.js';
-import { getMessageExtras, saveSmsFooter, saveChannelInvite, appendLine, DEFAULT_CHANNEL_INVITE } from '../sms-extras.js';
+import { getMessageExtras, saveMessageExtras, appendLine, DEFAULT_CHANNEL_INVITE } from '../sms-extras.js';
 import TemplateBar from './TemplateBar.jsx';
 
 function newReqId() {
@@ -49,9 +49,7 @@ export default function DirectSmsCard() {
     if (setupBusy) return;
     setSetupBusy(true);
     try {
-      // 두 문구를 각각 merge 저장 — 다른 필드는 보존.
-      await saveChannelInvite(inviteDraft);
-      await saveSmsFooter(footerDraft);
+      await saveMessageExtras({ footer: footerDraft, channelInvite: inviteDraft });
       const nextInviteCustom = inviteDraft.trim();
       setInviteCustom(nextInviteCustom);
       setInvite(nextInviteCustom || DEFAULT_CHANNEL_INVITE);
