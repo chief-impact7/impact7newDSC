@@ -72,7 +72,8 @@ export default function TemplateBar({ content, onPick }) {
         <option value="">템플릿 불러오기…</option>
         {list.map((t) => <option key={t.title} value={t.title}>{t.title}</option>)}
       </select>
-      <button type="button" className="mc-tpl-del" onClick={async () => { if (!manageOpen) await refresh(); setManageOpen(!manageOpen); }}>관리</button>
+      <button type="button" className="mc-tpl-manage-btn" aria-expanded={manageOpen}
+        onClick={async () => { if (!manageOpen) await refresh(); setManageOpen(!manageOpen); }}>📋 템플릿 관리</button>
       {saveOpen ? (
         <>
           <input aria-label="템플릿 이름" className="mc-tpl-title" value={titleInput} onChange={(e) => setTitleInput(e.target.value)}

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { sendDirectMessage } from '../../../data-layer.js';
 import { messageMeta, normalizePhones } from '../message-format.js';
 import { parsePhonesFromFile, sampleCsv } from '../message-import.js';
-import { CHANNEL_INVITE_SMS, getSmsFooter, saveSmsFooter, appendLine } from '../sms-extras.js';
+import { getMessageExtras, saveSmsFooter, saveChannelInvite, appendLine, DEFAULT_CHANNEL_INVITE } from '../sms-extras.js';
 import TemplateBar from './TemplateBar.jsx';
 
 function newReqId() {
@@ -20,16 +20,22 @@ export default function DirectSmsCard() {
   const [scheduledAt, setScheduledAt] = useState('');
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState('');
-  const [footer, setFooter] = useState('');           // 공유 꼬리말(로드된 값)
-  const [footerOpen, setFooterOpen] = useState(false); // 꼬리말 설정 편집창
+  const [footer, setFooter] = useState('');            // 공유 꼬리말(로드된 값)
+  const [invite, setInvite] = useState(DEFAULT_CHANNEL_INVITE); // 채널 안내(설정||기본)
+  const [inviteCustom, setInviteCustom] = useState(''); // 채널 안내 설정 원본(''=기본 사용)
+  const [setupOpen, setSetupOpen] = useState(false);    // 문구 설정 패널
   const [footerDraft, setFooterDraft] = useState('');
-  const [footerBusy, setFooterBusy] = useState(false);
+  const [inviteDraft, setInviteDraft] = useState('');
+  const [setupBusy, setSetupBusy] = useState(false);
   const reqIdRef = useRef(newReqId());
   const fileRef = useRef(null);
 
   useEffect(() => {
     let alive = true;
-    getSmsFooter().then((f) => { if (alive) setFooter(f); }).catch(() => {});
+    getMessageExtras().then((x) => {
+      if (!alive) return;
+      setFooter(x.footer); setInvite(x.channelInvite); setInviteCustom(x.channelInviteCustom);
+    }).catch(() => {});
     return () => { alive = false; };
   }, []);
 
@@ -39,18 +45,23 @@ export default function DirectSmsCard() {
     setText((t) => appendLine(t, line));
     resetReqId();
   }
-  async function onSaveFooter() {
-    if (footerBusy) return;
-    setFooterBusy(true);
+  async function onSaveSetup() {
+    if (setupBusy) return;
+    setSetupBusy(true);
     try {
+      // 두 문구를 각각 merge 저장 — 다른 필드는 보존.
+      await saveChannelInvite(inviteDraft);
       await saveSmsFooter(footerDraft);
+      const nextInviteCustom = inviteDraft.trim();
+      setInviteCustom(nextInviteCustom);
+      setInvite(nextInviteCustom || DEFAULT_CHANNEL_INVITE);
       setFooter(footerDraft.trim());
-      setFooterOpen(false);
-      setMsg('꼬리말을 저장했습니다 — 전 직원에게 적용됩니다.');
+      setSetupOpen(false);
+      setMsg('문구를 저장했습니다 — 전 직원·자동 전환 문자에 적용됩니다.');
     } catch (e) {
-      setMsg('꼬리말 저장 실패: ' + (e?.message || e));
+      setMsg('문구 저장 실패: ' + (e?.message || e));
     } finally {
-      setFooterBusy(false);
+      setSetupBusy(false);
     }
   }
 
@@ -137,16 +148,23 @@ export default function DirectSmsCard() {
               onChange={(e) => { setText(e.target.value); resetReqId(); }}
               placeholder="안내 내용을 입력하세요." />
             <div className="mc-vars" style={{ marginTop: 6 }}>
-              <button type="button" className="mc-var-btn" title={CHANNEL_INVITE_SMS} onClick={() => insertLine(CHANNEL_INVITE_SMS)}>+ 채널 가입 안내</button>
-              <button type="button" className="mc-var-btn" title={footer || '꼬리말이 아직 없습니다 — 설정에서 등록'} disabled={!footer} onClick={() => insertLine(footer)}>+ 학원 꼬리말</button>
-              <button type="button" className="mc-var-btn" onClick={() => { setFooterDraft(footer); setFooterOpen(!footerOpen); }}>꼬리말 설정⚙</button>
+              <button type="button" className="mc-var-btn" title={invite} onClick={() => insertLine(invite)}>+ 채널 가입 안내</button>
+              <button type="button" className="mc-var-btn" title={footer || '꼬리말이 아직 없습니다 — 문구 설정에서 등록'} disabled={!footer} onClick={() => insertLine(footer)}>+ 학원 꼬리말</button>
+              <button type="button" className="mc-var-btn" onClick={() => { setFooterDraft(footer); setInviteDraft(inviteCustom); setSetupOpen(!setupOpen); }}>문구 설정⚙</button>
             </div>
-            {footerOpen && (
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
-                <input aria-label="학원 꼬리말" className="mc-tpl-title" style={{ flex: 1 }} value={footerDraft}
+            {setupOpen && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6, border: '1px solid #e3e8e5', borderRadius: 8, padding: '8px 10px', background: '#fafaf7' }}>
+                <label className="mc-field-label" style={{ margin: 0 }}>채널 가입 안내 문구 — 자동 전환 문자에도 적용 (비우면 기본 문구)</label>
+                <textarea aria-label="채널 가입 안내 문구" className="mc-textarea" rows={2} style={{ minHeight: 44 }}
+                  value={inviteDraft} onChange={(e) => setInviteDraft(e.target.value)}
+                  placeholder={DEFAULT_CHANNEL_INVITE} maxLength={280} />
+                <label className="mc-field-label" style={{ margin: 0 }}>학원 꼬리말</label>
+                <input aria-label="학원 꼬리말" className="mc-tpl-title" value={footerDraft}
                   onChange={(e) => setFooterDraft(e.target.value)} placeholder="예: -임팩트세븐학원 02-2649-0509" maxLength={200} />
-                <button type="button" className="mc-var-btn" disabled={footerBusy} onClick={onSaveFooter}>{footerBusy ? '저장 중…' : '저장'}</button>
-                <button type="button" className="mc-var-btn" onClick={() => setFooterOpen(false)}>취소</button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button type="button" className="mc-var-btn" disabled={setupBusy} onClick={onSaveSetup}>{setupBusy ? '저장 중…' : '저장'}</button>
+                  <button type="button" className="mc-var-btn" onClick={() => setSetupOpen(false)}>취소</button>
+                </div>
               </div>
             )}
             <div className="mc-meta">
