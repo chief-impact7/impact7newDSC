@@ -894,8 +894,10 @@ service cloud.firestore {
     // =========================================================================
     match /shortTermStaff/{docId} {
       // 레거시 단기 컬렉션(통합 staff로 마이그레이션됨). manager도 전체 열람(staff와 일관).
-      allow read: if isDirector() || isManager() || isShortTerm();
-      allow write: if isDirector() || isShortTerm();
+      // shortterm 역할 허용 제거(2026-07-05 감사): 계정 미발급 상태에서 동료 PII(주민번호·계좌)
+      // 수평 노출 표면이었음. 역할 재도입 시 본인 문서 스코프(ownerUid)로 설계할 것.
+      allow read: if isDirector() || isManager();
+      allow write: if isDirector();
 
       // 비인증: 토큰 기반 등록 (필수 필드 + hasOnly + 토큰 검증)
       allow create: if request.resource.data.keys().hasAll(['name', 'phone', 'email', 'residentNumber', 'address', 'bank', 'accountNumber', 'accountHolder', 'createdAt', 'tokenId'])
@@ -905,8 +907,8 @@ service cloud.firestore {
         && hrOnboardingTokenValid(/databases/$(database)/documents/shortTermTokens/$(request.resource.data.tokenId));
 
       match /contracts/{contractId} {
-        allow read: if isDirector() || isShortTerm();
-        allow write: if isDirector() || isShortTerm();
+        allow read: if isDirector();
+        allow write: if isDirector();
       }
     }
 
@@ -914,7 +916,7 @@ service cloud.firestore {
     // [Director] 단기 온보딩 토큰
     // =========================================================================
     match /shortTermTokens/{tokenId} {
-      allow read, write: if isDirector() || isShortTerm();
+      allow read, write: if isDirector();
 
       // 비인증 토큰 검증 read는 getHrPublicToken callable로 이전(G03). 완료 처리(update)만 허용.
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
@@ -923,16 +925,16 @@ service cloud.firestore {
         && resource.data.status == 'pending'
         && resource.data.expiresAt > request.time;
 
-      allow create, delete: if isDirector() || isShortTerm();
+      allow create, delete: if isDirector();
     }
 
     // [Director] Staff + 서브컬렉션
     // =========================================================================
     match /staff/{staffId} {
       // PII 보호: 전 직원 신원 정보(주민번호·계좌·연락처)를 director+manager만 전체 열람.
-      // shortterm은 단기 부서 문서만 읽을 수 있다(LIST는 department==단기로 제약된 쿼리여야 통과).
-      allow read: if isDirector() || isManager()
-        || (isShortTerm() && resource.data.department == '단기');
+      // shortterm 단기부서 read 제거(2026-07-05 감사): 계정 미발급 상태의 동료 PII 수평 노출
+      // 표면이었음. 역할 재도입 시 본인 문서 스코프(ownerUid)로 설계할 것.
+      allow read: if isDirector() || isManager();
       allow write: if isDirector() || isManager();
 
       // 온보딩: 비인증 사용자가 유효한 토큰으로 staff 문서 생성 (통합: 교사/행정/단기 3종 토큰)
