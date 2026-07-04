@@ -5,6 +5,7 @@ import { functions } from '../../../firebase-config.js';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
 
 const retryCallable = httpsCallable(functions, 'retryMessageDelivery');
+const manageCallable = httpsCallable(functions, 'manageMessageFailure');
 
 // 큐 상태 표시 메타 (계약 §2.4).
 const QUEUE_STATUS = [
@@ -62,13 +63,34 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
             console.error('[retryMessageDelivery]', err);
             const code = err?.code || '';
             if (code.includes('permission-denied')) {
-                setRetryError('재시도는 원장 권한이 필요합니다.');
+                setRetryError('재발송은 원장 권한이 필요합니다.');
             } else if (code.includes('resource-exhausted')) {
-                setRetryError('수동 재시도 한도를 초과했습니다.');
+                setRetryError('수동 재발송 한도를 초과했습니다.');
             } else if (code.includes('failed-precondition')) {
-                setRetryError('지금은 재시도할 수 없습니다 (상태·쿨다운 확인).');
+                setRetryError('지금은 재발송할 수 없습니다 (상태·쿨다운·보존기간 확인).');
             } else {
-                setRetryError('재시도 요청 실패 — 잠시 후 다시 시도해주세요.');
+                setRetryError('재발송 요청 실패 — 잠시 후 다시 시도해주세요.');
+            }
+        } finally {
+            setRetrying(null);
+        }
+    };
+
+    // 보관=목록에서 숨김(직원 가능), 삭제=doc 제거(원장, message_logs 이력은 보존).
+    const handleManage = async (queueId, action, name) => {
+        if (action === 'delete' && !window.confirm(`${name}의 실패 항목을 삭제할까요?\n발송 로그(이력)는 남습니다.`)) return;
+        setRetrying(queueId);
+        setRetryError('');
+        try {
+            await manageCallable({ queueId, action });
+            onReload();
+        } catch (err) {
+            console.error('[manageMessageFailure]', err);
+            const code = err?.code || '';
+            if (code.includes('permission-denied')) {
+                setRetryError(action === 'delete' ? '삭제는 원장 권한이 필요합니다.' : '권한이 없습니다.');
+            } else {
+                setRetryError(`${action === 'delete' ? '삭제' : '보관'} 실패 — 잠시 후 다시 시도해주세요.`);
             }
         } finally {
             setRetrying(null);
@@ -121,7 +143,10 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
 
                 {failures.length > 0 ? (
                     <div className="msg-failure-list">
-                        <div className="msg-failure-head">미발송·실패 항목</div>
+                        <div className="msg-failure-head">
+                            미발송·실패 항목
+                            {(data.archivedCount ?? 0) > 0 && <span className="msg-archived-count"> · 보관됨 {data.archivedCount}건</span>}
+                        </div>
                         {failures.map(f => (
                             <div className="msg-failure-row" key={f.id}>
                                 <div className="msg-failure-main">
@@ -136,24 +161,48 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                     <span className={`msg-badge msg-${f.status === 'failed_permanent' ? 'failed' : 'retry'}`}>
                                         {f.status === 'failed_permanent' ? '실패' : '재시도 대기'}
                                     </span>
-                                    {/* 서버 messageRetryHandler는 failed_retryable만 허용 — 그 외 상태는 재시도 버튼을 숨긴다. */}
-                                    {f.status === 'failed_retryable' ? (
-                                        <button
-                                            className="dash-text-btn"
-                                            onClick={() => handleRetry(f.id)}
-                                            disabled={retrying === f.id}
-                                        >
-                                            {retrying === f.id ? '요청 중' : '재시도'}
-                                        </button>
-                                    ) : (
-                                        <span className="msg-retry-disabled" aria-disabled="true">재시도 불가</span>
+                                    {/* 재발송은 원장 권한. failed_permanent도 허용(원인이 추후 해소되는 실패 실재).
+                                        단 보존기간 경과(번호 purge)·홍보성(동의 재확인 불가)은 서버가 거부하므로 버튼을 막는다. */}
+                                    <button
+                                        className="dash-text-btn"
+                                        title={f.piiPurged ? '보존기간이 지나 재발송할 수 없습니다'
+                                            : (f.kind === 'promo' || f.kind === 'promo_sms') ? '홍보성 메시지는 수동 재발송할 수 없습니다'
+                                            : undefined}
+                                        onClick={() => handleRetry(f.id)}
+                                        disabled={retrying === f.id || f.piiPurged || f.kind === 'promo' || f.kind === 'promo_sms'}
+                                    >
+                                        {retrying === f.id ? '요청 중' : '재발송'}
+                                    </button>
+                                    {/* 보관/삭제는 종결 상태(failed_permanent)만 — 재시도 대기는 sweeper가 아직 처리 중. */}
+                                    {f.status === 'failed_permanent' && (
+                                        <>
+                                            <button
+                                                className="dash-text-btn"
+                                                title="목록에서 숨깁니다 (발송 이력은 보존)"
+                                                onClick={() => handleManage(f.id, 'archive', failureName(f))}
+                                                disabled={retrying === f.id}
+                                            >
+                                                보관
+                                            </button>
+                                            <button
+                                                className="dash-text-btn msg-danger-btn"
+                                                title="항목을 삭제합니다 (원장 권한, 발송 로그는 보존)"
+                                                onClick={() => handleManage(f.id, 'delete', failureName(f))}
+                                                disabled={retrying === f.id}
+                                            >
+                                                삭제
+                                            </button>
+                                        </>
                                     )}
                                 </div>
                             </div>
                         ))}
                     </div>
                 ) : (
-                    <div className="dash-empty">미발송·실패 항목 없음</div>
+                    <div className="dash-empty">
+                        미발송·실패 항목 없음
+                        {(data.archivedCount ?? 0) > 0 && ` (보관됨 ${data.archivedCount}건)`}
+                    </div>
                 )}
             </div>
         </div>

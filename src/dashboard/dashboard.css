@@ -1510,6 +1510,12 @@ body {
 }
 .msg-badge.msg-retry { background: #fff3e0; color: #b26a00; }
 .msg-badge.msg-failed { background: #fce8e6; color: var(--danger); }
+.msg-badge.msg-sent { background: #e6f4ea; color: #1e7e34; }
+.msg-badge.msg-pending { background: #eef1f4; color: #5f6b76; }
+.msg-badge.msg-converted { background: #e8f0fe; color: #1a56b8; }
+.msg-badge.msg-archived { background: #f1f3f4; color: #80868b; }
+.msg-danger-btn { color: var(--danger); }
+.msg-archived-count { font-weight: 400; color: var(--text-sec); }
 
 /* ── 상담 조회 탭 ─────────────────────────────────────────── */
 .consult-board { padding: 16px 0; }

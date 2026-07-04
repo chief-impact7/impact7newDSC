@@ -95,3 +95,19 @@
   .bulk-split { grid-template-columns: 1fr; }
   .bulk-left, .bulk-mid { border-right: 0; border-bottom: 1px solid #e3e8e5; }
 }
+
+/* ── 수신자별 발송 이력 타임라인 ───────────────────────────── */
+.rh-search { margin-top: 4px; }
+.rh-candidates { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.rh-candidates button { display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e3e8e5; border-radius: 16px; padding: 4px 12px; font: inherit; font-size: 12.5px; cursor: pointer; }
+.rh-candidates button:hover { border-color: #0b7a52; }
+.rh-cand-meta { color: #7c8a83; font-size: 12px; }
+.rh-target { font-size: 13px; font-weight: 700; color: #2d3a34; margin: 10px 0 6px; }
+.rh-note { font-weight: 400; color: #7c8a83; font-size: 12px; }
+.rh-timeline { list-style: none; margin: 0; padding: 0; max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.rh-item { border: 1px solid #e3e8e5; border-radius: 8px; padding: 8px 11px; background: #fff; }
+.rh-item-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; }
+.rh-time { font-size: 12px; color: #5f6b76; font-variant-numeric: tabular-nums; }
+.rh-kind { font-size: 12px; font-weight: 700; color: #0b7a52; }
+.rh-err { font-size: 12px; color: #c5221f; }
+.rh-content { font-size: 13px; color: #2d3a34; white-space: pre-wrap; word-break: break-word; }

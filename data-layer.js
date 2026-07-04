@@ -1054,6 +1054,20 @@ export async function getChannelFriends() {
   return res.data;
 }
 
+// 수신자별 발송 이력 타임라인 — message_queue 본문 포함(번호는 서버가 마스킹).
+export async function getRecipientMessageHistory(payload) {
+  const callable = httpsCallable(functions, 'getRecipientMessageHistory');
+  const res = await callable(payload);
+  return res.data;
+}
+
+// 실패 항목 보관(직원)/삭제(원장).
+export async function manageMessageFailure(payload) {
+  const callable = httpsCallable(functions, 'manageMessageFailure');
+  const res = await callable(payload);
+  return res.data;
+}
+
 // 학생별 발송 내역(message_logs 최신순).
 export async function getStudentMessages(studentId) {
   const callable = httpsCallable(functions, 'getStudentMessages');
