@@ -8,6 +8,7 @@ export default function TemplateBar({ content, onPick }) {
   const [sel, setSel] = useState('');
   const [titleInput, setTitleInput] = useState('');
   const [saveOpen, setSaveOpen] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -42,11 +43,13 @@ export default function TemplateBar({ content, onPick }) {
       setBusy(false);
     }
   }
-  async function onDelete() {
-    if (busy || !sel) return;
+  async function removeTemplate(title) {
+    if (busy || !title) return;
+    if (!confirm(`템플릿 "${title}"을(를) 삭제할까요?\n모든 직원에게서 삭제됩니다.`)) return;
     setBusy(true); setErr('');
     try {
-      setList(await deleteTemplate(sel)); setSel('');
+      setList(await deleteTemplate(title));
+      if (sel === title) setSel('');
     } catch (e) {
       setErr('삭제 실패: ' + (e?.message || e));
     } finally {
@@ -54,13 +57,22 @@ export default function TemplateBar({ content, onPick }) {
     }
   }
 
+  // 수정 = 본문에 불러오고 같은 제목으로 저장 대기 상태 — [저장]을 누르면 덮어쓴다.
+  function startEdit(t) {
+    onPick(t.content);
+    setSel(t.title);
+    setTitleInput(t.title);
+    setSaveOpen(true);
+    setManageOpen(false);
+  }
+
   return (
-    <div className="mc-tpl">
+    <div className="mc-tpl" style={{ position: 'relative' }}>
       <select aria-label="템플릿 선택" value={sel} onChange={(e) => pick(e.target.value)} onFocus={refresh}>
         <option value="">템플릿 불러오기…</option>
         {list.map((t) => <option key={t.title} value={t.title}>{t.title}</option>)}
       </select>
-      {sel && <button type="button" className="mc-tpl-del" disabled={busy} onClick={onDelete}>삭제</button>}
+      <button type="button" className="mc-tpl-del" onClick={async () => { if (!manageOpen) await refresh(); setManageOpen(!manageOpen); }}>관리</button>
       {saveOpen ? (
         <>
           <input aria-label="템플릿 이름" className="mc-tpl-title" value={titleInput} onChange={(e) => setTitleInput(e.target.value)}
@@ -72,6 +84,26 @@ export default function TemplateBar({ content, onPick }) {
         <button type="button" className="mc-tpl-save" onClick={() => setSaveOpen(true)} disabled={!content.trim()}>현재 내용 저장</button>
       )}
       {err && <span role="status" aria-live="polite" style={{ fontSize: 12, color: '#c5221f' }}>{err}</span>}
+      {manageOpen && (
+        <div className="mc-tpl-manage" role="group" aria-label="템플릿 관리"
+          onKeyDown={(e) => { if (e.key === 'Escape') setManageOpen(false); }}>
+          <div className="mc-tpl-manage-head">
+            템플릿 관리 <span style={{ color: '#999', fontWeight: 400 }}>{list.length}개 · 전 직원 공유</span>
+            <button type="button" className="mc-tpl-del" style={{ marginLeft: 'auto' }} onClick={() => setManageOpen(false)}>닫기</button>
+          </div>
+          {list.length === 0 && <div style={{ color: '#888', fontSize: 12.5, padding: '6px 0' }}>저장된 템플릿이 없습니다.</div>}
+          {list.map((t) => (
+            <div key={t.title} className="mc-tpl-manage-row">
+              <div className="mc-tpl-manage-main">
+                <div className="mc-tpl-manage-title">{t.title}</div>
+                <div className="mc-tpl-manage-preview">{t.content}</div>
+              </div>
+              <button type="button" className="mc-var-btn" disabled={busy} title="본문에 불러온 뒤 고쳐서 [저장]하면 덮어씁니다" onClick={() => startEdit(t)}>수정</button>
+              <button type="button" className="mc-var-btn" style={{ color: '#c5221f' }} disabled={busy} onClick={() => removeTemplate(t.title)}>삭제</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

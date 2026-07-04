@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { sendDirectMessage } from '../../../data-layer.js';
 import { messageMeta, normalizePhones } from '../message-format.js';
 import { parsePhonesFromFile, sampleCsv } from '../message-import.js';
+import { CHANNEL_INVITE_SMS, getSmsFooter, saveSmsFooter, appendLine } from '../sms-extras.js';
 import TemplateBar from './TemplateBar.jsx';
 
 function newReqId() {
@@ -19,10 +20,39 @@ export default function DirectSmsCard() {
   const [scheduledAt, setScheduledAt] = useState('');
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState('');
+  const [footer, setFooter] = useState('');           // 공유 꼬리말(로드된 값)
+  const [footerOpen, setFooterOpen] = useState(false); // 꼬리말 설정 편집창
+  const [footerDraft, setFooterDraft] = useState('');
+  const [footerBusy, setFooterBusy] = useState(false);
   const reqIdRef = useRef(newReqId());
   const fileRef = useRef(null);
 
+  useEffect(() => {
+    let alive = true;
+    getSmsFooter().then((f) => { if (alive) setFooter(f); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
   function resetReqId() { reqIdRef.current = newReqId(); }
+
+  function insertLine(line) {
+    setText((t) => appendLine(t, line));
+    resetReqId();
+  }
+  async function onSaveFooter() {
+    if (footerBusy) return;
+    setFooterBusy(true);
+    try {
+      await saveSmsFooter(footerDraft);
+      setFooter(footerDraft.trim());
+      setFooterOpen(false);
+      setMsg('꼬리말을 저장했습니다 — 전 직원에게 적용됩니다.');
+    } catch (e) {
+      setMsg('꼬리말 저장 실패: ' + (e?.message || e));
+    } finally {
+      setFooterBusy(false);
+    }
+  }
 
   async function onFile(e) {
     const file = e.target.files?.[0];
@@ -106,6 +136,19 @@ export default function DirectSmsCard() {
             <textarea aria-label="메시지 내용" className="mc-textarea" value={text}
               onChange={(e) => { setText(e.target.value); resetReqId(); }}
               placeholder="안내 내용을 입력하세요." />
+            <div className="mc-vars" style={{ marginTop: 6 }}>
+              <button type="button" className="mc-var-btn" title={CHANNEL_INVITE_SMS} onClick={() => insertLine(CHANNEL_INVITE_SMS)}>+ 채널 가입 안내</button>
+              <button type="button" className="mc-var-btn" title={footer || '꼬리말이 아직 없습니다 — 설정에서 등록'} disabled={!footer} onClick={() => insertLine(footer)}>+ 학원 꼬리말</button>
+              <button type="button" className="mc-var-btn" onClick={() => { setFooterDraft(footer); setFooterOpen(!footerOpen); }}>꼬리말 설정⚙</button>
+            </div>
+            {footerOpen && (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
+                <input aria-label="학원 꼬리말" className="mc-tpl-title" style={{ flex: 1 }} value={footerDraft}
+                  onChange={(e) => setFooterDraft(e.target.value)} placeholder="예: -임팩트세븐학원 02-2649-0509" maxLength={200} />
+                <button type="button" className="mc-var-btn" disabled={footerBusy} onClick={onSaveFooter}>{footerBusy ? '저장 중…' : '저장'}</button>
+                <button type="button" className="mc-var-btn" onClick={() => setFooterOpen(false)}>취소</button>
+              </div>
+            )}
             <div className="mc-meta">
               <span>{meta.chars}자 · {meta.bytes}byte</span>
               <span className={'mc-pill' + (meta.type === 'LMS' ? ' lms' : '')}>{meta.type}</span>
