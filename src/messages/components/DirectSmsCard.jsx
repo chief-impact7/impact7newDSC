@@ -9,6 +9,9 @@ function newReqId() {
   return 'direct-' + Math.random().toString(36).slice(2) + '-' + performance.now().toString(36);
 }
 
+// 클라이언트 1차 방어 상한 — 최종 검증은 서버 callable. F-02
+const MAX_RECIPIENTS = 500;
+
 export default function DirectSmsCard() {
   const [recipients, setRecipients] = useState('');
   const [text, setText] = useState('');
@@ -53,6 +56,8 @@ export default function DirectSmsCard() {
     if (!text.trim()) { setMsg('내용을 입력하세요.'); return; }
     if (!recipients.trim()) { setMsg('수신번호를 입력하세요.'); return; }
     if (when === 'schedule' && !scheduledAt) { setMsg('예약 시각을 입력하세요.'); return; }
+    const phoneCount = new Set(normalizePhones(recipients)).size;
+    if (phoneCount > MAX_RECIPIENTS) { setMsg(`한 번에 최대 ${MAX_RECIPIENTS}명까지 발송할 수 있습니다 (현재 ${phoneCount}명). 대상을 나눠 보내세요.`); return; }
     setSending(true); setMsg('');
     try {
       const payload = { recipients, text, requestId: reqIdRef.current };

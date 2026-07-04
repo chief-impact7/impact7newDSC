@@ -46,6 +46,27 @@ const PERIODS = [
 ];
 const RETRY_INELIGIBLE = (f) => f.piiPurged || f.kind === 'promo' || f.kind === 'promo_sms';
 
+// 일괄 재처리 동시 callable 호출 상한. 무제한 Promise.all은 대량 선택 시 서버에 순간 부하. F-04
+const BULK_CONCURRENCY = 5;
+// Promise.allSettled와 동일한 형태({status, value|reason})를 인덱스 순서대로 반환하되,
+// 동시 실행은 concurrency로 제한한다.
+async function runWithConcurrency(items, worker, concurrency) {
+    const results = new Array(items.length);
+    let next = 0;
+    async function runner() {
+        while (next < items.length) {
+            const i = next++;
+            try {
+                results[i] = { status: 'fulfilled', value: await worker(items[i]) };
+            } catch (reason) {
+                results[i] = { status: 'rejected', reason };
+            }
+        }
+    }
+    await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, runner));
+    return results;
+}
+
 // data는 getMessageDeliveryStatus callable 집계 결과(서버에서 카운트+번호 마스킹 완료).
 // 평문 번호는 서버를 벗어나지 않으므로 이 컴포넌트는 표시만 한다.
 function MessageDeliverySummary({ data, students, loading, onReload }) {
@@ -116,7 +137,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
             itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
             label: { show: false },
             data: Object.entries(channelCounts)
-                .filter(([, v]) => v > 0)
+                .filter(([k, v]) => v > 0 && CHANNEL_META[k])
                 .map(([k, v]) => ({ name: CHANNEL_META[k].label, value: v, itemStyle: { color: CHANNEL_META[k].color } })),
         }],
     }), [channelCounts]);
@@ -144,7 +165,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
         setBusy(true);
         setNotice(null);
         try {
-            const results = await Promise.allSettled(rows.map(run));
+            const results = await runWithConcurrency(rows, run, BULK_CONCURRENCY);
             const ok = results.filter(r => r.status === 'fulfilled').length;
             const fail = results.length - ok;
             const parts = [`${label} ${ok}건 완료`];

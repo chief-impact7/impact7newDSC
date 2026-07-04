@@ -151,19 +151,22 @@ export function useMessageDelivery(user) {
     const [data, setData] = useState(emptyDelivery);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const reqIdRef = useRef(0);
 
     // params: { fromMs?, toMs? } — 발송 통계 기간 필터(생략 시 전체=최근 스캔분).
     const reload = useCallback((params) => {
         if (!user) return;
+        const reqId = ++reqIdRef.current; // 빠른 기간 전환 시 느린 이전 응답이 최신을 덮지 않도록. F-03
         setLoading(true);
         setError(null);
         getDeliveryStatus(params ?? {})
-            .then(res => setData({ ...emptyDelivery(), ...(res?.data ?? {}) }))
+            .then(res => { if (reqId === reqIdRef.current) setData({ ...emptyDelivery(), ...(res?.data ?? {}) }); })
             .catch(err => {
+                if (reqId !== reqIdRef.current) return;
                 console.error('[useMessageDelivery]', err);
                 setError(err);
             })
-            .finally(() => setLoading(false));
+            .finally(() => { if (reqId === reqIdRef.current) setLoading(false); });
     }, [user]);
 
     useEffect(() => { reload(); }, [reload]);

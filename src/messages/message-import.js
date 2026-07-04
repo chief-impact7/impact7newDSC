@@ -13,6 +13,8 @@ function cellToText(cell) {
 // 번호 판정은 normalizePhones(서버 parseRecipients와 동일 규칙)에 위임한다.
 // 전화번호 목록은 작다 — 과대·악성 파일이 XLSX 파서(취약 의존성)에 부하를 주지 않도록 상한. F-08
 const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
+// 한 파일에서 추출되는 번호 수 상한 — 대량 발송 blast radius를 업로드 단계에서부터 제한. F-02
+const MAX_IMPORT_PHONES = 1000;
 
 export async function parsePhonesFromFile(file) {
   if (file.size > MAX_IMPORT_BYTES) {
@@ -25,7 +27,11 @@ export async function parsePhonesFromFile(file) {
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, blankrows: false });
     for (const row of rows) for (const cell of row) phones.push(...normalizePhones(cellToText(cell)));
   }
-  return [...new Set(phones)];
+  const unique = [...new Set(phones)];
+  if (unique.length > MAX_IMPORT_PHONES) {
+    throw new Error(`추출된 번호가 너무 많습니다 (${unique.length}개 · 최대 ${MAX_IMPORT_PHONES}개). 파일을 나눠 업로드하세요.`);
+  }
+  return unique;
 }
 
 // 업로드용 샘플 CSV. 한 열에 번호만 있으면 된다(어느 칸이든 번호는 인식되지만 안내용 양식).
