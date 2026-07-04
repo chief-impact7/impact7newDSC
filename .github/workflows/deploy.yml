@@ -8,9 +8,10 @@ on:
 # 통합 재빌드만 트리거한다. 자체 site(impact7dsc)는 impact7-app/dsc로 redirect만 하므로
 # 수동 `firebase deploy`로 자체 site만 갱신돼 통합과 불일치하던 함정이 구조적으로 사라진다.
 jobs:
-  # 배포 트리거 전 최소 검증. `npm run build`(Vite)는 VITE_FIREBASE_* 시크릿을 요구하는데
-  # 이 repo CI에는 없어 배포를 막았던 이력이 있으므로 게이트에서 제외한다. 대신 env가 필요 없는
-  # 테스트 + 드리프트 체크(shared lock, class_settings 필드)만 돌려 회귀·스키마 불일치를 차단한다.
+  # 배포 트리거 전 최소 검증. Vite build와 vitest(React 컴포넌트 → firebase-config)는
+  # VITE_FIREBASE_* 시크릿을 요구하는데 이 repo CI엔 없어 배포를 막았던 이력이 있어 제외한다.
+  # 대신 env가 필요 없는 순수 로직 테스트(test:node)와 드리프트 체크(shared lock,
+  # class_settings 필드)만 돌려 회귀·스키마 불일치를 차단한다.
   verify:
     runs-on: ubuntu-latest
     steps:
@@ -19,7 +20,7 @@ jobs:
         with:
           node-version: '20'
       - run: npm ci
-      - run: npm test
+      - run: npm run test:node
       - run: node scripts/check-shared-lock-sync.mjs
       - run: node scripts/check-class-settings-fields.mjs
 
