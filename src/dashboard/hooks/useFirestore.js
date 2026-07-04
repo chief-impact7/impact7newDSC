@@ -152,11 +152,12 @@ export function useMessageDelivery(user) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    const reload = useCallback(() => {
+    // params: { fromMs?, toMs? } — 발송 통계 기간 필터(생략 시 전체=최근 스캔분).
+    const reload = useCallback((params) => {
         if (!user) return;
         setLoading(true);
         setError(null);
-        getDeliveryStatus()
+        getDeliveryStatus(params ?? {})
             .then(res => setData({ ...emptyDelivery(), ...(res?.data ?? {}) }))
             .catch(err => {
                 console.error('[useMessageDelivery]', err);
