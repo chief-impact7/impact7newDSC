@@ -62,17 +62,7 @@ service cloud.firestore {
         && get(tokenPath).data.status == 'pending'
         && get(tokenPath).data.expiresAt > request.time;
     }
-    function hrSigningTokenValid(tokenPath, contractId) {
-      return exists(tokenPath)
-        && get(tokenPath).data.contractId == contractId
-        && get(tokenPath).data.status == 'pending'
-        && get(tokenPath).data.expiresAt > request.time;
-    }
-    function hrSigningTokenForContract(tokenPath, contractId) {
-      return exists(tokenPath)
-        && get(tokenPath).data.contractId == contractId
-        && get(tokenPath).data.expiresAt > request.time;
-    }
+    // hrSigningTokenValid/hrSigningTokenForContract는 계약 서명이 서버 callable로 이전되며 제거됨.
 
     // =========================================================================
     // [공통] 학생 마스터 컬렉션
@@ -956,39 +946,11 @@ service cloud.firestore {
           (isStaff() && resource.data.assignedTo == request.auth.uid);
         allow write: if isDirector();
 
-        // 비인증 계약서 읽기는 getHrPublicToken callable로 이전(G03). 서명 update만 유지.
-        // ready→signed: 계약서 서명 (통합: 교사 contractSigningTokens 또는 행정 employeeContractSigningTokens)
-        allow update: if resource.data.status == 'ready'
-          && request.resource.data.status == 'signed'
-          && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['signatures', 'status', 'updatedAt', 'signedPdfUrl', 'signingTokenId'])
-          && 'signingTokenId' in request.resource.data
-          && (
-            hrSigningTokenValid(/databases/$(database)/documents/contractSigningTokens/$(request.resource.data.signingTokenId), contractId)
-            || hrSigningTokenValid(/databases/$(database)/documents/employeeContractSigningTokens/$(request.resource.data.signingTokenId), contractId)
-          );
-        // signed/salary_agreement_sent→자기자신: 급여약정서 서명 (salaryAgreementToken 검증, status 불변)
-        // status는 director가 'salary_agreement_sent'로 바꾼 뒤 강사가 서명하므로 두 상태 모두 허용
-        allow update: if resource.data.status in ['signed', 'salary_agreement_sent']
-          && request.resource.data.status == resource.data.status
-          && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['salaryAgreement', 'updatedAt', 'salaryPdfUrl', 'agreementTokenId'])
-          && 'agreementTokenId' in request.resource.data
-          && get(/databases/$(database)/documents/salaryAgreementTokens/$(request.resource.data.agreementTokenId)).data.contractId == contractId
-          && get(/databases/$(database)/documents/salaryAgreementTokens/$(request.resource.data.agreementTokenId)).data.status == 'pending'
-          && get(/databases/$(database)/documents/salaryAgreementTokens/$(request.resource.data.agreementTokenId)).data.expiresAt > request.time;
-        // signed/salary_agreement_sent→자기자신: signedPdfUrl 재업로드 수리 (서명 후 PDF 업로드 실패 복구용)
-        // 기존 signingToken이 같은 contractId를 가리키고 유효기간 내이면 허용. signature·status는 불변.
-        // 통합: 교사 contractSigningTokens 또는 행정 employeeContractSigningTokens (서명 후 status는 pending 아님).
-        allow update: if resource.data.status in ['signed', 'salary_agreement_sent']
-          && request.resource.data.status == resource.data.status
-          && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['signedPdfUrl', 'updatedAt'])
-          && 'signingTokenId' in resource.data
-          && (
-            hrSigningTokenForContract(/databases/$(database)/documents/contractSigningTokens/$(resource.data.signingTokenId), contractId)
-            || hrSigningTokenForContract(/databases/$(database)/documents/employeeContractSigningTokens/$(resource.data.signingTokenId), contractId)
-          );
+        // 비인증 계약서 읽기·서명은 모두 callable로 이전. read=getHrPublicToken(G03),
+        // 서명 write=submitContractSignature·submitSalaryAgreementSignature(Admin SDK, 토큰 검증·
+        // raster 서명·자기 서명만 write). 익명 update는 rules가 signatures 중첩 내용을 검증 못 해
+        // signatures.director 덮어쓰기·SVG data-URL(저장형 XSS) 주입이 가능했으므로 제거한다.
+        // director 서명·PDF 수리 등 관리자 write는 위 `allow write: if isDirector()`가 계속 커버.
       }
 
       match /assignments/{id} {
@@ -1103,33 +1065,9 @@ service cloud.firestore {
         allow read: if isDirector() ||
           (isStaff() && resource.data.assignedTo == request.auth.uid);
         allow write: if isDirector();
-        // 비인증 계약서 읽기는 getHrPublicToken callable로 이전(G03). 서명 update만 유지.
-        // ready→signed: 계약서 서명 (employeeContractSigningToken 검증)
-        allow update: if resource.data.status == 'ready'
-          && request.resource.data.status == 'signed'
-          && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['signatures', 'status', 'updatedAt', 'signedPdfUrl', 'signingTokenId'])
-          && 'signingTokenId' in request.resource.data
-          && get(/databases/$(database)/documents/employeeContractSigningTokens/$(request.resource.data.signingTokenId)).data.contractId == contractId
-          && get(/databases/$(database)/documents/employeeContractSigningTokens/$(request.resource.data.signingTokenId)).data.status == 'pending'
-          && get(/databases/$(database)/documents/employeeContractSigningTokens/$(request.resource.data.signingTokenId)).data.expiresAt > request.time;
-        // signed/salary_agreement_sent→자기자신: 급여약정서 서명 (salaryAgreementToken 검증, status 불변)
-        allow update: if resource.data.status in ['signed', 'salary_agreement_sent']
-          && request.resource.data.status == resource.data.status
-          && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['salaryAgreement', 'updatedAt', 'salaryPdfUrl', 'agreementTokenId'])
-          && 'agreementTokenId' in request.resource.data
-          && get(/databases/$(database)/documents/salaryAgreementTokens/$(request.resource.data.agreementTokenId)).data.contractId == contractId
-          && get(/databases/$(database)/documents/salaryAgreementTokens/$(request.resource.data.agreementTokenId)).data.status == 'pending'
-          && get(/databases/$(database)/documents/salaryAgreementTokens/$(request.resource.data.agreementTokenId)).data.expiresAt > request.time;
-        // signed/salary_agreement_sent→자기자신: signedPdfUrl 재업로드 수리 (서명 후 PDF 업로드 실패 복구용)
-        allow update: if resource.data.status in ['signed', 'salary_agreement_sent']
-          && request.resource.data.status == resource.data.status
-          && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['signedPdfUrl', 'updatedAt'])
-          && 'signingTokenId' in resource.data
-          && get(/databases/$(database)/documents/employeeContractSigningTokens/$(resource.data.signingTokenId)).data.contractId == contractId
-          && get(/databases/$(database)/documents/employeeContractSigningTokens/$(resource.data.signingTokenId)).data.expiresAt > request.time;
+        // 레거시 컬렉션(통합 staff로 마이그레이션) — 비인증 계약 read·서명 write는 모두 callable로
+        // 이전됨(위 staff/contracts와 동일). 익명 서명 update는 signatures 중첩 검증 불가로 인한
+        // director 서명 덮어쓰기·SVG XSS 위험이 있어 제거. 관리자 write는 isDirector가 커버.
       }
 
       match /performanceNotes/{noteId} {
