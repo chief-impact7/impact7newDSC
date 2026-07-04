@@ -1042,18 +1042,6 @@ export async function sendDailyReport(payload) {
   return res.data;
 }
 
-// 카카오 채널 친구목록 업로드 동기화 / 조회(직원 권한).
-export async function syncChannelFriends(payload) {
-  const callable = httpsCallable(functions, 'syncChannelFriends');
-  const res = await callable(payload);
-  return res.data;
-}
-export async function getChannelFriends() {
-  const callable = httpsCallable(functions, 'getChannelFriends');
-  const res = await callable({});
-  return res.data;
-}
-
 // 수신자별 발송 이력 타임라인 — message_queue 본문 포함(번호는 서버가 마스킹).
 export async function getRecipientMessageHistory(payload) {
   const callable = httpsCallable(functions, 'getRecipientMessageHistory');

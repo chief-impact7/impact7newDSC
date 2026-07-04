@@ -164,7 +164,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                     {/* 재발송은 원장 권한. failed_permanent도 허용(원인이 추후 해소되는 실패 실재).
                                         단 보존기간 경과(번호 purge)·홍보성(동의 재확인 불가)은 서버가 거부하므로 버튼을 막는다. */}
                                     <button
-                                        className="dash-text-btn"
+                                        className="msg-action-btn msg-action-retry"
                                         title={f.piiPurged ? '보존기간이 지나 재발송할 수 없습니다'
                                             : (f.kind === 'promo' || f.kind === 'promo_sms') ? '홍보성 메시지는 수동 재발송할 수 없습니다'
                                             : undefined}
@@ -177,7 +177,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                     {f.status === 'failed_permanent' && (
                                         <>
                                             <button
-                                                className="dash-text-btn"
+                                                className="msg-action-btn"
                                                 title="목록에서 숨깁니다 (발송 이력은 보존)"
                                                 onClick={() => handleManage(f.id, 'archive', failureName(f))}
                                                 disabled={retrying === f.id}
@@ -185,7 +185,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                                 보관
                                             </button>
                                             <button
-                                                className="dash-text-btn msg-danger-btn"
+                                                className="msg-action-btn msg-action-danger"
                                                 title="항목을 삭제합니다 (발송 로그·삭제 기록은 보존)"
                                                 onClick={() => handleManage(f.id, 'delete', failureName(f))}
                                                 disabled={retrying === f.id}
