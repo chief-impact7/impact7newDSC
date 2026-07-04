@@ -97,8 +97,12 @@ service cloud.firestore {
           && (!data.keys().hasAny(['branch']) || data.branch is string);
       }
 
-      function hasOnlyAllowedStudentFields() {
-        let allowed = [
+      // 클라이언트가 생성/수정할 수 있는 필드 목록(49개). 서버 전용 필드(message_consent —
+      // promoConsent/optOut080Sync가 admin으로 기록)는 여기 넣지 않는다 — update가 diff 기반이라
+      // 서버가 학생 문서에 새 필드를 추가해도 기존 문서의 클라 편집이 깨지지 않고, 클라는
+      // 서버 전용 필드를 위조할 수 없다.
+      function clientStudentFields() {
+        return [
           'name', 'level', 'grade',
           'school_elementary', 'school_middle', 'school_high', 'school_level_grade',
           'student_phone', 'parent_phone_1', 'parent_phone_2', 'other_phone',
@@ -117,14 +121,11 @@ service cloud.firestore {
           'status_changed_at', 'status_changed_by', 'status_previous',
           'nameNormalized', 'studentNumber', 'studentNumberSource', 'studentNumberIssuedAt',
           'studentNumberHistory',
-          'message_consent'
+          'school_history'
         ];
-        return request.resource.data.keys().hasOnly(allowed);
       }
-      // withinFieldLimit는 allowed 목록 크기(50)와 맞춘다 — 과거 36은 hasOnly가 이미 허용한
-      // 필드를 다 채운 정상 문서를 조용히 거부했음(O-04). allowed 확장 시 이 값도 함께 올린다.
-      // message_consent는 서버(promoConsent/optOut080Sync)가 admin으로 기록 — 누락 시 보유 학생의
-      // 모든 클라 편집이 hasOnly+필드한도 위반으로 조용히 거부됨(school_* 사고와 동일 클래스).
+      // withinFieldLimit는 create의 클라 필드 목록 크기(50)와 맞춘다 — 과거 36은 hasOnly가 이미
+      // 허용한 필드를 다 채운 정상 문서를 조용히 거부했음(O-04). 목록 확장 시 이 값도 함께 올린다.
 
       // DB/DSC: 읽기+쓰기, Director: 읽기만
       allow read: if isAuthorized();
@@ -137,14 +138,16 @@ service cloud.firestore {
 
       allow create: if isAuthorized()
         && hasRequiredStudentFields()
-        && hasOnlyAllowedStudentFields()
+        && request.resource.data.keys().hasOnly(clientStudentFields())
         && withinFieldLimit(50)
         && enrollmentStatusConsistent();
 
+      // update는 클라가 실제 변경한 키만 검증(diff.affectedKeys) — 문서 전체 키를 hasOnly로
+      // 검사하던 방식은 서버가 admin으로 새 필드를 기록할 때마다 그 학생의 모든 클라 편집을
+      // 조용히 거부했다(2026-05-30 school_*, 2026-07-04 message_consent 사고의 근본 해소).
       allow update: if isAuthorized()
         && hasRequiredStudentFields()
-        && hasOnlyAllowedStudentFields()
-        && withinFieldLimit(50)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(clientStudentFields())
         && (!resource.data.keys().hasAny(['status']) || request.resource.data.keys().hasAny(['status']))
         && enrollmentStatusConsistent();
 
@@ -188,7 +191,7 @@ service cloud.firestore {
           && data.doc_id is string
           && data.doc_id.size() > 0
           && data.change_type is string
-          && data.change_type in ['ENROLL', 'UPDATE', 'WITHDRAW', 'DELETE', 'RETURN', 'STATUS_CHANGE', 'RESTORE', 'LR_AMEND']
+          && data.change_type in ['ENROLL', 'UPDATE', 'WITHDRAW', 'DELETE', 'RETURN', 'STATUS_CHANGE', 'RESTORE', 'LR_AMEND', 'PROMOTION']
           && data.before is string
           && data.after is string
           && data.google_login_id is string
@@ -823,9 +826,11 @@ service cloud.firestore {
     // =========================================================================
     // [Director] Entities / Buildings / Teams
     // =========================================================================
-    match /entities/{id} { allow read: if isLoggedIn(); allow write: if isDirector(); }
-    match /buildings/{id} { allow read: if isLoggedIn(); allow write: if isDirector(); }
-    match /teams/{id} { allow read: if isLoggedIn(); allow write: if isDirector(); }
+    // read를 isLoggedIn()으로 열면 임의 Google 계정(비 impact7)도 법인·조직 정보를 읽는다(H-1).
+    // 단기직원은 외부 도메인 계정이라 isShortTerm()으로 병행 허용.
+    match /entities/{id} { allow read: if isImpact7VerifiedEmail() || isShortTerm(); allow write: if isDirector(); }
+    match /buildings/{id} { allow read: if isImpact7VerifiedEmail() || isShortTerm(); allow write: if isDirector(); }
+    match /teams/{id} { allow read: if isImpact7VerifiedEmail() || isShortTerm(); allow write: if isDirector(); }
 
     // =========================================================================
     // [Director] Onboarding Tokens
@@ -880,7 +885,7 @@ service cloud.firestore {
     // [Director] Assignments (root-level)
     // =========================================================================
     match /assignments/{id} {
-      allow read: if isLoggedIn();
+      allow read: if isImpact7VerifiedEmail() || isShortTerm();
       allow write: if isDirector();
     }
 
@@ -985,7 +990,7 @@ service cloud.firestore {
       }
 
       match /assignments/{id} {
-        allow read: if isLoggedIn();
+        allow read: if isImpact7VerifiedEmail() || isShortTerm();
         allow write: if isDirector();
       }
 
@@ -1019,7 +1024,8 @@ service cloud.firestore {
     // [Director] Contract Templates
     // =========================================================================
     match /contractTemplates/{id} {
-      allow read: if isLoggedIn();
+      // 근로계약서 템플릿(법적 조항) — 임의 Google 계정 열람 차단(H-1), 단기직원 서명 흐름은 허용
+      allow read: if isImpact7VerifiedEmail() || isShortTerm();
       allow write: if isDirector();
     }
 
@@ -1042,7 +1048,8 @@ service cloud.firestore {
     // =========================================================================
     match /auditLog/{id} {
       allow read: if isDirector();
-      allow create: if isLoggedIn();
+      // isLoggedIn() 개방은 임의 Google 계정의 허위 감사기록 주입을 허용했음(H-1)
+      allow create: if isImpact7VerifiedEmail() || isShortTerm();
       allow update, delete: if false;
     }
 
@@ -1355,6 +1362,15 @@ service cloud.firestore {
     match /message_logs/{id} {
       allow read: if isAuthorized();
       allow write: if false;
+    }
+
+    // 메시지 공용 설정(학원 꼬리말·채널 가입 안내 문구) — 전 직원 공유. 개인정보 없는 문안 전용.
+    match /message_settings/{id} {
+      allow read: if isAuthorized();
+      allow write: if isAuthorized()
+        && request.resource.data.keys().hasOnly(['sms_footer', 'channel_invite', 'updated_by', 'updated_at'])
+        && request.resource.data.get('sms_footer', '') is string && request.resource.data.get('sms_footer', '').size() <= 300
+        && request.resource.data.get('channel_invite', '') is string && request.resource.data.get('channel_invite', '').size() <= 300;
     }
 
     // 메시지 템플릿(자주 쓰는 문구) — 전 직원 공유 저장소. 개인정보 없는 문안만 담는다.
