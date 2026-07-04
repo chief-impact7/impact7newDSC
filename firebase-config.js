@@ -39,29 +39,8 @@ const app = initializeApp(firebaseConfig);
 const dataApp = initializeApp(firebaseConfig, 'dsc');
 export { app };
 
-// App Check — Firestore/Functions/Storage 요청에 App Check 토큰을 동봉(미강제 단계).
-// 초기 로딩 회귀(2026-06)를 두 가지로 첫 read 임계경로에서 완전히 분리한다:
-//  (1) app-check + reCAPTCHA 코드를 동적 import해 초기 청크(auth ~684KB)에서 제외,
-//  (2) requestIdleCallback 휴리스틱(첫 read보다 먼저 발화 가능) 대신, 호출처(app.js/App.jsx)가
-//      첫 데이터 read·페인트 이후 ensureAppCheck()를 명시 호출.
-// 미강제(enforcement off) 단계라 첫 요청에 토큰이 없어도 백엔드가 거부하지 않으므로 무방.
-// node:test/vitest 등 비브라우저 환경에서는 호출되지 않는다(운영 무영향).
-// ⚠️ 강제 전환 시 앱 부팅 즉시 init으로 되돌릴 것(첫 요청부터 토큰 필요).
-let _appCheckStarted = false;
-export async function ensureAppCheck() {
-    if (_appCheckStarted || typeof document === 'undefined') return;
-    _appCheckStarted = true;
-    // 로컬 개발: 디버그 토큰 활성화(콘솔 출력 토큰을 App Check에 등록해야 로컬서 동작). 운영 무영향.
-    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-        // @ts-ignore
-        self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-    }
-    const { initializeAppCheck, ReCaptchaEnterpriseProvider } = await import('firebase/app-check');
-    initializeAppCheck(dataApp, {
-        provider: new ReCaptchaEnterpriseProvider('6LcS4ywtAAAAADd8BBiFo_Fd4XXiXT1Uf3gHGxYl'),
-        isTokenAutoRefreshEnabled: true,
-    });
-}
+// App Check init은 넣지 않는다(2026-07-05 사용자 결정) — reCAPTCHA 로드가 초기 로딩 회귀
+// (2026-06)를 일으켰고 서버가 enforce off라 이득이 없다. 도입 시 impact7DB/.memory/project_appcheck_rollout.md 참조.
 
 export const auth = getAuth(app);
 

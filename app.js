@@ -4,7 +4,7 @@ import {
     collection, getDocs, doc,
     query, where
 } from 'firebase/firestore';
-import { auth, db, dataAuthReady, ensureAppCheck } from './firebase-config.js';
+import { auth, db, dataAuthReady } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
 import { initHelpGuide } from './help-guide.js';
 import { fetchAiBatchPerm } from './population-perms.js';
@@ -689,10 +689,6 @@ onAuthStateChanged(auth, async (user) => {
         renderSubFilters();
         updateL1ExpandIcons();
         renderListPanel();
-
-        // 첫 리스트 페인트 이후 App Check init — reCAPTCHA 토큰 발급(원격 왕복)이 초기 read를
-        // 막지 않도록 첫 페인트 뒤로 미룬다(미강제 단계라 그 사이 토큰 없이도 무방).
-        ensureAppCheck();
 
         // ── 첫 렌더 후 지연 작업. 퇴원생(1.5만+건)은 시스템 전반이 비원생 포함
         //    전제라 전체 적재가 필요하다 — 단 첫 조작(학생 클릭) 경합을 피해
