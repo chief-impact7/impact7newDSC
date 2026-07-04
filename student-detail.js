@@ -82,9 +82,7 @@ let _renderDocuFn = null;
 // Date → 'YYYY-MM-DD' (로컬 시간 기준, DB formatDate와 동일). 비정상 값은 '—'.
 function _fmtTenureDate(d) {
     if (!(d instanceof Date) || isNaN(d.getTime())) return '—';
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${d.getFullYear()}-${mm}-${dd}`;
+    return formatDateKST(d);   // shared datetime SSoT (비-KST 환경 drift 방지)
 }
 
 // 재원기간 표시 문자열. start 없으면 '—'. END 규칙: end 있으면 퇴원일,
@@ -252,8 +250,9 @@ async function syncChecklistCache(studentId, items) {
 }
 
 function renderChecklistCard(studentId) {
+    // 순수 렌더 — 캐시 동기화(syncChecklistCache)는 렌더 side-effect로 매 틱 호출되면
+    // "렌더→write→onSnapshot→렌더" 결합을 만들므로, 실제 카드 갱신 시에만 별도로 호출한다(M-15).
     const items = getStudentChecklistStatus(studentId);
-    syncChecklistCache(studentId, items).catch(err => console.warn('[checklist-cache] 동기화 실패:', err)); // 캐시 동기화(fire-and-forget)
     const doneCount = items.filter(i => i.done).length;
     const total = items.length;
     const allDone = doneCount === total;
@@ -763,8 +762,9 @@ function renderReportCard(records) {
 function scoreDateText(value) {
     if (!value) return '';
     if (typeof value === 'string') return value.slice(0, 10);
-    if (typeof value.toDate === 'function') return value.toDate().toISOString().slice(0, 10);
-    if (value.seconds) return new Date(value.seconds * 1000).toISOString().slice(0, 10);
+    // toISOString()은 UTC라 KST 자정 근처 Timestamp를 하루 앞으로 표시 → formatDateKST 사용(LOW).
+    if (typeof value.toDate === 'function') return formatDateKST(value.toDate());
+    if (value.seconds) return formatDateKST(new Date(value.seconds * 1000));
     return '';
 }
 
@@ -1201,8 +1201,13 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     }
 
     // 재원현황 (프로필 내 표시)
+    // 같은 학생 incremental 재렌더에서 재생성하면 fillTenure로 채워둔 값이 '…'로 리셋되는데
+    // fillTenure는 !cardsUnchanged에서만 다시 호출돼 영구히 '…'로 멈춘다(M-14).
+    // 학생이 바뀌었거나 tenure 자리표시자가 아직 없을 때만 재생성한다.
     const stayStatsEl = document.getElementById('profile-stay-stats');
-    if (stayStatsEl) stayStatsEl.innerHTML = buildStayStatsHtml(student);
+    if (stayStatsEl && (studentChanged || !document.getElementById('detail-header-tenure'))) {
+        stayStatsEl.innerHTML = buildStayStatsHtml(student);
+    }
 
     // 카드들 렌더링
     const cardsContainer = document.getElementById('detail-cards');
@@ -1535,6 +1540,12 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
         cardsContainer.innerHTML = cardsHtml;
         _lastCardsHtml = cardsHtml;
 
+        // 체크리스트 완료 캐시 backfill — 실제 카드 갱신 시에만(M-15). 값이 바뀐 경우에만 write.
+        if (!isWithdrawn) {
+            syncChecklistCache(studentId, getStudentChecklistStatus(studentId))
+                .catch(err => console.warn('[checklist-cache] 동기화 실패:', err));
+        }
+
         // 재원기간 — 헤더에 비동기로 채움 (history_logs deriveTenure, DB와 동일 로직)
         if (document.getElementById('detail-header-tenure')) fillTenure(studentId, student);
 
@@ -1657,6 +1668,8 @@ export async function saveExtraVisit(studentId, field, value) {
     // 날짜가 입력되면 pending 해제
     if (field === 'date' && value) state._pendingClinicStudentId = null;
     const rec = state.dailyRecords[studentId] || {};
+    // 이전 타겟(미래) 날짜 — 날짜를 옮기면 이전 타겟 문서의 클리닉을 정리해야 유령이 안 남는다(H-6).
+    const prevTargetDate = (rec.extra_visit || {}).date;
     const extraVisit = { ...(rec.extra_visit || {}) };
     extraVisit[field] = value;
     if (extraVisit.date && !extraVisit.time) extraVisit.time = DEFAULT_CLINIC_TIME;
@@ -1680,18 +1693,25 @@ export async function saveExtraVisit(studentId, field, value) {
 
     // 타겟 날짜가 다르면 타겟 날짜 레코드에도 저장 (등원예정 목록 표시용)
     const targetDate = extraVisit.date;
+    const student = state.allStudents.find(s => s.docId === studentId);
     if (targetDate && targetDate !== state.selectedDate) {
         const docId = makeDailyRecordId(studentId, targetDate);
-        const student = state.allStudents.find(s => s.docId === studentId);
         try {
-            await auditSet(doc(db, 'daily_records', docId), {
-                student_id: studentId,
-                date: targetDate,
-                branch: branchFromStudent(student || {}),
-                extra_visit: extraVisit
-            }, { merge: true });
+            const payload = { student_id: studentId, date: targetDate, extra_visit: extraVisit };
+            if (student) payload.branch = branchFromStudent(student);
+            await auditSet(doc(db, 'daily_records', docId), payload, { merge: true });
         } catch (err) {
             console.error('클리닉 미래 날짜 저장 실패:', err);
+        }
+    }
+
+    // 타겟 날짜가 이전 미래 타겟과 다르면, 이전 타겟 문서의 extra_visit를 정리(유령 클리닉 방지, H-6)
+    if (prevTargetDate && prevTargetDate !== targetDate && prevTargetDate !== state.selectedDate) {
+        try {
+            await auditSet(doc(db, 'daily_records', makeDailyRecordId(studentId, prevTargetDate)),
+                { extra_visit: deleteField() }, { merge: true });
+        } catch (err) {
+            console.error('이전 클리닉 날짜 정리 실패:', err);
         }
     }
 }
@@ -1707,9 +1727,15 @@ export async function clearExtraVisit(studentId) {
     if (state.selectedDate < todayStr()) { alert('과거 기록은 삭제할 수 없습니다.'); return; }
     const rec = state.dailyRecords[studentId];
     const prevExtraVisit = rec ? rec.extra_visit : undefined;
+    // 미래 타겟 날짜에 저장된 클리닉이면 그 문서도 함께 지워야 유령이 안 남는다(H-6).
+    const prevTargetDate = prevExtraVisit?.date;
     if (rec) delete rec.extra_visit;
     try {
         await saveImmediately(studentId, { extra_visit: deleteField() });
+        if (prevTargetDate && prevTargetDate !== state.selectedDate) {
+            await auditSet(doc(db, 'daily_records', makeDailyRecordId(studentId, prevTargetDate)),
+                { extra_visit: deleteField() }, { merge: true });
+        }
     } catch (err) {
         // 저장 실패 시 optimistic delete를 되돌린다. F-04.
         console.error('방문 삭제 실패:', err);

@@ -9,6 +9,15 @@ service firebase.storage {
             || request.auth.token.email.matches('.*@impact7\\.kr$'));
     }
 
+    // HR 경로(staff/contracts/expenses/signatures) 전용 — chief@impact7.kr 계정만 접근.
+    // 4개 프로젝트(impact7DB·impact7newDSC·impact7HR·impact7exam) 공유본이므로
+    // 이 파일 수정 시 나머지 3개 저장소도 동기화 필요(firestore-rules-sync 스킬).
+    function isHrAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email == 'chief@impact7.kr';
+    }
+
     // === impact7exam ===
     match /exam-papers/{allPaths=**} {
       allow read: if isAuthorized();
@@ -21,20 +30,20 @@ service firebase.storage {
 
     // === impact7HR ===
     match /staff/{staffId}/{allPaths=**} {
-      allow read: if isAuthorized();
-      allow write: if isAuthorized();
+      allow read: if isHrAdmin();
+      allow write: if isHrAdmin();
     }
     match /contracts/{allPaths=**} {
-      allow read: if isAuthorized();
-      allow write: if isAuthorized();
+      allow read: if isHrAdmin();
+      allow write: if isHrAdmin();
     }
     match /expenses/{expenseId}/{allPaths=**} {
-      allow read: if isAuthorized();
-      allow write: if isAuthorized();
+      allow read: if isHrAdmin();
+      allow write: if isHrAdmin();
     }
     match /signatures/{allPaths=**} {
-      allow read: if isAuthorized();
-      allow write: if isAuthorized();
+      allow read: if isHrAdmin();
+      allow write: if isHrAdmin();
     }
 
     // === impact7newDSC ===

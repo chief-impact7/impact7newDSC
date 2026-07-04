@@ -8,7 +8,7 @@ import { signInWithGoogle, logout } from './auth.js';
 import { todayStr, getDayName, addDays, PAST_STUDENT_STATUSES, normalizeDays, enrollmentCode, branchFromStudent } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditSet, auditAdd, normalizeImpact7Email } from './audit.js';
 import { staffLabel } from '@impact7/shared/staff-label';
-import { getActiveEnrollments } from './student-helpers.js';
+import { getActiveEnrollments, findStudent } from './student-helpers.js';
 import { openKoreanDatePicker } from './date-picker.js';
 import { loadClassSettings } from './data-layer.js';
 import { state } from './state.js';
@@ -714,7 +714,7 @@ function renderCards(rows) {
             <div class="card-body">
                 ${row.isOverridingOut ? '<p style="color:var(--text-sec);font-size:13px;padding:8px 0;">타반수업 중 — 입력 비활성</p>' : renderCardSections(row.checkId, checkData)}
                 ${row.isOverridingOut ? '' : `<div class="card-actions">
-                    <button class="btn btn-secondary btn-sm" onclick="openPostponeModal('${escAttr(row.student.id)}', '${escAttr(row.student.name)}', ${row.enrollIdx})">
+                    <button class="btn btn-secondary btn-sm" onclick="openPostponeModal('${escAttr(row.student.id)}', ${row.enrollIdx})">
                         연기/보강
                     </button>
                 </div>`}
@@ -778,9 +778,10 @@ window.toggleCard = (header) => {
 // ─── Postponed tasks ─────────────────────────────────────────────────────────
 let _postponeContext = null;
 
-window.openPostponeModal = (studentId, studentName, enrollIdx) => {
+window.openPostponeModal = (studentId, enrollIdx) => {
     _postponeContext = { studentId, enrollIdx };
-    document.getElementById('postpone-student-name').textContent = studentName;
+    const student = findStudent(studentId);
+    document.getElementById('postpone-student-name').textContent = student?.name || '';
     document.getElementById('postpone-content').value = '';
     document.getElementById('postpone-handler').value = '';
 

@@ -377,14 +377,15 @@ export function searchMemoStudent(q) {
 
     dropdown.innerHTML = matches.map(s => {
         const code = (s.enrollments || []).map(e => enrollmentCode(e)).join(', ');
-        return `<div class="memo-student-dropdown-item" role="button" tabindex="0" data-keyclick onclick="selectMemoStudent('${escAttr(s.docId)}', '${escAttr(s.name)}')">${esc(s.name)} <span style="color:var(--text-sec);font-size:11px;">${esc(code)}</span></div>`;
+        return `<div class="memo-student-dropdown-item" role="button" tabindex="0" data-keyclick onclick="selectMemoStudent('${escAttr(s.docId)}')">${esc(s.name)} <span style="color:var(--text-sec);font-size:11px;">${esc(code)}</span></div>`;
     }).join('');
     dropdown.style.display = '';
 }
 
-export function selectMemoStudent(studentId, studentName) {
+export function selectMemoStudent(studentId) {
+    const student = findStudent(studentId);
     document.getElementById('memo-student-id').value = studentId;
-    document.getElementById('memo-student-selected').textContent = studentName;
+    document.getElementById('memo-student-selected').textContent = student?.name || '';
     document.getElementById('memo-student-search').value = '';
     document.getElementById('memo-student-dropdown').style.display = 'none';
 }

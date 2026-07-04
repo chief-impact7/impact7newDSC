@@ -429,7 +429,7 @@ export default function App() {
                             branchFilter={branchFilter}
                             classFilter={classFilter}
                             gradeFilter={gradeFilter}
-                            date={baseDate}
+                            date={normalizedBaseDate}
                         />
                     </ErrorBoundary>
                 )

@@ -6,16 +6,8 @@ import GradeFilter from '../../dashboard/components/GradeFilter.jsx';
 import { messageMeta } from '../message-format.js';
 import TemplateBar from './TemplateBar.jsx';
 import { createBulkMessage, createPromoCampaign } from '../../../data-layer.js';
-
-// 광고 규제(정보통신망법 §50): 머리에 (광고)[학원명], 끝에 무료수신거부 080. 서버도 동일 검증.
-// 080-500-4233 = 솔라피 무료 공용 수신거부 번호 — 전화 시 우리 계정 수신거부 목록에 자동 등록·발송 차단.
-const OPT_OUT_LINE = '무료수신거부 080-500-4233';
-function insertOptOut(content) {
-  let c = content;
-  if (!/\(광고\)/.test(c)) c = '(광고) [임팩트세븐학원]\n' + c;
-  if (!/(무료거부|수신거부|080)/.test(c)) c = c.replace(/\s*$/, '') + '\n' + OPT_OUT_LINE;
-  return c;
-}
+// 광고 규제 표기(정보통신망법 §50)는 공용 모듈 — 발송 시 자동 보정, 버튼은 미리보기 확인용.
+import { OPT_OUT_LINE, ensurePromoCompliance } from '../../../promo-compliance.js';
 
 function newReqId() { return 'bulk-' + Math.random().toString(36).slice(2) + '-' + performance.now().toString(36); }
 
@@ -124,7 +116,9 @@ export default function BulkSendCard({ students = [] }) {
     setSending(true); setMsg('');
     try {
       const fields = [...recipientFields];
-      const payload = { title: '카카오 발송', content, studentIds: ids, recipientFields: fields, recipientField: fields[0], requestId: reqIdRef.current };
+      // 홍보는 (광고)·080 표기를 발송 직전 자동 보정 — 깜빡해도 법적 표기가 빠지지 않는다.
+      const body = kind === 'promo' ? ensurePromoCompliance(content) : content;
+      const payload = { title: '카카오 발송', content: body, studentIds: ids, recipientFields: fields, recipientField: fields[0], requestId: reqIdRef.current };
       if (when === 'schedule') payload.scheduledAt = scheduledAt.slice(0, 16).replace('T', ' ') + ':00';
       let res;
       if (kind === 'promo') { payload.targeting = 'M'; res = await createPromoCampaign(payload); }
@@ -225,7 +219,7 @@ export default function BulkSendCard({ students = [] }) {
                   <button key={v} type="button" className="mc-var-btn" onClick={() => { setContent((c) => c + v); resetReqId(); }}>{v}</button>
                 ))}
                 {kind === 'promo' && (
-                  <button type="button" className="mc-var-btn" onClick={() => { setContent((c) => insertOptOut(c)); resetReqId(); }}>+ (광고)·080</button>
+                  <button type="button" className="mc-var-btn" title="발송 시 자동으로 붙지만, 미리보기로 확인하려면 클릭" onClick={() => { setContent((c) => ensurePromoCompliance(c)); resetReqId(); }}>+ (광고)·080</button>
                 )}
               </div>
             </div>

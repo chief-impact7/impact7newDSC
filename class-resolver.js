@@ -163,6 +163,10 @@ export function _getAllClassCodes() {
 
 // 내신 반코드(Firestore 키)로 학생 목록 조회
 // classKey = 소속+반코드 (예: "2단지신목중2A"), 빈 소속이면 "신목중2A"
+// 주의(M-12): 이 조회/카운트는 반설정 화면의 "배정 로스터"로, naesin_start/end 기간을
+// 의도적으로 확인하지 않는다(기간 밖에도 반 편성·관리 필요). 반면 출결 탭의 활성 멤버십은
+// getNaesinInfo(shared deriveActiveNaesinEnrollment, 기간 게이트)를 쓴다 — 두 인원수가
+// 기간 밖에서 다를 수 있는 것은 정상이다(로스터 vs 활성).
 export function getNaesinStudentsByDerivedCode(classKey) {
     if (!classKey) return [];
     const result = [];

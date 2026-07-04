@@ -13,7 +13,8 @@ import { isSameTeacher, teacherDisplayName } from '@impact7/shared/teacher-label
 import { db } from './firebase-config.js';
 import { doc, getDoc, getDocFromServer, writeBatch } from 'firebase/firestore';
 import { auditUpdate, auditSet, batchUpdate, READ_ONLY } from './audit.js';
-import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt, isActiveNaesinBase, resolveNaesinCsKey } from './student-helpers.js';
+import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt, isActiveNaesinBase, resolveNaesinCsKey, isValidDateStr } from './student-helpers.js';
+import { deriveActiveNaesinEnrollment } from '@impact7/shared/enrollment-derivation';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 import { renderUnifiedMemoCard } from './role-memo.js';
 import { renderClassDeleteCard, applyClassDetailTabMode } from './class-detail.js';
@@ -35,33 +36,44 @@ function getNaesinInfo(student, selectedDate, dayName) {
     // 휴원 기간 내 학생은 내신 대상 아님 (내신은 정규의 일시적 전환 — 정규가 멈춰있으면 내신도 멈춤)
     if (isOnLeaveAt(student, selectedDate)) return null;
 
-    // 정규 enrollment 확인: 만료·요일 없는 enrollment 제외, override 있는 것만
-    const regularEnroll = (student.enrollments || []).find(
-        e => isActiveNaesinBase(e, selectedDate) && e.naesin_class_override
-    );
-    if (!regularEnroll) return null;
+    // 내신 활성 판정은 shared SSoT(deriveActiveNaesinEnrollment)로 단일화한다.
+    // 과거엔 "override 있는 첫 enrollment"를 자체 find해 shared(첫 정규/자유학기 → override 해소)와
+    // 대상이 달라져 배지·레벨라벨·탭 멤버십이 모순됐다(2026-06-15 류하율 A101 사고 클래스). C-1.
+    // getActiveEnrollments와 동일한 활성 필터(미시작·종료 제외) 후 넘긴다.
+    const current = (student.enrollments || []).filter(e =>
+        !(isValidDateStr(e.start_date) && e.start_date > selectedDate) &&
+        !(isValidDateStr(e.end_date)   && e.end_date   < selectedDate));
 
-    // 내신 반 매칭 (빈 문자열 override = 배제)
-    const csKey = resolveNaesinCsKey(student, regularEnroll);
-    if (!csKey) return null;
+    const derived = deriveActiveNaesinEnrollment(current, {
+        classSettings,
+        dateStr: selectedDate,
+        resolveNaesinCsKey: (re) => resolveNaesinCsKey(student, re),
+    });
+    if (!derived) return null;
 
-    // 표시용 반코드: csKey에서 소속 접두사 제거
+    // csKey는 shared가 정한 값(정규→파생: class_number=csKey). 원본 정규 enrollment는
+    // 개별 naesin_schedule/naesin_days override를 보유하므로 함께 잡아 시간 조회에 쓴다.
+    const baseRegular = current.find(e =>
+        (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
+    const csKey = derived.class_number;
     const naesinCode = window.displayCodeFromCsKey?.(csKey, window.branchFromStudent?.(student)) || csKey;
-
     const cs = classSettings?.[csKey];
-    if (!cs?.naesin_start || !cs?.naesin_end) return null;
-    if (cs.naesin_start > selectedDate || cs.naesin_end < selectedDate) return null;
 
-    const classDays = Object.keys(cs.schedule || {});
-
-    // 요일 판정: 학생 개별 naesin_days가 있으면 그것이 우선 (반 스케줄 밖 요일 override 허용)
-    const studentNaesinDays = regularEnroll.naesin_days;
-    if (dayName) {
-        const effectiveDays = studentNaesinDays?.length > 0 ? studentNaesinDays : classDays;
-        if (!effectiveDays.includes(dayName)) return null;
+    if (cs?.naesin_start && cs?.naesin_end) {
+        const classDays = Object.keys(cs.schedule || {});
+        // 요일 판정: 학생 개별 naesin_days가 있으면 그것이 우선 (반 스케줄 밖 요일 override 허용)
+        const studentNaesinDays = baseRegular?.naesin_days;
+        if (dayName) {
+            const effectiveDays = studentNaesinDays?.length > 0 ? studentNaesinDays : classDays;
+            if (!effectiveDays.includes(dayName)) return null;
+        }
+        return { enrollment: baseRegular || derived, naesinCode, csKey, classDays, cs };
     }
 
-    return { enrollment: regularEnroll, naesinCode, csKey, classDays, cs };
+    // 명시적 내신 등 class_settings 창이 없는 파생: 파생 자체 요일/필드로 표시만 (H-2).
+    const derivedDays = Array.isArray(derived.day) ? derived.day : [];
+    if (dayName && derivedDays.length && !derivedDays.includes(dayName)) return null;
+    return { enrollment: baseRegular || derived, naesinCode, csKey, classDays: derivedDays, cs: null };
 }
 
 // 내신 등원 시간 조회: 개별 override → 반 기본 순 (csKey로 class_settings 조회)
@@ -149,8 +161,8 @@ export function renderNaesinList() {
         ? allItems.filter(({ naesinKey }) => naesinKey === selectedClass)
         : allItems;
 
-    // 카운트 표시
-    countEl.textContent = `${items.length}명`;
+    // 카운트 표시 (list-count가 없는 화면에서 TypeError 방지)
+    if (countEl) countEl.textContent = `${items.length}명`;
 
     // ── L3 반 칩 (code=Firestore키, displayCode=표시용) ──
     const chipHtml = classes.map(({ code, displayCode, count }) => {
@@ -403,7 +415,9 @@ export function renderNaesinDetail(studentId) {
     const clinicHtml = _renderClinicCard(studentId, rec?.extra_visit, selectedDate);
 
     // ── 반에서 제거 카드 (내신 활성 학생일 때만) ──
-    const removeHtml = csKey ? _renderRemoveFromClassCard(studentId, csKey, code, 'removeFromNaesin') : '';
+    // info가 없으면(내신 아님) fallback csKey가 branch 접두만으로 truthy가 돼 허위 카드가 뜬다 →
+    // 실제 내신 멤버십 신호인 info?.csKey로 판정한다(LOW).
+    const removeHtml = info?.csKey ? _renderRemoveFromClassCard(studentId, info.csKey, code, 'removeFromNaesin') : '';
 
     // ── 조립 ──
     const cardsEl = document.getElementById('detail-cards');
@@ -892,9 +906,14 @@ function renderNaesinClassDetail(csKey) {
     // 담당
     const teachersList = window.teachersList || [];
     const currentTeacher = cs.teacher || '';
+    const _teacherName = (email) => window.getTeacherName?.(email) || teacherDisplayName(staffLabel(email)) || staffLabel(email);
     // 폴백도 표시 규약(첫 글자 대문자) 유지, 저장값이 구메일이어도 동일인 매칭 — teacher-label 규약
-    const teacherOptions = teachersList.map(t => {
-        const name = window.getTeacherName?.(t.email) || teacherDisplayName(staffLabel(t.email)) || staffLabel(t.email);
+    // 현재 담임이 목록(homeroom_eligible)에서 빠지면 보존 option 주입 — 빈값 소실 방지(H-1).
+    const _preservedTeacherOption = (!currentTeacher || teachersList.some(t => isSameTeacher(t.email, currentTeacher)))
+        ? ''
+        : `<option value="${_escAttr(currentTeacher)}" selected>${_esc(_teacherName(currentTeacher))} (목록 외)</option>`;
+    const teacherOptions = _preservedTeacherOption + teachersList.map(t => {
+        const name = _teacherName(t.email);
         return `<option value="${_escAttr(t.email)}" ${isSameTeacher(t.email, currentTeacher) ? 'selected' : ''}>${_esc(name)}</option>`;
     }).join('');
 

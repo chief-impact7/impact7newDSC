@@ -9,6 +9,7 @@ import {
 } from './data-layer.js';
 import { ATTENDANCE_ACTIONS } from '@impact7/shared/attendance-action';
 import { esc, escAttr, isKakaoNightKST } from './ui-utils.js';
+import { OPT_OUT_LINE, ensurePromoCompliance } from './promo-compliance.js';
 
 let _deps = {};
 let _mode = 'notice'; // 'notice'(템플릿 안내) | 'free'(자유 안내) | 'promo'(홍보)
@@ -58,11 +59,11 @@ const CONSENT_TARGETS = [
 ];
 const CONSENT_SOURCE_LABEL = {
   diagnostic_form: '진단평가 신청서', survey_form: '설문', admin: '관리자 입력', kakao_friend: '카카오 친구',
+  optout_080: '080 수신거부',
 };
 let _consent = null; // 현재 학생의 message_consent 사본(설정/철회 후 낙관 갱신)
 
-// 080-500-4233 = 솔라피 무료 공용 수신거부 번호(BulkSendCard OPT_OUT_LINE과 동일).
-const PROMO_PLACEHOLDER = '(광고)[임팩트세븐학원]\n\n안내 내용을 입력하세요.\n\n무료수신거부 080-500-4233';
+const PROMO_PLACEHOLDER = `(광고)[임팩트세븐학원]\n\n안내 내용을 입력하세요.\n\n${OPT_OUT_LINE}`;
 
 const KIND_LABEL = {
   attendance: '출결', parent_notice: '안내', report: '안내', parent_bms: '안내',
@@ -163,7 +164,9 @@ function consentStatusHtml(c) {
     return `<span style="color:#00754A;font-weight:700;">동의</span> <span style="color:#999;">${esc([consentDate(c.at), src].filter(Boolean).join(' · '))}</span>`;
   }
   if (c?.revokedAt) {
-    return `<span style="color:#c82014;font-weight:700;">철회</span> <span style="color:#999;">${esc(consentDate(c.revokedAt))}</span>`;
+    // 080 전화 수신거부(솔라피 명단 동기화)는 학원 철회 처리와 구분해 표기.
+    const label = c.source === 'optout_080' ? '수신거부(080)' : '철회';
+    return `<span style="color:#c82014;font-weight:700;">${label}</span> <span style="color:#999;">${esc(consentDate(c.revokedAt))}</span>`;
   }
   return '<span style="color:#888;">미동의</span>';
 }
@@ -208,10 +211,13 @@ async function setConsent(studentId, target, optedIn, readonly) {
     await setPromoConsent({ studentId, target, optedIn, source: 'admin' });
     const field = CONSENT_TARGETS.find((t) => t.target === target)?.field;
     if (field) {
-      _consent = {
-        ..._consent,
-        [field]: { optedIn, source: 'admin', at: new Date(), revokedAt: optedIn ? null : new Date() },
-      };
+      const entry = { optedIn, source: 'admin', at: new Date(), revokedAt: optedIn ? null : new Date() };
+      _consent = { ..._consent, [field]: entry };
+      // 캐시된 student.message_consent도 함께 갱신한다. students는 onSnapshot이 아니라 getDocs로
+      // 로드돼 renderMessageTab이 재진입마다 student.message_consent로 _consent를 재초기화하므로,
+      // 여기서 캐시를 안 고치면 탭 재진입 시 방금 철회/기록이 이전 상태로 되돌아 보인다(M-1).
+      const cached = _deps.getStudent?.(studentId);
+      if (cached) cached.message_consent = { ...(cached.message_consent || {}), [field]: entry };
     }
     _deps.toast?.(optedIn ? `${label} 광고 수신동의를 기록했습니다.` : `${label} 광고 수신동의를 철회했습니다.`, 'success');
   } catch (err) {
@@ -248,20 +254,29 @@ function renderHistoryItem(it) {
 async function loadHistory(studentId) {
   const box = document.getElementById('msg-history');
   if (!box) return;
-  box.innerHTML = '<div style="color:#888;font-size:13px;">발송 내역 불러오는 중…</div>';
+  // 발송 확정(접수→도달 확인)은 1~3분 걸린다 — 배지는 자동 갱신되지 않으므로 새로고침 버튼 제공.
+  const headHtml = (note) => `
+    <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
+      <span style="font-weight:600;font-size:13.5px;">최근 발송 내역</span>
+      <span style="font-size:11.5px;color:#999;" title="알림톡 본문은 개인정보 보존기간(발송 후 7일)까지 표시됩니다">${note}</span>
+      <button type="button" id="msg-hist-refresh" title="발송 상태는 확정까지 1~3분 걸립니다"
+        style="margin-left:auto;font-size:11.5px;padding:1px 10px;border:1px solid #dde3e8;border-radius:12px;background:#fff;color:#4a5560;cursor:pointer;">새로고침</button>
+    </div>`;
+  const bindRefresh = () =>
+    document.getElementById('msg-hist-refresh')?.addEventListener('click', () => loadHistory(studentId));
+  box.innerHTML = headHtml('불러오는 중…');
   try {
     const { items } = await getRecipientMessageHistory({ studentId, limit: HISTORY_LIMIT });
     if (!items || !items.length) {
-      box.innerHTML = '<div style="color:#888;font-size:13px;">발송 내역이 없습니다.</div>';
+      box.innerHTML = headHtml('발송 내역 없음');
+      bindRefresh();
       return;
     }
     const capNote = items.length >= HISTORY_LIMIT ? ` (최근 ${HISTORY_LIMIT}건)` : '';
     box.innerHTML = `
-      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
-        <span style="font-weight:600;font-size:13.5px;">최근 발송 내역</span>
-        <span style="font-size:11.5px;color:#999;" title="알림톡 본문은 개인정보 보존기간(발송 후 7일)까지 표시됩니다">${items.length}건${capNote} · 본문 7일 보관</span>
-      </div>
+      ${headHtml(`${items.length}건${capNote} · 본문 7일 보관`)}
       <div style="max-height:320px;overflow-y:auto;padding-right:2px;">${items.map(renderHistoryItem).join('')}</div>`;
+    bindRefresh();
     // 행 클릭/엔터 → 본문 한 줄 미리보기 ↔ 전체 펼침.
     box.querySelectorAll('.msg-hist-item').forEach((row) => {
       const toggle = () => {
@@ -342,7 +357,7 @@ function renderForm(studentId, hasRecipient, readonly) {
     document.getElementById('msg-send').addEventListener('click', () => sendFree(studentId));
   } else {
     form.innerHTML = `
-      <div style="font-size:12px;color:#999;margin-bottom:5px;">광고는 본문에 (광고) 표기와 무료수신거부 안내 필수</div>
+      <div style="font-size:12px;color:#999;margin-bottom:5px;">(광고) 표기와 무료수신거부 080 안내는 발송 시 자동으로 붙습니다</div>
       <textarea id="msg-content" class="field-input" aria-label="홍보 메시지 본문" rows="4" style="width:100%;box-sizing:border-box;margin:0;" placeholder="${escAttr(PROMO_PLACEHOLDER)}" ${dis}></textarea>
       <button type="button" id="msg-send" class="btn btn-primary" style="margin-top:8px;padding:6px 16px;" ${dis}>브랜드 메시지 발송</button>
     `;
@@ -461,8 +476,10 @@ async function sendNotice(studentId, sel) {
 
 async function sendPromo(studentId) {
   if (_sending) return;
-  const content = document.getElementById('msg-content').value.trim();
-  if (!content) { _deps.toast?.('본문을 입력하세요.', 'error'); return; }
+  const raw = document.getElementById('msg-content').value.trim();
+  if (!raw) { _deps.toast?.('본문을 입력하세요.', 'error'); return; }
+  // (광고)·080 표기는 발송 직전 자동 보정(멱등) — 깜빡해도 법적 표기가 빠지지 않는다.
+  const content = ensurePromoCompliance(raw);
   if (!_promoReqId) _promoReqId = `promo_${studentId}_${Date.now()}`;
   await doSend(
     () => createPromoCampaign({

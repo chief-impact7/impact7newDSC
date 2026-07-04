@@ -126,7 +126,7 @@ import {
     loadAbsenceRecords, loadLeaveRequests,
     _toDate, _isOlderThan, syncTaskStudentNames, autoCloseOldRecords,
     loadWithdrawnStudents, saveDailyRecord, saveRetakeSchedule, saveImmediately,
-    updateDateDisplay, reloadForDate, changeDate, openDatePicker, goToday
+    updateDateDisplay, reloadForDate, changeDate, openDatePicker, goToday, unsubscribeAll
 } from './data-layer.js';
 import {
     initRoleMemoDeps,
@@ -722,6 +722,8 @@ onAuthStateChanged(auth, async (user) => {
             }
         }
     } else {
+        // 로그아웃/계정 전환: 실시간 리스너를 모두 해제해 누수·permission-denied 콜백을 막는다(M-4).
+        unsubscribeAll();
         state.currentUser = null;
         window._auditUser = null;
         state.canRunAiBatch = false;

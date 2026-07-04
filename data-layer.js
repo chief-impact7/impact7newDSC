@@ -34,12 +34,11 @@ const _promoteEnrollPending = createPromoteEnrollPending(
 // daily_records 저장 + 로컬 캐시 갱신 헬퍼 (debounce/immediate 공통)
 async function _persistDailyRecord(studentId, targetDate, updates) {
     const student = state.allStudents.find(s => s.docId === studentId);
-    await auditSet(doc(db, 'daily_records', makeDailyRecordId(studentId, targetDate)), {
-        student_id: studentId,
-        date: targetDate,
-        branch: branchFromStudent(student || {}),
-        ...updates
-    }, { merge: true });
+    // 학생이 아직 로드 안 됐으면(퇴원생 지연 로드 등) branch를 payload에서 제외한다.
+    // branchFromStudent({})='' 가 merge로 기존 branch를 빈값으로 덮어쓰는 것 방지(M-5).
+    const base = { student_id: studentId, date: targetDate, ...updates };
+    if (student) base.branch = branchFromStudent(student);
+    await auditSet(doc(db, 'daily_records', makeDailyRecordId(studentId, targetDate)), base, { merge: true });
 }
 function _applyDailyCache(studentId, targetDate, updates) {
     if (!state.dailyRecords[studentId]) {
@@ -645,8 +644,19 @@ function _listenCollection(key, q, parser, onData) {
             }
         }, (err) => {
             console.error(`[${key}] 실시간 리스너 실패:`, err.message);
+            // 에러 후 재연결 첫 스냅샷이 refresh 경로를 타도록 initialLoad를 내린다.
+            // (안 내리면 재연결돼도 initialLoad=true라 _realtimeRefreshUI를 영영 건너뛰어 화면이 stale)(M-6)
+            initialLoad = false;
             resolve();
         });
+    });
+}
+
+// 로그아웃/계정 전환 시 모든 실시간 리스너 해제 — 누수·permission-denied 콜백 방지(M-4).
+export function unsubscribeAll() {
+    Object.keys(_unsubs).forEach(key => {
+        try { _unsubs[key](); } catch { /* already detached */ }
+        delete _unsubs[key];
     });
 }
 
@@ -897,7 +907,9 @@ export async function saveImmediately(studentId, updates, { silent = false } = {
     const targetDate = state.selectedDate;
     try {
         await _persistDailyRecord(studentId, targetDate, updates);
-        _applyDailyCache(studentId, targetDate, updates);
+        // 발동(ack) 시점에도 같은 날짜를 보고 있을 때만 캐시 갱신 — in-flight 중 날짜 이동 시
+        // targetDate 데이터가 새 날짜 맵에 새어들어가는 것 방지(H-4, _writeDailyRecord와 동일 가드).
+        if (state.selectedDate === targetDate) _applyDailyCache(studentId, targetDate, updates);
         if (!silent) showSaveIndicator('saved');
     } catch (err) {
         console.error('저장 실패:', err);
@@ -935,7 +947,11 @@ export async function reloadForDate() {
     updateDateDisplay();   // 데이터 로드를 기다리지 않고 날짜 칩/배너 즉시 갱신
     state._visitStatusPending = {};
 
-    await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadRoleMemos(), loadClassNextHw(state.selectedDate), loadClassSettings(), loadTeachers()]);
+    // 날짜 의존 컬렉션만 재로드. retake/hw_fail/test_fail/absence는 날짜 무관 onSnapshot
+    // 리스너라 로그인 시 1회 구독으로 계속 살아있고, teachers는 정적 목록이므로 날짜 화살표마다
+    // 재구독/재조회하면 읽기 스파이크만 유발한다(M-3). loadClassSettings는 _classSettingsLoaded
+    // 가드로 이미 no-op. (초기 구독·전체 새로고침은 app.js 로그인/visibilitychange 경로에서 담당)
+    await Promise.allSettled([loadDailyRecords(state.selectedDate), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadClassNextHw(state.selectedDate)]);
     await syncAbsenceRecords();
     state.selectedNextHwClass = null;
     renderSubFilters();

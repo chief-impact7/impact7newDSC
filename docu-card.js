@@ -7,6 +7,7 @@ import { splitRecordsByType } from './docu-records.js';
 import { renderLeaveRequestCard } from './leave-request.js';
 import { renderUnifiedMemoCard } from './role-memo.js';
 import { esc } from './ui-utils.js';
+import { todayStr } from './src/shared/firestore-helpers.js';
 
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
 const MAX_CONTENT_LEN = 5000;
@@ -20,8 +21,6 @@ let _editBuffer = null; // 편집 중 미저장 입력(content·occurred_at) 스
 export function initDocuCardDeps(deps) {
   _deps = deps; // { toast, readonly }
 }
-
-function todayStr() { return new Date().toISOString().slice(0, 10); }
 
 function fileListHtml(files) {
   if (!files || !files.length) return '';

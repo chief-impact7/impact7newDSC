@@ -58,12 +58,8 @@ export async function completeScheduledVisit(source, docId, studentId) {
             const t = state.testFailTasks.find(t => t.docId === docId);
             if (t) { t.status = '완료'; t.completed_by = completedBy; t.completed_at = completedAt; }
         } else if (source === 'extra') {
-            // docId is studentId for extra_visit
-            const rec = state.dailyRecords[docId] || {};
-            const ev = rec.extra_visit || {};
-            ev.visit_status = '완료';
-            ev.completed_by = completedBy;
-            ev.completed_at = completedAt;
+            // docId is studentId for extra_visit. await 전 공유 참조 변형 금지(M-10) — 복제본 저장 후 대입.
+            const ev = { ...(state.dailyRecords[docId]?.extra_visit || {}), visit_status: '완료', completed_by: completedBy, completed_at: completedAt };
             await saveImmediately(docId, { extra_visit: ev });
             if (state.dailyRecords[docId]) state.dailyRecords[docId].extra_visit = ev;
         }
@@ -102,11 +98,9 @@ export async function resetScheduledVisit(source, docId, studentId) {
             const t = state.testFailTasks.find(t => t.docId === docId);
             if (t) { t.status = 'pending'; delete t.completed_by; delete t.completed_at; }
         } else if (source === 'extra') {
-            const rec = state.dailyRecords[docId] || {};
-            const ev = rec.extra_visit || {};
-            ev.visit_status = 'pending';
-            delete ev.completed_by;
-            delete ev.completed_at;
+            // await 전 공유 참조 변형 금지(M-10) — 복제본에서 완료 필드 제거 후 저장, 성공 시 대입.
+            const { completed_by, completed_at, ...rest } = state.dailyRecords[docId]?.extra_visit || {};
+            const ev = { ...rest, visit_status: 'pending' };
             await saveImmediately(docId, { extra_visit: ev });
             if (state.dailyRecords[docId]) state.dailyRecords[docId].extra_visit = ev;
         }
@@ -195,7 +189,8 @@ export async function confirmVisitStatus(docId) {
     } else if (nextStatus === '완료') {
         await completeScheduledVisit(source, docId, studentId);
     } else {
-        // '기타'
+        // 남은 케이스: extra 소스의 '미완료'(else로 떨어짐) 또는 임의 소스의 '기타'.
+        // 하드코딩 '기타' 대신 실제 nextStatus를 기록해야 extra 미완료가 '기타'로 오기록되지 않는다(M-9).
         showSaveIndicator('saving');
         try {
             const completedBy = staffLabel(state.currentUser?.email);
@@ -203,16 +198,17 @@ export async function confirmVisitStatus(docId) {
             const statusPayload = { completed_by: completedBy, completed_at: completedAt };
 
             if (source === 'hw_fail') {
-                await auditUpdate(doc(db, 'hw_fail_tasks', docId), { status: '기타', ...statusPayload });
+                await auditUpdate(doc(db, 'hw_fail_tasks', docId), { status: nextStatus, ...statusPayload });
                 const t = state.hwFailTasks.find(t => t.docId === docId);
-                if (t) Object.assign(t, { status: '기타', ...statusPayload });
+                if (t) Object.assign(t, { status: nextStatus, ...statusPayload });
             } else if (source === 'test_fail') {
-                await auditUpdate(doc(db, 'test_fail_tasks', docId), { status: '기타', ...statusPayload });
+                await auditUpdate(doc(db, 'test_fail_tasks', docId), { status: nextStatus, ...statusPayload });
                 const t = state.testFailTasks.find(t => t.docId === docId);
-                if (t) Object.assign(t, { status: '기타', ...statusPayload });
+                if (t) Object.assign(t, { status: nextStatus, ...statusPayload });
             } else if (source === 'extra') {
-                const ev = state.dailyRecords[docId]?.extra_visit || {};
-                Object.assign(ev, { visit_status: '기타', ...statusPayload });
+                // await 전에 공유 참조(extra_visit)를 변형하면 저장 실패 시 로컬만 바뀌어 드리프트(M-10).
+                // 복제본을 저장하고 성공 후 대입한다.
+                const ev = { ...(state.dailyRecords[docId]?.extra_visit || {}), visit_status: nextStatus, ...statusPayload };
                 await saveImmediately(docId, { extra_visit: ev });
                 if (state.dailyRecords[docId]) state.dailyRecords[docId].extra_visit = ev;
             }

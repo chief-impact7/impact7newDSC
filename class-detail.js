@@ -290,11 +290,18 @@ export function renderClassDetail(classCode) {
     const currentTeacher = state.classSettings[classCode]?.teacher || '';
     const currentSubTeacher = state.classSettings[classCode]?.sub_teacher || '';
     // 저장값이 구메일(@gw)이어도 정규화된 목록과 동일인 매칭 — @impact7/shared teacher-label 규약
-    const teacherOptions = state.teachersList.map(t => {
+    // 현재 배정자가 목록(homeroom_eligible)에서 빠지면(퇴직·비교수부) 보존 option을 강제 주입한다.
+    // 안 하면 "미지정"으로 렌더 → 부담당만 수정해도 담임이 빈값으로 소실된다(H-1).
+    const _preservedTeacherOption = (assigned) => {
+        if (!assigned) return '';
+        if (state.teachersList.some(t => isSameTeacher(t.email, assigned))) return '';
+        return `<option value="${escAttr(assigned)}" selected>${esc(getTeacherName(assigned))} (목록 외)</option>`;
+    };
+    const teacherOptions = _preservedTeacherOption(currentTeacher) + state.teachersList.map(t => {
         const name = getTeacherName(t.email);
         return `<option value="${escAttr(t.email)}" ${isSameTeacher(t.email, currentTeacher) ? 'selected' : ''}>${esc(name)}</option>`;
     }).join('');
-    const subTeacherOptions = state.teachersList.map(t => {
+    const subTeacherOptions = _preservedTeacherOption(currentSubTeacher) + state.teachersList.map(t => {
         const name = getTeacherName(t.email);
         return `<option value="${escAttr(t.email)}" ${isSameTeacher(t.email, currentSubTeacher) ? 'selected' : ''}>${esc(name)}</option>`;
     }).join('');

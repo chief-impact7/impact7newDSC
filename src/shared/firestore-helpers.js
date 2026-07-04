@@ -9,7 +9,7 @@ import {
 } from '@impact7/shared/student-label';
 import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 import { db } from '../../firebase-config.js';
-import { enrollmentCode, branchFromStudent, allClassCodes } from '../../student-core.js';
+import { enrollmentCode, branchFromStudent, allClassCodes, normalizeDays } from '../../student-core.js';
 
 // 학부별 학기 정의 (impact7db.web.app 설정과 동일하게 유지)
 export const LEVEL_SEMESTERS = {
@@ -347,12 +347,6 @@ export async function fetchDashboardDailyLogData(date) {
 
 // ─── 유틸 ───
 
-function normalizeDays(day) {
-    if (!day) return [];
-    if (Array.isArray(day)) return day.map(d => d.replace('요일', '').trim());
-    return day.split(/[,·\s]+/).map(d => d.replace('요일', '').trim()).filter(Boolean);
-}
-
 function normalizeEnrollments(s) {
     if (s.enrollments?.length) return s.enrollments;
     let levelSymbol = s.level_symbol || s.level_code || '';
@@ -374,13 +368,6 @@ function normalizeEnrollments(s) {
 export { enrollmentCode, allClassCodes };
 
 export { ATTENDANCE_ACTIONS, normalizeAttendanceLabel, attendanceLabel } from '@impact7/shared/attendance-action';
-
-export const branchFromClassNumber = (num) => {
-    const first = (num || '').trim()[0];
-    if (first === '1') return '2단지';
-    if (first === '2') return '10단지';
-    return '';
-};
 
 export { branchFromStudent };
 

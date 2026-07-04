@@ -8,7 +8,22 @@ on:
 # 통합 재빌드만 트리거한다. 자체 site(impact7dsc)는 impact7-app/dsc로 redirect만 하므로
 # 수동 `firebase deploy`로 자체 site만 갱신돼 통합과 불일치하던 함정이 구조적으로 사라진다.
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: node scripts/check-shared-lock-sync.mjs
+      - run: node scripts/check-class-settings-fields.mjs
+
   trigger-unified:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - name: Trigger unified hosting deploy

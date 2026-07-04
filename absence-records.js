@@ -2,9 +2,9 @@
 // daily-ops.js에서 추출한 결석대장 관련 함수
 // Phase 3-2
 
-import { doc, serverTimestamp } from 'firebase/firestore';
+import { doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from './firebase-config.js';
-import { auditUpdate, auditSet } from './audit.js';
+import { auditUpdate, auditSet, batchUpdate, batchSet } from './audit.js';
 import { state } from './state.js';
 import { esc, escAttr, showSaveIndicator, renderTime12hSelect, _fmtTs, _stripYear, _renderRescheduleHistory } from './ui-utils.js';
 import { getStudentClassContextsForDate, makeDailyRecordId } from './student-helpers.js';
@@ -346,16 +346,17 @@ export async function closeAbsenceRecord(docId, studentId) {
     showSaveIndicator('saving');
     try {
         const absenceDate = r.absence_date || state.selectedDate;
-        await auditUpdate(doc(db, 'absence_records', docId), {
-            status: 'closed'
-        });
-        // daily_records에 absence_closed 마커 저장 → syncAbsenceRecords가 재생성하지 않도록
+        // status='closed'와 daily_records absence_closed 마커를 원자적으로 커밋한다.
+        // 분리 write 시 첫 성공·둘째 실패면 syncAbsenceRecords가 결석 레코드를 부활시킨다(M-8).
+        const batch = writeBatch(db);
+        batchUpdate(batch, doc(db, 'absence_records', docId), { status: 'closed' });
         const dailyDocId = makeDailyRecordId(studentId, absenceDate);
-        await auditSet(doc(db, 'daily_records', dailyDocId), {
+        batchSet(batch, doc(db, 'daily_records', dailyDocId), {
             student_id: studentId,
             date: absenceDate,
             absence_closed: true
         }, { merge: true });
+        await batch.commit();
         if (state.dailyRecords[studentId]) state.dailyRecords[studentId].absence_closed = true;
         state.absenceRecords = state.absenceRecords.filter(x => x.docId !== docId);
         renderStudentDetail(studentId);

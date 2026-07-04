@@ -2,7 +2,7 @@
 // daily-ops.js에서 추출한 휴퇴원 요청 & 복귀 관련 함수
 // Phase 3-1
 
-import { collection, doc, serverTimestamp, deleteField, writeBatch } from 'firebase/firestore';
+import { collection, doc, serverTimestamp, deleteField, writeBatch, getDocFromServer } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { parseDateKST, todayStr, finalApprovalDate } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditAdd, batchUpdate } from './audit.js';
@@ -657,7 +657,11 @@ export function selectLeaveRequestStudentById(id) {
     document.getElementById('lr-parent-phone').textContent = s.parent_phone_1 || '—';
 }
 
+// 제출 in-flight 가드 — 더블클릭 시 중복 요청서 생성(→ 중복 finalize·복귀는 중복 enrollment) 방지(M-7).
+let _leaveSubmitting = false;
+
 export async function submitLeaveRequest() {
+    if (_leaveSubmitting) return;
     if (!_leaveRequestStudentId || !_leaveRequestStudentData) {
         alert('학생을 선택해주세요.');
         return;
@@ -705,6 +709,7 @@ export async function submitLeaveRequest() {
         data.leave_end_date = le;
     }
 
+    _leaveSubmitting = true;
     try {
         const docRef = await auditAdd(collection(db, 'leave_requests'), data);
         state.leaveRequests.push({ docId: docRef.id, ...data, requested_at: new Date(), created_at: new Date() });
@@ -715,6 +720,8 @@ export async function submitLeaveRequest() {
     } catch (err) {
         alert('요청 저장 실패: ' + err.message);
         console.error(err);
+    } finally {
+        _leaveSubmitting = false;
     }
 }
 
@@ -884,15 +891,25 @@ async function _approveLeave(docId, studentId, { byField, atField, otherByField,
     if (!confirm(confirmMsg)) return;
 
     try {
-        const updates = { [byField]: state.currentUser?.email || '', [atField]: serverTimestamp() };
-        if (r[otherByField]) updates.status = 'approved';
-        await auditUpdate(doc(db, 'leave_requests', docId), updates);
+        const ref = doc(db, 'leave_requests', docId);
+        // 1) 내 승인 필드부터 확정 기록
+        await auditUpdate(ref, { [byField]: state.currentUser?.email || '', [atField]: serverTimestamp() });
+
+        // 2) 서버에서 최신 문서를 재조회해 최종 승인 여부를 판정한다.
+        //    로컬 캐시(r[otherByField])로만 판단하면, 다른 부서가 근접 시각에 승인했는데
+        //    onSnapshot 지연으로 로컬이 stale일 때 status='approved' 전이가 유실되어
+        //    Cloud Function이 발동하지 않는다(휴퇴원·복귀 전이·history 전부 누락)(H-5).
+        const fresh = (await getDocFromServer(ref)).data() || {};
+        const bothApproved = !!fresh.teacher_approved_by && !!fresh.approved_by;
+        if (bothApproved && fresh.status !== 'approved') {
+            await auditUpdate(ref, { status: 'approved' });
+        }
 
         const lrIdx = state.leaveRequests.findIndex(lr => lr.docId === docId);
         if (lrIdx >= 0) {
             state.leaveRequests[lrIdx][byField] = state.currentUser?.email || '';
             state.leaveRequests[lrIdx][atField] = new Date();
-            if (r[otherByField]) state.leaveRequests[lrIdx].status = 'approved';
+            if (bothApproved) state.leaveRequests[lrIdx].status = 'approved';
         }
 
         // 최종 승인된 경우 학생 상태 전이는 Cloud Function(onLeaveRequestApproved)이 처리
@@ -928,7 +945,7 @@ function _openReturnModal(studentId, type) {
 
     // 모달 제목
     const titleEl = document.querySelector('#return-from-leave-modal .modal-header h3');
-    titleEl.textContent = _isReEnrollType(type) ? '재등원 요청' : '복귀 요청';
+    if (titleEl) titleEl.textContent = _isReEnrollType(type) ? '재등원 요청' : '복귀 요청';
 
     // 날짜 라벨
     document.getElementById('rfl-date-label').textContent = _isReEnrollType(type) ? '재등원일' : '복귀일';
@@ -1006,6 +1023,7 @@ export function openReturnFromLeaveModal(studentId) {
 }
 
 export async function submitReturnFromLeave() {
+    if (_leaveSubmitting) return;
     if (!_returnModalStudentId || !_returnModalType) return;
 
     const student = findStudent(_returnModalStudentId);
@@ -1022,6 +1040,7 @@ export async function submitReturnFromLeave() {
 
     const note = document.getElementById('rfl-consultation-note').value.trim();
 
+    _leaveSubmitting = true;
     try {
         const data = {
             student_id: _returnModalStudentId,
@@ -1057,6 +1076,8 @@ export async function submitReturnFromLeave() {
     } catch (err) {
         alert('요청 실패: ' + err.message);
         console.error(err);
+    } finally {
+        _leaveSubmitting = false;
     }
 }
 

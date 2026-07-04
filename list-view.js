@@ -9,6 +9,7 @@ import {
     branchFromStudent, matchesBranchFilter, enrollmentCode, allClassCodes, _enrollCodeList,
     deriveNaesinCode, getActiveEnrollments, getStudentStartTime, isOnLeaveAt, isWithdrawnAt,
     isNaesinActiveToday, isFreeSemesterActiveToday, isPauseExpired, pauseExpiredDays, isValidDateStr,
+    resolveNaesinCsKey, displayCodeFromCsKey,
 } from './student-helpers.js';
 import { schoolSearchTerms } from './school-normalizer.js';
 import { esc, escAttr, formatTime12h, oxDisplayClass } from './ui-utils.js';
@@ -497,7 +498,11 @@ export function renderListPanel() {
         const _naesinCodeFallback = (!_todayEnrolls.length && !_activeEnrolls.length && naesinPeriodIds.has(s.docId))
             ? (() => {
                 const re = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
-                return re ? (deriveNaesinCode(s, re) || '') : '';
+                if (!re) return '';
+                // 실제 내신 탭 멤버십은 override(resolveNaesinCsKey) 기준이므로, 카드 부제목도
+                // override 해소 표시코드를 우선 사용해 탭 반코드와 일치시킨다(M-13). 없으면 자동유도.
+                const csKey = resolveNaesinCsKey(s, re);
+                return (csKey && displayCodeFromCsKey(csKey, branchFromStudent(s))) || deriveNaesinCode(s, re) || '';
             })() : '';
         const code = _enrollCodeList(_todayEnrolls) || _enrollCodeList(_activeEnrolls) || _naesinCodeFallback;
         const branch = branchFromStudent(s);

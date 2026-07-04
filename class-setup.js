@@ -940,9 +940,11 @@ window.submitWizard = async function () {
                 _pushFormationLog(batch, student.docId, '—', `추가: ${d.classCode} (자유학기) 누적`);
             } else if (d.classType === '정규') {
                 // 정규는 end_date를 박지 않는다 — 정규 종료는 status(퇴원/종강)로만.
-                // 기존 활성 정규가 있으면 in-place로 반 변경(코드·요일·시작일 갱신, override/semester 보존).
-                // 없으면 새 정규를 추가한다.
-                const oldReg = existing.find(e => e.class_type === '정규' && !e.end_date);
+                // 활성 정규가 정확히 1개면 in-place로 반 변경(코드·요일·시작일 갱신, override/semester 보존).
+                // 0개면 새 정규 추가. 2개 이상이면 어느 반을 대체할지 모호하므로 임의 반을
+                // 덮어써 소리 없이 제거하지 않고(M-2) 새 enrollment로 추가한다(소실 < 가시적 중복).
+                const activeRegs = existing.filter(e => e.class_type === '정규' && !e.end_date);
+                const oldReg = activeRegs.length === 1 ? activeRegs[0] : null;
                 const oldCode = oldReg ? `${oldReg.level_symbol || ''}${oldReg.class_number || ''}` : '';
                 const newCode = d.classCode;
                 const updated = oldReg
