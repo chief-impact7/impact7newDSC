@@ -76,9 +76,9 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
         }
     };
 
-    // 보관=목록에서 숨김(직원 가능), 삭제=doc 제거(원장, message_logs 이력은 보존).
+    // 보관=목록에서 숨김, 삭제=doc 제거(둘 다 직원 가능 — 삭제는 서버가 누가/누구에게/언제를 감사 기록).
     const handleManage = async (queueId, action, name) => {
-        if (action === 'delete' && !window.confirm(`${name}의 실패 항목을 삭제할까요?\n발송 로그(이력)는 남습니다.`)) return;
+        if (action === 'delete' && !window.confirm(`${name}의 실패 항목을 삭제할까요?\n발송 로그(이력)와 삭제 기록은 남습니다.`)) return;
         setRetrying(queueId);
         setRetryError('');
         try {
@@ -88,7 +88,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
             console.error('[manageMessageFailure]', err);
             const code = err?.code || '';
             if (code.includes('permission-denied')) {
-                setRetryError(action === 'delete' ? '삭제는 원장 권한이 필요합니다.' : '권한이 없습니다.');
+                setRetryError('권한이 없습니다.');
             } else {
                 setRetryError(`${action === 'delete' ? '삭제' : '보관'} 실패 — 잠시 후 다시 시도해주세요.`);
             }
@@ -186,7 +186,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                             </button>
                                             <button
                                                 className="dash-text-btn msg-danger-btn"
-                                                title="항목을 삭제합니다 (원장 권한, 발송 로그는 보존)"
+                                                title="항목을 삭제합니다 (발송 로그·삭제 기록은 보존)"
                                                 onClick={() => handleManage(f.id, 'delete', failureName(f))}
                                                 disabled={retrying === f.id}
                                             >
