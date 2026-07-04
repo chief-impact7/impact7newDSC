@@ -61,7 +61,8 @@ const CONSENT_SOURCE_LABEL = {
 };
 let _consent = null; // 현재 학생의 message_consent 사본(설정/철회 후 낙관 갱신)
 
-const PROMO_PLACEHOLDER = '(광고)[임팩트세븐학원]\n\n안내 내용을 입력하세요.\n\n무료수신거부 080-000-0000';
+// 080-500-4233 = 솔라피 무료 공용 수신거부 번호(BulkSendCard OPT_OUT_LINE과 동일).
+const PROMO_PLACEHOLDER = '(광고)[임팩트세븐학원]\n\n안내 내용을 입력하세요.\n\n무료수신거부 080-500-4233';
 
 const KIND_LABEL = {
   attendance: '출결', parent_notice: '안내', report: '안내', parent_bms: '안내',

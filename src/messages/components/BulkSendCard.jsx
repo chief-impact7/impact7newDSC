@@ -8,7 +8,8 @@ import TemplateBar from './TemplateBar.jsx';
 import { createBulkMessage, createPromoCampaign } from '../../../data-layer.js';
 
 // 광고 규제(정보통신망법 §50): 머리에 (광고)[학원명], 끝에 무료수신거부 080. 서버도 동일 검증.
-const OPT_OUT_LINE = '무료수신거부 080-XXX-XXXX';
+// 080-500-4233 = 솔라피 무료 공용 수신거부 번호 — 전화 시 우리 계정 수신거부 목록에 자동 등록·발송 차단.
+const OPT_OUT_LINE = '무료수신거부 080-500-4233';
 function insertOptOut(content) {
   let c = content;
   if (!/\(광고\)/.test(c)) c = '(광고) [임팩트세븐학원]\n' + c;
@@ -17,6 +18,10 @@ function insertOptOut(content) {
 }
 
 function newReqId() { return 'bulk-' + Math.random().toString(36).slice(2) + '-' + performance.now().toString(36); }
+
+// 대량 발송 blast radius 제한. 서버가 최종 검증하지만 클라 1차 방어로 오발송 규모를 줄인다. F-02
+const BULK_CONFIRM_THRESHOLD = 30; // 이 인원 이상이면 발송 전 확인 단계를 요구
+const BULK_MAX_RECIPIENTS = 500; // 클라이언트 상한 — 초과 시 발송 자체를 차단
 
 const RECIPIENT_LABELS = { student: '학생', parent_1: '학부모1', parent_2: '학부모2' };
 const STATUS_LABELS = { enrolled: '재원', non: '비원생' };
@@ -49,8 +54,9 @@ export default function BulkSendCard({ students = [] }) {
   const [scheduledAt, setScheduledAt] = useState('');
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState('');
+  const [confirming, setConfirming] = useState(false);
   const reqIdRef = useRef(newReqId());
-  const resetReqId = () => { reqIdRef.current = newReqId(); };
+  const resetReqId = () => { reqIdRef.current = newReqId(); setConfirming(false); };
 
   const matches = useMemo(
     () => filterStudents(students, { branch, grades, status, q }),
@@ -99,12 +105,22 @@ export default function BulkSendCard({ students = [] }) {
     resetReqId();
   }
 
-  async function onSend() {
+  function onSendClick() {
     if (sending) return;
     const ids = rows.filter((v) => v.on).map((v) => v.student.id);
     if (!ids.length) { setMsg('대상이 없습니다. 검색으로 추가하세요.'); return; }
     if (!content.trim()) { setMsg('내용을 입력하세요.'); return; }
     if (when === 'schedule' && !scheduledAt) { setMsg('예약 시각을 입력하세요.'); return; }
+    if (ids.length > BULK_MAX_RECIPIENTS) {
+      setMsg(`한 번에 최대 ${BULK_MAX_RECIPIENTS}명까지 발송할 수 있습니다 (현재 ${ids.length}명). 대상을 나눠 보내세요.`);
+      return;
+    }
+    if (ids.length >= BULK_CONFIRM_THRESHOLD && !confirming) { setConfirming(true); setMsg(''); return; }
+    doSend(ids);
+  }
+
+  async function doSend(ids) {
+    setConfirming(false);
     setSending(true); setMsg('');
     try {
       const fields = [...recipientFields];
@@ -215,7 +231,7 @@ export default function BulkSendCard({ students = [] }) {
             </div>
             <TemplateBar content={content} onPick={(c) => { setContent(c); resetReqId(); }} />
             <textarea aria-label="메시지 내용" className="mc-textarea bulk-content" value={content} onChange={(e) => { setContent(e.target.value); resetReqId(); }}
-              placeholder={kind === 'promo' ? '(광고) [임팩트세븐학원]\n\n...\n\n무료수신거부 080-...' : '안내 내용을 입력하세요.'} />
+              placeholder={kind === 'promo' ? `(광고) [임팩트세븐학원]\n\n...\n\n${OPT_OUT_LINE}` : '안내 내용을 입력하세요.'} />
             <div className="mc-meta">
               <span>{meta.chars}자 · {meta.bytes}byte</span>
               <span className={'mc-pill' + (meta.type === 'LMS' ? ' lms' : '')}>{meta.type}</span>
@@ -241,8 +257,18 @@ export default function BulkSendCard({ students = [] }) {
               </div>
               {when === 'schedule' && <input aria-label="예약 발송 시각" type="datetime-local" value={scheduledAt} onChange={(e) => { setScheduledAt(e.target.value); resetReqId(); }} />}
             </div>
-            <button className="mc-send bulk-send-btn" disabled={sending} onClick={onSend}>
-              {sending ? '발송 중…' : `${checkedCount}명에게 발송`}
+            {confirming && (
+              <div className="mc-note" role="alertdialog" aria-label="발송 확인" style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+                <span>
+                  {checkedCount}명 · 받는이 {recipientText} · {kind === 'promo' ? '홍보성' : '정보성'}
+                  {when === 'schedule' && scheduledAt ? ` · 예약 ${scheduledAt.replace('T', ' ')}` : ' · 즉시 발송'}
+                  — 맞으면 아래 버튼을 다시 눌러 발송하세요.
+                </span>
+                <button type="button" className="mc-var-btn" onClick={() => setConfirming(false)}>취소</button>
+              </div>
+            )}
+            <button className="mc-send bulk-send-btn" disabled={sending} onClick={onSendClick}>
+              {sending ? '발송 중…' : confirming ? `확인 후 ${checkedCount}명에게 발송` : `${checkedCount}명에게 발송`}
             </button>
             {msg && <p className="mc-field-label" role="status" aria-live="polite" style={{ marginTop: 8 }}>{msg}</p>}
           </div>
