@@ -53,6 +53,20 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // 인증 헬퍼 (Exam 앱용) — exam_users/{uid}.role 기반.
+    // exists() 가드 + data.get() 기본값: 문서 부재(프로비저닝 전/타 앱 직원)든
+    // role 필드 부재든 평가 에러 없이 clean deny. HR_users(getUserRole)는
+    // exam 교사가 문서를 안 가질 수 있어 역할 소스로 쓰지 않는다.
+    // =========================================================================
+    function examUserRole() {
+      return exists(/databases/$(database)/documents/exam_users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/exam_users/$(request.auth.uid)).data.get('role', '')
+        : '';
+    }
+    function isExamMember() { return isAuthorized() && examUserRole() in ['teacher', 'owner']; }
+    function isExamOwner() { return isAuthorized() && examUserRole() == 'owner'; }
+
+    // =========================================================================
     // [HR] 통합 staff 공개 온보딩·서명 토큰 검증 헬퍼 (다토큰)
     // Firestore rules는 컬렉션 경로를 변수화하지 못하므로 호출부에서 완성된 path를
     // 넘기고, exists()로 get()을 가드해 미존재 컬렉션 분기가 OR 평가를 깨지 않게 한다.
@@ -218,12 +232,6 @@ service cloud.firestore {
     // [Exam] 사용자 프로필 (UID 기반)
     // =========================================================================
     match /exam_users/{userId} {
-      function isExamOwner() {
-        return isAuthorized()
-          && exists(/databases/$(database)/documents/exam_users/$(request.auth.uid))
-          && get(/databases/$(database)/documents/exam_users/$(request.auth.uid)).data.role == 'owner';
-      }
-
       // 외부(비 impact7) 도메인 차단 — isLoggedIn()이 아닌 도메인 검증.
       allow read: if isAuthorized();
 
@@ -237,8 +245,11 @@ service cloud.firestore {
         && request.auth.uid == userId
         && request.resource.data.role == resource.data.role;
 
-      // owner: 타인 포함 전체 관리(역할 부여·회수는 owner 전용).
-      allow create, update, delete: if isExamOwner();
+      // owner: 타인 포함 전체 관리(역할 부여·회수는 owner 전용). role 오타/누락 문서가
+      // 생기면 그 계정의 exam write 전체가 잠기므로 스키마를 강제한다.
+      allow create, update: if isExamOwner()
+        && request.resource.data.get('role', '') in ['teacher', 'owner'];
+      allow delete: if isExamOwner();
     }
 
     // =========================================================================
@@ -1080,7 +1091,8 @@ service cloud.firestore {
     // =========================================================================
     match /departments/{deptId} {
       allow read: if isAuthorized();
-      allow write: if isAuthorized();
+      // 설정성 컬렉션 — exam 프론트 nav/페이지 게이트(OwnerOnly)와 짝
+      allow write: if isExamOwner();
     }
 
     // =========================================================================
@@ -1088,7 +1100,8 @@ service cloud.firestore {
     // =========================================================================
     match /examTypes/{typeId} {
       allow read: if isAuthorized();
-      allow write: if isAuthorized();
+      // 설정성 컬렉션 — exam 프론트 nav/페이지 게이트(OwnerOnly)와 짝
+      allow write: if isExamOwner();
     }
 
     // =========================================================================
@@ -1096,7 +1109,7 @@ service cloud.firestore {
     // =========================================================================
     match /exams/{examId} {
       allow read: if isAuthorized();
-      allow create, update, delete: if isAuthorized();
+      allow create, update, delete: if isExamMember();
     }
 
     // =========================================================================
@@ -1104,9 +1117,8 @@ service cloud.firestore {
     // =========================================================================
     match /answer_keys/{keyId} {
       allow read: if isAuthorized();
-      allow create: if isAuthorized();
-      allow update: if isAuthorized();
-      allow delete: if false;
+      // write는 서버(Admin SDK)만 — client write 경로 0개 확인(2026-07-05), 심층 방어로 차단
+      allow create, update, delete: if false;
     }
 
     // =========================================================================
@@ -1114,10 +1126,13 @@ service cloud.firestore {
     // =========================================================================
     match /results/{examId} {
       allow read: if isAuthorized();
+      // 부모 문서는 client write 경로 없음 — write는 students 서브컬렉션만
+      allow write: if false;
 
       match /students/{studentId} {
         allow read: if isAuthorized();
-        allow write: if isAuthorized();
+        // OCR 채점 저장 — teacher가 client SDK로 직접 write. owner 전용화 금지(채점 마비)
+        allow write: if isExamMember();
       }
     }
 
@@ -1126,11 +1141,11 @@ service cloud.firestore {
     // =========================================================================
     match /external_score_events/{eventId} {
       allow read: if isAuthorized();
-      allow create, update, delete: if isAuthorized();
+      allow create, update, delete: if isExamMember();
 
       match /students/{studentId} {
         allow read: if isAuthorized();
-        allow write: if isAuthorized();
+        allow write: if isExamMember();
       }
     }
 
@@ -1139,7 +1154,7 @@ service cloud.firestore {
     // =========================================================================
     match /exam_notifications/{notifId} {
       allow read: if isAuthorized();
-      allow create: if isAuthorized();
+      allow create: if isExamMember();
     }
 
     // =========================================================================
@@ -1147,7 +1162,8 @@ service cloud.firestore {
     // =========================================================================
     match /exam_templates/{templateId} {
       allow read: if isAuthorized();
-      allow write: if isAuthorized();
+      // write는 서버(Admin SDK)만 — client write 경로 0개 확인(2026-07-05), 심층 방어로 차단
+      allow write: if false;
     }
 
     // =========================================================================
@@ -1163,7 +1179,7 @@ service cloud.firestore {
     // =========================================================================
     match /exam_sets/{setId} {
       allow read: if isAuthorized();
-      allow create, update, delete: if isAuthorized();
+      allow create, update, delete: if isExamMember();
     }
 
     // =========================================================================
@@ -1172,9 +1188,9 @@ service cloud.firestore {
     match /exam_analyses/{id} {
       // 외부 도메인 차단 — request.auth != null이 아닌 도메인 검증(N-01).
       allow read: if isAuthorized();
-      allow create: if isAuthorized()
+      allow create: if isExamMember()
                       && request.resource.data.createdBy == request.auth.uid;
-      allow update, delete: if isAuthorized()
+      allow update, delete: if isExamMember()
                               && (resource.data.createdBy == request.auth.uid
                                   || request.auth.token.admin == true);
     }
