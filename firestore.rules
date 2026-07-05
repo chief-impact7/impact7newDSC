@@ -1190,9 +1190,10 @@ service cloud.firestore {
       allow read: if isAuthorized();
       allow create: if isExamMember()
                       && request.resource.data.createdBy == request.auth.uid;
+      // 모더레이션은 owner 역할 — 구 admin 커스텀 클레임은 프로비저닝 경로가 없는 죽은 분기였음
       allow update, delete: if isExamMember()
                               && (resource.data.createdBy == request.auth.uid
-                                  || request.auth.token.admin == true);
+                                  || isExamOwner());
     }
 
     // =========================================================================
