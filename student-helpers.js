@@ -5,6 +5,7 @@ import { todayStr, parseDateKST, getDayName } from './src/shared/firestore-helpe
 import { state, LEVEL_SHORT, LEAVE_STATUSES } from './state.js';
 import { applyNaesinFreeDerivation, isNaesinActiveAt } from '@impact7/shared/enrollment-derivation';
 import { currentSchool, normalizeRealLevelGrade } from '@impact7/shared/student-label';
+import { normalizeClassCode } from '@impact7/shared/class-code';
 import {
     normalizeDays, enrollmentCode, branchFromStudent, allClassCodes,
     makeDailyRecordId, buildNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE,
@@ -162,13 +163,21 @@ export function isNaesinActiveToday(s, dateStr) {
     });
 }
 
+// 반코드 표기 차이(ks132 ≡ KS132)를 흡수하는 classSettings 조회.
+// 학생 enrollment에서 유입된 코드는 케이스가 섞일 수 있어 정확 일치 → 정규화 키 순으로 본다.
+// shared v1.41 classSettingsGet 도입 전까지의 로컬 브리지 — 도입 후 교체 가능.
+export function csGet(classSettings, code) {
+    if (!code) return undefined;
+    return classSettings?.[code] ?? classSettings?.[normalizeClassCode(code)];
+}
+
 export function isFreeSemesterActiveToday(s, dateStr) {
     const today = dateStr || todayStr();
     const enrollments = s.enrollments || [];
     const current = enrollments.filter(e => !isValidDateStr(e.end_date) || e.end_date >= today);
     return current.some(e => {
         if (e.class_type === '자유학기' && isValidDateStr(e.start_date) && e.start_date <= today) return true;
-        const cs = state.classSettings[enrollmentCode(e)];
+        const cs = csGet(state.classSettings, enrollmentCode(e));
         if (cs?.free_start && cs?.free_end && cs.free_start <= today && cs.free_end >= today) return true;
         return false;
     });
@@ -177,18 +186,17 @@ export function isFreeSemesterActiveToday(s, dateStr) {
 // 학생 등원시간: 개별 시간 → 반 기본 시간 fallback (내신/자유학기: 요일별 schedule 지원)
 export function getStudentStartTime(enrollment, dayName) {
     if (!enrollment) return '';
+    const cs = csGet(state.classSettings, enrollmentCode(enrollment));
     if (dayName) {
         const studentTime = enrollment.schedule?.[dayName];
         if (studentTime) return studentTime;
         // 자유학기: free_schedule 조회
-        if (enrollment.class_type === '자유학기') {
-            const freeSchedule = state.classSettings[enrollmentCode(enrollment)]?.free_schedule;
-            if (freeSchedule?.[dayName]) return freeSchedule[dayName];
+        if (enrollment.class_type === '자유학기' && cs?.free_schedule?.[dayName]) {
+            return cs.free_schedule[dayName];
         }
-        const classSchedule = state.classSettings[enrollmentCode(enrollment)]?.schedule;
-        if (classSchedule?.[dayName]) return classSchedule[dayName];
+        if (cs?.schedule?.[dayName]) return cs.schedule[dayName];
     }
-    return enrollment.start_time || enrollment.time || state.classSettings[enrollmentCode(enrollment)]?.default_time || '';
+    return enrollment.start_time || enrollment.time || cs?.default_time || '';
 }
 
 // ─── ID & 검색 ─────────────────────────────────────────────────────────────

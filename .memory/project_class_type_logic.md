@@ -25,7 +25,7 @@ type: project
 
 ### getActiveEnrollments
 - 내신: `enrollment.class_type === '내신' && start_date <= today` → 정규 숨김
-- 자유학기: `enrollment.class_type === '자유학기' && start_date <= today <= end_date` → 같은 반코드의 정규 숨김
+- 자유학기: `enrollment.class_type === '자유학기' && start_date <= today <= end_date` → 정규 전량 숨김 (shared v1.41부터 반코드 무관 — 내신 분기와 대칭. 표준 데이터는 정규와 동일 class_code라 v1.40 이전과 결과 동일)
 - 특강: 정규 숨기지 않음 (독립적으로 공존)
 
 ### REGULAR_CLASS_TYPES

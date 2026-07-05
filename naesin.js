@@ -14,7 +14,7 @@ import { isSameTeacher, teacherDisplayName } from '@impact7/shared/teacher-label
 import { db } from './firebase-config.js';
 import { doc, getDoc, getDocFromServer, writeBatch } from 'firebase/firestore';
 import { auditUpdate, auditSet, batchUpdate, READ_ONLY } from './audit.js';
-import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt, isActiveNaesinBase, resolveNaesinCsKey, isValidDateStr } from './student-helpers.js';
+import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt, isActiveNaesinBase, resolveNaesinCsKey, isValidDateStr, csGet } from './student-helpers.js';
 import { deriveActiveNaesinEnrollment } from '@impact7/shared/enrollment-derivation';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 import { renderUnifiedMemoCard } from './role-memo.js';
@@ -58,7 +58,7 @@ function getNaesinInfo(student, selectedDate, dayName) {
         (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
     const csKey = derived.class_number;
     const naesinCode = window.displayCodeFromCsKey?.(csKey, window.branchFromStudent?.(student)) || csKey;
-    const cs = classSettings?.[csKey];
+    const cs = csGet(classSettings, csKey); // 학생 데이터 유입 키 — 표기 차이 흡수
 
     if (cs?.naesin_start && cs?.naesin_end) {
         const classDays = Object.keys(cs.schedule || {});
@@ -80,7 +80,7 @@ function getNaesinInfo(student, selectedDate, dayName) {
 // 내신 등원 시간 조회: 개별 override → 반 기본 순 (csKey로 class_settings 조회)
 function getNaesinTime(enrollment, csKey, dayName, classSettings) {
     return enrollment.naesin_schedule?.[dayName] ||
-           classSettings?.[csKey]?.schedule?.[dayName] || '';
+           csGet(classSettings, csKey)?.schedule?.[dayName] || '';
 }
 
 // ─── Core functions ───────────────────────────────────────────────────────────
@@ -192,7 +192,7 @@ export function renderNaesinList() {
                 ? window._formatTime12h(startTime)
                 : startTime;
 
-            const teacherEmail = classSettings?.[naesinKey]?.teacher || '';
+            const teacherEmail = csGet(classSettings, naesinKey)?.teacher || '';
             const teacherName = staffLabel(teacherEmail);
             const subLine = [naesinCode, teacherName].filter(Boolean).join(' · ');
 
