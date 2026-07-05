@@ -26,7 +26,7 @@ import {
     enrollmentCode, findStudent,
     branchFromStudent, makeDailyRecordId,
     getActiveEnrollments, getStudentStartTime,
-    allClassCodes, isNaesinActiveToday
+    allClassCodes, isNaesinActiveToday, deriveClassLabelAt
 } from './student-helpers.js';
 import {
     currentSchool, studentGrade, todayStr, getDayName
@@ -378,13 +378,6 @@ function buildStayStatsHtml(student) {
 
 // ─── 출결현황 탭 ──────────────────────────────────────────────────────────────
 
-// 자유학기/내신은 정규와 공존 시 우선 표시 (둘 다 정규의 일시적 전환이라 짧게)
-function _classTypeLabel(types) {
-    if (types.has('자유학기')) return '자유';
-    if (types.has('내신')) return '내신';
-    return [...types].join('/');
-}
-
 function _ensureReportInputDefaults() {
     const startEl = document.getElementById('report-start');
     const endEl = document.getElementById('report-end');
@@ -649,19 +642,9 @@ function renderReportCard(records) {
         const dayName = date ? getDayName(date) : '';
         const status = rec.attendance?.status || '';
         const reason = rec.attendance?.reason || '';
-        let classLabel = '';
-        if (student && date) {
-            // 내신 활성은 자동 유도라 enrollment에 '내신' 항목이 없을 수 있어 우선 검사.
-            // 그 외에는 그 날짜 활성 enrollment의 class_type 표시 (day 매칭 우선, 없으면 활성 전체).
-            if (isNaesinActiveToday(student, date)) {
-                classLabel = '내신';
-            } else {
-                const active = getActiveEnrollments(student, date);
-                const matched = active.filter(e => (e.day || []).includes(dayName));
-                const source = matched.length > 0 ? matched : active;
-                classLabel = _classTypeLabel(new Set(source.map(e => e.class_type || '정규')));
-            }
-        }
+        // 저장 시점 스냅샷(class_label) 우선 — 내신반 삭제·기간 변경 후에도 과거 표시가
+        // 보존된다. 스냅샷 없는 옛 기록만 현재 설정으로 역산(fallback).
+        const classLabel = rec.class_label || (student && date ? deriveClassLabelAt(student, date) : '');
         return { date, dayName, status, reason, classLabel };
     }).filter(r => r.date);
 
@@ -672,7 +655,7 @@ function renderReportCard(records) {
                 출석 (${attendanceRows.length}일)
             </div>
             <table class="report-attendance-table">
-                <thead><tr><th>날짜</th><th>반</th><th>구분</th><th>비고</th></tr></thead>
+                <thead><tr><th>날짜</th><th>유형</th><th>구분</th><th>비고</th></tr></thead>
                 <tbody>
                     ${attendanceRows.map(r => {
                         const dateShort = r.date.slice(5).replace('-', '/');

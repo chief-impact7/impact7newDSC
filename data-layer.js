@@ -14,7 +14,7 @@ import { parseDateKST, toDateStrKST, todayStr, getDayName } from './src/shared/f
 import { state, DEFAULT_DOMAINS, LEAVE_STATUSES, DEFAULT_TEST_SECTIONS } from './state.js';
 import { showSaveIndicator, showToast } from './ui-utils.js';
 import { openKoreanDatePicker } from './date-picker.js';
-import { normalizeDays, enrollmentCode, branchFromStudent, makeDailyRecordId, getActiveEnrollments } from './student-helpers.js';
+import { normalizeDays, enrollmentCode, branchFromStudent, makeDailyRecordId, getActiveEnrollments, deriveClassLabelAt } from './student-helpers.js';
 import { DEFAULT_HISTORY_LIMIT } from './consultation-filter.js';
 import { createDebouncedWriter } from './save-scheduler.js';
 import { createPromoteEnrollPending } from '@impact7/shared/promote-enroll';
@@ -37,8 +37,20 @@ async function _persistDailyRecord(studentId, targetDate, updates) {
     // 학생이 아직 로드 안 됐으면(퇴원생 지연 로드 등) branch를 payload에서 제외한다.
     // branchFromStudent({})='' 가 merge로 기존 branch를 빈값으로 덮어쓰는 것 방지(M-5).
     const base = { student_id: studentId, date: targetDate, ...updates };
-    if (student) base.branch = branchFromStudent(student);
+    if (student) {
+        base.branch = branchFromStudent(student);
+        // 수업 유형 스냅샷: 당일 저장에만 박는다 — 과거·미래 날짜는 현재 설정 역산이 오산 위험.
+        // 반 설정 로드 완료 + 캐시가 그 날짜 반영(dailyRecordsDate) + 라벨 없음일 때만 → 기존 스냅샷 보존,
+        // classSettings 공백 상태의 내신/자유 '정규' 오판 고정 방지.
+        if (targetDate === todayStr() && state._classSettingsLoaded
+            && state.dailyRecordsDate === targetDate
+            && !state.dailyRecords[studentId]?.class_label) {
+            const label = deriveClassLabelAt(student, targetDate);
+            if (label) base.class_label = label;
+        }
+    }
     await auditSet(doc(db, 'daily_records', makeDailyRecordId(studentId, targetDate)), base, { merge: true });
+    return base;
 }
 function _applyDailyCache(studentId, targetDate, updates) {
     if (!state.dailyRecords[studentId]) {
@@ -49,9 +61,9 @@ function _applyDailyCache(studentId, targetDate, updates) {
 
 async function _writeDailyRecord({ studentId, targetDate, updates }) {
     try {
-        await _persistDailyRecord(studentId, targetDate, updates);
-        // 발동 시점에 같은 날짜를 보고 있을 때만 캐시 갱신
-        if (state.selectedDate === targetDate) _applyDailyCache(studentId, targetDate, updates);
+        const written = await _persistDailyRecord(studentId, targetDate, updates);
+        // 발동 시점에 같은 날짜를 보고 있을 때만 캐시 갱신 (written = 스탬프 필드 포함 실제 저장분)
+        if (state.selectedDate === targetDate) _applyDailyCache(studentId, targetDate, written);
         showSaveIndicator('saved');
     } catch (err) {
         console.error('저장 실패:', err);
@@ -449,6 +461,7 @@ export function loadDailyRecords(date) {
     return _listenCollection('daily_records', q, null, (data) => {
         state.dailyRecords = {};
         data.forEach(d => { state.dailyRecords[d.student_id] = d; });
+        state.dailyRecordsDate = date; // 캐시가 반영하는 날짜 — class_label 스탬프 가드용
     });
 }
 
@@ -906,10 +919,10 @@ export async function saveImmediately(studentId, updates, { silent = false } = {
     if (!silent) showSaveIndicator('saving');
     const targetDate = state.selectedDate;
     try {
-        await _persistDailyRecord(studentId, targetDate, updates);
+        const written = await _persistDailyRecord(studentId, targetDate, updates);
         // 발동(ack) 시점에도 같은 날짜를 보고 있을 때만 캐시 갱신 — in-flight 중 날짜 이동 시
         // targetDate 데이터가 새 날짜 맵에 새어들어가는 것 방지(H-4, _writeDailyRecord와 동일 가드).
-        if (state.selectedDate === targetDate) _applyDailyCache(studentId, targetDate, updates);
+        if (state.selectedDate === targetDate) _applyDailyCache(studentId, targetDate, written);
         if (!silent) showSaveIndicator('saved');
     } catch (err) {
         console.error('저장 실패:', err);

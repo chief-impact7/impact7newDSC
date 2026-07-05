@@ -41,6 +41,7 @@ export const state = {
     currentUser: null,
     allStudents: [],
     dailyRecords: {},
+    dailyRecordsDate: '',
     retakeSchedules: [],
     hwFailTasks: [],
     testFailTasks: [],

@@ -5,7 +5,7 @@ import { todayStr, parseDateKST, getDayName } from './src/shared/firestore-helpe
 import { state, LEVEL_SHORT, LEAVE_STATUSES } from './state.js';
 import { applyNaesinFreeDerivation, isNaesinActiveAt } from '@impact7/shared/enrollment-derivation';
 import { currentSchool, normalizeRealLevelGrade } from '@impact7/shared/student-label';
-import { normalizeClassCode } from '@impact7/shared/class-code';
+import { classSettingsGet } from '@impact7/shared/class-code';
 import {
     normalizeDays, enrollmentCode, branchFromStudent, allClassCodes,
     makeDailyRecordId, buildNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE,
@@ -163,12 +163,26 @@ export function isNaesinActiveToday(s, dateStr) {
     });
 }
 
-// 반코드 표기 차이(ks132 ≡ KS132)를 흡수하는 classSettings 조회.
-// 학생 enrollment에서 유입된 코드는 케이스가 섞일 수 있어 정확 일치 → 정규화 키 순으로 본다.
-// shared v1.41 classSettingsGet 도입 전까지의 로컬 브리지 — 도입 후 교체 가능.
-export function csGet(classSettings, code) {
-    if (!code) return undefined;
-    return classSettings?.[code] ?? classSettings?.[normalizeClassCode(code)];
+// 반코드 표기 차이(ks132 ≡ KS132)를 흡수하는 classSettings 조회 — shared SSoT 위임.
+export const csGet = classSettingsGet;
+
+// 자유학기/내신은 정규와 공존 시 우선 표시 (둘 다 정규의 일시적 전환이라 짧게)
+function classTypeLabel(types) {
+    if (types.has('자유학기')) return '자유';
+    if (types.has('내신')) return '내신';
+    return [...types].sort().join('/');
+}
+
+// 기준일의 수업 유형 라벨 — 내신 활성(자동 유도 포함) 우선, 그 외 활성 enrollment의
+// class_type (요일 매칭 우선, 없으면 활성 전체). daily_records.class_label 스냅샷 저장과
+// 출결탭 fallback 역산이 공유하는 단일 판정. 판정 불가 시 ''.
+export function deriveClassLabelAt(s, dateStr) {
+    if (isNaesinActiveToday(s, dateStr)) return '내신';
+    const active = getActiveEnrollments(s, dateStr);
+    const dayName = getDayName(dateStr);
+    const matched = active.filter(e => normalizeDays(e.day).includes(dayName));
+    const source = matched.length > 0 ? matched : active;
+    return classTypeLabel(new Set(source.map(e => e.class_type || '정규')));
 }
 
 export function isFreeSemesterActiveToday(s, dateStr) {

@@ -155,6 +155,8 @@ daily_records/{studentId}_{date}
 ├── student_id: string
 ├── date: string                 # "2026-02-27"
 ├── branch: string
+├── class_label: string          # 기록 시점 수업 유형 스냅샷 ("내신"|"자유"|"정규"|"특강"|"정규/특강" 등)
+│                                # 출결탭이 우선 사용, 없으면 현재 설정으로 역산 fallback. 미래 날짜엔 미기록
 ├── hw_fail_action: map          # 숙제 2차 미통과 처리 (domain별)
 │   └── {domain}: map            # 예: "Gr", "A/G", "R/C"
 │       ├── type: string         # "등원" | "대체숙제"
