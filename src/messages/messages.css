@@ -121,3 +121,15 @@
 .mc-tpl-manage-preview { font-size: 11.5px; color: #9a958c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mc-tpl-manage-btn { border: 1px solid #0b7a52; border-radius: 7px; padding: 4px 11px; background: #eef7f2; color: #0b7a52; font-weight: 700; font-size: 12.5px; cursor: pointer; white-space: nowrap; font-family: inherit; }
 .mc-tpl-manage-btn:hover { background: #0b7a52; color: #fff; }
+
+/* === 채널 가입 유도 대상 카드 === */
+.ci-toolbar { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.ci-toolbar-right { margin-left: auto; display: flex; gap: 6px; }
+.ci-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ci-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border, #e5e7eb); border-radius: 10px; }
+.ci-row.ci-inactive { opacity: 0.55; }
+.ci-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ci-name { font-weight: 600; font-size: 0.92rem; }
+.ci-meta { font-size: 0.8rem; color: var(--muted, #6b7280); }
+.ci-badges { display: flex; gap: 4px; flex-wrap: wrap; }
+.ci-side { margin-left: auto; display: flex; gap: 4px; flex-shrink: 0; }

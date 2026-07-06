@@ -47,6 +47,8 @@ const PERIODS = [
     { key: 'custom', label: '기간 지정' },
 ];
 const RETRY_INELIGIBLE = (f) => f.piiPurged || f.kind === 'promo' || f.kind === 'promo_sms';
+// 보관/삭제 자격 — 행 버튼과 일괄 버튼이 같은 술어를 써야 두 UI가 어긋나지 않는다.
+const MANAGE_ELIGIBLE = (f) => f.status === 'failed_permanent';
 
 // 일괄 재처리 동시 callable 호출 상한. 무제한 Promise.all은 대량 선택 시 서버에 순간 부하. F-04
 const BULK_CONCURRENCY = 5;
@@ -101,6 +103,10 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
 
     const selected = failures.filter(f => selectedIds.has(f.id));
     const allSelected = failures.length > 0 && selected.length === failures.length;
+    // 일괄 버튼은 실행 가능한 건수를 라벨에 보여주고 0건이면 비활성화한다 —
+    // 누른 뒤에야 "가능한 항목이 없습니다" 에러가 뜨는 상황을 만들지 않는다.
+    const retryEligible = selected.filter(f => !RETRY_INELIGIBLE(f));
+    const manageEligible = selected.filter(MANAGE_ELIGIBLE);
 
     function rangeParams(p = period) {
         if (p === 'today') return { fromMs: kstDayStartMs() };
@@ -185,16 +191,14 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
         }
     }
     function bulkRetry() {
-        const eligible = selected.filter(f => !RETRY_INELIGIBLE(f));
-        if (!eligible.length) { setNotice({ kind: 'error', text: '재발송 가능한 항목이 없습니다 (보존기간·홍보성 제외).' }); return; }
-        runBulk(eligible, f => retryCallable({ queueId: f.id }), '재발송 요청', selected.length - eligible.length);
+        if (!retryEligible.length) return;
+        runBulk(retryEligible, f => retryCallable({ queueId: f.id }), '재발송 요청', selected.length - retryEligible.length);
     }
     function bulkManage(action) {
-        const eligible = selected.filter(f => f.status === 'failed_permanent');
+        if (!manageEligible.length) return;
         const label = action === 'delete' ? '삭제' : '보관';
-        if (!eligible.length) { setNotice({ kind: 'error', text: `${label} 가능한 항목이 없습니다 (실패 확정 건만).` }); return; }
-        if (action === 'delete' && !window.confirm(`선택한 ${eligible.length}건을 삭제할까요?\n발송 로그(이력)와 삭제 기록은 남습니다.`)) return;
-        runBulk(eligible, f => manageCallable({ queueId: f.id, action }), label, selected.length - eligible.length);
+        if (action === 'delete' && !window.confirm(`선택한 ${manageEligible.length}건을 삭제할까요?\n발송 로그(이력)와 삭제 기록은 남습니다.`)) return;
+        runBulk(manageEligible, f => manageCallable({ queueId: f.id, action }), label, selected.length - manageEligible.length);
     }
     function singleRetry(f) {
         runBulk([f], x => retryCallable({ queueId: x.id }), '재발송 요청', 0);
@@ -292,9 +296,33 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                             {selected.length > 0 && (
                                 <span className="msg-bulk-actions">
                                     <span className="msg-bulk-count">{selected.length}건 선택</span>
-                                    <button type="button" className="msg-action-btn msg-action-retry" disabled={busy} onClick={bulkRetry}>일괄 재발송</button>
-                                    <button type="button" className="msg-action-btn" disabled={busy} onClick={() => bulkManage('archive')}>일괄 보관</button>
-                                    <button type="button" className="msg-action-btn msg-action-danger" disabled={busy} onClick={() => bulkManage('delete')}>일괄 삭제</button>
+                                    <button
+                                        type="button"
+                                        className="msg-action-btn msg-action-retry"
+                                        disabled={busy || !retryEligible.length}
+                                        title={retryEligible.length ? undefined : '선택한 항목 중 재발송 가능한 건이 없습니다 (보존기간 경과·홍보성 제외)'}
+                                        onClick={bulkRetry}
+                                    >
+                                        일괄 재발송 ({retryEligible.length})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="msg-action-btn"
+                                        disabled={busy || !manageEligible.length}
+                                        title={manageEligible.length ? undefined : '실패 확정 건만 보관할 수 있습니다 — 재시도 대기 건은 자동 재처리가 끝나면 실패 확정으로 바뀝니다'}
+                                        onClick={() => bulkManage('archive')}
+                                    >
+                                        일괄 보관 ({manageEligible.length})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="msg-action-btn msg-action-danger"
+                                        disabled={busy || !manageEligible.length}
+                                        title={manageEligible.length ? undefined : '실패 확정 건만 삭제할 수 있습니다 — 재시도 대기 건은 자동 재처리가 끝나면 실패 확정으로 바뀝니다'}
+                                        onClick={() => bulkManage('delete')}
+                                    >
+                                        일괄 삭제 ({manageEligible.length})
+                                    </button>
                                 </span>
                             )}
                         </div>
@@ -348,7 +376,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                         재발송
                                     </button>
                                     {/* 보관/삭제는 종결 상태(failed_permanent)만 — 재시도 대기는 sweeper가 아직 처리 중. */}
-                                    {f.status === 'failed_permanent' && (
+                                    {MANAGE_ELIGIBLE(f) && (
                                         <>
                                             <button
                                                 className="msg-action-btn"
