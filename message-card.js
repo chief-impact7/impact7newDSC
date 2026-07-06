@@ -5,11 +5,17 @@
 import {
   sendParentNotice, createPromoCampaign, sendDailyReport,
   tabletCheckin, sendAbsenceNotice, getAbsenceNoticeToday, getRecipientMessageHistory,
-  setPromoConsent,
+  setPromoConsent, saveStudentMessageRecipientSettings,
 } from './data-layer.js';
 import { ATTENDANCE_ACTIONS } from '@impact7/shared/attendance-action';
 import { esc, escAttr, isKakaoNightKST } from './ui-utils.js';
 import { OPT_OUT_LINE, ensurePromoCompliance } from './promo-compliance.js';
+import {
+  buildRecipientSettings,
+  createRecipientSettingsSaveQueue,
+  MESSAGE_RECIPIENT_SETTINGS_FIELD,
+  resolveRecipientFields,
+} from './src/messages/recipient-settings.js';
 
 let _deps = {};
 let _mode = 'notice'; // 'notice'(템플릿 안내) | 'free'(자유 안내) | 'promo'(홍보)
@@ -89,13 +95,27 @@ export function initMessageCardDeps(deps) { _deps = deps; }
 
 function onlyDigits(v) { return String(v ?? '').replace(/\D/g, ''); }
 
-function defaultRecipientFields(available) {
-  if (available.some((o) => o.field === 'parent_1')) return new Set(['parent_1']);
-  return new Set(available[0]?.field ? [available[0].field] : []);
-}
-
 function selectedRecipientFields(channel) {
   return [...(channel === 'alimtalk' ? _alimtalkRecipientFields : _bmsRecipientFields)];
+}
+
+function currentRecipientSettings() {
+  return buildRecipientSettings(_alimtalkRecipientFields, _bmsRecipientFields);
+}
+
+const enqueueRecipientSettingsSave = createRecipientSettingsSaveQueue(
+  (studentId, settings) => saveStudentMessageRecipientSettings(studentId, settings),
+  (err) => {
+    console.error('[message-card] 수신 대상 저장 실패:', err);
+    _deps.toast?.(err?.message || '수신 대상 저장에 실패했습니다.', 'error');
+  },
+);
+
+function saveRecipientSettings(studentId) {
+  const settings = currentRecipientSettings();
+  const cached = _deps.getStudent?.(studentId);
+  if (cached) cached[MESSAGE_RECIPIENT_SETTINGS_FIELD] = settings;
+  void enqueueRecipientSettingsSave(studentId, settings);
 }
 
 export function renderMessageTab(studentId) {
@@ -109,8 +129,10 @@ export function renderMessageTab(studentId) {
 
   // 가용 대상 — 번호가 있는 것만. 기본 선택은 학부모1(있으면), 없으면 첫 가용.
   const available = RECIPIENT_OPTIONS.filter((o) => onlyDigits(student[o.key]));
-  _alimtalkRecipientFields = defaultRecipientFields(available);
-  _bmsRecipientFields = defaultRecipientFields(available);
+  const availableFields = available.map((o) => o.field);
+  const savedRecipients = student[MESSAGE_RECIPIENT_SETTINGS_FIELD];
+  _alimtalkRecipientFields = new Set(resolveRecipientFields(savedRecipients, 'alimtalk', availableFields));
+  _bmsRecipientFields = new Set(resolveRecipientFields(savedRecipients, 'bms', availableFields));
   const hasRecipient = available.length > 0;
 
   const recipientChecks = (channel, selected) => available.map((o) =>
@@ -156,12 +178,14 @@ export function renderMessageTab(studentId) {
     r.addEventListener('change', () => {
       if (r.checked) _alimtalkRecipientFields.add(r.value);
       else _alimtalkRecipientFields.delete(r.value);
+      void saveRecipientSettings(studentId);
     });
   });
   el.querySelectorAll('input[name="msg-recipient-bms"]').forEach((r) => {
     r.addEventListener('change', () => {
       if (r.checked) _bmsRecipientFields.add(r.value);
       else _bmsRecipientFields.delete(r.value);
+      void saveRecipientSettings(studentId);
     });
   });
   el.querySelectorAll('.msg-mode-btn').forEach((b) => {

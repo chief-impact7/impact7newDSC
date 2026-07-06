@@ -22,6 +22,7 @@ import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 import { deriveStudentNumber, studentNumberIdentityKey } from '@impact7/shared/student-number';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { canonicalizeTeacherEmails, teacherDisplayName } from '@impact7/shared/teacher-label';
+import { MESSAGE_RECIPIENT_SETTINGS_FIELD } from './src/messages/recipient-settings.js';
 
 const _promoteEnrollPending = createPromoteEnrollPending(
     { db, writeBatch, doc, collection, serverTimestamp },
@@ -1084,6 +1085,12 @@ export async function getRecipientMessageHistory(payload) {
   const callable = httpsCallable(functions, 'getRecipientMessageHistory');
   const res = await callable(payload);
   return res.data;
+}
+
+export async function saveStudentMessageRecipientSettings(studentId, settings) {
+  await auditUpdate(doc(db, 'students', studentId), {
+    [MESSAGE_RECIPIENT_SETTINGS_FIELD]: settings,
+  });
 }
 
 // 실패 항목 보관(직원)/삭제(원장).
