@@ -448,13 +448,15 @@ async function loadQuickState(studentId, readonly) {
 // 상태머신·연타 멱등은 서버가 보장하므로 클라는 이중 클릭만 막는다.
 async function sendQuickAttendance(studentId, actionLabel) {
   if (_quickBusy) return;
+  const recipientFields = selectedRecipientFields('alimtalk');
+  if (!recipientFields.length) { _deps.toast?.('알림톡 수신 대상을 선택하세요.', 'error'); return; }
   const student = _deps.getStudent?.(studentId) || {};
   _quickBusy = true;
   document.querySelectorAll('.msg-quick').forEach((b) => { b.disabled = true; });
   try {
     const res = await tabletCheckin({
       studentNumber: String(student.studentNumber ?? '').trim(),
-      studentId, action: actionLabel, source: 'dsc',
+      studentId, action: actionLabel, source: 'dsc', recipientFields,
     });
     if (res.result === 'duplicate') {
       _deps.toast?.('방금 처리된 출결입니다.', 'error');
