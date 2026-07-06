@@ -13,7 +13,8 @@ import { OPT_OUT_LINE, ensurePromoCompliance } from './promo-compliance.js';
 
 let _deps = {};
 let _mode = 'notice'; // 'notice'(템플릿 안내) | 'free'(자유 안내) | 'promo'(홍보)
-let _recipientField = 'parent_1'; // 'student' | 'parent_1' | 'parent_2' | 'other'
+let _alimtalkRecipientFields = new Set(['parent_1']);
+let _bmsRecipientFields = new Set(['parent_1']);
 let _sending = false;
 let _quickBusy = false;
 // 멱등키 — 폼 단위로 안정 유지(응답 타임아웃 후 재시도의 중복 발송 차단), 발송 성공 시 재발급.
@@ -37,6 +38,7 @@ const RECIPIENT_OPTIONS = [
   { field: 'parent_2', label: '학부모2', key: 'parent_phone_2' },
   { field: 'other', label: '기타', key: 'other_phone' },
 ];
+const RECIPIENT_LABELS = Object.fromEntries(RECIPIENT_OPTIONS.map((o) => [o.field, o.label]));
 
 // 등하원 빠른 처리 — 태블릿을 찍지 않은 학생의 수동 처리. tabletCheckin과 같은 서버 경로를 타므로
 // 출결 기록과 알림톡 발송이 함께 되고, 태블릿에서 이미 처리한 액션은 상태머신이 막는다(버튼 비활성).
@@ -87,6 +89,15 @@ export function initMessageCardDeps(deps) { _deps = deps; }
 
 function onlyDigits(v) { return String(v ?? '').replace(/\D/g, ''); }
 
+function defaultRecipientFields(available) {
+  if (available.some((o) => o.field === 'parent_1')) return new Set(['parent_1']);
+  return new Set(available[0]?.field ? [available[0].field] : []);
+}
+
+function selectedRecipientFields(channel) {
+  return [...(channel === 'alimtalk' ? _alimtalkRecipientFields : _bmsRecipientFields)];
+}
+
 export function renderMessageTab(studentId) {
   const el = document.getElementById('message-tab');
   if (!el) return;
@@ -98,12 +109,13 @@ export function renderMessageTab(studentId) {
 
   // 가용 대상 — 번호가 있는 것만. 기본 선택은 학부모1(있으면), 없으면 첫 가용.
   const available = RECIPIENT_OPTIONS.filter((o) => onlyDigits(student[o.key]));
-  _recipientField = available.some((o) => o.field === 'parent_1') ? 'parent_1' : (available[0]?.field ?? 'parent_1');
+  _alimtalkRecipientFields = defaultRecipientFields(available);
+  _bmsRecipientFields = defaultRecipientFields(available);
   const hasRecipient = available.length > 0;
 
-  const recipientRadios = available.map((o) =>
+  const recipientChecks = (channel, selected) => available.map((o) =>
     `<label style="display:inline-flex;align-items:center;gap:4px;margin:0;">
-       <input type="radio" name="msg-recipient" value="${escAttr(o.field)}" ${o.field === _recipientField ? 'checked' : ''}>
+       <input type="checkbox" name="msg-recipient-${channel}" value="${escAttr(o.field)}" ${selected.has(o.field) ? 'checked' : ''}>
        ${esc(o.label)}
      </label>`,
   ).join('');
@@ -118,7 +130,14 @@ export function renderMessageTab(studentId) {
       </div>
       <div class="card" style="padding:9px 14px;">
         ${hasRecipient
-          ? `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px;font-size:13px;"><span style="color:#555;">수신</span>${recipientRadios}</div>`
+          ? `<div style="display:grid;gap:5px;margin-bottom:6px;font-size:13px;">
+              <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;">
+                <span style="color:#555;min-width:74px;">알림톡 수신</span>${recipientChecks('alimtalk', _alimtalkRecipientFields)}
+              </div>
+              <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;">
+                <span style="color:#555;min-width:74px;">BMS 수신</span>${recipientChecks('bms', _bmsRecipientFields)}
+              </div>
+            </div>`
           : '<div style="color:#c82014;margin-bottom:6px;font-size:13px;">등록된 연락처가 없어 발송할 수 없습니다.</div>'}
         <div style="display:flex;gap:6px;margin-bottom:8px;">
           <button type="button" class="btn msg-mode-btn" data-mode="notice" style="${modeBtnStyle}" aria-pressed="${_mode === 'notice'}">정보성 안내</button>
@@ -133,8 +152,17 @@ export function renderMessageTab(studentId) {
     </div>
   `;
   renderConsentStrip(studentId, readonly);
-  el.querySelectorAll('input[name="msg-recipient"]').forEach((r) => {
-    r.addEventListener('change', () => { _recipientField = r.value; });
+  el.querySelectorAll('input[name="msg-recipient-alimtalk"]').forEach((r) => {
+    r.addEventListener('change', () => {
+      if (r.checked) _alimtalkRecipientFields.add(r.value);
+      else _alimtalkRecipientFields.delete(r.value);
+    });
+  });
+  el.querySelectorAll('input[name="msg-recipient-bms"]').forEach((r) => {
+    r.addEventListener('change', () => {
+      if (r.checked) _bmsRecipientFields.add(r.value);
+      else _bmsRecipientFields.delete(r.value);
+    });
   });
   el.querySelectorAll('.msg-mode-btn').forEach((b) => {
     b.addEventListener('click', () => { _mode = b.dataset.mode; renderForm(studentId, hasRecipient, readonly); });
@@ -237,6 +265,7 @@ function renderHistoryItem(it) {
     : `<i style="color:#aaa;">${it.piiPurged ? '(보존기간 경과로 본문 삭제됨)' : '(본문 없음)'}</i>`;
   const meta = [
     formatLogTime(it.createdAt),
+    RECIPIENT_LABELS[it.recipientRole] || '',
     it.recipientMasked || '',
     it.lastErrorCode ? `오류 ${it.lastErrorCode}` : '',
   ].filter(Boolean).join(' · ');
@@ -463,12 +492,14 @@ async function sendAbsenceQuick(studentId, readonly) {
 
 async function sendNotice(studentId, sel) {
   if (_sending) return;
+  const recipientFields = selectedRecipientFields('alimtalk');
+  if (!recipientFields.length) { _deps.toast?.('알림톡 수신 대상을 선택하세요.', 'error'); return; }
   const templateKey = sel.value;
   const variables = {};
   document.querySelectorAll('.msg-var').forEach((i) => { variables[i.dataset.key] = i.value.trim(); });
   if (!_noticeReqId) _noticeReqId = `notice_${studentId}_${Date.now()}`;
   await doSend(
-    () => sendParentNotice({ studentId, templateKey, variables, recipientField: _recipientField, requestId: _noticeReqId }),
+    () => sendParentNotice({ studentId, templateKey, variables, recipientFields, requestId: _noticeReqId }),
     '알림톡 발송을 요청했습니다.',
     () => { _noticeReqId = null; scheduleHistoryReload(studentId); },
   );
@@ -476,6 +507,8 @@ async function sendNotice(studentId, sel) {
 
 async function sendPromo(studentId) {
   if (_sending) return;
+  const recipientFields = selectedRecipientFields('bms');
+  if (!recipientFields.length) { _deps.toast?.('BMS 수신 대상을 선택하세요.', 'error'); return; }
   const raw = document.getElementById('msg-content').value.trim();
   if (!raw) { _deps.toast?.('본문을 입력하세요.', 'error'); return; }
   // (광고)·080 표기는 발송 직전 자동 보정(멱등) — 깜빡해도 법적 표기가 빠지지 않는다.
@@ -484,7 +517,7 @@ async function sendPromo(studentId) {
   await doSend(
     () => createPromoCampaign({
       title: `개별홍보-${studentId}`, content, targeting: 'M',
-      studentIds: [studentId], recipientField: _recipientField, requestId: _promoReqId,
+      studentIds: [studentId], recipientFields, recipientField: recipientFields[0], requestId: _promoReqId,
     }),
     '브랜드 메시지 발송을 요청했습니다.',
     () => { _promoReqId = null; scheduleHistoryReload(studentId); },
@@ -495,6 +528,8 @@ async function sendPromo(studentId) {
 // 멱등키 없이 재발송 허용(더블클릭은 _sending으로 차단) — parent-message.js 정책과 동일.
 async function sendFree(studentId) {
   if (_sending) return;
+  const recipientFields = selectedRecipientFields('bms');
+  if (!recipientFields.length) { _deps.toast?.('BMS 수신 대상을 선택하세요.', 'error'); return; }
   const content = document.getElementById('msg-content').value.trim();
   if (!content) { _deps.toast?.('내용을 입력하세요.', 'error'); return; }
   // 야간(20:50~08:00)엔 카카오가 친구 대상 카톡(브랜드메시지)을 차단한다. 발송자에게 처리 방식을 묻는다.
@@ -503,7 +538,7 @@ async function sendFree(studentId) {
     reserveIfNight = confirm('지금은 카카오톡 발송 제한 시간(밤 8:50~오전 8시)입니다.\n\n[확인] 채널 가입 학부모는 내일 오전 8시에 카카오톡으로 발송 (미가입자는 지금 문자)\n[취소] 지금 바로 문자로 발송');
   }
   await doSend(
-    () => sendDailyReport({ studentId, content, recipientField: _recipientField, reserveIfNight }),
+    () => sendDailyReport({ studentId, content, recipientFields, recipientField: recipientFields[0], reserveIfNight }),
     // 실제 예약 여부는 서버 응답(scheduledDate: 친구+야간만 non-null)으로 판정 — 경계 시계 스큐 오표기 방지.
     (res) => (reserveIfNight && res?.scheduledDate)
       ? '예약했습니다 — 가입자는 내일 오전 8시 카카오톡, 미가입자는 지금 문자로 발송됩니다.'
