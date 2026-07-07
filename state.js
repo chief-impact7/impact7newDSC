@@ -79,6 +79,7 @@ export const state = {
     selectedNextHwClass: null,
     nextHwModalTarget: { classCode: null, domain: null },
     detailTab: 'daily',
+    classDetailTab: '일반',
     _editingTempDocId: null,
     _visitStatusPending: {},
     _scheduledVisitsCache: null,

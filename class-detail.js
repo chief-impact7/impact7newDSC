@@ -17,6 +17,7 @@ import { matchesBranchFilter, enrollmentCode, getActiveEnrollments, isActiveNaes
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 import { cancelStudentPendingTasks } from './data-layer.js';
 import { recordTeacherChange } from './teacher-history.js';
+import { renderClassBulkMessageCard, resolveClassMembers } from './class-bulk-message.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let getOverrideStudentsForClass, getOverridingOutFromClass, getClassDomains, getClassTestSections;
@@ -194,73 +195,121 @@ export function applyClassDetailTabMode() {
     if (scoreTabEl) scoreTabEl.style.display = 'none';
 }
 
-export function renderClassDetail(classCode) {
-    if (!classCode) {
-        document.getElementById('detail-empty').style.display = '';
-        document.getElementById('detail-content').style.display = 'none';
-        return;
-    }
+// ─── 반 상세 4탭 (일반/숙제/테스트/특이) ─────────────────────────────────────
+export const CLASS_DETAIL_TABS = ['일반', '숙제', '테스트', '특이'];
 
-    // 특강 반: naesin보다 먼저 체크 (반 이름에 한글 포함되므로 _isNaesinClassCode가 true 반환할 수 있음)
-    const isTeukangClass = state.classSettings[classCode]?.class_type === '특강';
-    const isFreeMode = state._classMgmtMode === 'free';
+// groups: { 일반, 숙제, 테스트, 특이 } 각 탭의 카드 HTML 문자열.
+// 활성 탭 카드만 노출하고, 비면 "해당 없음" 안내를 표시(탭 바는 항상 4개 유지).
+export function renderClassDetailTabbed(groups) {
+    const active = CLASS_DETAIL_TABS.includes(state.classDetailTab) ? state.classDetailTab : '일반';
+    const tabBar = `
+        <div class="detail-tabs class-detail-subtabs" role="tablist" aria-label="반 설정 탭">
+            ${CLASS_DETAIL_TABS.map(t => `<button class="detail-tab${t === active ? ' active' : ''}" role="tab" aria-selected="${t === active}" onclick="switchClassDetailTab('${t}')">${t}</button>`).join('')}
+        </div>`;
+    const content = (groups[active] || '').trim()
+        || '<div class="detail-card"><div class="detail-card-empty">해당 없음</div></div>';
+    return `${tabBar}<div class="class-detail-tab-body">${content}</div>`;
+}
 
-    // 내신 반: naesin.js로 위임
-    if (!isTeukangClass && !isFreeMode && window.renderNaesinClassDetail && _isNaesinClassCode(classCode)) {
-        window.renderNaesinClassDetail(classCode);
-        return;
-    }
+export function switchClassDetailTab(tab) {
+    state.classDetailTab = tab;
+    if (state.selectedClassCode) renderClassDetail(state.selectedClassCode);
+}
 
-    state.selectedStudentId = null; // 학생 선택 해제
-    applyClassDetailTabMode();
+// ─── 재사용 카드 빌더 (문자열 반환) ─────────────────────────────────────────
+function renderClassTeacherCard(classCode) {
+    const currentTeacher = state.classSettings[classCode]?.teacher || '';
+    const currentSubTeacher = state.classSettings[classCode]?.sub_teacher || '';
+    // 저장값이 구메일(@gw)이어도 정규화된 목록과 동일인 매칭 — @impact7/shared teacher-label 규약
+    // 현재 배정자가 목록(homeroom_eligible)에서 빠지면(퇴직·비교수부) 보존 option을 강제 주입한다.
+    // 안 하면 "미지정"으로 렌더 → 부담당만 수정해도 담임이 빈값으로 소실된다(H-1).
+    const _preservedTeacherOption = (assigned) => {
+        if (!assigned) return '';
+        if (state.teachersList.some(t => isSameTeacher(t.email, assigned))) return '';
+        return `<option value="${escAttr(assigned)}" selected>${esc(getTeacherName(assigned))} (목록 외)</option>`;
+    };
+    const teacherOptions = _preservedTeacherOption(currentTeacher) + state.teachersList.map(t => {
+        const name = getTeacherName(t.email);
+        return `<option value="${escAttr(t.email)}" ${isSameTeacher(t.email, currentTeacher) ? 'selected' : ''}>${esc(name)}</option>`;
+    }).join('');
+    const subTeacherOptions = _preservedTeacherOption(currentSubTeacher) + state.teachersList.map(t => {
+        const name = getTeacherName(t.email);
+        return `<option value="${escAttr(t.email)}" ${isSameTeacher(t.email, currentSubTeacher) ? 'selected' : ''}>${esc(name)}</option>`;
+    }).join('');
 
-    document.getElementById('detail-empty').style.display = 'none';
-    document.getElementById('detail-content').style.display = '';
+    return `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                ${msIcon('person')}
+                담당 배정
+            </div>
+            <div class="teacher-assign-grid">
+                <div class="teacher-assign-row">
+                    <label class="teacher-assign-label" for="teacher-select">담당</label>
+                    <select class="field-input teacher-assign-select" id="teacher-select" onchange="saveTeacherAssign('${escAttr(classCode)}')">
+                        <option value="">미지정</option>
+                        ${teacherOptions}
+                    </select>
+                </div>
+                <div class="teacher-assign-row">
+                    <label class="teacher-assign-label" for="sub-teacher-select">부담당</label>
+                    <select class="field-input teacher-assign-select" id="sub-teacher-select" onchange="saveTeacherAssign('${escAttr(classCode)}')">
+                        <option value="">미지정</option>
+                        ${subTeacherOptions}
+                    </select>
+                </div>
+            </div>
+        </div>`;
+}
 
-    // 반설정 학생 목록은 요일 매칭과 무관하게 그 반에 등록된 모든 멤버를 노출.
-    // 정규 분기는 getRegularClassStudents로 통일 (자유학기 기간 학생도 정규 멤버로 포함).
-    let classStudents;
-    if (isTeukangClass) {
-        classStudents = getTeukangClassStudents(classCode);
-    } else if (isFreeMode) {
-        classStudents = state.allStudents.filter(s =>
-            s.status !== '퇴원' &&
-            (s.enrollments || []).some(e => e.class_type === '자유학기' && enrollmentCode(e) === classCode)
-        ).filter(s => matchesBranchFilter(s));
-    } else {
-        classStudents = getRegularClassStudents(classCode);
-    }
-    const domains = getClassDomains(classCode);
-    const testSections = getClassTestSections(classCode);
-
-    // 프로필 헤더를 반 정보로 교체 (학생 상세에서 남은 데이터 클리어)
-    document.getElementById('profile-avatar').textContent = classCode[0] || '?';
-    document.getElementById('detail-name').textContent = classCode;
-    document.getElementById('profile-phones').innerHTML = '';
-    document.getElementById('profile-stay-stats').innerHTML = '';
-    document.getElementById('profile-tags').innerHTML = `
-        <span class="tag">${classStudents.length}명</span>
-    `;
-
-    const cardsContainer = document.getElementById('detail-cards');
-
-    // ① 등원예정시간 — 반 기본 시간만 설정 (학생별 개별시간은 학생 상세패널에서)
+function renderClassDefaultTimeCard(classCode) {
+    // 반 기본 시간만 설정 (학생별 개별시간은 학생 상세패널에서)
     const defaultTime = state.classSettings[classCode]?.default_time || '';
     const timeUpdatedBy = state.classSettings[classCode]?.default_time_updated_by || '';
     const timeUpdatedAt = state.classSettings[classCode]?.default_time_updated_at || '';
     const timeUpdatedLabel = timeUpdatedBy
         ? `${getTeacherName(timeUpdatedBy)} · ${formatDateTimeKST(timeUpdatedAt)}`
         : '';
+    return `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                ${msIcon('schedule')}
+                등원예정시간
+            </div>
+            <div class="arrival-bulk-row">
+                <input type="time" class="arrival-time-input" aria-label="등원예정시간" value="${defaultTime}"
+                    onchange="saveClassDefaultTime('${escAttr(classCode)}', this.value)">
+            </div>
+            <div style="font-size:11px;color:var(--text-sec);margin-top:4px;">변경 시 자동 저장${timeUpdatedLabel ? ` · 최근: ${esc(timeUpdatedLabel)}` : ''}</div>
+        </div>`;
+}
 
-    // ② 영역숙제관리
+export function renderClassDomainCard(classCode) {
+    const domains = getClassDomains(classCode);
     const domainChips = domains.map((d, i) => `
         <span class="domain-chip">
             ${esc(d)}
             <button class="domain-chip-remove" onclick="event.stopPropagation(); removeClassDomain('${escAttr(classCode)}', ${i})" title="삭제">&times;</button>
         </span>
     `).join('');
+    return `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                ${msIcon('category')}
+                영역숙제관리
+            </div>
+            <div class="domain-chips-container">${domainChips || '<span class="detail-card-empty">영역 없음</span>'}</div>
+            <div class="domain-add-row">
+                <input type="text" id="domain-add-input" class="field-input" placeholder="새 영역 이름" aria-label="새 영역 이름" style="flex:1;"
+                    onkeydown="if(event.key==='Enter') addClassDomain('${escAttr(classCode)}')">
+                <button class="btn btn-primary btn-sm" onclick="addClassDomain('${escAttr(classCode)}')">추가</button>
+            </div>
+            <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="resetClassDomains('${escAttr(classCode)}')">기본값 복원</button>
+        </div>`;
+}
 
-    // ③ 테스트관리 — 섹션별 구성
+export function renderClassTestSectionsCard(classCode) {
+    const testSections = getClassTestSections(classCode);
     const sectionNames = Object.keys(testSections);
     const testSectionsHtml = sectionNames.map(secName => {
         const tests = testSections[secName] || [];
@@ -286,99 +335,7 @@ export function renderClassDetail(classCode) {
             </div>
         `;
     }).join('');
-
-    // ④ 담당/부담당 배정
-    const currentTeacher = state.classSettings[classCode]?.teacher || '';
-    const currentSubTeacher = state.classSettings[classCode]?.sub_teacher || '';
-    // 저장값이 구메일(@gw)이어도 정규화된 목록과 동일인 매칭 — @impact7/shared teacher-label 규약
-    // 현재 배정자가 목록(homeroom_eligible)에서 빠지면(퇴직·비교수부) 보존 option을 강제 주입한다.
-    // 안 하면 "미지정"으로 렌더 → 부담당만 수정해도 담임이 빈값으로 소실된다(H-1).
-    const _preservedTeacherOption = (assigned) => {
-        if (!assigned) return '';
-        if (state.teachersList.some(t => isSameTeacher(t.email, assigned))) return '';
-        return `<option value="${escAttr(assigned)}" selected>${esc(getTeacherName(assigned))} (목록 외)</option>`;
-    };
-    const teacherOptions = _preservedTeacherOption(currentTeacher) + state.teachersList.map(t => {
-        const name = getTeacherName(t.email);
-        return `<option value="${escAttr(t.email)}" ${isSameTeacher(t.email, currentTeacher) ? 'selected' : ''}>${esc(name)}</option>`;
-    }).join('');
-    const subTeacherOptions = _preservedTeacherOption(currentSubTeacher) + state.teachersList.map(t => {
-        const name = getTeacherName(t.email);
-        return `<option value="${escAttr(t.email)}" ${isSameTeacher(t.email, currentSubTeacher) ? 'selected' : ''}>${esc(name)}</option>`;
-    }).join('');
-
-    const teacherCard = `
-        <div class="detail-card">
-            <div class="detail-card-title">
-                ${msIcon('person')}
-                담당 배정
-            </div>
-            <div class="teacher-assign-grid">
-                <div class="teacher-assign-row">
-                    <label class="teacher-assign-label" for="teacher-select">담당</label>
-                    <select class="field-input teacher-assign-select" id="teacher-select" onchange="saveTeacherAssign('${escAttr(classCode)}')">
-                        <option value="">미지정</option>
-                        ${teacherOptions}
-                    </select>
-                </div>
-                <div class="teacher-assign-row">
-                    <label class="teacher-assign-label" for="sub-teacher-select">부담당</label>
-                    <select class="field-input teacher-assign-select" id="sub-teacher-select" onchange="saveTeacherAssign('${escAttr(classCode)}')">
-                        <option value="">미지정</option>
-                        ${subTeacherOptions}
-                    </select>
-                </div>
-            </div>
-        </div>`;
-
-    // 특강반: 담당 + 특강기간 + 요일/시간 + 학생 추가 카드만 노출 (편성 과정에서 설정된 나머지는 숨김)
-    if (isTeukangClass) {
-        cardsContainer.innerHTML = `
-            ${teacherCard}
-            ${renderTeukangPeriodCard(classCode)}
-            ${renderClassScheduleCard(classCode)}
-            ${renderTeukangAddStudentCard(classCode)}
-            ${renderClassDeleteCard(classCode, 'teukang')}
-        `;
-        document.getElementById('detail-panel').classList.add('mobile-visible');
-        return;
-    }
-
-    const dayOrPeriodCards = isFreeMode
-        ? `${renderFreeSemesterPeriodCard(classCode)}${renderClassScheduleCard(classCode)}`
-        : renderRegularClassDayCard(classCode);
-
-    cardsContainer.innerHTML = `
-        ${teacherCard}
-
-        ${dayOrPeriodCards}
-
-        <div class="detail-card">
-            <div class="detail-card-title">
-                ${msIcon('schedule')}
-                등원예정시간
-            </div>
-            <div class="arrival-bulk-row">
-                <input type="time" class="arrival-time-input" aria-label="등원예정시간" value="${defaultTime}"
-                    onchange="saveClassDefaultTime('${escAttr(classCode)}', this.value)">
-            </div>
-            <div style="font-size:11px;color:var(--text-sec);margin-top:4px;">변경 시 자동 저장${timeUpdatedLabel ? ` · 최근: ${esc(timeUpdatedLabel)}` : ''}</div>
-        </div>
-
-        <div class="detail-card">
-            <div class="detail-card-title">
-                ${msIcon('category')}
-                영역숙제관리
-            </div>
-            <div class="domain-chips-container">${domainChips || '<span class="detail-card-empty">영역 없음</span>'}</div>
-            <div class="domain-add-row">
-                <input type="text" id="domain-add-input" class="field-input" placeholder="새 영역 이름" aria-label="새 영역 이름" style="flex:1;"
-                    onkeydown="if(event.key==='Enter') addClassDomain('${escAttr(classCode)}')">
-                <button class="btn btn-primary btn-sm" onclick="addClassDomain('${escAttr(classCode)}')">추가</button>
-            </div>
-            <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="resetClassDomains('${escAttr(classCode)}')">기본값 복원</button>
-        </div>
-
+    return `
         <div class="detail-card">
             <div class="detail-card-title">
                 ${msIcon('quiz')}
@@ -391,15 +348,144 @@ export function renderClassDetail(classCode) {
                 <button class="btn btn-secondary btn-sm" onclick="addTestSection('${escAttr(classCode)}')">섹션 추가</button>
             </div>
             <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="resetTestSections('${escAttr(classCode)}')">기본값 복원</button>
-        </div>
+        </div>`;
+}
 
-        ${renderClassTempOverrideSection(classCode)}
+// 프로필 헤더를 반 정보로 교체 (학생 상세에서 남은 데이터 클리어)
+function setClassProfileHeader(classCode, memberCount) {
+    document.getElementById('profile-avatar').textContent = classCode[0] || '?';
+    document.getElementById('detail-name').textContent = classCode;
+    document.getElementById('profile-phones').innerHTML = '';
+    document.getElementById('profile-stay-stats').innerHTML = '';
+    document.getElementById('profile-tags').innerHTML = `<span class="tag">${memberCount}명</span>`;
+}
 
-        ${renderClassDeleteCard(classCode, isFreeMode ? 'free' : 'regular')}
-    `;
+export function renderClassDetail(classCode) {
+    if (!classCode) {
+        document.getElementById('detail-empty').style.display = '';
+        document.getElementById('detail-content').style.display = 'none';
+        return;
+    }
+
+    // 특강 반: naesin보다 먼저 체크 (반 이름에 한글 포함되므로 _isNaesinClassCode가 true 반환할 수 있음)
+    const isTeukangClass = state.classSettings[classCode]?.class_type === '특강';
+    const isFreeMode = state._classMgmtMode === 'free';
+
+    // 내신 반: naesin.js로 위임
+    if (!isTeukangClass && !isFreeMode && window.renderNaesinClassDetail && _isNaesinClassCode(classCode)) {
+        window.renderNaesinClassDetail(classCode);
+        return;
+    }
+
+    state.selectedStudentId = null; // 학생 선택 해제
+    applyClassDetailTabMode();
+
+    document.getElementById('detail-empty').style.display = 'none';
+    document.getElementById('detail-content').style.display = '';
+
+    // 헤더 인원수와 '단체 안내' 카드/발송 대상이 같은 로스터를 쓰도록 resolveClassMembers로 통일한다
+    // (리뷰: free 모드에서 헤더=자유학기만, 발송=정규∪자유학기로 갈려 인원수·발송 대상이 어긋나던 오발송 위험).
+    const classStudents = resolveClassMembers(classCode);
+
+    setClassProfileHeader(classCode, classStudents.length);
+
+    const cardsContainer = document.getElementById('detail-cards');
+    const teacherCard = renderClassTeacherCard(classCode);
+
+    // 특강: 영역숙제/테스트/등원예정시간 카드 없음 — 일반=담당+기간+요일/시간+학생추가, 특이=삭제
+    if (isTeukangClass) {
+        cardsContainer.innerHTML = renderClassDetailTabbed({
+            '일반': `${teacherCard}${renderTeukangPeriodCard(classCode)}${renderClassScheduleCard(classCode)}${renderTeukangAddStudentCard(classCode)}${renderClassBulkMessageCard(classCode)}`,
+            '숙제': '',
+            '테스트': '',
+            '특이': renderClassDeleteCard(classCode, 'teukang'),
+        });
+        document.getElementById('detail-panel').classList.add('mobile-visible');
+        return;
+    }
+
+    const dayOrPeriodCards = isFreeMode
+        ? `${renderFreeSemesterPeriodCard(classCode)}${renderClassScheduleCard(classCode)}`
+        : renderRegularClassDayCard(classCode);
+
+    cardsContainer.innerHTML = renderClassDetailTabbed({
+        '일반': `${teacherCard}${dayOrPeriodCards}${renderClassDefaultTimeCard(classCode)}${renderClassBulkMessageCard(classCode)}`,
+        '숙제': renderClassDomainCard(classCode),
+        '테스트': renderClassTestSectionsCard(classCode),
+        '특이': `${renderClassTempOverrideSection(classCode)}${renderClassDeleteCard(classCode, isFreeMode ? 'free' : 'regular')}`,
+    });
 
     // 좁은 화면(<=1100px)에서 디테일 패널 표시 — 데스크톱에선 무해
     document.getElementById('detail-panel').classList.add('mobile-visible');
+}
+
+// ─── 소속 트리 L4 반 뷰 (읽기+단체메시지 전용) ───────────────────────────────
+// 소속 트리에서 반을 클릭(학생 미선택)했을 때. 반설정 편집 UI는 없고 정보 표시와
+// 단체 안내만 노출한다. renderClassDetail과 달리 탭·편집 카드를 만들지 않는다.
+export function renderBranchClassDetail(classCode) {
+    if (!classCode) { renderStudentDetail(null); return; }
+
+    state.selectedStudentId = null;
+    applyClassDetailTabMode();
+
+    document.getElementById('detail-empty').style.display = 'none';
+    document.getElementById('detail-content').style.display = '';
+
+    // 반 유형별 멤버(내신·특강·자유·정규) — 단체안내 카드와 동일 해석기로 통일해
+    // 헤더 인원수·학생목록·발송 대상이 어긋나지 않게 한다(리뷰 #2·#4·#5).
+    const classStudents = resolveClassMembers(classCode)
+        .slice()
+        .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+
+    setClassProfileHeader(classCode, classStudents.length);
+
+    document.getElementById('detail-cards').innerHTML =
+        renderBranchClassSummaryCard(classCode)
+        + renderBranchClassStudentListCard(classStudents)
+        + renderClassBulkMessageCard(classCode);
+
+    document.getElementById('detail-panel').classList.add('mobile-visible');
+}
+
+function renderBranchClassSummaryCard(classCode) {
+    const cs = state.classSettings[classCode] || {};
+    const daysLabel = (cs.default_days?.length ? cs.default_days : _getRegularClassDays(classCode)).join(' · ');
+    const scheduleKey = _classScheduleKey(cs);
+    const schedule = cs[scheduleKey] || {};
+    const scheduleDays = Object.keys(schedule).sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b));
+    const scheduleRows = scheduleDays.map(day => `
+        <div style="display:flex;align-items:center;gap:8px;padding:2px 0;">
+            <span class="naesin-day-badge naesin-day-active" style="flex-shrink:0;">${esc(day)}</span>
+            <span style="color:var(--text-sec);">${esc(schedule[day] || '')}</span>
+        </div>`).join('');
+    return `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                ${msIcon('info')}
+                반 정보
+            </div>
+            <div style="font-size:13px;line-height:1.7;">
+                <div>요일: ${daysLabel ? esc(daysLabel) : '<span style="color:var(--text-sec);">미설정</span>'}</div>
+                <div>등원예정시간: ${cs.default_time ? esc(cs.default_time) : '<span style="color:var(--text-sec);">미설정</span>'}</div>
+            </div>
+            ${scheduleRows ? `<div style="margin-top:6px;">${scheduleRows}</div>` : ''}
+        </div>`;
+}
+
+function renderBranchClassStudentListCard(classStudents) {
+    const rows = classStudents.map(s => `
+        <div class="detail-card-list-row" style="padding:6px 4px;cursor:pointer;border-bottom:1px solid var(--border);"
+            onclick="selectStudent('${escAttr(s.docId)}')">
+            <span style="font-weight:500;">${esc(s.name)}</span>
+        </div>`).join('');
+    return `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                ${msIcon('group')}
+                학생 목록 (${classStudents.length}명)
+            </div>
+            <div>${rows || '<div class="detail-card-empty">학생 없음</div>'}</div>
+        </div>`;
 }
 
 // ─── 정규반 등원 요일 카드 ──────────────────────────────────────────────────

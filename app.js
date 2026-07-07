@@ -65,15 +65,16 @@ import {
 } from './absence-records.js';
 import {
     initClassDetailDeps,
-    renderClassDetail, renderClassTempOverrideSection,
+    renderClassDetail, renderBranchClassDetail, renderClassTempOverrideSection,
     openClassTempOverrideModal, filterClassOverrideStudents, selectClassOverrideStudent, submitClassTempOverrideFromModal,
     saveTeacherAssign, addClassDomain, removeClassDomain, resetClassDomains,
     addTestToSection, removeTestFromSection, addTestSection, removeTestSection, resetTestSections, resetTestSection,
     saveClassDefaultTime, toggleRegularClassDay, toggleClassDay, saveClassDayTime,
     saveTeukangPeriod, saveFreeSemesterPeriod, searchTeukangAddStudent, addStudentToTeukang,
     confirmDeleteClass, deleteClass, CLASS_MODE_LABELS, getClassPeriodInfo,
-    autoCleanupClasses
+    autoCleanupClasses, switchClassDetailTab
 } from './class-detail.js';
+import { sendClassBulkMessage } from './class-bulk-message.js';
 import {
     initHwManagementDeps,
     renderHwFailActionCard, saveHwFailAction, selectHwFailType, clearHwFailType, saveHwFailFields,
@@ -286,6 +287,8 @@ window.reopenAbsenceMakeup = reopenAbsenceMakeup;
 // class-detail.js 의존성 주입 + window 노출
 initClassDetailDeps({ getOverrideStudentsForClass, getOverridingOutFromClass, getClassDomains, getClassTestSections, getTeacherName, saveClassSettings, isInTeukangClass, getTeukangClassStudents, getRegularClassStudents, renderStudentDetail, renderListPanel, _isNaesinClassCode });
 window.renderClassDetail = renderClassDetail;
+window.renderBranchClassDetail = renderBranchClassDetail;
+window.switchClassDetailTab = switchClassDetailTab;
 window.openClassTempOverrideModal = openClassTempOverrideModal;
 window.filterClassOverrideStudents = filterClassOverrideStudents;
 window.selectClassOverrideStudent = selectClassOverrideStudent;
@@ -310,6 +313,7 @@ window.confirmDeleteClass = confirmDeleteClass;
 window.deleteClass = deleteClass;
 window.searchTeukangAddStudent = searchTeukangAddStudent;
 window.addStudentToTeukang = addStudentToTeukang;
+window.sendClassBulkMessage = sendClassBulkMessage;
 
 // hw-management.js 의존성 주입 + window 노출
 initHwManagementDeps({ renderStudentDetail, renderSubFilters, renderListPanel, saveDailyRecord, getClassDomains, getNextHwStatus, saveClassNextHw, checkCanEditGrading, saveImmediately, getUniqueClassCodes, renderFilterChips, openBulkModal });

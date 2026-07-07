@@ -3450,6 +3450,15 @@ textarea.field-input {
     background: var(--danger);
 }
 
+/* ─── 반 설정 상세 서브탭 (일반/숙제/테스트/특이) ─── */
+/* #detail-cards 패딩(12px 16px)을 상쇄해 스크롤 영역 최상단에 고정 노출 */
+.class-detail-subtabs {
+    position: sticky;
+    top: -12px;
+    margin: -12px -16px 12px;
+    z-index: 2;
+}
+
 /* ─── 출결현황 ─── */
 .report-date-range {
     display: flex;

@@ -468,6 +468,7 @@ export function setClassCode(code) {
     state.selectedStudentId = null; // 반 변경 시 학생 선택 해제
     // 반설정에서 반 선택 시 소속 필터 해제 (반설정은 모든 학생을 다룸)
     if (state.selectedClassCode) {
+        state.classDetailTab = '일반'; // 새 반 진입은 항상 첫 탭으로(이전 반의 '특이'=삭제카드 잔존 방지)
         state.selectedBranch = null;
         state.selectedBranchLevel = null;
     }
@@ -522,14 +523,18 @@ export function setBranchClass(mode, code) {
     const isSame = state._classMgmtMode === mode && state.selectedClassCode === code;
     state._classMgmtMode = isSame ? null : mode;
     state.selectedClassCode = isSame ? null : code;
+    if (!isSame) state.classDetailTab = '일반'; // 새 반 진입은 항상 첫 탭으로
     state._classFilterSource = isSame ? null : 'branch'; // 소속 트리 = 출결 맥락 (등원예정 제외)
     state.selectedStudentId = null;
 
     renderBranchFilter();
     renderFilterChips();
     renderSubFilters();
+    // 반 선택 시 renderListPanel 스위처가 소속 반 뷰(renderBranchClassDetail)를 띄우므로 덮어쓰지 않는다.
+    // 반 해제(isSame) 시엔 스위처의 clear 분기가 콘텐츠 서브필터에 막혀 직전 반 카드가 잔존하므로,
+    // setClassCode와 대칭으로 여기서 명시 정리한다.
     renderListPanel();
-    renderStudentDetail(null);
+    if (!state.selectedClassCode) renderStudentDetail(null);
 }
 
 

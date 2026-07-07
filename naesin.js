@@ -18,7 +18,7 @@ import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt, isActiveNaesinBase
 import { deriveActiveNaesinEnrollment } from '@impact7/shared/enrollment-derivation';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 import { renderUnifiedMemoCard } from './role-memo.js';
-import { renderClassDeleteCard, applyClassDetailTabMode } from './class-detail.js';
+import { renderClassDeleteCard, applyClassDetailTabMode, renderClassDetailTabbed, renderClassDomainCard, renderClassTestSectionsCard } from './class-detail.js';
 import { cancelStudentPendingTasks } from './data-layer.js';
 import { recordTeacherChange } from './teacher-history.js';
 
@@ -940,9 +940,7 @@ function renderNaesinClassDetail(csKey) {
         </div>`;
     }).join('');
 
-    const cardsContainer = document.getElementById('detail-cards');
-    cardsContainer.style.display = '';
-    cardsContainer.innerHTML = `
+    const teacherCard = `
         <div class="detail-card">
             <div class="detail-card-title">
                 ${msIcon('person', '', 'style="color:var(--primary);font-size:18px;"')}
@@ -952,8 +950,9 @@ function renderNaesinClassDetail(csKey) {
                 <option value="">미지정</option>
                 ${teacherOptions}
             </select>
-        </div>
+        </div>`;
 
+    const periodCard = `
         <div class="detail-card">
             <div class="detail-card-title">
                 ${msIcon('date_range', '', 'style="color:var(--primary);font-size:18px;"')}
@@ -966,8 +965,9 @@ function renderNaesinClassDetail(csKey) {
                 <input type="date" class="field-input" value="${_escAttr(naesinEnd)}" style="flex:1;"
                     onchange="window.saveNaesinClassPeriod('${_escAttr(csKey)}', 'naesin_end', this.value)">
             </div>
-        </div>
+        </div>`;
 
+    const scheduleCard = `
         <div class="detail-card">
             <div class="detail-card-title">
                 ${msIcon('schedule', '', 'style="color:var(--primary);font-size:18px;"')}
@@ -975,12 +975,16 @@ function renderNaesinClassDetail(csKey) {
             </div>
             <div style="font-size:11px;color:var(--text-sec);margin-bottom:8px;">시간을 입력하면 해당 요일이 활성화됩니다</div>
             ${scheduleRows}
-        </div>
+        </div>`;
 
-        ${_renderNaesinAddStudentCard(csKey)}
-
-        ${renderClassDeleteCard(csKey, 'naesin')}
-    `;
+    const cardsContainer = document.getElementById('detail-cards');
+    cardsContainer.style.display = '';
+    cardsContainer.innerHTML = renderClassDetailTabbed({
+        '일반': `${teacherCard}${periodCard}${scheduleCard}${_renderNaesinAddStudentCard(csKey)}`,
+        '숙제': renderClassDomainCard(csKey),
+        '테스트': renderClassTestSectionsCard(csKey),
+        '특이': renderClassDeleteCard(csKey, 'naesin'),
+    });
 
     // 탭 숨기기
     const tabsEl = document.getElementById('detail-tabs');

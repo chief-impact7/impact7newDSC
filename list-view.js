@@ -16,10 +16,10 @@ import { schoolSearchTerms } from './school-normalizer.js';
 import { esc, escAttr, formatTime12h, oxDisplayClass } from './ui-utils.js';
 import {
     getTeacherName, addOverrideInStudents, getStudentOverrides, getStudentDomains, getStudentTestItems,
-    _isOlderThan
+    _isOlderThan, _isDetailInputFocused
 } from './data-layer.js';
 import { isNewStudent, DEFAULT_ATTENDANCE_LABELS } from './attendance.js';
-import { renderClassDetail } from './class-detail.js';
+import { renderClassDetail, renderBranchClassDetail } from './class-detail.js';
 import { renderStudentDetail } from './student-detail.js';
 import {
     getEnrollPendingVisits,
@@ -975,22 +975,28 @@ export function renderListPanel() {
     // 단, 소속 트리에서 L4 반을 선택한 경우(selectedBranchLevel + selectedClassCode 동시 활성)는
     // 학생 리스트만 노출하고 반 상세 편집 UI는 띄우지 않음 (반설정 오접근 방지).
     // 이전 반 상세가 잔존하지 않도록 명시적으로 빈 상태로 복원.
+    // onSnapshot 재렌더가 단체안내 입력 중 textarea를 지우지 않도록, 상세 입력 포커스 중이면 반 상세
+    // 재렌더를 건너뛴다(renderStudentDetail의 _isDetailInputFocused 가드와 동일 정신). 사용자 액션 시엔
+    // 포커스가 상세 밖(사이드바 등)으로 이동하므로 통과한다.
+    const detailInputFocused = _isDetailInputFocused();
     const isL4Selection = !!(state.selectedBranchLevel && state.selectedClassCode);
     if (isL4Selection && !state.selectedStudentId) {
-        // L4 + 학생 미선택: 이전 반 상세 잔재 제거. 학생 선택 중이면 onSnapshot 재발화 시
-        // 학생 상세가 사라지는 사고를 막기 위해 아래 분기들로 fall-through(naesin/teukang/free·
-        // else 모두 !state.selectedStudentId 조건이라 자동 no-op).
-        renderStudentDetail(null);
+        // L4 + 학생 미선택: 반 정보+학생목록+단체메시지(읽기/메시지 전용) 표시.
+        // 반설정 편집 UI는 없다(반설정 오접근 방지). 학생 선택 시 renderStudentDetail이 다시 노출.
+        if (!detailInputFocused) renderBranchClassDetail(state.selectedClassCode);
     } else if (((state._classMgmtMode === 'naesin' && _isNaesinClassCode(state.selectedClassCode)) ||
          state._classMgmtMode === 'teukang' ||
          state._classMgmtMode === 'free') && state.selectedClassCode && !state.selectedStudentId) {
-        renderClassDetail(state.selectedClassCode);
+        if (!detailInputFocused) renderClassDetail(state.selectedClassCode);
     } else {
         const allFilters = { ...state.savedSubFilters };
         allFilters[state.currentCategory] = new Set(state.currentSubFilter);
         const hasContentFilter = ['attendance', 'homework', 'test', 'automation', 'admin'].some(cat => allFilters[cat]?.size > 0);
         if (state.selectedClassCode && !state.selectedStudentId && !hasContentFilter) {
-            renderClassDetail(state.selectedClassCode);
+            if (!detailInputFocused) renderClassDetail(state.selectedClassCode);
+        } else if (!state.selectedClassCode && !state.selectedStudentId && !hasContentFilter) {
+            // 반·학생 모두 미선택(서브필터 없음): 직전 학생/반 카드 잔존 방지 — 빈 상태로 강제 복원.
+            renderStudentDetail(null);
         }
     }
 }

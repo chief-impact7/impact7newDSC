@@ -609,7 +609,7 @@ export function loadAbsenceRecords() {
 const _unsubs = {};   // 컬렉션별 unsubscribe 함수
 let _rtDebounce = null;
 
-function _isDetailInputFocused() {
+export function _isDetailInputFocused() {
     const el = document.activeElement;
     if (!el) return false;
     const tag = el.tagName;
