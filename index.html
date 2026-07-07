@@ -738,16 +738,16 @@
         <div class="parent-msg-modal">
             <div class="parent-msg-header">
                 <h3>학부모 알림 작성</h3>
-                <button class="icon-btn" onclick="document.getElementById('parent-msg-modal').style.display='none'" aria-label="닫기">
+                <button class="icon-btn" onclick="document.getElementById('parent-msg-modal').style.display='none'" title="학부모 알림 작성 창 닫기" aria-label="학부모 알림 작성 창 닫기">
                     <svg class="material-symbols-outlined" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 18 18 6M6 6l12 12"/></svg>
                 </button>
             </div>
             <div class="parent-msg-tabs">
-                <button class="parent-msg-tab active" id="parent-msg-tab-ai" onclick="switchParentMsgTab('ai')">
+                <button class="parent-msg-tab active" id="parent-msg-tab-ai" onclick="switchParentMsgTab('ai')" title="AI가 학생 데이터를 바탕으로 학부모 알림 내용을 작성합니다" aria-label="AI 작성 탭">
                     <svg class="material-symbols-outlined" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="font-size:16px;"><path d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z"/></svg>
                     AI 작성
                 </button>
-                <button class="parent-msg-tab" id="parent-msg-tab-manual" onclick="switchParentMsgTab('manual')">
+                <button class="parent-msg-tab" id="parent-msg-tab-manual" onclick="switchParentMsgTab('manual')" title="직접 학부모 알림 내용을 작성합니다" aria-label="직접 작성 탭">
                     <svg class="material-symbols-outlined" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="font-size:16px;"><path d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"/></svg>
                     직접 작성
                 </button>
@@ -760,7 +760,7 @@
                         Gemini가 알림 메시지를 작성하고 있습니다...
                     </div>
                     <div id="parent-msg-prompt-section" class="parent-msg-prompt-section">
-                        <button class="parent-msg-prompt-toggle" onclick="togglePromptEditor()">
+                        <button class="parent-msg-prompt-toggle" onclick="togglePromptEditor()" title="AI 작성 지시사항을 열거나 닫습니다" aria-label="프롬프트 설정 열기 또는 닫기">
                             <svg class="material-symbols-outlined" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="font-size:16px;"><path d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75"/></svg>
                             프롬프트 설정
                             <svg class="material-symbols-outlined parent-msg-prompt-arrow" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" id="prompt-arrow" style="font-size:16px;"><path d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
@@ -769,8 +769,8 @@
                             <textarea class="parent-msg-prompt-textarea" id="parent-msg-prompt"
                                 placeholder="AI에게 전달할 지시사항을 입력하세요..."></textarea>
                             <div style="display:flex;gap:6px;margin-top:6px;">
-                                <button class="parent-msg-btn-small" onclick="resetPromptToDefault()">기본값 복원</button>
-                                <button class="parent-msg-btn-small primary" onclick="saveCustomPrompt()">저장</button>
+                                <button class="parent-msg-btn-small" onclick="resetPromptToDefault()" title="AI 작성 지시사항을 기본값으로 되돌립니다" aria-label="프롬프트 기본값 복원">기본값 복원</button>
+                                <button class="parent-msg-btn-small primary" onclick="saveCustomPrompt()" title="현재 AI 작성 지시사항을 저장합니다" aria-label="프롬프트 저장">저장</button>
                             </div>
                         </div>
                     </div>
@@ -800,23 +800,23 @@
                     <svg class="material-symbols-outlined" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="font-size:14px;"><path d="m4.5 12.75 6 6 9-13.5"/></svg>
                     복사됨
                 </span>
-                <button class="parent-msg-btn-regen" onclick="regenerateParentMessage()" id="parent-msg-regen-btn">
+                <button class="parent-msg-btn-regen" onclick="regenerateParentMessage()" id="parent-msg-regen-btn" title="현재 탭 기준으로 학부모 알림 내용을 다시 생성합니다" aria-label="학부모 알림 내용 다시 생성">
                     <svg class="material-symbols-outlined" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="font-size:16px;"><path d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>
                     AI 생성
                 </button>
-                <button class="parent-msg-btn-copy" onclick="copyParentMessage()">
+                <button class="parent-msg-btn-copy" onclick="copyParentMessage()" title="작성된 학부모 알림 내용을 클립보드에 복사합니다" aria-label="학부모 알림 내용 복사">
                     <svg class="material-symbols-outlined" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="font-size:16px;"><path d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"/></svg>
                     복사
                 </button>
-                <button class="parent-msg-btn-copy" id="parent-msg-send-btn" style="background:#0b7a52;color:#fff;border-color:#0b7a52;" onclick="sendParentMessage()">
+                <button class="parent-msg-btn-copy" id="parent-msg-send-btn" style="background:#0b7a52;color:#fff;border-color:#0b7a52;" onclick="sendParentMessage()" title="알림톡으로 발송" aria-label="알림톡으로 발송">
                     <svg class="material-symbols-outlined" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="font-size:16px;"><path d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5"/></svg>
                     알림톡
                 </button>
-                <button class="parent-msg-btn-copy" id="parent-msg-send-log-btn" style="background:#155e9c;color:#fff;border-color:#155e9c;" onclick="sendParentMessageWithConsult()">
+                <button class="parent-msg-btn-copy" id="parent-msg-send-log-btn" style="background:#155e9c;color:#fff;border-color:#155e9c;" onclick="sendParentMessageWithConsult()" title="브랜드메시지로 발송. 야간제한" aria-label="브랜드메시지로 발송. 야간제한">
                     <svg class="material-symbols-outlined" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="font-size:16px;"><path d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 0 1-.825-.242m9.345-8.334a2.126 2.126 0 0 0-.476-.095 48.64 48.64 0 0 0-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0 0 11.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155"/></svg>
                     상담+발송
                 </button>
-                <button class="parent-msg-btn-close" onclick="document.getElementById('parent-msg-modal').style.display='none'">
+                <button class="parent-msg-btn-close" onclick="document.getElementById('parent-msg-modal').style.display='none'" title="학부모 알림 작성 창 닫기" aria-label="학부모 알림 작성 창 닫기">
                     닫기
                 </button>
             </div>
