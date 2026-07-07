@@ -4,6 +4,7 @@ import { resolve } from 'path'
 
 export default defineConfig({
     root: './',
+    base: '/dsc/',
     plugins: [react()],
     test: {
         // vitest 대상은 src 하위만 — 루트 *.test.js는 node:test 전용(npm run test:node)

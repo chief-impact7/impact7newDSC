@@ -3107,14 +3107,32 @@ textarea.field-input {
   color: var(--text-sec);
 }
 
-.parent-msg-recipient-row select {
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+.parent-msg-recipient-checks {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.parent-msg-recipient-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
   font-size: 13px;
-  background: var(--surface, #fff);
   color: var(--text-main);
   cursor: pointer;
+}
+
+.parent-msg-recipient-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand, #00754A);
+}
+
+.parent-msg-recipient-empty {
+  font-size: 13px;
+  color: var(--danger, #c82014);
 }
 
 .parent-msg-btn-copy {

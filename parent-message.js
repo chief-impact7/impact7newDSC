@@ -7,11 +7,14 @@ import { geminiModel } from './firebase-ai.js';
 import { parseDateKST, getDayName } from './src/shared/firestore-helpers.js';
 import { esc, decodeHtmlEntities, formatTime12h, showSaveIndicator, isKakaoNightKST } from './ui-utils.js';
 import { enrollmentCode } from './student-helpers.js';
-import { sendDailyReport, addConsultation } from './data-layer.js';
+import { sendDailyReport, sendParentNotice, addConsultation, saveStudentParentMessageRecipientFields } from './data-layer.js';
 import { buildConsultationPayload } from './consultation-payload.js';
+import { defaultRecipientFields, normalizeRecipientFields } from './src/messages/recipient-settings.js';
 import { todayKST } from '@impact7/shared/datetime';
 
 let _sendingReport = false;
+let _parentMsgRecipientFields = new Set(['parent_1']);
+let _recipientSaveQueue = Promise.resolve();
 
 // 백엔드 recipientPhone.js의 RECIPIENT_FIELDS와 일치. 번호가 있는 대상만 노출한다.
 const RECIPIENT_OPTIONS = [
@@ -22,18 +25,51 @@ const RECIPIENT_OPTIONS = [
 ];
 const onlyDigits = (v) => String(v ?? '').replace(/\D/g, '');
 
-// 학생 번호 유무에 따라 수신 대상 select를 채운다. 기본 선택은 학부모1(있으면), 없으면 첫 가용.
-function populateRecipientSelect(studentId) {
-    const sel = document.getElementById('parent-msg-recipient');
-    if (!sel) return;
+function parentMessageRecipientFields(student, availableFields) {
+    const saved = normalizeRecipientFields(student?.parent_message_recipient_fields, availableFields);
+    return saved ?? defaultRecipientFields(availableFields);
+}
+
+function saveParentMessageRecipientFields(studentId) {
+    const fields = [..._parentMsgRecipientFields];
+    const student = getStudent?.(studentId);
+    if (student) student.parent_message_recipient_fields = fields;
+    _recipientSaveQueue = _recipientSaveQueue
+        .catch(() => {})
+        .then(() => saveStudentParentMessageRecipientFields(studentId, fields))
+        .catch((err) => {
+            console.error('[parent-message] 수신 대상 저장 실패:', err);
+        });
+    return _recipientSaveQueue;
+}
+
+// 학생 번호 유무에 따라 수신 대상 체크박스를 채운다. 학부모알림작성 전용 선택값만 사용한다.
+function populateRecipientChecks(studentId) {
+    const box = document.getElementById('parent-msg-recipient');
+    if (!box) return;
     const student = getStudent?.(studentId) || {};
     const available = RECIPIENT_OPTIONS.filter((o) => onlyDigits(student[o.key]));
-    const opts = available.length ? available : RECIPIENT_OPTIONS.filter((o) => o.field === 'parent_1');
-    sel.innerHTML = opts.map((o) => {
+    const availableFields = available.map((o) => o.field);
+    _parentMsgRecipientFields = new Set(parentMessageRecipientFields(student, availableFields));
+    if (!available.length) {
+        box.innerHTML = '<span class="parent-msg-recipient-empty">등록된 연락처 없음</span>';
+        return;
+    }
+    box.innerHTML = available.map((o) => {
         const tail = onlyDigits(student[o.key]).slice(-4);
-        return `<option value="${o.field}">${o.label}${tail ? ` (${tail})` : ''}</option>`;
+        const checked = _parentMsgRecipientFields.has(o.field) ? 'checked' : '';
+        return `<label class="parent-msg-recipient-check">
+            <input type="checkbox" name="parent-msg-recipient-field" value="${o.field}" ${checked}>
+            <span>${esc(o.label)}${tail ? ` (${tail})` : ''}</span>
+        </label>`;
     }).join('');
-    sel.value = available.some((o) => o.field === 'parent_1') ? 'parent_1' : (available[0]?.field ?? 'parent_1');
+    box.querySelectorAll('input[name="parent-msg-recipient-field"]').forEach((input) => {
+        input.addEventListener('change', () => {
+            if (input.checked) _parentMsgRecipientFields.add(input.value);
+            else _parentMsgRecipientFields.delete(input.value);
+            void saveParentMessageRecipientFields(studentId);
+        });
+    });
 }
 
 // ─── 의존성 주입 (daily-ops.js에서 init 호출) ──────────────────────────────
@@ -436,8 +472,8 @@ export function openParentMessageModal(studentId) {
     const manualText = document.getElementById('parent-msg-manual-text');
     if (manualText) manualText.value = '';
 
-    // 수신 대상 select — 학생 번호 유무 반영, 기본 학부모1.
-    populateRecipientSelect(studentId);
+    // 수신 대상 — 학부모알림작성 전용 다중 선택.
+    populateRecipientChecks(studentId);
 }
 
 export async function regenerateParentMessage() {
@@ -484,20 +520,68 @@ export function copyParentMessage() {
     });
 }
 
-// 일일 리포트 발송 — 친구면 정보형 BMS, 비친구면 가입 안내 SMS(서버가 분기). 수신 대상은 select(parent-msg-recipient)에서 선택, 기본 학부모1.
-// logConsultation=true면 발송 성공 후 상담 기록에 자동 저장(형태='문자').
-async function _doSend(logConsultation) {
-    if (_sendingReport || !parentMsgStudentId) return;
+function parentMessageContent() {
     const textEl = parentMsgMode === 'ai'
         ? document.getElementById('parent-msg-text')
         : document.getElementById('parent-msg-manual-text');
-    const content = textEl?.value?.trim();
+    return textEl?.value?.trim() || '';
+}
+
+function selectedParentMsgRecipients() {
+    return [..._parentMsgRecipientFields];
+}
+
+function consultationTargetLabel(recipientFields) {
+    if (recipientFields.length === 1 && recipientFields[0] === 'student') return '학생';
+    if (recipientFields.includes('student')) return '학생/학부모';
+    return '학부모';
+}
+
+function reportDateLabel() {
+    const d = parseDateKST(state.selectedDate);
+    if (!d || Number.isNaN(d.getTime())) return state.selectedDate || todayKST();
+    return `${d.getMonth() + 1}/${d.getDate()}(${getDayName(state.selectedDate)})`;
+}
+
+// 일반 발송은 승인된 수업 리포트 알림톡(ATA)으로 보낸다. 알림톡은 야간 발송 제한을 타지 않는다.
+async function _sendReportAlimtalk() {
+    if (_sendingReport || !parentMsgStudentId) return;
+    const content = parentMessageContent();
     if (!content) { alert('발송할 내용이 없습니다.'); return; }
+    const recipientFields = selectedParentMsgRecipients();
+    if (!recipientFields.length) { alert('수신 대상을 선택하세요.'); return; }
+
+    const btnIds = ['parent-msg-send-btn', 'parent-msg-send-log-btn'];
+    _sendingReport = true;
+    btnIds.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
+    try {
+        await sendParentNotice({
+            studentId: parentMsgStudentId,
+            templateKey: 'report',
+            variables: { 날짜: reportDateLabel(), 내용: content },
+            recipientFields,
+        });
+        alert('알림톡 발송을 요청했습니다.');
+    } catch (err) {
+        console.error('알림톡 발송 실패:', err);
+        alert('알림톡 발송 실패: ' + (err?.message || err));
+    } finally {
+        _sendingReport = false;
+        btnIds.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = false; });
+    }
+}
+
+// 상담+발송은 기존 일일 리포트 BMS 경로를 유지한다. 친구면 정보형 BMS, 비친구/미도달은 문자 전환.
+async function _sendReportBmsWithConsultation() {
+    if (_sendingReport || !parentMsgStudentId) return;
+    const content = parentMessageContent();
+    if (!content) { alert('발송할 내용이 없습니다.'); return; }
+    const recipientFields = selectedParentMsgRecipients();
+    if (!recipientFields.length) { alert('수신 대상을 선택하세요.'); return; }
 
     const btnIds = ['parent-msg-send-btn', 'parent-msg-send-log-btn'];
     // 학부모 알림 작성엔 날짜 UI가 없으므로 발송일(오늘) 기준 — 대시보드 선택일(state.selectedDate)과 무관.
     const sendDate = todayKST();
-    const recipientField = document.getElementById('parent-msg-recipient')?.value || 'parent_1';
     // 야간(20:50~08:00)엔 카카오가 친구 대상 카톡을 차단 — 발송자에게 지금 문자/내일 카톡 예약을 묻는다.
     let reserveIfNight = false;
     if (isKakaoNightKST()) {
@@ -511,7 +595,8 @@ async function _doSend(logConsultation) {
         const res = await sendDailyReport({
             studentId: parentMsgStudentId,
             content,
-            recipientField,
+            recipientField: recipientFields[0],
+            recipientFields,
             reserveIfNight,
         });
         let msg;
@@ -523,29 +608,26 @@ async function _doSend(logConsultation) {
             msg = '채널 미가입이라 안내 문자로 발송했습니다.';
         }
 
-        // 상담 기록은 발송 성공 후 저장.
-        if (logConsultation) {
-            try {
-                const student = getStudent?.(parentMsgStudentId) || {};
-                const teacher = getCurrentTeacher?.() || {};
-                await addConsultation(buildConsultationPayload({
-                    studentId: parentMsgStudentId,
-                    studentName: student.name || '',
-                    className: '',
-                    teacherId: teacher.id || '',
-                    teacherName: teacher.name || '',
-                    date: sendDate,
-                    target: recipientField === 'student' ? '학생' : '학부모',
-                    method: '문자',
-                    consultationType: '정기',
-                    text: content,
-                    title: '',
-                }));
-                msg += ' · 상담 기록 저장됨';
-            } catch (e) {
-                console.error('상담 기록 저장 실패:', e);
-                msg += ' · (상담 저장 실패 — 상담 탭에서 수동 저장하세요: ' + (e?.message || e) + ')';
-            }
+        try {
+            const student = getStudent?.(parentMsgStudentId) || {};
+            const teacher = getCurrentTeacher?.() || {};
+            await addConsultation(buildConsultationPayload({
+                studentId: parentMsgStudentId,
+                studentName: student.name || '',
+                className: '',
+                teacherId: teacher.id || '',
+                teacherName: teacher.name || '',
+                date: sendDate,
+                target: consultationTargetLabel(recipientFields),
+                method: '문자',
+                consultationType: '정기',
+                text: content,
+                title: '',
+            }));
+            msg += ' · 상담 기록 저장됨';
+        } catch (e) {
+            console.error('상담 기록 저장 실패:', e);
+            msg += ' · (상담 저장 실패 — 상담 탭에서 수동 저장하세요: ' + (e?.message || e) + ')';
         }
         alert(msg);
     } catch (err) {
@@ -557,5 +639,5 @@ async function _doSend(logConsultation) {
     }
 }
 
-export function sendParentMessage() { return _doSend(false); }
-export function sendParentMessageWithConsult() { return _doSend(true); }
+export function sendParentMessage() { return _sendReportAlimtalk(); }
+export function sendParentMessageWithConsult() { return _sendReportBmsWithConsultation(); }

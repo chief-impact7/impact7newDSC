@@ -1093,6 +1093,12 @@ export async function saveStudentMessageRecipientSettings(studentId, settings) {
   });
 }
 
+export async function saveStudentParentMessageRecipientFields(studentId, fields) {
+  await auditUpdate(doc(db, 'students', studentId), {
+    parent_message_recipient_fields: fields,
+  });
+}
+
 // 실패 항목 보관(직원)/삭제(원장).
 export async function manageMessageFailure(payload) {
   const callable = httpsCallable(functions, 'manageMessageFailure');
