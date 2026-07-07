@@ -981,7 +981,7 @@ export function renderListPanel() {
     const detailInputFocused = _isDetailInputFocused();
     const isL4Selection = !!(state.selectedBranchLevel && state.selectedClassCode);
     if (isL4Selection && !state.selectedStudentId) {
-        // L4 + 학생 미선택: 반 정보+학생목록+단체메시지(읽기/메시지 전용) 표시.
+        // L4 + 학생 미선택: 소속반 뷰(현황=반 정보+학생목록, 메시지=단체 안내) 표시.
         // 반설정 편집 UI는 없다(반설정 오접근 방지). 학생 선택 시 renderStudentDetail이 다시 노출.
         if (!detailInputFocused) renderBranchClassDetail(state.selectedClassCode);
     } else if (((state._classMgmtMode === 'naesin' && _isNaesinClassCode(state.selectedClassCode)) ||

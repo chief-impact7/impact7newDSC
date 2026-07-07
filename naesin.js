@@ -275,6 +275,17 @@ function _renderClinicCard(studentId, extraVisit, selectedDate) {
 
 // ─── 상세패널 렌더링 ──────────────────────────────────────────────────────────
 
+// 내신·특강 학생 상세는 일일현황 카드만 보인다. 탭 바와 비-daily pane(출결/성적/상담/메시지/기록)을
+// 모두 숨겨 직전 소속반 메시지 탭(단체안내)·학생 메시지 탭 등이 남아 노출되는 것을 방지한다.
+function _hideNonDailyDetailTabs() {
+    const tabsEl = document.getElementById('detail-tabs');
+    if (tabsEl) tabsEl.style.display = 'none';
+    ['report-tab', 'score-tab', 'consultation-tab', 'message-tab', 'docu-tab'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+}
+
 /**
  * renderNaesinDetail(studentId)
  *
@@ -427,11 +438,8 @@ export function renderNaesinDetail(studentId) {
         cardsEl.innerHTML = attHtml + schedHtml + memoHtml + clinicHtml + removeHtml;
     }
 
-    // 탭 상태 (일일현황 탭만 표시)
-    const tabsEl = document.getElementById('detail-tabs');
-    if (tabsEl) tabsEl.style.display = 'none';
-    const reportEl = document.getElementById('report-tab');
-    if (reportEl) reportEl.style.display = 'none';
+    // 일일현황 탭만 표시 (비-daily pane·탭 바 모두 숨김)
+    _hideNonDailyDetailTabs();
 }
 
 // ─── 클리닉 추가 ─────────────────────────────────────────────────────────────
@@ -736,11 +744,8 @@ export function renderTeukangDetail(studentId) {
         cardsEl.innerHTML = attHtml + schedHtml + removeHtml + memoHtml + clinicHtml;
     }
 
-    // 탭 숨기기
-    const tabsEl = document.getElementById('detail-tabs');
-    if (tabsEl) tabsEl.style.display = 'none';
-    const reportEl = document.getElementById('report-tab');
-    if (reportEl) reportEl.style.display = 'none';
+    // 일일현황 탭만 표시 (비-daily pane·탭 바 모두 숨김)
+    _hideNonDailyDetailTabs();
     return true;
 }
 
@@ -985,12 +990,6 @@ function renderNaesinClassDetail(csKey) {
         '테스트': renderClassTestSectionsCard(csKey),
         '특이': renderClassDeleteCard(csKey, 'naesin'),
     });
-
-    // 탭 숨기기
-    const tabsEl = document.getElementById('detail-tabs');
-    if (tabsEl) tabsEl.style.display = 'none';
-    const reportEl = document.getElementById('report-tab');
-    if (reportEl) reportEl.style.display = 'none';
 
     document.getElementById('detail-panel').classList.add('mobile-visible');
 }

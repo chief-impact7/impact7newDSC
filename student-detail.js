@@ -38,6 +38,7 @@ import {
     saveDailyRecord, saveImmediately, searchStudentConsultations
 } from './data-layer.js';
 import { isAttendedStatus } from './attendance.js';
+import { renderClassBulkMessageTab } from './class-bulk-message.js';
 import {
     renderHwFailActionCard, renderPendingTasksCard, openPersonalNextHwModal
 } from './hw-management.js';
@@ -445,6 +446,11 @@ export function switchDetailTab(tab) {
         });
     }
     if (tab === 'message') {
+        // 소속반 뷰(학생 미선택 + L4 반 선택): 개인 메시지 대신 반 단체 안내 탭
+        if (!state.selectedStudentId && state.selectedClassCode && state.selectedBranchLevel) {
+            renderClassBulkMessageTab(state.selectedClassCode);
+            return;
+        }
         if (_renderMessageFn) {
             _renderMessageFn(state.selectedStudentId);
             return;
@@ -1581,8 +1587,11 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     const messageTabEl = document.getElementById('message-tab');
     if (messageTabEl) {
         messageTabEl.style.display = state.detailTab === 'message' ? '' : 'none';
-        if (studentChanged && studentId && state.detailTab === 'message' && _renderMessageFn) {
-            _renderMessageFn(studentId);
+        if (studentChanged && studentId && state.detailTab === 'message') {
+            // _renderMessageFn 미로드면 switchDetailTab이 import 후 렌더 — 소속반 단체 안내 탭에서
+            // 학생으로 전환한 직후 stale 단체 안내 UI가 학생 화면에 남는 것을 방지.
+            if (_renderMessageFn) _renderMessageFn(studentId);
+            else switchDetailTab('message');
         }
     }
     const docuTabEl2 = document.getElementById('docu-tab');

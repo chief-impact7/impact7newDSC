@@ -36,7 +36,9 @@ export function renderTempAttendanceDetail(docId) {
     const tabsEl = document.getElementById('detail-tabs');
     if (tabsEl) tabsEl.style.display = 'none';
     document.getElementById('detail-cards').style.display = '';
-    ['report-tab', 'score-tab', 'consultation-tab'].forEach(id => {
+    // message-tab·docu-tab 포함 — 소속반 메시지 탭(단체안내)이 채워진 뒤 진단평가로 넘어오면
+    // 그 UI가 남아 진단평가 카드 아래 노출된다.
+    ['report-tab', 'score-tab', 'consultation-tab', 'message-tab', 'docu-tab'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
     });

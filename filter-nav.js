@@ -524,6 +524,10 @@ export function setBranchClass(mode, code) {
     state._classMgmtMode = isSame ? null : mode;
     state.selectedClassCode = isSame ? null : code;
     if (!isSame) state.classDetailTab = '일반'; // 새 반 진입은 항상 첫 탭으로
+    // 소속반 뷰 상단 탭은 항상 '현황'으로 초기화한다 — 진입(!isSame)뿐 아니라 해제(isSame)에서도.
+    // 해제 시 detailTab='message'가 남으면 소속으로 좁혀진 목록에서 학생을 클릭했을 때
+    // 그 학생의 개인 메시지 탭이 열려버린다(리뷰 확인).
+    state.detailTab = 'daily';
     state._classFilterSource = isSame ? null : 'branch'; // 소속 트리 = 출결 맥락 (등원예정 제외)
     state.selectedStudentId = null;
 
@@ -568,15 +572,21 @@ export function renderFilterChips() {
         chips.push({ label: `${catLabel}: ${subLabel}`, onRemove: `clearCat:${cat}` });
     }
 
-    // 소속 칩
-    if (state.selectedBranch) {
-        const branchLabel = state.selectedBranchLevel ? `${state.selectedBranch} ${state.selectedBranchLevel}` : state.selectedBranch;
-        chips.push({ label: `소속: ${branchLabel}`, onRemove: 'clearBranch' });
-    }
-
-    // 반 칩
-    if (state.selectedClassCode) {
-        chips.push({ label: `반: ${state.selectedClassCode}`, onRemove: 'clearClassCode' });
+    // 소속 트리 L4 반 선택 = 단일 '소속반' 칩. 소속·반 두 칩으로 쪼개면 소속 칩만 지웠을 때
+    // 남은 반 칩이 반설정의 반 필터와 구별되지 않는다 — 두 '반'은 서로 다른 개념.
+    const isBranchClass = !!(state.selectedBranchLevel && state.selectedClassCode);
+    if (isBranchClass) {
+        chips.push({ label: `소속반: ${state.selectedClassCode}`, onRemove: 'clearBranchClass' });
+    } else {
+        // 소속 칩
+        if (state.selectedBranch) {
+            const branchLabel = state.selectedBranchLevel ? `${state.selectedBranch} ${state.selectedBranchLevel}` : state.selectedBranch;
+            chips.push({ label: `소속: ${branchLabel}`, onRemove: 'clearBranch' });
+        }
+        // 반 칩 (반설정 트리)
+        if (state.selectedClassCode) {
+            chips.push({ label: `반: ${state.selectedClassCode}`, onRemove: 'clearClassCode' });
+        }
     }
 
     if (chips.length === 0) {
@@ -589,10 +599,14 @@ export function renderFilterChips() {
     }
 
     // 필터가 걸린 채 검색 중이면 검색 범위 안내 배너 표시 (검색은 의도적으로 현재 필터 안에서 동작)
-    // 반 필터는 검색 중 적용되지 않으므로(list-view.js) 배너 라벨에서 제외
+    // 반 필터는 검색 중 적용되지 않으므로(list-view.js) 배너 라벨에서 제외.
+    // 소속반 통합 칩도 반 부분은 미적용이지만 소속(단지·학부) 필터는 적용되므로 소속 라벨로 되돌려 표시.
     const scopeBanner = document.getElementById('search-scope-banner');
     if (scopeBanner) {
-        const scopeChips = chips.filter(c => c.onRemove !== 'clearClassCode');
+        const scopeChips = chips.filter(c => c.onRemove !== 'clearClassCode' && c.onRemove !== 'clearBranchClass');
+        if (isBranchClass) {
+            scopeChips.push({ label: `소속: ${state.selectedBranch} ${state.selectedBranchLevel}` });
+        }
         const show = !!state.searchQuery?.trim() && scopeChips.length > 0;
         scopeBanner.style.display = show ? '' : 'none';
         if (show) {
@@ -627,6 +641,10 @@ export function removeFilterChip(action) {
         renderClassCodeFilter();
         // 디테일 패널 초기화
         state.selectedStudentId = null;
+    } else if (action === 'clearBranchClass') {
+        // 소속반 통합 칩 제거 = 소속 트리 L4 토글 오프와 동일 (반만 해제, 소속·학부는 유지)
+        setBranchClass(state._classMgmtMode, state.selectedClassCode);
+        return;
     }
 
 
@@ -645,6 +663,7 @@ export function clearAllFilters() {
     state.selectedBranch = null;
     state.selectedBranchLevel = null;
     state.selectedClassCode = null;
+    state.detailTab = 'daily'; // 소속반 메시지 탭 잔상이 이후 학생 선택으로 이월되지 않도록 초기화
     document.querySelector('.nav-l1[data-category="branch"]')?.classList.remove('expanded');
     document.querySelector('.nav-l1[data-category="class_mgmt"]')?.classList.remove('expanded');
     // UI 동기화

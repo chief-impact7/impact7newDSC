@@ -17,7 +17,7 @@ import { matchesBranchFilter, enrollmentCode, getActiveEnrollments, isActiveNaes
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
 import { cancelStudentPendingTasks } from './data-layer.js';
 import { recordTeacherChange } from './teacher-history.js';
-import { renderClassBulkMessageCard, resolveClassMembers } from './class-bulk-message.js';
+import { renderClassBulkMessageTab, resolveClassMembers } from './class-bulk-message.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let getOverrideStudentsForClass, getOverridingOutFromClass, getClassDomains, getClassTestSections;
@@ -176,23 +176,46 @@ export async function submitClassTempOverrideFromModal(classCode) {
     await window.createTempClassOverride(studentId, classCode, [dateVal], reason);
 }
 
-// 반 상세 패널: 출결현황/성적 탭은 학생 전용 → 반 모드에서 숨기고 daily로 강제.
+// 학생 전용 탭 콘텐츠 패널들 — 반 모드 진입 시 모두 숨겨 직전 학생 탭 잔존을 막는다.
+const STUDENT_TAB_PANES = ['report-tab', 'score-tab', 'consultation-tab', 'message-tab', 'docu-tab'];
+
+function _hideTabPanes(ids) {
+    for (const id of ids) {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    }
+}
+
+// 반설정 상세: 상단 학생 탭 바(현황/기록/메시지…)를 통째로 숨긴다.
+// 반설정의 탭은 일반/숙제/테스트/특이 4탭(renderClassDetailTabbed)뿐이다.
 // 학생 선택 시 renderStudentDetail이 다시 노출함.
 export function applyClassDetailTabMode() {
     const tabsEl = document.getElementById('detail-tabs');
-    if (tabsEl) {
-        tabsEl.querySelectorAll('.detail-tab').forEach(t => {
-            if (t.dataset.tab === 'report' || t.dataset.tab === 'score' || t.dataset.tab === 'consultation') t.style.display = 'none';
-            t.classList.toggle('active', t.dataset.tab === 'daily');
-            t.setAttribute('aria-selected', String(t.dataset.tab === 'daily'));
-        });
-    }
+    if (tabsEl) tabsEl.style.display = 'none';
     state.detailTab = 'daily';
     document.getElementById('detail-cards').style.display = '';
-    const reportTabEl = document.getElementById('report-tab');
-    if (reportTabEl) reportTabEl.style.display = 'none';
-    const scoreTabEl = document.getElementById('score-tab');
-    if (scoreTabEl) scoreTabEl.style.display = 'none';
+    _hideTabPanes(STUDENT_TAB_PANES);
+}
+
+// 소속반 상세(읽기 뷰): 현황·메시지 탭만 노출 (기록/출결/상담/성적은 학생 전용).
+// 재렌더(onSnapshot 등) 시 사용자가 보던 메시지 탭을 유지한다.
+export function applyBranchClassTabMode() {
+    const active = state.detailTab === 'message' ? 'message' : 'daily';
+    state.detailTab = active;
+    const tabsEl = document.getElementById('detail-tabs');
+    if (tabsEl) {
+        tabsEl.style.display = '';
+        tabsEl.querySelectorAll('.detail-tab').forEach(t => {
+            const visible = t.dataset.tab === 'daily' || t.dataset.tab === 'message';
+            t.style.display = visible ? '' : 'none';
+            t.classList.toggle('active', t.dataset.tab === active);
+            t.setAttribute('aria-selected', String(t.dataset.tab === active));
+        });
+    }
+    document.getElementById('detail-cards').style.display = active === 'daily' ? '' : 'none';
+    _hideTabPanes(STUDENT_TAB_PANES.filter(id => id !== 'message-tab'));
+    const messageTabEl = document.getElementById('message-tab');
+    if (messageTabEl) messageTabEl.style.display = active === 'message' ? '' : 'none';
 }
 
 // ─── 반 상세 4탭 (일반/숙제/테스트/특이) ─────────────────────────────────────
@@ -395,7 +418,7 @@ export function renderClassDetail(classCode) {
     // 특강: 영역숙제/테스트/등원예정시간 카드 없음 — 일반=담당+기간+요일/시간+학생추가, 특이=삭제
     if (isTeukangClass) {
         cardsContainer.innerHTML = renderClassDetailTabbed({
-            '일반': `${teacherCard}${renderTeukangPeriodCard(classCode)}${renderClassScheduleCard(classCode)}${renderTeukangAddStudentCard(classCode)}${renderClassBulkMessageCard(classCode)}`,
+            '일반': `${teacherCard}${renderTeukangPeriodCard(classCode)}${renderClassScheduleCard(classCode)}${renderTeukangAddStudentCard(classCode)}`,
             '숙제': '',
             '테스트': '',
             '특이': renderClassDeleteCard(classCode, 'teukang'),
@@ -409,7 +432,7 @@ export function renderClassDetail(classCode) {
         : renderRegularClassDayCard(classCode);
 
     cardsContainer.innerHTML = renderClassDetailTabbed({
-        '일반': `${teacherCard}${dayOrPeriodCards}${renderClassDefaultTimeCard(classCode)}${renderClassBulkMessageCard(classCode)}`,
+        '일반': `${teacherCard}${dayOrPeriodCards}${renderClassDefaultTimeCard(classCode)}`,
         '숙제': renderClassDomainCard(classCode),
         '테스트': renderClassTestSectionsCard(classCode),
         '특이': `${renderClassTempOverrideSection(classCode)}${renderClassDeleteCard(classCode, isFreeMode ? 'free' : 'regular')}`,
@@ -420,18 +443,18 @@ export function renderClassDetail(classCode) {
 }
 
 // ─── 소속 트리 L4 반 뷰 (읽기+단체메시지 전용) ───────────────────────────────
-// 소속 트리에서 반을 클릭(학생 미선택)했을 때. 반설정 편집 UI는 없고 정보 표시와
-// 단체 안내만 노출한다. renderClassDetail과 달리 탭·편집 카드를 만들지 않는다.
+// 소속 트리에서 반을 클릭(학생 미선택)했을 때. 반설정 편집 UI는 없고
+// 현황 탭(반 정보+학생 목록)과 메시지 탭(단체 안내)만 노출한다.
 export function renderBranchClassDetail(classCode) {
     if (!classCode) { renderStudentDetail(null); return; }
 
     state.selectedStudentId = null;
-    applyClassDetailTabMode();
+    applyBranchClassTabMode();
 
     document.getElementById('detail-empty').style.display = 'none';
     document.getElementById('detail-content').style.display = '';
 
-    // 반 유형별 멤버(내신·특강·자유·정규) — 단체안내 카드와 동일 해석기로 통일해
+    // 반 유형별 멤버(내신·특강·자유·정규) — 단체안내 탭과 동일 해석기로 통일해
     // 헤더 인원수·학생목록·발송 대상이 어긋나지 않게 한다(리뷰 #2·#4·#5).
     const classStudents = resolveClassMembers(classCode)
         .slice()
@@ -441,8 +464,10 @@ export function renderBranchClassDetail(classCode) {
 
     document.getElementById('detail-cards').innerHTML =
         renderBranchClassSummaryCard(classCode)
-        + renderBranchClassStudentListCard(classStudents)
-        + renderClassBulkMessageCard(classCode);
+        + renderBranchClassStudentListCard(classStudents);
+
+    // 메시지 탭을 보던 중의 재렌더(onSnapshot 등)면 탭 콘텐츠도 최신화 (작성 중 입력은 내부에서 보존)
+    if (state.detailTab === 'message') renderClassBulkMessageTab(classCode);
 
     document.getElementById('detail-panel').classList.add('mobile-visible');
 }
