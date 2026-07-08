@@ -7,7 +7,7 @@ import { state } from './state.js';
 import { doc } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { auditUpdate } from './audit.js';
-import { esc, escAttr, showSaveIndicator, renderTime12hOptions } from './ui-utils.js';
+import { esc, escAttr, showSaveIndicator } from './ui-utils.js';
 import { saveDailyRecord, saveRetakeSchedule, getStudentDomains } from './data-layer.js';
 import { toDateStrKST, parseDateKST, getDayName } from './src/shared/firestore-helpers.js';
 import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
@@ -270,6 +270,17 @@ export async function saveStudentScheduledTime(studentId, classCode, time) {
 // ─── Enrollment 편집 ─────────────────────────────────────────────────────────
 let editingEnrollment = { studentId: null, enrollIdx: 0 };
 
+// input[type=time]은 zero-padded "HH:MM"만 인식하고 그 외("4:00", "16:0" 같은 레거시 값)는
+// 조용히 빈 칸으로 무시한다. 구 <select>(renderTime12hOptions)는 비표준 값도 옵션에 끼워 넣어
+// 그대로 보존했으므로, 동일 시각으로 zero-pad해 그 보존 동작을 유지한다.
+function _normalizeTimeValue(v) {
+    const m = /^(\d{1,2}):(\d{1,2})/.exec(v || '');
+    if (!m) return '';
+    const h = String(Math.min(23, parseInt(m[1], 10))).padStart(2, '0');
+    const mm = String(Math.min(59, parseInt(m[2], 10))).padStart(2, '0');
+    return `${h}:${mm}`;
+}
+
 export function openEnrollmentModal(studentId, enrollIdx) {
     const student = findStudent(studentId);
     if (!student) return;
@@ -291,11 +302,7 @@ export function openEnrollmentModal(studentId, enrollIdx) {
     document.getElementById('enroll-class-num').value = enroll.class_number || '';
     document.getElementById('enroll-class-type').value = enroll.class_type || '정규';
     const enrollTimeEl = document.getElementById('enroll-time');
-    if (enrollTimeEl) {
-        const enrollTime = enroll.start_time || enroll.time || '16:00';
-        enrollTimeEl.innerHTML = renderTime12hOptions(enrollTime);
-        enrollTimeEl.value = enrollTime;
-    }
+    if (enrollTimeEl) enrollTimeEl.value = _normalizeTimeValue(enroll.start_time || enroll.time) || '16:00';
     document.getElementById('enroll-start-date').value = enroll.start_date || '';
     document.getElementById('enroll-end-date').value = enroll.end_date || '';
 
@@ -358,6 +365,9 @@ export async function saveEnrollment() {
         return;
     }
     if (selectedDays.length === 0) { alert('수업 요일을 1개 이상 선택하세요.'); return; }
+    // input[type=time]은 사용자가 지우면 빈 문자열을 반환한다(구 select는 항상 값이 있어 불가능했던 상태).
+    // 가드 없이 저장하면 start_time:''로 개별 등원시간이 조용히 유실된다.
+    if (!startTime) { alert('수업 시작 시간을 입력하세요.'); return; }
     if (!startDate) { alert('시작일을 입력하세요.'); return; }
 
     // enrollments 배열 업데이트

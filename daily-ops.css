@@ -1007,6 +1007,14 @@ body {
   overflow-y: auto;
 }
 
+/* 메시지·기록 탭도 다른 탭과 동일하게 자체 스크롤 (누락 시 부모 overflow:hidden에 콘텐츠가 잘림) */
+#message-tab,
+#docu-tab {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .detail-close-btn {
   margin-left: auto;
   display: none;
@@ -1740,26 +1748,46 @@ textarea.field-input {
 /* ===== Scrollbar ===== */
 .sidebar::-webkit-scrollbar,
 .list-items::-webkit-scrollbar,
-#detail-cards::-webkit-scrollbar {
+#detail-cards::-webkit-scrollbar,
+#report-tab::-webkit-scrollbar,
+#score-tab::-webkit-scrollbar,
+#consultation-tab::-webkit-scrollbar,
+#message-tab::-webkit-scrollbar,
+#docu-tab::-webkit-scrollbar {
   width: 6px;
 }
 
 .sidebar::-webkit-scrollbar-track,
 .list-items::-webkit-scrollbar-track,
-#detail-cards::-webkit-scrollbar-track {
+#detail-cards::-webkit-scrollbar-track,
+#report-tab::-webkit-scrollbar-track,
+#score-tab::-webkit-scrollbar-track,
+#consultation-tab::-webkit-scrollbar-track,
+#message-tab::-webkit-scrollbar-track,
+#docu-tab::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .sidebar::-webkit-scrollbar-thumb,
 .list-items::-webkit-scrollbar-thumb,
-#detail-cards::-webkit-scrollbar-thumb {
+#detail-cards::-webkit-scrollbar-thumb,
+#report-tab::-webkit-scrollbar-thumb,
+#score-tab::-webkit-scrollbar-thumb,
+#consultation-tab::-webkit-scrollbar-thumb,
+#message-tab::-webkit-scrollbar-thumb,
+#docu-tab::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 3px;
 }
 
 .sidebar::-webkit-scrollbar-thumb:hover,
 .list-items::-webkit-scrollbar-thumb:hover,
-#detail-cards::-webkit-scrollbar-thumb:hover {
+#detail-cards::-webkit-scrollbar-thumb:hover,
+#report-tab::-webkit-scrollbar-thumb:hover,
+#score-tab::-webkit-scrollbar-thumb:hover,
+#consultation-tab::-webkit-scrollbar-thumb:hover,
+#message-tab::-webkit-scrollbar-thumb:hover,
+#docu-tab::-webkit-scrollbar-thumb:hover {
   background: var(--outline);
 }
 
