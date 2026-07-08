@@ -1520,7 +1520,13 @@ body {
 .msg-badge.msg-archived { background: #f1f3f4; color: #80868b; }
 .msg-archived-count { font-weight: 400; color: var(--text-sec); }
 
-/* 새로고침 — pill 버튼, 로딩 중 아이콘 회전 */
+/* 발송 현황 헤더 액션 */
+.msg-header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.msg-pricing-btn,
 .msg-refresh-btn {
     display: inline-flex;
     align-items: center;
@@ -1536,7 +1542,17 @@ body {
     cursor: pointer;
     transition: background .15s, border-color .15s;
 }
+.msg-pricing-btn {
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    color: #1e7e34;
+    text-decoration: none;
+}
+.msg-pricing-btn .material-symbols-outlined,
 .msg-refresh-btn .material-symbols-outlined { font-size: 16px; }
+.msg-pricing-btn:hover,
 .msg-refresh-btn:hover:not(:disabled) { background: #f3f5f7; border-color: #c3ccd4; }
 .msg-refresh-btn:disabled { opacity: .55; cursor: default; }
 .msg-refresh-btn.loading .material-symbols-outlined { animation: msg-refresh-spin 1s linear infinite; }

@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Solapi 메시지 가격 및 운영 구분</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17202a;
+      --muted: #5d6d7e;
+      --line: #d8dee6;
+      --panel: #f6f8fb;
+      --head: #203040;
+      --accent: #0a6e49;
+      --warn: #9a5b00;
+      --danger: #9f1d1d;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 32px;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+      line-height: 1.58;
+      background: #fff;
+    }
+
+    main {
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 32px 0 12px;
+      font-size: 20px;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 8px 0;
+    }
+
+    .summary {
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 8px;
+    }
+
+    .summary strong {
+      color: var(--accent);
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      min-width: 1180px;
+      border-collapse: collapse;
+      background: #fff;
+    }
+
+    th,
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      border-right: 1px solid var(--line);
+      vertical-align: top;
+      text-align: left;
+      font-size: 14px;
+    }
+
+    th:last-child,
+    td:last-child {
+      border-right: 0;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    thead th {
+      color: #fff;
+      background: var(--head);
+      white-space: nowrap;
+    }
+
+    tbody th {
+      width: 150px;
+      color: var(--head);
+      background: #f2f5f8;
+      font-weight: 700;
+    }
+
+    .price {
+      white-space: nowrap;
+      font-weight: 700;
+    }
+
+    .ok {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .warn {
+      color: var(--warn);
+      font-weight: 700;
+    }
+
+    .danger {
+      color: var(--danger);
+      font-weight: 700;
+    }
+
+    ul {
+      margin: 8px 0 0;
+      padding-left: 20px;
+    }
+
+    li + li {
+      margin-top: 4px;
+    }
+
+    .notes {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+    }
+
+    .note {
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .source-list a {
+      color: #0b5cab;
+      overflow-wrap: anywhere;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media print {
+      body {
+        padding: 16px;
+      }
+
+      .table-wrap {
+        overflow: visible;
+      }
+
+      table {
+        min-width: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Solapi 메시지 가격 및 운영 구분</h1>
+    <p class="meta">기준일: 2026-07-08 · 가격은 Solapi 공개 표준 단가 기준, VAT 별도</p>
+
+    <section class="summary" aria-label="운영 요약">
+      <p><strong>우리 원칙:</strong> 출결·수업·상담·청구·운영 공지는 알림톡 우선, 승인 템플릿이 없거나 긴급 공지면 SMS/LMS를 사용한다.</p>
+      <p><strong>BMS_FREE는 사용 금지:</strong> 템플릿 없이 자유 발송 가능하지만 100원/건으로 LMS보다 비싸고, 이번 실패의 원인이 된 경로다.</p>
+      <p><strong>광고성 판단 기준:</strong> 수신 방법이 카카오톡인지 문자인지가 아니라 내용이 영리목적 광고성인지 여부다. 정보성 LMS에는 (광고)와 080을 넣지 않는다.</p>
+    </section>
+
+    <h2>비교표</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>구분</th>
+            <th>수신방법</th>
+            <th>카카오톡채널 가입</th>
+            <th>정보성</th>
+            <th>홍보성(광고,080)</th>
+            <th>가격</th>
+            <th>발송시간</th>
+            <th>실패시의 우리의 대응</th>
+            <th>우리 학원의 예</th>
+            <th>그 외 알고 있어야 할 참고사항</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th>알림톡</th>
+            <td>카카오톡</td>
+            <td>수신자 채널 가입 불필요</td>
+            <td><span class="ok">가능, 권장</span><br>승인된 정보성 템플릿 기반</td>
+            <td><span class="danger">불가</span><br>광고·모집·혜택 안내는 알림톡 대상이 아님</td>
+            <td class="price">13원</td>
+            <td>정보성 메시지. 운영상 야간에는 긴급·필수 안내만 사용</td>
+            <td>발송 실패 시 SMS/LMS fallback. 템플릿 오류나 접수 거부는 원인 수정 후 재발송</td>
+            <td>출결, 지각, 미등원, 상담 일정, 시험 일정 확정, 수강료 청구·수납 안내</td>
+            <td>템플릿 사전 승인 필요. 한글/영어 1,000자, 버튼 5개. 가장 싸고 정석인 정보성 채널</td>
+          </tr>
+          <tr>
+            <th>브랜드 메시지 텍스트</th>
+            <td>카카오톡</td>
+            <td>필요</td>
+            <td><span class="warn">비권장</span><br>정보성은 알림톡 또는 SMS/LMS로 분리</td>
+            <td><span class="ok">가능</span><br>광고성으로 취급하고 수신동의·야간 제한 관리</td>
+            <td class="price">53원</td>
+            <td>광고성이면 21:00~08:00 발송 제한. 별도 야간 동의 없으면 금지</td>
+            <td>카카오 미도달·수신불가 시 캠페인 정책에 따라 LMS 전환 가능. 전환 문자도 광고 표기 필요</td>
+            <td>채널 친구에게 보내는 특별 이벤트 안내, 카카오 버튼이 중요한 캠페인</td>
+            <td>LMS보다 비싸다. 카카오 UX와 버튼이 꼭 필요한 경우에만 검토</td>
+          </tr>
+          <tr>
+            <th>브랜드 메시지 자유형<br>BMS_FREE</th>
+            <td>카카오톡</td>
+            <td>필요</td>
+            <td><span class="danger">사용 금지</span></td>
+            <td><span class="danger">사용 금지</span><br>비용상 기본 채널로 부적합</td>
+            <td class="price">100원</td>
+            <td>광고성이면 21:00~08:00 발송 제한. 별도 야간 동의 없으면 금지</td>
+            <td>앞으로 큐 생성 자체를 막는다. 기존 실패분은 direct LMS로 재생성</td>
+            <td>이번 73건 실패가 이 경로로 생성됨</td>
+            <td>템플릿 없이 자유 작성 가능하지만 너무 비싸다. Solapi 공지상 친구톡은 2026-01-01부터 브랜드 메시지 자유형으로 대체</td>
+          </tr>
+          <tr>
+            <th>SMS</th>
+            <td>문자</td>
+            <td>불필요</td>
+            <td><span class="ok">가능</span><br>정보성 문구에는 (광고)·080 불필요</td>
+            <td><span class="ok">가능</span><br>(광고), 발신자명, 무료수신거부 080 필요</td>
+            <td class="price">18원</td>
+            <td>정보성은 일반 발송. 광고성은 21:00~08:00 별도 동의 없으면 금지</td>
+            <td>통신사 실패 시 재시도. 최종 실패는 실패목록에 남김</td>
+            <td>짧은 수업 변경, 휴강 한 줄 안내, 간단 확인 요청</td>
+            <td>90바이트. 한글 약 45자 수준이라 대부분 긴 안내는 LMS로 분류됨</td>
+          </tr>
+          <tr>
+            <th>LMS</th>
+            <td>문자</td>
+            <td>불필요</td>
+            <td><span class="ok">가능</span><br>승인 템플릿이 없는 정보성 공지에 적합</td>
+            <td><span class="ok">가능</span><br>(광고), 발신자명, 무료수신거부 080 필요</td>
+            <td class="price">45원</td>
+            <td>정보성은 일반 발송. 광고성은 21:00~08:00 별도 동의 없으면 금지</td>
+            <td>통신사 실패 시 재시도. 최종 실패는 실패목록에 남김</td>
+            <td>학원 행사 일정, 간담회 안내, 장문 운영 공지, 승인 템플릿 없는 정보성 안내</td>
+            <td>2,000바이트. 카카오 채널 가입 여부와 무관하고 BMS_FREE보다 저렴</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>운영 분류</h2>
+    <div class="notes">
+      <div class="note">
+        <h3>정보성으로 보는 예</h3>
+        <ul>
+          <li>출결, 지각, 미등원, 조퇴, 보강 안내</li>
+          <li>수업 시간 변경, 휴강, 준비물, 과제 안내</li>
+          <li>상담 일정, 시험 일정, 진단평가 예약 확정</li>
+          <li>수강료 청구, 미납, 수납 확인</li>
+          <li>재원생 대상 학원 운영·행사 일정 공지</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>광고성으로 볼 수 있는 예</h3>
+        <ul>
+          <li>방학특강 모집, 신규 강좌 신청 유도</li>
+          <li>할인, 이벤트, 혜택, 쿠폰, 친구 추천</li>
+          <li>기존 수강과 직접 관련 없는 상품·서비스 홍보</li>
+          <li>정보성 공지 뒤에 신청 유도 문구를 붙인 혼합 메시지</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>우리 시스템 기본값</h3>
+        <ul>
+          <li>정보성 알림톡: 승인 템플릿이 있으면 우선 사용</li>
+          <li>정보성 SMS/LMS: 알림톡 템플릿이 없거나 긴급 공지일 때 사용</li>
+          <li>홍보성 SMS/LMS: 수신동의 확인 후 (광고)와 080 포함</li>
+          <li>BMS_FREE: 비용과 운영 리스크 때문에 차단</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>규정 위반 시 제재</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>위반 유형</th>
+            <th>내용</th>
+            <th>제재</th>
+            <th>운영 대응</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th>사전동의 없는 광고 전송</th>
+            <td>광고성 정보를 명시적 사전동의 없이 전송</td>
+            <td>3천만원 이하 과태료</td>
+            <td>광고성 발송은 동의 스냅샷이 있는 대상에게만 허용</td>
+          </tr>
+          <tr>
+            <th>수신거부자에게 광고 전송</th>
+            <td>수신거부 또는 동의철회 이후 광고성 정보 전송</td>
+            <td>3천만원 이하 과태료</td>
+            <td>080 수신거부 동기화 후 즉시 제외</td>
+          </tr>
+          <tr>
+            <th>야간 광고 전송</th>
+            <td>21:00~08:00 광고성 정보 전송. 이메일 제외</td>
+            <td>3천만원 이하 과태료</td>
+            <td>광고성 예약 발송은 야간 자동 차단 또는 익일 예약</td>
+          </tr>
+          <tr>
+            <th>광고 표기의무 위반</th>
+            <td>(광고), 전송자 명칭, 무료수신거부 080 누락 또는 변칙 표기</td>
+            <td>3천만원 이하 과태료</td>
+            <td>홍보성 SMS/LMS 발송 직전 자동 보정</td>
+          </tr>
+          <tr>
+            <th>수신거부 방해·은폐</th>
+            <td>수신거부·동의철회 회피, 발신자 은폐·위변조, 자동 생성 번호 사용 등</td>
+            <td>1년 이하 징역 또는 1천만원 이하 벌금</td>
+            <td>수신거부 절차를 단순하게 유지하고 발신번호·학원명 고정</td>
+          </tr>
+          <tr>
+            <th>불법행위 목적 광고성 정보</th>
+            <td>법에서 금지한 불법행위를 위한 광고성 정보 전송</td>
+            <td>3년 이하 징역 또는 3천만원 이하 벌금</td>
+            <td>학원 운영 안내·정상 홍보 외 문구 금지</td>
+          </tr>
+          <tr>
+            <th>강화되는 과징금 리스크</th>
+            <td>2026년 개정 흐름상 불법스팸 전송자와 방지 의무 소홀 사업자 제재 강화</td>
+            <td>관련 매출액 6% 이하 과징금 가능</td>
+            <td>광고/정보성 분류 기록, 동의 근거, 발송 로그 보존</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>출처</h2>
+    <ul class="source-list">
+      <li>Solapi 가격 정책: <a href="https://solapi.com/pricing">https://solapi.com/pricing</a></li>
+      <li>Solapi 발송 구간별 할인 단가표: <a href="https://solapi.com/guides/tiered-pricing">https://solapi.com/guides/tiered-pricing</a></li>
+      <li>Solapi BMS_FREE 자유형 발송: <a href="https://solapi.com/developers/api/kakao-bms-free">https://solapi.com/developers/api/kakao-bms-free</a></li>
+      <li>Solapi 친구톡 종료 및 브랜드 메시지 자유형 대체 공지: <a href="https://solapi.com/notices/notices-2025-12-04">https://solapi.com/notices/notices-2025-12-04</a></li>
+      <li>KISA 불법스팸 방지를 위한 정보통신망법 안내서 제7차 개정본: <a href="https://www.kisa.or.kr/401/form?postSeq=3608">https://www.kisa.or.kr/401/form?postSeq=3608</a></li>
+      <li>KISA 불법스팸 신고 처리절차 및 제재 요약: <a href="https://spam.kisa.or.kr/spam/cm/cntnts/cntntsView.do?cntntsId=1086&amp;mi=1061">https://spam.kisa.or.kr/spam/cm/cntnts/cntntsView.do?cntntsId=1086&amp;mi=1061</a></li>
+      <li>정보통신망법 제50조 및 제76조: <a href="https://www.law.go.kr">https://www.law.go.kr</a></li>
+    </ul>
+  </main>
+</body>
+</html>

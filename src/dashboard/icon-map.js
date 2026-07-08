@@ -18,6 +18,7 @@ export const ICON_NAME = {
   monitoring: 'presentationChartLine',
   send: 'paperAirplane',
   refresh: 'arrowPath',
+  payments: 'banknotes',
   expand_less: 'chevronUp',
   expand_more: 'chevronDown',
   science: 'beaker',

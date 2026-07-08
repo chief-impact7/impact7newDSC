@@ -216,10 +216,22 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                     <Icon name={ICON_NAME.send} size={20} className="material-symbols-outlined" aria-hidden="true" />
                     발송 현황 (출결 알림)
                 </span>
-                <button className={`msg-refresh-btn${loading ? ' loading' : ''}`} onClick={refresh} disabled={loading} title="새로고침">
-                    <Icon name={ICON_NAME.refresh} size={16} className="material-symbols-outlined" aria-hidden="true" />
-                    {loading ? '불러오는 중' : '새로고침'}
-                </button>
+                <span className="msg-header-actions">
+                    <a
+                        className="msg-pricing-btn"
+                        href="/docs/Pricing.html"
+                        target="_blank"
+                        rel="noreferrer"
+                        title="가격정책"
+                        aria-label="가격정책"
+                    >
+                        <Icon name={ICON_NAME.payments} size={16} className="material-symbols-outlined" aria-hidden="true" />
+                    </a>
+                    <button className={`msg-refresh-btn${loading ? ' loading' : ''}`} onClick={refresh} disabled={loading} title="새로고침">
+                        <Icon name={ICON_NAME.refresh} size={16} className="material-symbols-outlined" aria-hidden="true" />
+                        {loading ? '불러오는 중' : '새로고침'}
+                    </button>
+                </span>
             </div>
             <div className="dash-card-body">
                 <div className="dash-stats">
