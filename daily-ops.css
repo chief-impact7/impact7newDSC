@@ -987,32 +987,21 @@ body {
   overflow: hidden;
 }
 
-#detail-cards {
+/* 상세패널 탭 공통(현황/출결/성적/상담/메시지/기록): 자체 스크롤 필수.
+   개별 ID 셀렉터로 반복하면 새 탭 추가 시 빠뜨리기 쉽다(message-tab·docu-tab 스크롤 누락 전례) —
+   이 클래스 하나만 index.html의 각 탭 div에 붙이면 스크롤·스크롤바가 자동 적용된다. */
+.detail-tab-pane {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+}
+
+#detail-cards {
   padding: 12px 16px;
 }
 
 #consultation-tab {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
   padding: 12px 16px;
-}
-
-/* 출결현황 탭: 길어지면 자체 스크롤 (다른 탭과 동일 패턴) */
-#report-tab {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-/* 메시지·기록 탭도 다른 탭과 동일하게 자체 스크롤 (누락 시 부모 overflow:hidden에 콘텐츠가 잘림) */
-#message-tab,
-#docu-tab {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
 }
 
 .detail-close-btn {
@@ -1748,46 +1737,26 @@ textarea.field-input {
 /* ===== Scrollbar ===== */
 .sidebar::-webkit-scrollbar,
 .list-items::-webkit-scrollbar,
-#detail-cards::-webkit-scrollbar,
-#report-tab::-webkit-scrollbar,
-#score-tab::-webkit-scrollbar,
-#consultation-tab::-webkit-scrollbar,
-#message-tab::-webkit-scrollbar,
-#docu-tab::-webkit-scrollbar {
+.detail-tab-pane::-webkit-scrollbar {
   width: 6px;
 }
 
 .sidebar::-webkit-scrollbar-track,
 .list-items::-webkit-scrollbar-track,
-#detail-cards::-webkit-scrollbar-track,
-#report-tab::-webkit-scrollbar-track,
-#score-tab::-webkit-scrollbar-track,
-#consultation-tab::-webkit-scrollbar-track,
-#message-tab::-webkit-scrollbar-track,
-#docu-tab::-webkit-scrollbar-track {
+.detail-tab-pane::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .sidebar::-webkit-scrollbar-thumb,
 .list-items::-webkit-scrollbar-thumb,
-#detail-cards::-webkit-scrollbar-thumb,
-#report-tab::-webkit-scrollbar-thumb,
-#score-tab::-webkit-scrollbar-thumb,
-#consultation-tab::-webkit-scrollbar-thumb,
-#message-tab::-webkit-scrollbar-thumb,
-#docu-tab::-webkit-scrollbar-thumb {
+.detail-tab-pane::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 3px;
 }
 
 .sidebar::-webkit-scrollbar-thumb:hover,
 .list-items::-webkit-scrollbar-thumb:hover,
-#detail-cards::-webkit-scrollbar-thumb:hover,
-#report-tab::-webkit-scrollbar-thumb:hover,
-#score-tab::-webkit-scrollbar-thumb:hover,
-#consultation-tab::-webkit-scrollbar-thumb:hover,
-#message-tab::-webkit-scrollbar-thumb:hover,
-#docu-tab::-webkit-scrollbar-thumb:hover {
+.detail-tab-pane::-webkit-scrollbar-thumb:hover {
   background: var(--outline);
 }
 
@@ -3691,9 +3660,6 @@ textarea.field-input {
 
 /* ─── 성적 탭 ─── */
 #score-tab {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
     padding: 12px 16px 16px;
 }
 .score-tab-content {

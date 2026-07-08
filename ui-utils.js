@@ -16,13 +16,27 @@ export const decodeHtmlEntities = (str) => {
 };
 
 // ─── Time Formatting ───────────────────────────────────────────────────────
+function _to12Hour(hour) {
+    return hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+}
+
 export function formatTime12h(time24) {
     if (!time24) return '';
     const [h, m] = time24.split(':');
     const hour = parseInt(h);
-    const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
     const ampm = hour < 12 ? '오전' : '오후';
-    return `${ampm} ${h12}:${m}`;
+    return `${ampm} ${_to12Hour(hour)}:${m}`;
+}
+
+// AI 프롬프트용 — 오전/오후 없는 콜론 표기(예: "5:30"). LLM에게 "이렇게 바꿔 써라"고
+// 지시하는 대신 데이터를 넘기기 전에 이미 최종 형태로 만들어, AI가 형식 판단 없이 그대로
+// 옮겨 적게 한다(확률적 프롬프트 준수 대신 결정론적 서버측 포맷).
+export function formatTime12hNoAmPm(time24) {
+    if (!time24) return '';
+    const [h, m] = time24.split(':');
+    const hour = parseInt(h);
+    if (Number.isNaN(hour) || m === undefined) return '';
+    return `${_to12Hour(hour)}:${m}`;
 }
 
 // 카카오 브랜드메시지(친구 대상 카톡) 야간 발송 제한 시간(KST 20:50~08:00)인가.

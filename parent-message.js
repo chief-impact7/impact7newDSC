@@ -5,7 +5,7 @@ import { msIcon } from './ms-icon.js';
 import { state } from './state.js';
 import { geminiModel } from './firebase-ai.js';
 import { parseDateKST, getDayName } from './src/shared/firestore-helpers.js';
-import { esc, decodeHtmlEntities, formatTime12h, showSaveIndicator, isKakaoNightKST } from './ui-utils.js';
+import { esc, decodeHtmlEntities, formatTime12h, formatTime12hNoAmPm, showSaveIndicator, isKakaoNightKST } from './ui-utils.js';
 import { enrollmentCode } from './student-helpers.js';
 import { sendDailyReport, sendParentNotice, addConsultation, saveStudentParentMessageRecipientFields } from './data-layer.js';
 import { buildConsultationPayload } from './consultation-payload.js';
@@ -93,7 +93,7 @@ const DEFAULT_PARENT_MSG_PROMPT = `영어학원 "임팩트7" 담당 선생님이
 - 존댓말, 따뜻한 톤, 긍정적이고 공감하는 감정과 말투. 이모지 금지
 - 인사말 없이 바로 내용 시작
 - "오늘" 대신 요일로 지칭 (데이터에서 날짜 확인)
-- 시간은 "h:mm" 콜론 숫자로만 표기 (예: "5:30에 등원", "8:20에 등원")
+- 학생 데이터의 시간 값(arrival_time 등)은 이미 "h:mm" 콜론 형식(예: "5:30")으로 제공됨 — 그 형식을 바꾸지 말고 그대로 사용
 - "{name} 학생은" 으로 시작
 - 개별 항목명 나열 금지 (데이터는 별도 첨부됨)
 - 3-4문장, 150자 내외로 간결하게
@@ -283,6 +283,23 @@ async function _processGeminiQueue() {
     _geminiRunning = false;
 }
 
+// AI 응답에 시간 표기 규칙이 안 지켜진 잔여 패턴이 남으면 강제 정규화하는 안전망.
+// 프롬프트 지시(규칙 텍스트)는 확률적이라 100% 준수를 보장 못한다 — 데이터를 사전 포맷해도
+// 자유 텍스트(선생님 메모 등)를 AI가 그대로 인용하며 재도입할 수 있으므로 이중 방어.
+function _normalizeAiTimeMentions(text) {
+    if (!text) return text;
+    return text
+        // "h시 m분" → "h:mm" 먼저 변환(자유 텍스트 인용 대비. "3시간 30분"은 "시" 뒤에 숫자가
+        // 안 와 매치 안 됨). "오전/오후" 제거보다 앞서야 "오후 6시 3분"의 "오후"까지 지워진다.
+        .replace(/(\d{1,2})시\s*(\d{1,2})분/g, (_, h, m) => `${h}:${m.padStart(2, '0')}`)
+        // "오전/오후 h:mm" → "h:mm" (접두사 제거)
+        .replace(/(오전|오후)\s*(\d{1,2}):(\d{2})/g, '$2:$3')
+        // 24시간(13~23):M(M) → 12시간 h:mm. 분은 한 자리도 허용해 zero-pad하고, 뒤에 붙은
+        // "분"(있으면)도 함께 삼킨다 — 끝에 \b를 두면 한글은 word character가 아니라 "분" 뒤에서
+        // 경계 판정이 실패해 "분"만 매치 밖에 남는 문제가 있어 끝 \b는 생략한다.
+        .replace(/\b(1[3-9]|2[0-3]):(\d{1,2})분?/g, (_, h, m) => `${parseInt(h, 10) - 12}:${m.padStart(2, '0')}`);
+}
+
 export async function generateParentMessage(studentId) {
     const summary = collectStudentDaySummary(studentId);
     if (!summary) return '학생 정보를 찾을 수 없습니다.';
@@ -296,6 +313,13 @@ export async function generateParentMessage(studentId) {
     delete safeSummary.test_fail_actions;
     delete safeSummary.extra_visit;
 
+    // 시간 필드를 AI에게 넘기기 전에 최종 표기("5:30")로 미리 변환한다 — AI는 포맷 판단 없이
+    // 그대로 옮겨 적기만 하면 되므로, 프롬프트 규칙 문구에만 기대는 것보다 훨씬 안정적이다.
+    safeSummary.arrival_time = formatTime12hNoAmPm(safeSummary.arrival_time);
+    if (safeSummary.departure?.time) {
+        safeSummary.departure = { ...safeSummary.departure, time: formatTime12hNoAmPm(safeSummary.departure.time) };
+    }
+
     const customPrompt = getCustomPrompt().replace('{name}', summary.name);
     const noteSection = summary.note ? `\n\n선생님 메모:\n${summary.note}` : '';
     const teacherNote = document.getElementById('parent-msg-note')?.value?.trim();
@@ -303,7 +327,7 @@ export async function generateParentMessage(studentId) {
     const fullPrompt = `${customPrompt}${noteSection}${teacherNoteSection}\n\n학생 데이터:\n${JSON.stringify(safeSummary, null, 2)}`;
 
     const result = await _enqueueGemini(fullPrompt);
-    const aiComment = result.response.text().trim();
+    const aiComment = _normalizeAiTimeMentions(result.response.text().trim());
 
     // AI 코멘트 + 구분선 + 데이터 합치기
     const dataTemplate = generateDataTemplate(studentId);
