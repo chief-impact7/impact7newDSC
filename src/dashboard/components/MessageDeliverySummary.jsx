@@ -219,7 +219,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                 <span className="msg-header-actions">
                     <a
                         className="msg-pricing-btn"
-                        href="/docs/Pricing.html"
+                        href={`${import.meta.env.BASE_URL}docs/Pricing.html`}
                         target="_blank"
                         rel="noreferrer"
                         title="가격정책"
