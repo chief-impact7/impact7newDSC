@@ -118,7 +118,7 @@ export default function BulkSendCard({ students = [] }) {
       const fields = [...recipientFields];
       // 홍보는 (광고)·080 표기를 발송 직전 자동 보정 — 깜빡해도 법적 표기가 빠지지 않는다.
       const body = kind === 'promo' ? ensurePromoCompliance(content) : content;
-      const payload = { title: '카카오 발송', content: body, studentIds: ids, recipientFields: fields, recipientField: fields[0], requestId: reqIdRef.current };
+      const payload = { title: '문자 발송', content: body, studentIds: ids, recipientFields: fields, recipientField: fields[0], requestId: reqIdRef.current };
       if (when === 'schedule') payload.scheduledAt = scheduledAt.slice(0, 16).replace('T', ' ') + ':00';
       let res;
       if (kind === 'promo') { payload.targeting = 'M'; res = await createPromoCampaign(payload); }
@@ -127,8 +127,8 @@ export default function BulkSendCard({ students = [] }) {
       else {
         const s = res.stats || {};
         const parts = [];
-        if (s.friend_bms != null || s.ad_sms != null) { // 홍보 분기 결과
-          parts.push(`카카오 ${s.friend_bms || 0}`, `문자광고 ${s.ad_sms || 0}`);
+        if (s.friend_bms != null || s.ad_sms != null) {
+          parts.push(`문자광고 ${s.ad_sms || 0}`);
           if (s.skipped_no_consent) parts.push(`미동의 제외 ${s.skipped_no_consent}`);
         } else {
           parts.push(`${s.queued ?? ids.length}건`);
@@ -151,7 +151,7 @@ export default function BulkSendCard({ students = [] }) {
   return (
     <section className="mc-section">
       <div className="mc-card">
-        <div className="mc-section-title">💬 카카오 발송 <span className="mc-tag" style={{ background: '#0a6e49' }}>목록·검색·누적</span></div>
+        <div className="mc-section-title">💬 문자 발송 <span className="mc-tag" style={{ background: '#0a6e49' }}>목록·검색·누적</span></div>
         <div className="bulk-split">
           <div className="bulk-left">
             <p className="bulk-col-title">받는 사람</p>

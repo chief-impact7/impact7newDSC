@@ -1,4 +1,4 @@
-// 학생 상세의 [메시지] 탭 — 개별 발송. 정보성 안내(알림톡 템플릿) / 자유 안내(친구=카톡·비친구=문자) / 홍보(브랜드 메시지).
+// 학생 상세의 [메시지] 탭 — 개별 발송. 정보성 안내(알림톡 템플릿) / 자유 안내(LMS/SMS) / 홍보 문자.
 // 수신 대상(학생/학부모1/학부모2/기타) 선택. 대규모/다수 발송은 별도 화면.
 // 권한·광고 규제는 서버 callable이 검증한다.
 
@@ -8,7 +8,7 @@ import {
   setPromoConsent, saveStudentMessageRecipientSettings,
 } from './data-layer.js';
 import { ATTENDANCE_ACTIONS } from '@impact7/shared/attendance-action';
-import { esc, escAttr, isKakaoNightKST } from './ui-utils.js';
+import { esc, escAttr } from './ui-utils.js';
 import { OPT_OUT_LINE, ensurePromoCompliance } from './promo-compliance.js';
 import {
   buildRecipientSettings,
@@ -157,7 +157,7 @@ export function renderMessageTab(studentId) {
                 <span style="color:#555;min-width:74px;">알림톡 수신</span>${recipientChecks('alimtalk', _alimtalkRecipientFields)}
               </div>
               <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;">
-                <span style="color:#555;min-width:74px;">BMS 수신</span>${recipientChecks('bms', _bmsRecipientFields)}
+                <span style="color:#555;min-width:74px;">문자 수신</span>${recipientChecks('bms', _bmsRecipientFields)}
               </div>
             </div>`
           : '<div style="color:#c82014;margin-bottom:6px;font-size:13px;">등록된 연락처가 없어 발송할 수 없습니다.</div>'}
@@ -403,7 +403,7 @@ function renderForm(studentId, hasRecipient, readonly) {
     document.getElementById('msg-send').addEventListener('click', () => sendNotice(studentId, sel));
   } else if (_mode === 'free') {
     form.innerHTML = `
-      <div style="font-size:12px;color:#999;margin-bottom:5px;">가입자는 카카오톡, 미가입자는 문자로 발송 (광고성은 '홍보' 모드)</div>
+      <div style="font-size:12px;color:#999;margin-bottom:5px;">승인 템플릿이 없는 정보성 안내는 LMS/SMS로 발송합니다. 광고성은 '홍보' 모드를 사용하세요.</div>
       <textarea id="msg-content" class="field-input" aria-label="자유 안내 본문" rows="4" style="width:100%;box-sizing:border-box;margin:0;" placeholder="보낼 내용을 입력하세요." ${dis}></textarea>
       <button type="button" id="msg-send" class="btn btn-primary" style="margin-top:8px;padding:6px 16px;" ${dis}>메시지 발송</button>
     `;
@@ -412,7 +412,7 @@ function renderForm(studentId, hasRecipient, readonly) {
     form.innerHTML = `
       <div style="font-size:12px;color:#999;margin-bottom:5px;">(광고) 표기와 무료수신거부 080 안내는 발송 시 자동으로 붙습니다</div>
       <textarea id="msg-content" class="field-input" aria-label="홍보 메시지 본문" rows="4" style="width:100%;box-sizing:border-box;margin:0;" placeholder="${escAttr(PROMO_PLACEHOLDER)}" ${dis}></textarea>
-      <button type="button" id="msg-send" class="btn btn-primary" style="margin-top:8px;padding:6px 16px;" ${dis}>브랜드 메시지 발송</button>
+      <button type="button" id="msg-send" class="btn btn-primary" style="margin-top:8px;padding:6px 16px;" ${dis}>홍보 문자 발송</button>
     `;
     document.getElementById('msg-send').addEventListener('click', () => sendPromo(studentId));
   }
@@ -534,7 +534,7 @@ async function sendNotice(studentId, sel) {
 async function sendPromo(studentId) {
   if (_sending) return;
   const recipientFields = selectedRecipientFields('bms');
-  if (!recipientFields.length) { _deps.toast?.('BMS 수신 대상을 선택하세요.', 'error'); return; }
+  if (!recipientFields.length) { _deps.toast?.('문자 수신 대상을 선택하세요.', 'error'); return; }
   const raw = document.getElementById('msg-content').value.trim();
   if (!raw) { _deps.toast?.('본문을 입력하세요.', 'error'); return; }
   // (광고)·080 표기는 발송 직전 자동 보정(멱등) — 깜빡해도 법적 표기가 빠지지 않는다.
@@ -545,30 +545,22 @@ async function sendPromo(studentId) {
       title: `개별홍보-${studentId}`, content, targeting: 'M',
       studentIds: [studentId], recipientFields, recipientField: recipientFields[0], requestId: _promoReqId,
     }),
-    '브랜드 메시지 발송을 요청했습니다.',
+    '홍보 문자 발송을 요청했습니다.',
     () => { _promoReqId = null; scheduleHistoryReload(studentId); },
   );
 }
 
-// 자유 안내(템플릿 없음) — 친구=정보형 BMS(카톡), 비친구=문자. sendDailyReport가 서버에서 분기.
+// 자유 안내(템플릿 없음) — BMS_FREE를 쓰지 않고 LMS/SMS로 보낸다.
 // 멱등키 없이 재발송 허용(더블클릭은 _sending으로 차단) — parent-message.js 정책과 동일.
 async function sendFree(studentId) {
   if (_sending) return;
   const recipientFields = selectedRecipientFields('bms');
-  if (!recipientFields.length) { _deps.toast?.('BMS 수신 대상을 선택하세요.', 'error'); return; }
+  if (!recipientFields.length) { _deps.toast?.('문자 수신 대상을 선택하세요.', 'error'); return; }
   const content = document.getElementById('msg-content').value.trim();
   if (!content) { _deps.toast?.('내용을 입력하세요.', 'error'); return; }
-  // 야간(20:50~08:00)엔 카카오가 친구 대상 카톡(브랜드메시지)을 차단한다. 발송자에게 처리 방식을 묻는다.
-  let reserveIfNight = false;
-  if (isKakaoNightKST()) {
-    reserveIfNight = confirm('지금은 카카오톡 발송 제한 시간(밤 8:50~오전 8시)입니다.\n\n[확인] 채널 가입 학부모는 내일 오전 8시에 카카오톡으로 발송 (미가입자는 지금 문자)\n[취소] 지금 바로 문자로 발송');
-  }
   await doSend(
-    () => sendDailyReport({ studentId, content, recipientFields, recipientField: recipientFields[0], reserveIfNight }),
-    // 실제 예약 여부는 서버 응답(scheduledDate: 친구+야간만 non-null)으로 판정 — 경계 시계 스큐 오표기 방지.
-    (res) => (reserveIfNight && res?.scheduledDate)
-      ? '예약했습니다 — 가입자는 내일 오전 8시 카카오톡, 미가입자는 지금 문자로 발송됩니다.'
-      : '발송을 요청했습니다. (미도달 시 문자로 자동 전환)',
+    () => sendDailyReport({ studentId, content, recipientFields, recipientField: recipientFields[0] }),
+    '문자 발송을 요청했습니다.',
     () => scheduleHistoryReload(studentId),
   );
 }

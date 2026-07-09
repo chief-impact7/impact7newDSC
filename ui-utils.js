@@ -39,13 +39,6 @@ export function formatTime12hNoAmPm(time24) {
     return `${_to12Hour(hour)}:${m}`;
 }
 
-// 카카오 브랜드메시지(친구 대상 카톡) 야간 발송 제한 시간(KST 20:50~08:00)인가.
-// 브라우저 로컬 시간대와 무관하게 UTC 기준으로 KST 분(0~1439)을 계산한다.
-export function isKakaoNightKST(d = new Date()) {
-    const kstMin = ((d.getUTCHours() * 60 + d.getUTCMinutes()) + 9 * 60) % 1440;
-    return kstMin >= (20 * 60 + 50) || kstMin < (8 * 60);
-}
-
 export function renderTime12hOptions(value = '16:00') {
     const normalized = value || '16:00';
     const slots = [

@@ -5,7 +5,7 @@ import { msIcon } from './ms-icon.js';
 import { state } from './state.js';
 import { geminiModel } from './firebase-ai.js';
 import { parseDateKST, getDayName } from './src/shared/firestore-helpers.js';
-import { esc, decodeHtmlEntities, formatTime12h, formatTime12hNoAmPm, showSaveIndicator, isKakaoNightKST } from './ui-utils.js';
+import { esc, decodeHtmlEntities, formatTime12h, formatTime12hNoAmPm, showSaveIndicator } from './ui-utils.js';
 import { enrollmentCode } from './student-helpers.js';
 import { sendDailyReport, sendParentNotice, addConsultation, saveStudentParentMessageRecipientFields } from './data-layer.js';
 import { buildConsultationPayload } from './consultation-payload.js';
@@ -597,7 +597,7 @@ async function _sendReportAlimtalk() {
     }
 }
 
-// 상담+발송은 기존 일일 리포트 BMS 경로를 유지한다. 친구면 정보형 BMS, 비친구/미도달은 문자 전환.
+// 상담+발송은 상담 기록을 남긴 뒤 LMS/SMS로 발송한다.
 async function _sendReportBmsWithConsultation() {
     if (_sendingReport || !parentMsgStudentId) return;
     const content = parentMessageContent();
@@ -608,11 +608,6 @@ async function _sendReportBmsWithConsultation() {
     const btnIds = ['parent-msg-send-btn', 'parent-msg-send-log-btn'];
     // 학부모 알림 작성엔 날짜 UI가 없으므로 발송일(오늘) 기준 — 대시보드 선택일(state.selectedDate)과 무관.
     const sendDate = todayKST();
-    // 야간(20:50~08:00)엔 카카오가 친구 대상 카톡을 차단 — 발송자에게 지금 문자/내일 카톡 예약을 묻는다.
-    let reserveIfNight = false;
-    if (isKakaoNightKST()) {
-        reserveIfNight = confirm('지금은 카카오톡 발송 제한 시간(밤 8:50~오전 8시)입니다.\n\n[확인] 채널 가입 학부모는 내일 오전 8시에 카카오톡으로 발송 (미가입자는 지금 문자)\n[취소] 지금 바로 문자로 발송');
-    }
     _sendingReport = true;
     btnIds.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
     try {
@@ -623,16 +618,8 @@ async function _sendReportBmsWithConsultation() {
             content,
             recipientField: recipientFields[0],
             recipientFields,
-            reserveIfNight,
         });
-        let msg;
-        if (reserveIfNight && res?.scheduledDate) {
-            msg = '예약했습니다 — 가입자는 내일 오전 8시 카카오톡으로 발송됩니다.';
-        } else if (res?.joined) {
-            msg = '카카오톡으로 발송 접수되었습니다. (미도달 시 잠시 후 문자로 자동 전환)';
-        } else {
-            msg = '채널 미가입이라 안내 문자로 발송했습니다.';
-        }
+        const msg = `${res?.queuedCount ?? recipientFields.length}건 문자 발송을 요청했습니다.`;
 
         try {
             const student = getStudent?.(parentMsgStudentId) || {};

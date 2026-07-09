@@ -1052,7 +1052,7 @@ export async function sendParentNotice(payload) {
   return res.data;
 }
 
-// 개별 홍보(브랜드 메시지). studentIds 1명으로 캠페인 재사용. 서버에서 원장 권한·광고 규제 검증.
+// 개별 홍보 문자. studentIds 1명으로 캠페인 재사용. 서버에서 권한·광고 규제 검증.
 export async function createPromoCampaign(payload) {
   const callable = httpsCallable(functions, 'createPromoCampaign');
   const res = await callable(payload);
@@ -1073,7 +1073,7 @@ export async function createBulkMessage(payload) {
   return res.data;
 }
 
-// 일일 학습 리포트 발송(직원 권한). 친구→정보형 BMS, 비친구→가입안내 SMS.
+// 일일 학습 리포트 발송(직원 권한). 자유 본문은 LMS/SMS로 발송.
 export async function sendDailyReport(payload) {
   const callable = httpsCallable(functions, 'sendDailyReport');
   const res = await callable(payload);
