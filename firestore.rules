@@ -778,6 +778,8 @@ service cloud.firestore {
           && request.resource.data.keys().hasOnly(['email', 'name', 'role', 'permissions', 'assignedBuildings'])
           && request.resource.data.permissions is map
           && request.resource.data.assignedBuildings is list
+          // 신규 권한 카탈로그 키의 자가 주입 차단 — 자기생성은 기존 18키 외 어떤 키도 쓸 수 없다
+          && request.resource.data.permissions.keys().hasOnly(['canViewPopulationStats', 'canViewClassCounts', 'canViewDashboard', 'canViewStudents', 'canEditStudents', 'canViewStudentPrivateInfo', 'canViewAttendance', 'canEditAttendance', 'canViewConsultations', 'canEditConsultations', 'canViewPayments', 'canManagePayments', 'canViewSalary', 'canManagePayroll', 'canManageEmployees', 'canManagePermissions', 'canSignContract', 'canSendEmail'])
           && request.resource.data.permissions.get('canViewPopulationStats', false) == false
           && request.resource.data.permissions.get('canViewClassCounts', false) == false
           && request.resource.data.permissions.get('canViewDashboard', false) == false
