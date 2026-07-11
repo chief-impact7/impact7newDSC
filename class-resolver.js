@@ -2,6 +2,7 @@
 // daily-ops.js에서 분리한 반코드 해소 / 멤버십 집계 (클러스터 2)
 // 순수 조회 로직. RULES 7.4: _getAllClassCodes()는 class_settings + enrollment 양쪽에서 정규 반코드 수집.
 
+import { branchFromClassNumber } from '@impact7/shared/branch';
 import { state } from './state.js';
 import { getDayName, todayStr, studentLevel } from './src/shared/firestore-helpers.js';
 import {
@@ -96,7 +97,6 @@ export function _getAllClassCodes() {
     const regularCodes = new Set();
     const freeCounts = new Map();
     const naesinCounts = new Map();
-    const BRANCHES = ['10단지', '2단지'];
 
     // 1. class_settings 기반 등록 — 자유학기/내신/정규/특강 분류
     Object.entries(state.classSettings).forEach(([code, cs]) => {
@@ -104,7 +104,7 @@ export function _getAllClassCodes() {
         if (cs.class_type === '특강') return; // teukang 그룹에서 별도 처리
 
         if (cs.naesin_start && cs.naesin_end) {
-            const branch = BRANCHES.find(b => code.startsWith(b)) || '';
+            const branch = branchFromClassNumber(code);
             if (state.selectedBranch && branch !== state.selectedBranch) return;
             naesinCounts.set(code, { displayCode: displayCodeFromCsKey(code, branch), count: 0 });
             return;

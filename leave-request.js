@@ -3,6 +3,7 @@
 // Phase 3-1
 
 import { msIcon } from './ms-icon.js';
+import { branchFromClassCode } from '@impact7/shared/branch';
 import { collection, doc, serverTimestamp, deleteField, writeBatch, getDocFromServer } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { parseDateKST, todayStr, finalApprovalDate } from './src/shared/firestore-helpers.js';
@@ -965,9 +966,7 @@ function _openReturnModal(studentId, type) {
             // 정규반만 (class_type 없음=레거시 정규 포함, '내신'/'특강' 제외).
             // 자유학기는 정규 코드 공유하되 free_schedule이 있음 — 정규로 취급.
             if (cs.class_type && cs.class_type !== '정규') return false;
-            // code의 첫 숫자로 branch 추론 (A101 → '1' → 2단지, A201 → '2' → 10단지)
-            const firstDigit = (code.match(/\d/) || [''])[0];
-            const codeBranch = firstDigit === '1' ? '2단지' : firstDigit === '2' ? '10단지' : '';
+            const codeBranch = branchFromClassCode(code);
             if (branch && codeBranch && codeBranch !== branch) return false;
             return true;
         })
