@@ -8,7 +8,7 @@ import { esc, escAttr, formatTime12h, nextOXValue, oxDisplayClass, _stripYear, _
 import { enrollmentCode, getActiveEnrollments, matchesBranchFilter } from './student-helpers.js';
 import { getDayName, studentShortLabel } from './src/shared/firestore-helpers.js';
 import {
-    initFailActionShared, renderFailActionCard, reopenFailDomain, selectFailType,
+    initFailActionShared, renderFailActionCard, selectFailType,
     clearFailType, saveFailFields, saveFailAction, completeFailTask, cancelFailTask,
 } from './fail-action-shared.js';
 
@@ -50,7 +50,6 @@ const HW_CONFIG = {
     extraTaskData: {},
     savedTagInline: true,       // hw는 행마다 ✓저장됨 태그를 인라인 노출
     hidePendingFromForm: false, // hw는 pending도 폼에 인라인 표시(테스트와 달리 숨기지 않음)
-    reopenedSet: null,
     selectFn: 'selectHwFailType',
     clearFn: 'clearHwFailType',
     saveFieldsFn: 'saveHwFailFields',
@@ -59,7 +58,6 @@ const HW_CONFIG = {
 export function renderHwFailActionCard(studentId, domains, d2nd, hwFailAction, mode = 'default') {
     return renderFailActionCard({ studentId, items: domains, d2nd, failAction: hwFailAction, mode, config: HW_CONFIG });
 }
-export const reopenHwFailDomain = (studentId, domain) => reopenFailDomain(studentId, domain, HW_CONFIG);
 export const selectHwFailType = (studentId, domain, type, btnEl) => selectFailType(studentId, domain, type, HW_CONFIG);
 export const clearHwFailType = (studentId, domain) => clearFailType(studentId, domain, HW_CONFIG);
 export const saveHwFailFields = (studentId, domain, btnEl) => saveFailFields(studentId, domain, btnEl, HW_CONFIG);

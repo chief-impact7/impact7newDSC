@@ -79,6 +79,21 @@ export function oxDisplayClass(value) {
     return 'ox-empty';
 }
 
+export function oxChip(label, val) {
+    return `<div class="hw-domain-item">
+        <span class="hw-domain-label">${esc(label)}</span>
+        <span class="hw-domain-ox readonly ${oxDisplayClass(val)}">${esc(val || '—')}</span>
+    </div>`;
+}
+
+export function oxChipBtn(label, val, studentId, field) {
+    return `<div class="hw-domain-item">
+        <span class="hw-domain-label">${esc(label)}</span>
+        <button class="hw-domain-ox ${oxDisplayClass(val)}" data-student="${escAttr(studentId)}" data-field="${field}" data-domain="${escAttr(label)}"
+            onclick="event.stopPropagation(); toggleHwDomainOX('${escAttr(studentId)}', '${field}', '${escAttr(label)}')">${esc(val || '—')}</button>
+    </div>`;
+}
+
 // ─── Attendance Toggle Helper ──────────────────────────────────────────────
 export function _attToggleClass(status) {
     const d = status === '미확인' ? '등원전' : status;

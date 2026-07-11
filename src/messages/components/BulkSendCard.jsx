@@ -9,7 +9,8 @@ import { createBulkMessage, createPromoCampaign } from '../../../data-layer.js';
 // 광고 규제 표기(정보통신망법 §50)는 공용 모듈 — 발송 시 자동 보정, 버튼은 미리보기 확인용.
 import { OPT_OUT_LINE, ensurePromoCompliance } from '../../../promo-compliance.js';
 
-function newReqId() { return 'bulk-' + Math.random().toString(36).slice(2) + '-' + performance.now().toString(36); }
+// randomUUID는 secure context 전용 — LAN http dev(host:true)용 fallback 유지
+function newReqId() { return 'bulk-' + (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + '-' + performance.now().toString(36)); }
 
 // 대량 발송 blast radius 제한. 서버가 최종 검증하지만 클라 1차 방어로 오발송 규모를 줄인다. F-02
 const BULK_CONFIRM_THRESHOLD = 30; // 이 인원 이상이면 발송 전 확인 단계를 요구

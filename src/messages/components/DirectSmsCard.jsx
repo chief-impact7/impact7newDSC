@@ -6,8 +6,8 @@ import { getMessageExtras, saveMessageExtras, composeWithExtras, DEFAULT_CHANNEL
 import TemplateBar from './TemplateBar.jsx';
 
 function newReqId() {
-  // 입력 1회분 멱등키. 발송 성공 또는 내용 변경 시 리셋.
-  return 'direct-' + Math.random().toString(36).slice(2) + '-' + performance.now().toString(36);
+  // 입력 1회분 멱등키. 발송 성공 또는 내용 변경 시 리셋. randomUUID는 secure context 전용이라 LAN http dev용 fallback 유지.
+  return 'direct-' + (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + '-' + performance.now().toString(36));
 }
 
 // 클라이언트 1차 방어 상한 — 최종 검증은 서버 callable. F-02

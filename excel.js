@@ -6,13 +6,14 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
-import { todayStr, getDayName, addDays, PAST_STUDENT_STATUSES, normalizeDays, enrollmentCode, branchFromStudent } from './src/shared/firestore-helpers.js';
+import { todayStr, getDayName, addDays, PAST_STUDENT_STATUSES, normalizeDays, normalizeEnrollments, enrollmentCode, branchFromStudent } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditSet, auditAdd, normalizeImpact7Email } from './audit.js';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { getActiveEnrollments, findStudent } from './student-helpers.js';
 import { openKoreanDatePicker } from './date-picker.js';
 import { loadClassSettings } from './data-layer.js';
 import { state } from './state.js';
+import { esc, escAttr } from './ui-utils.js';
 
 // ─── State ───────────────────────────────────────────────────────────────────
 let currentUser = null;
@@ -25,35 +26,6 @@ let saveTimers = {};           // 디바운스 타이머
 let unsubDailyChecks = null;   // daily_checks 실시간 리스너 해제 함수
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-const esc = (str) => {
-    const d = document.createElement('div');
-    d.textContent = str ?? '';
-    return d.innerHTML;
-};
-
-const escAttr = (str) =>
-    String(str ?? '').replace(/&/g, '&amp;').replace(/'/g, '&#39;')
-        .replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-// 기존 flat 필드 → enrollments 배열 자동 변환
-function normalizeEnrollments(s) {
-    if (s.enrollments?.length) return s.enrollments;
-    let levelSymbol = s.level_symbol || s.level_code || '';
-    let classNumber = s.class_number || '';
-    // Auto-correction: level_symbol에 숫자만 있으면 class_number로 이동
-    if (/^\d+$/.test(levelSymbol) && !classNumber) {
-        classNumber = levelSymbol;
-        levelSymbol = '';
-    }
-    const day = normalizeDays(s.day);
-    // 레거시 반배정 정보가 전혀 없으면(상담생 등 enrollments=[]) 합성하지 않는다 — class_type '정규' 둔갑 방지
-    if (!levelSymbol && !classNumber && !s.class_type && !day.length) return [];
-    const ct = s.class_type || '정규';
-    const e = { class_type: ct, level_symbol: levelSymbol, class_number: classNumber, day, start_date: s.start_date || '' };
-    if (ct === '특강') e.end_date = s.special_end_date || '';
-    return [e];
-}
-
 function makeDailyCheckId(date, studentId, enrollIdx) {
     return `${date}_${studentId}_${enrollIdx}`;
 }

@@ -16,6 +16,7 @@ import { esc } from './ui-utils.js';
 import { enrollmentCode } from './student-core.js';
 import { wizardData, allStudents, showToast, popPerms } from './class-setup-state.js';
 import { csvCell, safeCell } from './src/shared/csv.js';
+import { branchFromClassNumber } from '@impact7/shared/branch';
 
 // mode: '정규' (자유학기 포함) | '내신'
 export function initPlanner(mode) {
@@ -81,12 +82,10 @@ function getPlannerRows(mode) {
 function getStudentBranch(student) {
     const direct = String(student.branch || '').trim();
     if (direct === '2단지' || direct === '10단지') return direct;
-    // class_number 첫 자리로 추론 (RULES.md): 1→2단지, 2→10단지
-    const enrolls = getPlanningEnrollments(student);
-    for (const e of enrolls) {
-        const head = String(e.class_number || '').trim().charAt(0);
-        if (head === '1') return '2단지';
-        if (head === '2') return '10단지';
+    // class_number → 단지 파생은 shared 규칙 재사용 (내신 csKey '10단지…' 접두 우선 처리 포함)
+    for (const e of getPlanningEnrollments(student)) {
+        const branch = branchFromClassNumber(e.class_number);
+        if (branch) return branch;
     }
     return '소속 미지정';
 }

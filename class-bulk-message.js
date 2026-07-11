@@ -8,6 +8,7 @@ import { esc, escAttr, showToast } from './ui-utils.js';
 import { READ_ONLY } from './audit.js';
 import { createBulkMessage } from './data-layer.js';
 import { getRegularClassStudents, getFreeSemesterClassStudents, getTeukangClassStudents, getNaesinStudentsByDerivedCode, _isNaesinClassCode } from './class-resolver.js';
+import { onlyDigits } from './src/messages/message-format.js';
 
 // 백엔드 recipientPhone.js의 RECIPIENT_FIELDS와 일치.
 const RECIPIENT_OPTIONS = [
@@ -27,8 +28,6 @@ let _sending = false;
 // 서버 큐잉 성공+클라 타임아웃일 때 다음 반이 duplicate로 막혀 영구 잼(리뷰 #1).
 let _reqId = null;
 let _lastSendSig = null;
-
-function onlyDigits(v) { return String(v ?? '').replace(/\D/g, ''); }
 
 // 반 유형별 멤버 해석 — 소속 L4·반설정 양쪽에서 _classMgmtMode/class_type로 분기.
 // 내신은 naesin_class_override 링크라 정규 로스터엔 안 잡혀 별도 조회가 필수(리뷰 #2·#3).

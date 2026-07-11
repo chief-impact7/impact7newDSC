@@ -13,7 +13,7 @@ import {
     resolveNaesinCsKey, displayCodeFromCsKey,
 } from './student-helpers.js';
 import { schoolSearchTerms } from './school-normalizer.js';
-import { esc, escAttr, formatTime12h, oxDisplayClass } from './ui-utils.js';
+import { esc, escAttr, formatTime12h, oxChip, oxChipBtn } from './ui-utils.js';
 import {
     getTeacherName, addOverrideInStudents, getStudentOverrides, getStudentDomains, getStudentTestItems,
     _isOlderThan, _isDetailInputFocused
@@ -74,7 +74,12 @@ export function getEffectiveAttendanceTime(s, date, dayName) {
     const todayE = getActiveEnrollments(s, date).find(e => (e.day || []).includes(dayName));
     const enrollTime = getStudentStartTime(todayE, dayName);
     if (enrollTime) times.push(enrollTime);
+    times.push(...collectVisitTimes(s, date));
+    return times.length === 0 ? '99:99' : times.sort()[0];
+}
 
+function collectVisitTimes(s, date) {
+    const times = [];
     const docId = s.docId;
     for (const t of state.hwFailTasks) {
         if (t.student_id !== docId || t.type !== '등원' || t.status !== 'pending') continue;
@@ -90,8 +95,7 @@ export function getEffectiveAttendanceTime(s, date, dayName) {
     for (const a of Object.values(hfa)) {
         if (a.type === '등원' && a.scheduled_date === date && a.scheduled_time) times.push(a.scheduled_time);
     }
-
-    return times.length === 0 ? '99:99' : times.sort()[0];
+    return times;
 }
 
 export function isVisitStudent(docId) {
@@ -571,15 +575,7 @@ export function renderListPanel() {
                     ? allDomains.filter(d => (rec?.hw_domains_1st || {})[d] !== 'O')
                     : allDomains;
                 toggleHtml = `<div class="hw-domain-group">` +
-                    domains.map(d => {
-                        const val = domainData[d] || '';
-                        const cls = oxDisplayClass(val);
-                        return `<div class="hw-domain-item">
-                            <span class="hw-domain-label">${esc(d)}</span>
-                            <button class="hw-domain-ox ${cls}" data-student="${escAttr(s.docId)}" data-field="${field}" data-domain="${escAttr(d)}"
-                                onclick="event.stopPropagation(); toggleHwDomainOX('${escAttr(s.docId)}', '${field}', '${escAttr(d)}')">${esc(val || '—')}</button>
-                        </div>`;
-                    }).join('') +
+                    domains.map(d => oxChipBtn(d, domainData[d] || '', s.docId, field)).join('') +
                     `</div>`;
             } else if (isHwNext) {
                 // L2 hw_next: 기존 커스텀 숙제 배열
@@ -615,26 +611,12 @@ export function renderListPanel() {
                     let summaryParts = [];
                     if (has1st) {
                         summaryParts.push(`<div class="hw-domain-summary"><span class="hw-domain-summary-label">1차</span><div class="hw-domain-group">` +
-                            domains.map(d => {
-                                const val = d1st[d] || '';
-                                const cls = oxDisplayClass(val);
-                                return `<div class="hw-domain-item">
-                                    <span class="hw-domain-label">${esc(d)}</span>
-                                    <span class="hw-domain-ox readonly ${cls}">${esc(val || '—')}</span>
-                                </div>`;
-                            }).join('') +
+                            domains.map(d => oxChip(d, d1st[d] || '')).join('') +
                             `</div></div>`);
                     }
                     if (has2nd) {
                         summaryParts.push(`<div class="hw-domain-summary"><span class="hw-domain-summary-label">2차</span><div class="hw-domain-group">` +
-                            domains.map(d => {
-                                const val = d2nd[d] || '';
-                                const cls = oxDisplayClass(val);
-                                return `<div class="hw-domain-item">
-                                    <span class="hw-domain-label">${esc(d)}</span>
-                                    <span class="hw-domain-ox readonly ${cls}">${esc(val || '—')}</span>
-                                </div>`;
-                            }).join('') +
+                            domains.map(d => oxChip(d, d2nd[d] || '')).join('') +
                             `</div></div>`);
                     }
                     toggleHtml = summaryParts.join('');
@@ -659,15 +641,7 @@ export function renderListPanel() {
                     sectionHtmlParts.push(
                         `<div style="margin-top:4px;">` +
                         `<div class="hw-domain-group">` +
-                        filtered.map(t => {
-                            const val = domainData[t] || '';
-                            const cls = oxDisplayClass(val);
-                            return `<div class="hw-domain-item">
-                                <span class="hw-domain-label">${esc(t)}</span>
-                                <button class="hw-domain-ox ${cls}" data-student="${escAttr(s.docId)}" data-field="${field}" data-domain="${escAttr(t)}"
-                                    onclick="event.stopPropagation(); toggleHwDomainOX('${escAttr(s.docId)}', '${field}', '${escAttr(t)}')">${esc(val || '—')}</button>
-                            </div>`;
-                        }).join('') +
+                        filtered.map(t => oxChipBtn(t, domainData[t] || '', s.docId, field)).join('') +
                         `</div></div>`
                     );
                 }
@@ -694,14 +668,7 @@ export function renderListPanel() {
                             if (!hasAny) continue;
                             secParts.push(
                                 `<div class="hw-domain-group">` +
-                                items.map(t => {
-                                    const val = data[t] || '';
-                                    const cls = oxDisplayClass(val);
-                                    return `<div class="hw-domain-item">
-                                        <span class="hw-domain-label">${esc(t)}</span>
-                                        <span class="hw-domain-ox readonly ${cls}">${esc(val || '—')}</span>
-                                    </div>`;
-                                }).join('') +
+                                items.map(t => oxChip(t, data[t] || '')).join('') +
                                 `</div>`
                             );
                         }
@@ -764,21 +731,7 @@ export function renderListPanel() {
 
             // 비정규 등원 예약 시간 (hw_fail/test_fail/extra_visit/hw_fail_action 통합).
             // 정규/fallback 예정 시간(scheduledTime)과 다른 것만 보충 블록으로 표시.
-            const visitBonusTimes = [];
-            for (const t of state.hwFailTasks) {
-                if (t.student_id !== s.docId || t.type !== '등원' || t.status !== 'pending') continue;
-                if (t.scheduled_date === state.selectedDate && t.scheduled_time) visitBonusTimes.push(t.scheduled_time);
-            }
-            for (const t of state.testFailTasks) {
-                if (t.student_id !== s.docId || t.type !== '등원' || t.status !== 'pending') continue;
-                if (t.scheduled_date === state.selectedDate && t.scheduled_time) visitBonusTimes.push(t.scheduled_time);
-            }
-            const ev = rec?.extra_visit;
-            if (ev?.date === state.selectedDate && ev.time) visitBonusTimes.push(ev.time);
-            const hfa = rec?.hw_fail_action || {};
-            for (const a of Object.values(hfa)) {
-                if (a.type === '등원' && a.scheduled_date === state.selectedDate && a.scheduled_time) visitBonusTimes.push(a.scheduled_time);
-            }
+            const visitBonusTimes = collectVisitTimes(s, state.selectedDate);
             const uniqueBonusTimes = [...new Set(visitBonusTimes)].filter(t => t !== scheduledTime).sort();
 
             let timeLabel = '', timeValue = '', timeClass = '';

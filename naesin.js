@@ -119,7 +119,7 @@ export function getNaesinPeriodStudentIds() {
     return new Set(getNaesinStudents({ ignoreDayFilter: true }).map(({ student }) => student.docId));
 }
 
-export function getNaesinClasses(students) {
+function getNaesinClasses(students) {
     if (!students) students = getNaesinStudents();
     const countMap = new Map();
 
@@ -286,6 +286,56 @@ function _hideNonDailyDetailTabs() {
     });
 }
 
+// 내신/특강 공용: 프로필 헤더 (기존 요소 재활용)
+function _setDetailProfileHeader(student, badgeHtml, code, teacherEmail) {
+    const avatarEl = document.getElementById('profile-avatar');
+    const nameEl   = document.getElementById('detail-name');
+    const phonesEl = document.getElementById('profile-phones');
+    const tagsEl   = document.getElementById('profile-tags');
+    if (avatarEl) avatarEl.textContent = (student.name || '?')[0];
+    if (nameEl)   nameEl.textContent = student.name || '';
+    if (phonesEl) {
+        phonesEl.innerHTML =
+            `<div class="profile-phone"><span class="phone-label">학생</span>${_esc(student.student_phone || '')}</div>` +
+            `<div class="profile-phone"><span class="phone-label">학부모</span>${_esc(student.parent_phone_1 || '')}</div>`;
+    }
+    if (tagsEl) {
+        const teacherName  = staffLabel(teacherEmail);
+        const branch       = window.branchFromStudent?.(student) || '';
+        const schoolGrade  = studentShortLabel(student);
+        tagsEl.innerHTML =
+            badgeHtml +
+            (code ? `<span class="tag-class">${_esc(code)}</span>` : '') +
+            (schoolGrade ? `<span class="tag">${_esc(schoolGrade)}</span>` : '') +
+            (branch     ? `<span class="tag">${_esc(branch)}</span>` : '') +
+            (teacherName ? `<span class="tag">담당: ${_esc(teacherName)}</span>` : '');
+    }
+}
+
+// 내신/특강 공용: 출결 카드
+function _renderAttendanceCard(studentId, rec) {
+    const attStatus = rec?.attendance?.status || '미확인';
+    const attClassMap = { '미확인': 'att-active', '출석': 'att-present', '지각': 'att-late', '결석': 'att-absent' };
+    const attButtons = [
+        { label: '등원전', value: '미확인' },
+        { label: '출석',   value: '출석' },
+        { label: '지각',   value: '지각' },
+        { label: '결석',   value: '결석' },
+    ].map(({ label, value }) => {
+        const cls = attStatus === value ? attClassMap[value] : '';
+        return `<button class="naesin-att-btn ${cls}"
+            onclick="window.toggleAttendance('${_escAttr(studentId)}', '${_escAttr(value)}')">${_esc(label)}</button>`;
+    }).join('');
+    return `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                ${msIcon('how_to_reg')}
+                출결
+            </div>
+            <div class="naesin-att-row">${attButtons}</div>
+        </div>`;
+}
+
 /**
  * renderNaesinDetail(studentId)
  *
@@ -312,53 +362,11 @@ export function renderNaesinDetail(studentId) {
     document.getElementById('detail-content').style.display = '';
     document.getElementById('detail-panel').classList.add('mobile-visible');
 
-    // ── 프로필 헤더 (기존 요소 재활용) ──
-    const avatarEl = document.getElementById('profile-avatar');
-    const nameEl   = document.getElementById('detail-name');
-    const phonesEl = document.getElementById('profile-phones');
-    const tagsEl   = document.getElementById('profile-tags');
-    if (avatarEl) avatarEl.textContent = (student.name || '?')[0];
-    if (nameEl)   nameEl.textContent = student.name || '';
-    if (phonesEl) {
-        phonesEl.innerHTML =
-            `<div class="profile-phone"><span class="phone-label">학생</span>${_esc(student.student_phone || '')}</div>` +
-            `<div class="profile-phone"><span class="phone-label">학부모</span>${_esc(student.parent_phone_1 || '')}</div>`;
-    }
-    if (tagsEl) {
-        const teacherEmail = cs.teacher || '';
-        const teacherName  = staffLabel(teacherEmail);
-        const branch       = window.branchFromStudent?.(student) || '';
-        const schoolGrade  = studentShortLabel(student);
-        tagsEl.innerHTML =
-            `<span class="tag-naesin">내신</span>` +
-            (code ? `<span class="tag-class">${_esc(code)}</span>` : '') +
-            (schoolGrade ? `<span class="tag">${_esc(schoolGrade)}</span>` : '') +
-            (branch     ? `<span class="tag">${_esc(branch)}</span>` : '') +
-            (teacherName ? `<span class="tag">담당: ${_esc(teacherName)}</span>` : '');
-    }
+    // ── 프로필 헤더 ──
+    _setDetailProfileHeader(student, `<span class="tag-naesin">내신</span>`, code, cs.teacher || '');
 
     // ── Section 2: 출결 ──
-    const attStatus = rec?.attendance?.status || '미확인';
-    const attClassMap = { '미확인': 'att-active', '출석': 'att-present', '지각': 'att-late', '결석': 'att-absent' };
-    const attButtons = [
-        { label: '등원전', value: '미확인' },
-        { label: '출석',   value: '출석' },
-        { label: '지각',   value: '지각' },
-        { label: '결석',   value: '결석' },
-    ].map(({ label, value }) => {
-        const cls = attStatus === value ? attClassMap[value] : '';
-        return `<button class="naesin-att-btn ${cls}"
-            onclick="window.toggleAttendance('${_escAttr(studentId)}', '${_escAttr(value)}')">${_esc(label)}</button>`;
-    }).join('');
-
-    const attHtml = `
-        <div class="detail-card">
-            <div class="detail-card-title">
-                ${msIcon('how_to_reg')}
-                출결
-            </div>
-            <div class="naesin-att-row">${attButtons}</div>
-        </div>`;
+    const attHtml = _renderAttendanceCard(studentId, rec);
 
     // ── Section 3: 등원요일·시간 ──
     const allDays = ['월', '화', '수', '목', '금', '토', '일'];
@@ -453,6 +461,22 @@ window.openNaesinClinic = function(studentId) {
     }
 };
 
+// 내신/특강 공용: enrollments 저장 + 인디케이터. 성공 시 true — 재렌더는 호출측 몫.
+async function _saveEnrollments(studentId, student, enrollments, { extraData, failAlert } = {}) {
+    window.showSaveIndicator?.('saving');
+    try {
+        await auditUpdate(doc(db, 'students', studentId), { ...extraData, enrollments });
+        student.enrollments = enrollments;
+        window.showSaveIndicator?.('saved');
+        return true;
+    } catch (err) {
+        console.error('[naesin] enrollments 저장 실패:', err);
+        window.showSaveIndicator?.('error');
+        if (failAlert) alert(failAlert + err.message);
+        return false;
+    }
+}
+
 // ─── 등원시간 수정 ────────────────────────────────────────────────────────────
 window.editNaesinTime = async function(studentId, day, selectedTime = null) {
     const { allStudents, selectedDate, classSettings } = _state();
@@ -496,16 +520,7 @@ window.editNaesinTime = async function(studentId, day, selectedTime = null) {
     }
     enrollments[enrollIdx] = updatedEnrollment;
 
-    window.showSaveIndicator?.('saving');
-    try {
-        await auditUpdate(doc(db, 'students', studentId), { enrollments });
-        student.enrollments = enrollments;
-        window.showSaveIndicator?.('saved');
-    } catch (err) {
-        console.error('[editNaesinTime] Firestore 저장 실패:', err);
-        window.showSaveIndicator?.('error');
-        return;
-    }
+    if (!await _saveEnrollments(studentId, student, enrollments)) return;
 
     if (window.renderNaesinDetail) window.renderNaesinDetail(studentId);
 };
@@ -543,16 +558,7 @@ window.toggleNaesinDay = async function(studentId, day) {
 
     enrollments[enrollIdx] = { ...enrollments[enrollIdx], naesin_days: currentDays };
 
-    window.showSaveIndicator?.('saving');
-    try {
-        await auditUpdate(doc(db, 'students', studentId), { enrollments });
-        student.enrollments = enrollments;
-        window.showSaveIndicator?.('saved');
-    } catch (err) {
-        console.error('[toggleNaesinDay] Firestore 저장 실패:', err);
-        window.showSaveIndicator?.('error');
-        return;
-    }
+    if (!await _saveEnrollments(studentId, student, enrollments)) return;
 
     if (window.renderNaesinDetail) window.renderNaesinDetail(studentId);
     if (window.renderListPanel) window.renderListPanel();
@@ -584,17 +590,7 @@ window.removeFromNaesin = async function(studentId, csKey) {
         return u;
     });
 
-    window.showSaveIndicator?.('saving');
-    try {
-        await auditUpdate(doc(db, 'students', studentId), { enrollments: updatedEnrollments });
-        student.enrollments = updatedEnrollments;
-        window.showSaveIndicator?.('saved');
-    } catch (err) {
-        console.error('[removeFromNaesin] 저장 실패:', err);
-        window.showSaveIndicator?.('error');
-        alert('학생 제거에 실패했습니다: ' + err.message);
-        return;
-    }
+    if (!await _saveEnrollments(studentId, student, updatedEnrollments, { failAlert: '학생 제거에 실패했습니다: ' })) return;
 
     // 학생 선택 해제 후 반 상세로 복귀
     window.selectedStudentId = null;
@@ -635,53 +631,12 @@ export function renderTeukangDetail(studentId) {
     document.getElementById('detail-panel').classList.add('mobile-visible');
 
     // ── 헤더 ──
-    const avatarEl = document.getElementById('profile-avatar');
-    const nameEl = document.getElementById('detail-name');
-    const phonesEl = document.getElementById('profile-phones');
-    const tagsEl = document.getElementById('profile-tags');
-    if (avatarEl) avatarEl.textContent = (student.name || '?')[0];
-    if (nameEl) nameEl.textContent = student.name || '';
-    if (phonesEl) {
-        phonesEl.innerHTML =
-            `<div class="profile-phone"><span class="phone-label">학생</span>${_esc(student.student_phone || '')}</div>` +
-            `<div class="profile-phone"><span class="phone-label">학부모</span>${_esc(student.parent_phone_1 || '')}</div>`;
-    }
-    if (tagsEl) {
-        const teacherEmail = cs.teacher || '';
-        const teacherName = staffLabel(teacherEmail);
-        const branch = window.branchFromStudent?.(student) || '';
-        const schoolGrade = studentShortLabel(student);
-        tagsEl.innerHTML =
-            `<span class="tag-naesin" style="background:var(--info);">특강</span>` +
-            `<span class="tag-class">${_esc(classCode)}</span>` +
-            (schoolGrade ? `<span class="tag">${_esc(schoolGrade)}</span>` : '') +
-            (branch ? `<span class="tag">${_esc(branch)}</span>` : '') +
-            (teacherName ? `<span class="tag">담당: ${_esc(teacherName)}</span>` : '');
-    }
+    _setDetailProfileHeader(student, `<span class="tag-naesin" style="background:var(--info);">특강</span>`, classCode, cs.teacher || '');
     const stayStatsEl = document.getElementById('profile-stay-stats');
     if (stayStatsEl) stayStatsEl.innerHTML = '';
 
     // ── 출결 카드 ──
-    const attStatus = rec?.attendance?.status || '미확인';
-    const attClassMap = { '미확인': 'att-active', '출석': 'att-present', '지각': 'att-late', '결석': 'att-absent' };
-    const attButtons = [
-        { label: '등원전', value: '미확인' },
-        { label: '출석', value: '출석' },
-        { label: '지각', value: '지각' },
-        { label: '결석', value: '결석' },
-    ].map(({ label, value }) => {
-        const cls = attStatus === value ? attClassMap[value] : '';
-        return `<button class="naesin-att-btn ${cls}"
-            onclick="window.toggleAttendance('${_escAttr(studentId)}', '${_escAttr(value)}')">${_esc(label)}</button>`;
-    }).join('');
-    const attHtml = `
-        <div class="detail-card">
-            <div class="detail-card-title">
-                ${msIcon('how_to_reg')}
-                출결
-            </div>
-            <div class="naesin-att-row">${attButtons}</div>
-        </div>`;
+    const attHtml = _renderAttendanceCard(studentId, rec);
 
     // ── 등원요일·시간 카드 ──
     const allDays = ['월', '화', '수', '목', '금', '토', '일'];
@@ -775,16 +730,7 @@ window.toggleTeukangDay = async function(studentId, classCode, day) {
 
     enrollments[idx] = { ...enrollments[idx], day: currentDays };
 
-    window.showSaveIndicator?.('saving');
-    try {
-        await auditUpdate(doc(db, 'students', studentId), { enrollments });
-        student.enrollments = enrollments;
-        window.showSaveIndicator?.('saved');
-    } catch (err) {
-        console.error('[toggleTeukangDay] 저장 실패:', err);
-        window.showSaveIndicator?.('error');
-        return;
-    }
+    if (!await _saveEnrollments(studentId, student, enrollments)) return;
 
     if (window.renderTeukangDetail) window.renderTeukangDetail(studentId);
     if (window.renderListPanel) window.renderListPanel();
@@ -823,16 +769,7 @@ window.editTeukangTime = async function(studentId, classCode, selectedTime = nul
     }
     enrollments[idx] = updated;
 
-    window.showSaveIndicator?.('saving');
-    try {
-        await auditUpdate(doc(db, 'students', studentId), { enrollments });
-        student.enrollments = enrollments;
-        window.showSaveIndicator?.('saved');
-    } catch (err) {
-        console.error('[editTeukangTime] 저장 실패:', err);
-        window.showSaveIndicator?.('error');
-        return;
-    }
+    if (!await _saveEnrollments(studentId, student, enrollments)) return;
 
     if (window.renderTeukangDetail) window.renderTeukangDetail(studentId);
 };
@@ -850,27 +787,18 @@ window.removeFromTeukang = async function(studentId, classCode) {
         return !isTarget;
     });
     const hasTeukang = enrollments.some(e => e.class_type === '특강');
-    const updateData = { enrollments };
+    const extraData = {};
     if (!hasTeukang && student.status2 === '특강') {
-        updateData.status2 = '';
+        extraData.status2 = '';
     }
     if (enrollments.length === 0 && student.status !== '상담') {
-        updateData.status = '퇴원';
+        extraData.status = '퇴원';
     }
 
-    window.showSaveIndicator?.('saving');
-    try {
-        await auditUpdate(doc(db, 'students', studentId), updateData);
-        student.enrollments = enrollments;
-        if (!hasTeukang && student.status2 === '특강') student.status2 = '';
-        if (updateData.status) student.status = updateData.status;
-        if (updateData.status === '퇴원') cancelStudentPendingTasks(studentId);
-        window.showSaveIndicator?.('saved');
-    } catch (err) {
-        console.error('[removeFromTeukang] 저장 실패:', err);
-        window.showSaveIndicator?.('error');
-        return;
-    }
+    if (!await _saveEnrollments(studentId, student, enrollments, { extraData })) return;
+    if (!hasTeukang && student.status2 === '특강') student.status2 = '';
+    if (extraData.status) student.status = extraData.status;
+    if (extraData.status === '퇴원') cancelStudentPendingTasks(studentId);
 
     // 학생 선택 해제 후 반 상세로 복귀
     window.selectedStudentId = null;
@@ -1215,7 +1143,6 @@ window.addStudentToNaesin = async function(csKey, studentId) {
 // ─── 외부 모듈/onclick 핸들러용 window 노출 ──────────────────────────────────
 window._getNaesinStudents = getNaesinStudents;
 window._getNaesinPeriodStudentIds = getNaesinPeriodStudentIds;
-window._getNaesinClasses = getNaesinClasses;
 window.renderNaesinList = renderNaesinList;
 window.renderNaesinDetail = renderNaesinDetail;
 window.renderNaesinClassDetail = renderNaesinClassDetail;

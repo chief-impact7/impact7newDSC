@@ -84,6 +84,25 @@ function _leaveRequestStatusBadge(r) {
 
 // ─── 휴퇴원요청서 리스트 ─────────────────────────────────────────────────────
 
+// 리스트 아이템 공통 셸 (체크박스 + 이름 + 뱃지 + 메타). 뱃지/메타/클릭 대상만 호출부가 지정.
+function _listItemShell({ id, isActive, extraAttr = '', onclickExpr, nameHtml, badges, metaHtml, trailingHtml = '' }) {
+    return `<div class="list-item ${isActive ? 'active' : ''}${state.bulkMode ? ' bulk-mode' : ''}${state.selectedStudentIds.has(id) ? ' bulk-selected' : ''}" data-id="${escAttr(id)}"${extraAttr}
+                onclick="handleListItemClick(event,'${escAttr(id)}',()=>${onclickExpr})">
+                <input type="checkbox" class="list-item-checkbox" ${state.selectedStudentIds.has(id) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(id)}', this.checked)">
+                <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+                            <span style="font-weight:600;font-size:13px;">${nameHtml}</span>
+                            ${badges.join('\n                            ')}
+                        </div>
+                        <div style="font-size:11px;color:var(--text-sec);margin-top:2px;">
+                            ${metaHtml}
+                        </div>
+                    </div>${trailingHtml ? `\n                    ${trailingHtml}` : ''}
+                </div>
+            </div>`;
+}
+
 let _selectedLeaveRequestId = null;
 
 export function renderLeaveRequestList() {
@@ -132,22 +151,15 @@ export function renderLeaveRequestList() {
             const _by = getTeacherName(r.requested_by);
             const tsStr = _fmtTs(r.requested_at);
 
-            html += `<div class="list-item ${isActive ? 'active' : ''}${state.bulkMode ? ' bulk-mode' : ''}${state.selectedStudentIds.has(r.student_id) ? ' bulk-selected' : ''}" data-id="${escAttr(r.student_id)}" data-leave-id="${escAttr(r.docId)}"
-                onclick="handleListItemClick(event,'${escAttr(r.student_id)}',()=>selectLeaveRequest('${escAttr(r.docId)}'))">
-                <input type="checkbox" class="list-item-checkbox" ${state.selectedStudentIds.has(r.student_id) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(r.student_id)}', this.checked)">
-                <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
-                    <div style="flex:1;min-width:0;">
-                        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
-                            <span style="font-weight:600;font-size:13px;">${esc(r.student_name)}</span>
-                            ${_leaveRequestTypeBadge(r)}
-                            ${_leaveRequestStatusBadge(r)}
-                        </div>
-                        <div style="font-size:11px;color:var(--text-sec);margin-top:2px;">
-                            ${esc(classCodes)}${_by ? ' · ' + esc(_by) : ''} · ${esc(tsStr)}
-                        </div>
-                    </div>
-                </div>
-            </div>`;
+            html += _listItemShell({
+                id: r.student_id,
+                isActive,
+                extraAttr: ` data-leave-id="${escAttr(r.docId)}"`,
+                onclickExpr: `selectLeaveRequest('${escAttr(r.docId)}')`,
+                nameHtml: esc(r.student_name),
+                badges: [_leaveRequestTypeBadge(r), _leaveRequestStatusBadge(r)],
+                metaHtml: `${esc(classCodes)}${_by ? ' · ' + esc(_by) : ''} · ${esc(tsStr)}`
+            });
         }
     }
     container.innerHTML = html;
@@ -231,23 +243,15 @@ export function renderReturnUpcomingList() {
             const consultDone = s.return_consult_done;
             const consultIcon = msIcon(consultDone ? 'check_circle' : 'phone_in_talk', 'return-consult-icon', `title="복귀상담" style="color:${consultDone ? '#22c55e' : '#f59e0b'}" onclick="event.stopPropagation();toggleReturnConsult('${escAttr(s.docId)}')"`);
 
-            html += `<div class="list-item ${isActive ? 'active' : ''}${state.bulkMode ? ' bulk-mode' : ''}${state.selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}"
-                onclick="handleListItemClick(event,'${escAttr(s.docId)}',()=>selectReturnUpcomingStudent('${escAttr(s.docId)}'))">
-                <input type="checkbox" class="list-item-checkbox" ${state.selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">
-                <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
-                    <div style="flex:1;min-width:0;">
-                        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
-                            <span style="font-weight:600;font-size:13px;">${esc(s.name)}</span>
-                            ${typeBadge}
-                            <span class="return-dday ${g.ddayCls}">${ddayLabel}</span>
-                        </div>
-                        <div style="font-size:11px;color:var(--text-sec);margin-top:2px;">
-                            ${esc(codes)}${s.pause_end_date ? ' · 복귀 ' + esc(s.pause_end_date) : ''}
-                        </div>
-                    </div>
-                    ${consultIcon}
-                </div>
-            </div>`;
+            html += _listItemShell({
+                id: s.docId,
+                isActive,
+                onclickExpr: `selectReturnUpcomingStudent('${escAttr(s.docId)}')`,
+                nameHtml: esc(s.name),
+                badges: [typeBadge, `<span class="return-dday ${g.ddayCls}">${ddayLabel}</span>`],
+                metaHtml: `${esc(codes)}${s.pause_end_date ? ' · 복귀 ' + esc(s.pause_end_date) : ''}`,
+                trailingHtml: consultIcon
+            });
         }
     }
     container.innerHTML = html;
@@ -743,6 +747,34 @@ export async function toggleCancelLeaveRequest(docId, studentId) {
     } catch (err) { alert('처리 실패: ' + err.message); }
 }
 
+// 가드·confirm·targets 산출은 호출부(휴원/퇴원)가 각자 처리한다.
+async function _cancelScheduled(studentId, student, targets, studentFieldDeletes, errorLabel) {
+    showSaveIndicator('saving');
+    try {
+        // student 1건 + 레코드 N건을 단일 batch로 atomic 처리 (부분 실패 시 비일관 방지).
+        const batch = writeBatch(db);
+        batchUpdate(batch, doc(db, 'students', studentId), studentFieldDeletes);
+        for (const r of targets) {
+            batchUpdate(batch, doc(db, 'leave_requests', r.docId), { status: 'cancelled' });
+        }
+        await batch.commit();
+
+        // 로컬 state 반영은 commit 성공 후에만.
+        for (const field of Object.keys(studentFieldDeletes)) delete student[field];
+        for (const r of targets) {
+            const idx = state.leaveRequests.findIndex(lr => lr.docId === r.docId);
+            if (idx >= 0) state.leaveRequests[idx].status = 'cancelled';
+        }
+
+        showSaveIndicator('saved');
+        renderSubFilters();
+        if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) renderLeaveRequestList();
+        if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
+    } catch (err) {
+        alert(errorLabel + err.message);
+    }
+}
+
 // 미래 휴원 예약(아직 시작 전) 취소: student 예약 필드 정리 + 관련 휴원요청 레코드 cancelled.
 // 서버 finalize는 approved→cancelled 전이에 반응하지 않으므로(functions/index.js) 클라 정리와 충돌 없음.
 export async function cancelScheduledLeave(studentId) {
@@ -766,35 +798,11 @@ export async function cancelScheduledLeave(studentId) {
         && (!r.leave_start_date || r.leave_start_date > today)
     );
 
-    showSaveIndicator('saving');
-    try {
-        // student 1건 + 레코드 N건을 단일 batch로 atomic 처리 (부분 실패 시 비일관 방지).
-        const batch = writeBatch(db);
-        batchUpdate(batch, doc(db, 'students', studentId), {
-            scheduled_leave_status: deleteField(),
-            pause_start_date: deleteField(),
-            pause_end_date: deleteField(),
-        });
-        for (const r of targets) {
-            batchUpdate(batch, doc(db, 'leave_requests', r.docId), { status: 'cancelled' });
-        }
-        await batch.commit();
-
-        // 로컬 state 반영은 commit 성공 후에만.
-        delete student.scheduled_leave_status;
-        delete student.pause_start_date;
-        delete student.pause_end_date;
-        for (const r of targets) {
-            const idx = state.leaveRequests.findIndex(lr => lr.docId === r.docId);
-            if (idx >= 0) state.leaveRequests[idx].status = 'cancelled';
-        }
-
-        showSaveIndicator('saved');
-        renderSubFilters();
-        if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
-    } catch (err) {
-        alert('휴원 취소 처리 실패: ' + err.message);
-    }
+    await _cancelScheduled(studentId, student, targets, {
+        scheduled_leave_status: deleteField(),
+        pause_start_date: deleteField(),
+        pause_end_date: deleteField(),
+    }, '휴원 취소 처리 실패: ');
 }
 
 export async function cancelScheduledWithdrawal(studentId) {
@@ -820,32 +828,10 @@ export async function cancelScheduledWithdrawal(studentId) {
     const dates = [...new Set(targets.map(r => r.withdrawal_date))].sort().join(', ');
     if (!confirm(`${student.name} 학생의 예약된 퇴원을 취소하시겠습니까?\n(퇴원시작일: ${dates})`)) return;
 
-    showSaveIndicator('saving');
-    try {
-        const batch = writeBatch(db);
-        batchUpdate(batch, doc(db, 'students', studentId), {
-            withdrawal_date: deleteField(),
-            pre_withdrawal_status: deleteField(),
-        });
-        for (const r of targets) {
-            batchUpdate(batch, doc(db, 'leave_requests', r.docId), { status: 'cancelled' });
-        }
-        await batch.commit();
-
-        delete student.withdrawal_date;
-        delete student.pre_withdrawal_status;
-        for (const r of targets) {
-            const idx = state.leaveRequests.findIndex(lr => lr.docId === r.docId);
-            if (idx >= 0) state.leaveRequests[idx].status = 'cancelled';
-        }
-
-        showSaveIndicator('saved');
-        renderSubFilters();
-        if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) renderLeaveRequestList();
-        if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
-    } catch (err) {
-        alert('퇴원 취소 처리 실패: ' + err.message);
-    }
+    await _cancelScheduled(studentId, student, targets, {
+        withdrawal_date: deleteField(),
+        pre_withdrawal_status: deleteField(),
+    }, '퇴원 취소 처리 실패: ');
 }
 
 // 방어 가드: 최종 승인 시 RETURN 유형(복귀/재등원)은 반드시 target_class_code 필요

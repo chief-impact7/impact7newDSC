@@ -16,6 +16,7 @@ import {
   MESSAGE_RECIPIENT_SETTINGS_FIELD,
   resolveRecipientFields,
 } from './src/messages/recipient-settings.js';
+import { onlyDigits } from './src/messages/message-format.js';
 
 let _deps = {};
 let _mode = 'notice'; // 'notice'(템플릿 안내) | 'free'(자유 안내) | 'promo'(홍보)
@@ -92,8 +93,6 @@ const HISTORY_LIMIT = 50;
 
 // deps: { getStudent(id) → {name, studentNumber, student_phone, parent_phone_*, other_phone}, toast(msg, type), readonly }
 export function initMessageCardDeps(deps) { _deps = deps; }
-
-function onlyDigits(v) { return String(v ?? '').replace(/\D/g, ''); }
 
 function selectedRecipientFields(channel) {
   return [...(channel === 'alimtalk' ? _alimtalkRecipientFields : _bmsRecipientFields)];

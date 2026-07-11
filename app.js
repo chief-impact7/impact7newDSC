@@ -82,15 +82,13 @@ import {
     renderNextHwClassList, selectNextHwClass, openNextHwModal, saveNextHwFromModal, saveNextHwNone,
     openPersonalNextHwModal, savePersonalNextHwFromModal, savePersonalNextHwNone,
     restoreModalHandlers, refreshNextHwViews, renderNextHwClassDetail,
-    toggleHomework, oxFieldLabel, toggleHwDomainOX, applyHwDomainOX, handleHomeworkStatusChange,
-    reopenHwFailDomain
+    toggleHomework, oxFieldLabel, toggleHwDomainOX, applyHwDomainOX, handleHomeworkStatusChange
 } from './hw-management.js';
 import {
     initTestManagementDeps,
     getClassTestSections, renderTestFailActionCard,
     selectTestFailType, clearTestFailType, saveTestFailFields,
-    saveTestFailAction, completeTestFailTask, cancelTestFailTask,
-    reopenTestFailDomain
+    saveTestFailAction, completeTestFailTask, cancelTestFailTask
 } from './test-management.js';
 import {
     initAttendanceDeps,
@@ -325,7 +323,6 @@ window.saveHwFailFields = saveHwFailFields;
 window.renderPendingTasksCard = renderPendingTasksCard;
 window.completeHwFailTask = completeHwFailTask;
 window.cancelHwFailTask = cancelHwFailTask;
-window.reopenHwFailDomain = reopenHwFailDomain;
 window.renderNextHwClassList = renderNextHwClassList;
 window.selectNextHwClass = selectNextHwClass;
 window.openNextHwModal = openNextHwModal;
@@ -350,7 +347,6 @@ window.clearTestFailType = clearTestFailType;
 window.saveTestFailFields = saveTestFailFields;
 window.completeTestFailTask = completeTestFailTask;
 window.cancelTestFailTask = cancelTestFailTask;
-window.reopenTestFailDomain = reopenTestFailDomain;
 
 // attendance.js 의존성 주입
 initAttendanceDeps({ renderSubFilters, renderListPanel, renderStudentDetail, openBulkModal });
@@ -554,50 +550,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
-
-// ─── Retake actions ─────────────────────────────────────────────────────────
-
-async function completeRetake(retakeDocId) {
-    if (!confirm('이 일정을 완료 처리하시겠습니까?')) return;
-    showSaveIndicator('saving');
-    try {
-        const completedBy = staffLabel(state.currentUser?.email);
-        await auditUpdate(doc(db, 'retake_schedule', retakeDocId), {
-            status: '완료',
-            completed_by: completedBy,
-            completed_at: new Date().toISOString()
-        });
-        const r = state.retakeSchedules.find(r => r.docId === retakeDocId);
-        if (r) { r.status = '완료'; r.completed_by = completedBy; }
-        renderSubFilters();
-        if (state.selectedStudentId) renderStudentDetail(state.selectedStudentId);
-        showSaveIndicator('saved');
-    } catch (err) {
-        console.error('완료 처리 실패:', err);
-        showSaveIndicator('error');
-    }
-}
-
-async function cancelRetake(retakeDocId) {
-    if (!confirm('이 일정을 취소하시겠습니까?')) return;
-    showSaveIndicator('saving');
-    try {
-        const cancelledBy = staffLabel(state.currentUser?.email);
-        await auditUpdate(doc(db, 'retake_schedule', retakeDocId), {
-            status: '취소',
-            cancelled_by: cancelledBy,
-            cancelled_at: new Date().toISOString()
-        });
-        const r = state.retakeSchedules.find(r => r.docId === retakeDocId);
-        if (r) { r.status = '취소'; r.cancelled_by = cancelledBy; }
-        renderSubFilters();
-        if (state.selectedStudentId) renderStudentDetail(state.selectedStudentId);
-        showSaveIndicator('saved');
-    } catch (err) {
-        console.error('취소 처리 실패:', err);
-        showSaveIndicator('error');
-    }
-}
 
 // ─── Modal helpers ──────────────────────────────────────────────────────────
 // closeModal, openScheduleModal, openHomeworkModal, openTestModal,
@@ -850,6 +802,7 @@ window.refreshData = async () => {
     showSaveIndicator('saved');
 };
 
+// 콘솔 전용 운영 도구 — UI 진입점 없음이 정상 (f3bf980에서 자동실행을 수동 confirm으로 강등)
 window.runOldRecordCleanup = async (force = false) => {
     if (!force && !confirm('오래된 결석/휴퇴원/미통과 기록을 자동 정리합니다. production 데이터가 변경됩니다. 진행하시겠습니까?')) return;
     await autoCloseOldRecords();
@@ -876,18 +829,11 @@ window.saveSchedule = saveScheduleFromModal;
 window.saveHomework = saveHomeworkFromModal;
 window.saveTest = saveTestFromModal;
 window.saveDailyRecord = saveDailyRecord;
-window.saveDetailNote = async function(studentId) {
-    const ta = document.getElementById(`detail-note-${studentId}`);
-    if (!ta) return;
-    await saveDailyRecord(studentId, { note: ta.value });
-};
 // saveStudentMemoArray, addStudentMemo, deleteStudentMemo, toggleStudentMemoPin → role-memo.js로 분리됨
 window.handleAttendanceChange = handleAttendanceChange;
 window.openScheduleModal = openScheduleModal;
 window.openHomeworkModal = openHomeworkModal;
 window.openTestModal = openTestModal;
-window.completeRetake = completeRetake;
-window.cancelRetake = cancelRetake;
 window.openEnrollmentModal = openEnrollmentModal;
 window.saveEnrollment = saveEnrollment;
 window.saveStudentScheduledTime = saveStudentScheduledTime;

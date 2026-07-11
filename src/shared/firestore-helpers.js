@@ -8,11 +8,12 @@ import {
     LEVEL_SHORT,
 } from '@impact7/shared/student-label';
 import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
+import { formatDateKST, todayKST } from '@impact7/shared/datetime';
 import { db } from '../../firebase-config.js';
 import { enrollmentCode, branchFromStudent, allClassCodes, normalizeDays } from '../../student-core.js';
 
 // 학부별 학기 정의 (impact7db.web.app 설정과 동일하게 유지)
-export const LEVEL_SEMESTERS = {
+const LEVEL_SEMESTERS = {
     '초등': ['winter', 'spring1', 'spring2', 'summer', 'autumn'],
     '중등': ['winter', 'spring', 'summer', 'autumn'],
     '고등': ['winter', 'spring', 'autumn'],
@@ -28,7 +29,7 @@ export async function fetchSemesterSettings() {
 
 // 특정 날짜 + 레벨에 해당하는 학기 반환
 // key 형식: `{level}-{year}-{name}` (신규) 또는 `{year}-{Name}` (구형)
-export function getSemesterForDate(dateStr, level, semesterSettings) {
+function getSemesterForDate(dateStr, level, semesterSettings) {
     const entries = Object.entries(semesterSettings)
         .filter(([key]) => key.startsWith(`${level}-`))
         .filter(([, v]) => v.start_date)
@@ -93,66 +94,27 @@ export async function fetchStudentsFromCache() {
     }
 }
 
-// 특정 날짜의 daily_checks
-export async function fetchDailyChecks(date) {
-    const q = query(
-        collection(db, 'daily_checks'),
-        where('date', '==', date)
-    );
-    const snap = await getDocs(q);
-    const map = {};
-    snap.forEach(docSnap => {
-        map[docSnap.id] = docSnap.data();
-    });
-    return map;
-}
+const queryDocs = async (q) => (await getDocs(q)).docs.map(d => ({ id: d.id, ...d.data() }));
 
 // 기간별 daily_checks (startDate ~ endDate 포함)
 export async function fetchDailyChecksRange(startDate, endDate) {
-    const q = query(
+    return queryDocs(query(
         collection(db, 'daily_checks'),
         where('date', '>=', startDate),
         where('date', '<=', endDate)
-    );
-    const snap = await getDocs(q);
-    const list = [];
-    snap.forEach(docSnap => {
-        list.push({ id: docSnap.id, ...docSnap.data() });
-    });
-    return list;
-}
-
-// 특정 날짜의 pending 연기 작업
-export async function fetchPostponedTasks(date) {
-    const q = query(
-        collection(db, 'postponed_tasks'),
-        where('scheduled_date', '==', date),
-        where('status', '==', 'pending')
-    );
-    const snap = await getDocs(q);
-    const list = [];
-    snap.forEach(docSnap => {
-        list.push({ id: docSnap.id, ...docSnap.data() });
-    });
-    return list;
+    ));
 }
 
 // 기간별 연기 작업 (전체 상태)
 export async function fetchPostponedTasksRange(startDate, endDate) {
-    const q = query(
+    return queryDocs(query(
         collection(db, 'postponed_tasks'),
         where('scheduled_date', '>=', startDate),
         where('scheduled_date', '<=', endDate)
-    );
-    const snap = await getDocs(q);
-    const list = [];
-    snap.forEach(docSnap => {
-        list.push({ id: docSnap.id, ...docSnap.data() });
-    });
-    return list;
+    ));
 }
 
-export async function fetchClassSettingsMap() {
+async function fetchClassSettingsMap() {
     const snap = await getDocs(collection(db, 'class_settings'));
     const map = {};
     snap.forEach(docSnap => {
@@ -161,44 +123,26 @@ export async function fetchClassSettingsMap() {
     return map;
 }
 
-export async function fetchDailyRecordsForDate(date) {
-    const q = query(
+async function fetchDailyRecordsForDate(date) {
+    return queryDocs(query(
         collection(db, 'daily_records'),
         where('date', '==', date)
-    );
-    const snap = await getDocs(q);
-    const list = [];
-    snap.forEach(docSnap => {
-        list.push({ id: docSnap.id, ...docSnap.data() });
-    });
-    return list;
+    ));
 }
 
 export async function fetchDailyRecordsRange(startDate, endDate) {
-    const q = query(
+    return queryDocs(query(
         collection(db, 'daily_records'),
         where('date', '>=', startDate),
         where('date', '<=', endDate)
-    );
-    const snap = await getDocs(q);
-    const list = [];
-    snap.forEach(docSnap => {
-        list.push({ id: docSnap.id, ...docSnap.data() });
-    });
-    return list;
+    ));
 }
 
-export async function fetchTempAttendancesForDate(date) {
-    const q = query(
+async function fetchTempAttendancesForDate(date) {
+    return queryDocs(query(
         collection(db, 'temp_attendance'),
         where('temp_date', '==', date)
-    );
-    const snap = await getDocs(q);
-    const list = [];
-    snap.forEach(docSnap => {
-        list.push({ id: docSnap.id, ...docSnap.data() });
-    });
-    return list;
+    ));
 }
 
 async function fetchScheduledTaskRows(collectionName, date) {
@@ -221,7 +165,7 @@ async function fetchScheduledTaskRows(collectionName, date) {
     return [...map.values()];
 }
 
-export async function fetchAbsenceRecordsForDailyLog(date) {
+async function fetchAbsenceRecordsForDailyLog(date) {
     const absenceQ = query(
         collection(db, 'absence_records'),
         where('absence_date', '==', date)
@@ -259,7 +203,7 @@ export const finalApprovalDate = (request) => {
     return new Date(Math.max(...dates.map(date => date.getTime())));
 };
 
-export async function fetchApprovedLeaveRequestsForDate(date) {
+async function fetchApprovedLeaveRequestsForDate(date) {
     // 전체 approved 스캔 대신 두 승인 시각 각각의 하루 범위만 조회한다(승인 누적과 무관한 비용). F-10.
     // finalApprovalDate = max(approved_at, teacher_approved_at)이므로 두 쿼리 합집합 후 최종일을 재검증.
     const startDate = parseDateKST(date);
@@ -347,7 +291,7 @@ export async function fetchDashboardDailyLogData(date) {
 
 // ─── 유틸 ───
 
-function normalizeEnrollments(s) {
+export function normalizeEnrollments(s) {
     if (s.enrollments?.length) return s.enrollments;
     let levelSymbol = s.level_symbol || s.level_code || '';
     let classNumber = s.class_number || '';
@@ -401,13 +345,7 @@ export function studentGradeKey(student) {
 
 // ─── 날짜 유틸 ───
 
-const pad2 = (value) => String(value).padStart(2, '0');
-
-export const toDateStrKST = (date) => {
-    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
-    const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
-    return `${kst.getUTCFullYear()}-${pad2(kst.getUTCMonth() + 1)}-${pad2(kst.getUTCDate())}`;
-};
+export const toDateStrKST = (date) => formatDateKST(date);
 export const parseDateKST = (dateStr) => {
     const raw = String(dateStr || '').trim();
     const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -418,7 +356,7 @@ export const parseDateKST = (dateStr) => {
 };
 
 export function todayStr() {
-    return toDateStrKST(new Date());
+    return todayKST();
 }
 
 export function getDayName(dateStr) {
@@ -436,12 +374,10 @@ export function addDays(dateStr, days) {
 // 동일 필드 orderBy → 복합 인덱스 불필요. 권한: consultations read = isAuthorized.
 export async function fetchConsultationsForRange(startDate, endDate) {
     if (!startDate || !endDate) return [];
-    const q = query(
+    return queryDocs(query(
         collection(db, 'consultations'),
         where('date', '>=', startDate),
         where('date', '<=', endDate),
         orderBy('date', 'desc'),
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    ));
 }

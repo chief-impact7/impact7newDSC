@@ -3,6 +3,7 @@ import { studentFullLabel } from '@impact7/shared/student-label';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { filterStudents } from '../bulk-select.js';
 import { getRecipientMessageHistory } from '../../../data-layer.js';
+import { onlyDigits } from '../message-format.js';
 
 // 수신자별 발송 이력 타임라인. 카카오 관리자센터는 API 발송(알림톡/BMS) 원문을 보여주지 않으므로
 // 학부모 답장이 왔을 때 "무엇을 보냈는지"를 여기서 확인한다.
@@ -22,8 +23,6 @@ const STATUS_META = {
   converted_to_sms: { label: '문자 전환', cls: 'converted' },
   archived: { label: '보관됨', cls: 'archived' },
 };
-
-const onlyDigits = (v) => String(v ?? '').replace(/\D/g, '');
 
 export default function RecipientHistoryCard({ students = [] }) {
   const [q, setQ] = useState('');

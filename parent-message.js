@@ -3,13 +3,14 @@
 
 import { msIcon } from './ms-icon.js';
 import { state } from './state.js';
-import { geminiModel } from './firebase-ai.js';
+import { createGeminiQueue } from './gemini-queue.js';
 import { parseDateKST, getDayName } from './src/shared/firestore-helpers.js';
 import { esc, decodeHtmlEntities, formatTime12h, formatTime12hNoAmPm, showSaveIndicator } from './ui-utils.js';
 import { enrollmentCode } from './student-helpers.js';
 import { sendDailyReport, sendParentNotice, addConsultation, saveStudentParentMessageRecipientFields } from './data-layer.js';
 import { buildConsultationPayload } from './consultation-payload.js';
 import { defaultRecipientFields, normalizeRecipientFields } from './src/messages/recipient-settings.js';
+import { onlyDigits } from './src/messages/message-format.js';
 import { todayKST } from '@impact7/shared/datetime';
 
 let _sendingReport = false;
@@ -23,7 +24,6 @@ const RECIPIENT_OPTIONS = [
     { field: 'parent_2', label: '학부모2', key: 'parent_phone_2' },
     { field: 'other', label: '기타', key: 'other_phone' },
 ];
-const onlyDigits = (v) => String(v ?? '').replace(/\D/g, '');
 
 function parentMessageRecipientFields(student, availableFields) {
     const saved = normalizeRecipientFields(student?.parent_message_recipient_fields, availableFields);
@@ -110,7 +110,7 @@ const DEFAULT_PARENT_MSG_PROMPT = `영어학원 "임팩트7" 담당 선생님이
 - 시간 표기에 "오전"·"오후"·"시"·"분" 같은 단어를 절대 쓰지 말 것. 반드시 "5:30"처럼 콜론 숫자만 쓸 것 (17:30→"5:30", 08:20→"8:20". "오후 5:30", "5시 30분" 모두 금지)
 - 오직 제공된 학생 데이터에 존재하는 항목만 근거로 작성할 것`;
 
-export function getCustomPrompt() {
+function getCustomPrompt() {
     try {
         return localStorage.getItem('parent_msg_prompt') || DEFAULT_PARENT_MSG_PROMPT;
     } catch { return DEFAULT_PARENT_MSG_PROMPT; }
@@ -146,7 +146,7 @@ export function togglePromptEditor() {
     }
 }
 
-export function collectStudentDaySummary(studentId) {
+function collectStudentDaySummary(studentId) {
     const student = state.allStudents.find(s => s.docId === studentId);
     if (!student) return null;
 
@@ -232,56 +232,8 @@ export function collectStudentDaySummary(studentId) {
     return summary;
 }
 
-// ─── Gemini API 요청 큐 + 재시도 ─────────────────────────────────────────────
-const _geminiQueue = [];
-let _geminiRunning = false;
-const GEMINI_MIN_INTERVAL = 1200; // 요청 간 최소 간격 (ms)
-let _geminiLastCall = 0;
-
-async function _geminiWithRetry(prompt, maxRetries = 3) {
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-        try {
-            const result = await geminiModel.generateContent(prompt);
-            return result;
-        } catch (err) {
-            const isRetriable =
-                err?.code === 'functions/resource-exhausted' ||
-                err?.code === 'functions/unavailable' ||
-                err?.message?.includes('429') ||
-                err?.message?.includes('Resource exhausted');
-            if (!isRetriable || attempt === maxRetries - 1) throw err;
-            const delay = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s
-            console.warn(`Gemini 429 → ${delay / 1000}초 후 재시도 (${attempt + 1}/${maxRetries})`);
-            await new Promise(r => setTimeout(r, delay));
-        }
-    }
-}
-
-function _enqueueGemini(prompt) {
-    return new Promise((resolve, reject) => {
-        _geminiQueue.push({ prompt, resolve, reject });
-        if (!_geminiRunning) _processGeminiQueue();
-    });
-}
-
-async function _processGeminiQueue() {
-    _geminiRunning = true;
-    while (_geminiQueue.length > 0) {
-        const { prompt, resolve, reject } = _geminiQueue.shift();
-        const elapsed = Date.now() - _geminiLastCall;
-        if (elapsed < GEMINI_MIN_INTERVAL) {
-            await new Promise(r => setTimeout(r, GEMINI_MIN_INTERVAL - elapsed));
-        }
-        try {
-            _geminiLastCall = Date.now();
-            const result = await _geminiWithRetry(prompt);
-            resolve(result);
-        } catch (err) {
-            reject(err);
-        }
-    }
-    _geminiRunning = false;
-}
+// ─── Gemini API 요청 큐 — 상담 제목 생성(gemini-queue.js 싱글턴)과 별도 레인 ──
+const _enqueueGemini = createGeminiQueue();
 
 // AI 응답에 시간 표기 규칙이 안 지켜진 잔여 패턴이 남으면 강제 정규화하는 안전망.
 // 프롬프트 지시(규칙 텍스트)는 확률적이라 100% 준수를 보장 못한다 — 데이터를 사전 포맷해도
@@ -300,7 +252,7 @@ function _normalizeAiTimeMentions(text) {
         .replace(/\b(1[3-9]|2[0-3]):(\d{1,2})분?/g, (_, h, m) => `${parseInt(h, 10) - 12}:${m.padStart(2, '0')}`);
 }
 
-export async function generateParentMessage(studentId) {
+async function generateParentMessage(studentId) {
     const summary = collectStudentDaySummary(studentId);
     if (!summary) return '학생 정보를 찾을 수 없습니다.';
 
@@ -342,7 +294,7 @@ const DOMAIN_FULL_NAMES = {
 };
 function domainFullName(abbr) { return DOMAIN_FULL_NAMES[abbr] || abbr; }
 
-export function generateDataTemplate(studentId) {
+function generateDataTemplate(studentId) {
     const summary = collectStudentDaySummary(studentId);
     if (!summary) return '';
 
@@ -446,7 +398,7 @@ export function generateDataTemplate(studentId) {
     return lines.join('\n');
 }
 
-export function generateManualTemplate(studentId) {
+function generateManualTemplate(studentId) {
     const summary = collectStudentDaySummary(studentId);
     if (!summary) return '';
 
@@ -619,7 +571,7 @@ async function _sendReportBmsWithConsultation() {
             recipientField: recipientFields[0],
             recipientFields,
         });
-        const msg = `${res?.queuedCount ?? recipientFields.length}건 문자 발송을 요청했습니다.`;
+        let msg = `${res?.queuedCount ?? recipientFields.length}건 문자 발송을 요청했습니다.`;
 
         try {
             const student = getStudent?.(parentMsgStudentId) || {};

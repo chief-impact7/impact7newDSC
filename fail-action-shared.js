@@ -18,7 +18,6 @@
 //   extraTaskData     : {} | { source: 'test' }               (task 추가 필드)
 //   savedTagInline    : true(hw) | false(test)   — 행마다 ✓저장됨 태그 + 저장 시 노출
 //   hidePendingFromForm : false(hw) | true(test) — pending은 폼에서 숨기고 "모두 처리됨"
-//   reopenedSet       : null(hw) | Set(test)     — 명시적 편집요청 추적 set
 //   selectFn/clearFn/saveFieldsFn : onclick에 들어갈 window 전역 함수명
 import { msIcon } from './ms-icon.js';
 import { doc, writeBatch } from 'firebase/firestore';
@@ -71,16 +70,13 @@ export function renderFailActionCard({ studentId, items, d2nd, failAction, mode 
         `;
     }
 
-    // test: pending task 항목은 밀린 Task로 이동됐으므로 숨김(명시적 편집요청은 예외).
+    // test: pending task 항목은 밀린 Task로 이동됐으므로 숨김.
     let renderKeys = failKeys;
     if (config.hidePendingFromForm) {
-        renderKeys = failKeys.filter(key => {
-            const isPending = !!state[config.stateTasksKey].find(t =>
-                t.student_id === studentId && t.domain === key
-                && t.source_date === state.selectedDate && t.status === 'pending'
-            );
-            return !isPending || (config.reopenedSet && config.reopenedSet.has(`${studentId}_${key}`));
-        });
+        renderKeys = failKeys.filter(key => !state[config.stateTasksKey].find(t =>
+            t.student_id === studentId && t.domain === key
+            && t.source_date === state.selectedDate && t.status === 'pending'
+        ));
         if (renderKeys.length === 0) {
             return `
             <div class="detail-card hw-fail-card">
@@ -211,32 +207,6 @@ function _renderClosedFailRow(key, task) {
     `;
 }
 
-// 닫힌 task 재활성화 — UI에서 제공하지 않고 기존 window API 호환용으로만 유지.
-export async function reopenFailDomain(studentId, key, config) {
-    const taskDocId = `${config.docIdPrefix}${studentId}_${key}_${state.selectedDate}`.replace(/[^\w\s가-힣-]/g, '_');
-    const task = state[config.stateTasksKey].find(t => t.docId === taskDocId);
-    if (!task || task.status === 'pending') return;
-    if (!confirm(`'${key}' 후속대책을 다시 활성화하시겠습니까?`)) return;
-    showSaveIndicator('saving');
-    try {
-        await auditUpdate(doc(db, config.collection, taskDocId), {
-            status: 'pending',
-            completed_by: '',
-            completed_at: '',
-            cancelled_by: '',
-            cancelled_at: '',
-        });
-        Object.assign(task, { status: 'pending', completed_by: '', completed_at: '', cancelled_by: '', cancelled_at: '' });
-        if (config.reopenedSet) config.reopenedSet.add(`${studentId}_${key}`);
-        renderStudentDetail(studentId);
-        renderListPanel();
-        showSaveIndicator('saved');
-    } catch (err) {
-        console.error('재입력 활성화 실패:', err);
-        showSaveIndicator('error');
-    }
-}
-
 // 처리 유형 선택 (등원 / 대체숙제) — daily_records에만 저장(task는 "저장" 버튼 시 생성)
 export async function selectFailType(studentId, key, type, config) {
     if (!checkCanEditGrading(studentId)) return;
@@ -264,7 +234,6 @@ export async function clearFailType(studentId, key, config) {
     const rec = state.dailyRecords[studentId] || {};
     const failAction = { ...(rec[config.actionField] || {}) };
     delete failAction[key];
-    if (config.reopenedSet) config.reopenedSet.delete(`${studentId}_${key}`);
     await saveFailAction(studentId, failAction, undefined, config);
     renderStudentDetail(studentId);
 }
@@ -280,7 +249,6 @@ export async function saveFailFields(studentId, key, btnEl, config) {
         state.dailyRecords[studentId][config.actionField][key][el.dataset[config.datasetKey]] = el.value;
     });
     state.dailyRecords[studentId][config.actionField][key].updated_at = new Date().toISOString();
-    if (config.reopenedSet) config.reopenedSet.delete(`${studentId}_${key}`);
     await saveFailAction(studentId, state.dailyRecords[studentId][config.actionField], key, config);
     renderStudentDetail(studentId);
     // 저장 확인 태그는 재렌더 "후"의 새 요소에 노출한다 — 재렌더 전에 켜면 곧바로 지워진다.

@@ -220,7 +220,7 @@ export function getStudentDomains(studentId) {
 
 export function getStudentTestItems(studentId) {
     const student = state.allStudents.find(s => s.docId === studentId);
-    if (!student) return { sections: JSON.parse(JSON.stringify(DEFAULT_TEST_SECTIONS)), flat: [] };
+    if (!student) return { sections: structuredClone(DEFAULT_TEST_SECTIONS), flat: [] };
     const merged = {};
     student.enrollments.forEach(e => {
         const sections = getClassTestSections(enrollmentCode(e));
@@ -234,7 +234,7 @@ export function getStudentTestItems(studentId) {
         sections[secName] = [...itemSet];
     }
     if (Object.keys(sections).length === 0) {
-        return { sections: JSON.parse(JSON.stringify(DEFAULT_TEST_SECTIONS)), flat: [] };
+        return { sections: structuredClone(DEFAULT_TEST_SECTIONS), flat: [] };
     }
     const flat = Object.values(sections).flat();
     return { sections, flat };
@@ -1037,55 +1037,29 @@ export async function getStudentStatusSummary(studentId) {
   return snap.exists() ? snap.data() : null;
 }
 
+const callFn = (name, opts) => async (payload) => (await httpsCallable(functions, name, opts)(payload)).data;
+
 // 종합상태·상담요약·브리핑을 단일 호출로 생성 → 3개 컬렉션 갱신.
-export async function generateStudentReportAi(studentId) {
-  const callable = httpsCallable(functions, 'generateStudentReportAi');
-  const res = await callable({ studentId });
-  return res.data;
-}
+export const generateStudentReportAi = (studentId) => callFn('generateStudentReportAi')({ studentId });
 
 // ─── 학생 상세 '메시지' 탭: 개별 발송 ─────────────────────────────────────────
 // 정보성 안내(알림톡 템플릿). 동의·야간 제한 없음. 서버에서 직원 권한 검증.
-export async function sendParentNotice(payload) {
-  const callable = httpsCallable(functions, 'sendParentNotice');
-  const res = await callable(payload);
-  return res.data;
-}
+export const sendParentNotice = callFn('sendParentNotice');
 
 // 개별 홍보 문자. studentIds 1명으로 캠페인 재사용. 서버에서 권한·광고 규제 검증.
-export async function createPromoCampaign(payload) {
-  const callable = httpsCallable(functions, 'createPromoCampaign');
-  const res = await callable(payload);
-  return res.data;
-}
+export const createPromoCampaign = callFn('createPromoCampaign');
 
 // 임의 번호 정보성 SMS 즉석 발송(메시지 센터 ③블록).
-export async function sendDirectMessage(payload) {
-  const callable = httpsCallable(functions, 'sendDirectMessage');
-  const res = await callable(payload);
-  return res.data;
-}
+export const sendDirectMessage = callFn('sendDirectMessage');
 
 // 정보성 대용량 발송(메시지 센터 ②블록, 직원 권한).
-export async function createBulkMessage(payload) {
-  const callable = httpsCallable(functions, 'createBulkMessage');
-  const res = await callable(payload);
-  return res.data;
-}
+export const createBulkMessage = callFn('createBulkMessage');
 
 // 일일 학습 리포트 발송(직원 권한). 자유 본문은 LMS/SMS로 발송.
-export async function sendDailyReport(payload) {
-  const callable = httpsCallable(functions, 'sendDailyReport');
-  const res = await callable(payload);
-  return res.data;
-}
+export const sendDailyReport = callFn('sendDailyReport');
 
 // 수신자별 발송 이력 타임라인 — message_queue 본문 포함(번호는 서버가 마스킹).
-export async function getRecipientMessageHistory(payload) {
-  const callable = httpsCallable(functions, 'getRecipientMessageHistory');
-  const res = await callable(payload);
-  return res.data;
-}
+export const getRecipientMessageHistory = callFn('getRecipientMessageHistory');
 
 export async function saveStudentMessageRecipientSettings(studentId, settings) {
   await auditUpdate(doc(db, 'students', studentId), {
@@ -1100,33 +1074,17 @@ export async function saveStudentParentMessageRecipientFields(studentId, fields)
 }
 
 // 실패 항목 보관(직원)/삭제(원장).
-export async function manageMessageFailure(payload) {
-  const callable = httpsCallable(functions, 'manageMessageFailure');
-  const res = await callable(payload);
-  return res.data;
-}
+export const manageMessageFailure = callFn('manageMessageFailure');
 
 // 태블릿 출결 체크인과 동일 경로 — DSC 상세패널의 수동 등하원 처리(출결 기록+알림톡을 한 번에).
 // { studentNumber }만 주면 조회(오늘 상태·가능 액션), studentId+action까지 주면 확정.
-export async function tabletCheckin(payload) {
-  const callable = httpsCallable(functions, 'tabletCheckin');
-  const res = await callable(payload);
-  return res.data;
-}
+export const tabletCheckin = callFn('tabletCheckin');
 
 // 미등원 안내 수동 발송 — 로그북 '미도착(연락)' 버튼과 같은 멱등 컬렉션(absence_notices) 공유.
-export async function sendAbsenceNotice(payload) {
-  const callable = httpsCallable(functions, 'sendAbsenceNotice');
-  const res = await callable(payload);
-  return res.data;
-}
+export const sendAbsenceNotice = callFn('sendAbsenceNotice');
 
 // 광고 수신동의 설정/철회 — 번호 주인 단위(target: 'parent'|'student'). 직원 권한.
-export async function setPromoConsent(payload) {
-  const callable = httpsCallable(functions, 'setPromoConsent');
-  const res = await callable(payload);
-  return res.data;
-}
+export const setPromoConsent = callFn('setPromoConsent');
 
 // 오늘 미등원 안내 발송 여부 — 로그북 배지와 동일 소스(absence_notices/{sid}_{date}).
 export async function getAbsenceNoticeToday(studentId) {
@@ -1165,11 +1123,7 @@ export async function saveAiAutomationSettings(patch) {
 // 응답: {ok:true, status:'in_progress'|'complete', done, total, generated, skipped, total_tokens}
 //   | {ok:false, reason:'locked'}. 권한 없음/미인증은 HttpsError로 throw → 호출측 catch.
 // status:'in_progress'면 첫 청크만 끝났고 scheduled 틱이 이어받는다. timeout은 청크 1회 기준으로 충분(10분 여유).
-export async function runStudentReportBatchManual(opts = {}) {
-  const callable = httpsCallable(functions, 'runStudentReportBatchManual', { timeout: 600000 });
-  const res = await callable(opts);
-  return res.data;
-}
+export const runStudentReportBatchManual = (opts = {}) => callFn('runStudentReportBatchManual', { timeout: 600000 })(opts);
 
 export async function listStudentConsultations(studentId, limitCount = 10) {
   const q = query(

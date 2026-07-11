@@ -19,7 +19,7 @@ import { schoolLevelGradeLabel } from '@impact7/shared/student-label';
 import { ATTENDANCE_ACTIONS, normalizeAttendanceLabel } from '@impact7/shared/attendance-action';
 import { state, LEAVE_STATUSES } from './state.js';
 import {
-    esc, escAttr, formatTime12h, renderTime12hSelect, oxDisplayClass,
+    esc, escAttr, formatTime12h, renderTime12hSelect, oxChip,
     nowTimeStr, showSaveIndicator, showToast, _stripYear
 } from './ui-utils.js';
 import {
@@ -633,6 +633,26 @@ export async function loadReportCard(studentId = state.selectedStudentId) {
     }
 }
 
+function aggregateOX(records, prefix) {
+    const domains = new Set();
+    records.forEach(rec => {
+        Object.keys(rec[`${prefix}_domains_1st`] || {}).forEach(d => domains.add(d));
+        Object.keys(rec[`${prefix}_domains_2nd`] || {}).forEach(d => domains.add(d));
+    });
+
+    const stats = {};
+    domains.forEach(d => { stats[d] = { O: 0, '△': 0, X: 0 }; });
+    records.forEach(rec => {
+        domains.forEach(d => {
+            const val = (rec[`${prefix}_domains_2nd`]?.[d]) || (rec[`${prefix}_domains_1st`]?.[d]) || '';
+            if (val === 'O' || val === '△' || val === 'X') {
+                stats[d][val]++;
+            }
+        });
+    });
+    return stats;
+}
+
 function renderReportCard(records) {
     const contentEl = document.getElementById('report-content');
 
@@ -682,40 +702,10 @@ function renderReportCard(records) {
     `;
 
     // ── 숙제 O/△/X 집계 ──
-    const hwDomains = new Set();
-    records.forEach(rec => {
-        Object.keys(rec.hw_domains_1st || {}).forEach(d => hwDomains.add(d));
-        Object.keys(rec.hw_domains_2nd || {}).forEach(d => hwDomains.add(d));
-    });
-
-    const hwStats = {};
-    hwDomains.forEach(d => { hwStats[d] = { O: 0, '△': 0, X: 0 }; });
-    records.forEach(rec => {
-        hwDomains.forEach(d => {
-            const val = (rec.hw_domains_2nd?.[d]) || (rec.hw_domains_1st?.[d]) || '';
-            if (val === 'O' || val === '△' || val === 'X') {
-                hwStats[d][val]++;
-            }
-        });
-    });
+    const hwStats = aggregateOX(records, 'hw');
 
     // ── 테스트 O/△/X 집계 ──
-    const testDomains = new Set();
-    records.forEach(rec => {
-        Object.keys(rec.test_domains_1st || {}).forEach(d => testDomains.add(d));
-        Object.keys(rec.test_domains_2nd || {}).forEach(d => testDomains.add(d));
-    });
-
-    const testStats = {};
-    testDomains.forEach(d => { testStats[d] = { O: 0, '△': 0, X: 0 }; });
-    records.forEach(rec => {
-        testDomains.forEach(d => {
-            const val = (rec.test_domains_2nd?.[d]) || (rec.test_domains_1st?.[d]) || '';
-            if (val === 'O' || val === '△' || val === 'X') {
-                testStats[d][val]++;
-            }
-        });
-    });
+    const testStats = aggregateOX(records, 'test');
 
     const renderOxSection = (title, icon, stats) => {
         const domains = Object.keys(stats);
@@ -739,7 +729,7 @@ function renderReportCard(records) {
         `;
     };
 
-    const oxGridHtml = (hwDomains.size > 0 || testDomains.size > 0) ? `
+    const oxGridHtml = (Object.keys(hwStats).length > 0 || Object.keys(testStats).length > 0) ? `
         <div class="report-ox-grid">
             ${renderOxSection('숙제', 'assignment', hwStats)}
             ${renderOxSection('테스트', 'quiz', testStats)}
@@ -1299,25 +1289,13 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
                     ${has1stHw ? `<div class="detail-round-col">
                         <div class="detail-round-label">1차</div>
                         <div class="hw-domain-group">
-                            ${detailDomains.map(d => {
-                                const val = d1st[d] || '';
-                                return `<div class="hw-domain-item">
-                                    <span class="hw-domain-label">${esc(d)}</span>
-                                    <span class="hw-domain-ox readonly ${oxDisplayClass(val)}">${esc(val || '—')}</span>
-                                </div>`;
-                            }).join('')}
+                            ${detailDomains.map(d => oxChip(d, d1st[d] || '')).join('')}
                         </div>
                     </div>` : ''}
                     ${has2ndHw ? `<div class="detail-round-col">
                         <div class="detail-round-label">2차</div>
                         <div class="hw-domain-group">
-                            ${detailDomains.filter(d => d1st[d] !== 'O').map(d => {
-                                const val = d2nd[d] || '';
-                                return `<div class="hw-domain-item">
-                                    <span class="hw-domain-label">${esc(d)}</span>
-                                    <span class="hw-domain-ox readonly ${oxDisplayClass(val)}">${esc(val || '—')}</span>
-                                </div>`;
-                            }).join('')}
+                            ${detailDomains.filter(d => d1st[d] !== 'O').map(d => oxChip(d, d2nd[d] || '')).join('')}
                         </div>
                     </div>` : ''}
                 </div>
@@ -1354,13 +1332,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
                                 return `<div style="margin-bottom:6px;">
                                     <div class="detail-round-label">${esc(secName)}</div>
                                     <div class="hw-domain-group" style="margin-bottom:2px;">
-                                        ${filtered.map(t => {
-                                            const val = data[t] || '';
-                                            return `<div class="hw-domain-item">
-                                                <span class="hw-domain-label">${esc(t)}</span>
-                                                <span class="hw-domain-ox readonly ${oxDisplayClass(val)}">${esc(val || '—')}</span>
-                                            </div>`;
-                                        }).join('')}
+                                        ${filtered.map(t => oxChip(t, data[t] || '')).join('')}
                                     </div>
                                 </div>`;
                             }).join('')}

@@ -360,11 +360,6 @@ export function renderClassCodeFilter() {
 
     const { regular, naesin, teukang, free } = _getAllClassCodes();
 
-    const regExpanded = state._classMgmtMode === 'regular';
-    const freeExpanded = state._classMgmtMode === 'free';
-    const naeExpanded = state._classMgmtMode === 'naesin';
-    const tekExpanded = state._classMgmtMode === 'teukang';
-
     let html = '';
 
     const isDeleteMode = state._classDeleteMode;
@@ -382,40 +377,21 @@ export function renderClassCodeFilter() {
         </div>`;
     }
 
-    // 정규 L2
-    html += `<div class="nav-l2 l2-parent ${regExpanded ? 'active l2-expanded' : ''}" onclick="window.setClassMgmtMode('regular')">
-        정규<span class="nav-l2-count">${regular.length}</span>
-        ${msIcon(regExpanded ? 'expand_less' : 'expand_more', 'l2-expand-icon')}
+    const sections = [
+        { mode: 'regular', label: '정규', list: regular, chip: code => _renderL3Chip(code, code, getClassMgmtCount(code), 'regular') },
+        { mode: 'free', label: '자유학기', list: free, chip: ({ code, count }) => _renderL3Chip(code, code, count, 'free') },
+        { mode: 'naesin', label: '내신', list: naesin, chip: ({ code, displayCode, count }) => _renderL3Chip(code, displayCode, count, 'naesin') },
+        { mode: 'teukang', label: '특강', list: teukang, chip: code => _renderL3Chip(code, code, getTeukangClassStudents(code).length, 'teukang') }
+    ];
+    for (const { mode, label, list, chip } of sections) {
+        const expanded = state._classMgmtMode === mode;
+        html += `<div class="nav-l2 l2-parent ${expanded ? 'active l2-expanded' : ''}" onclick="window.setClassMgmtMode('${mode}')">
+        ${label}<span class="nav-l2-count">${list.length}</span>
+        ${msIcon(expanded ? 'expand_less' : 'expand_more', 'l2-expand-icon')}
     </div>`;
-    if (regExpanded) {
-        html += regular.map(code => _renderL3Chip(code, code, getClassMgmtCount(code), 'regular')).join('');
-    }
-
-    // 자유학기 L2
-    html += `<div class="nav-l2 l2-parent ${freeExpanded ? 'active l2-expanded' : ''}" onclick="window.setClassMgmtMode('free')">
-        자유학기<span class="nav-l2-count">${free.length}</span>
-        ${msIcon(freeExpanded ? 'expand_less' : 'expand_more', 'l2-expand-icon')}
-    </div>`;
-    if (freeExpanded) {
-        html += free.map(({ code, count }) => _renderL3Chip(code, code, count, 'free')).join('');
-    }
-
-    // 내신 L2
-    html += `<div class="nav-l2 l2-parent ${naeExpanded ? 'active l2-expanded' : ''}" onclick="window.setClassMgmtMode('naesin')">
-        내신<span class="nav-l2-count">${naesin.length}</span>
-        ${msIcon(naeExpanded ? 'expand_less' : 'expand_more', 'l2-expand-icon')}
-    </div>`;
-    if (naeExpanded) {
-        html += naesin.map(({ code, displayCode, count }) => _renderL3Chip(code, displayCode, count, 'naesin')).join('');
-    }
-
-    // 특강 L2
-    html += `<div class="nav-l2 l2-parent ${tekExpanded ? 'active l2-expanded' : ''}" onclick="window.setClassMgmtMode('teukang')">
-        특강<span class="nav-l2-count">${teukang.length}</span>
-        ${msIcon(tekExpanded ? 'expand_less' : 'expand_more', 'l2-expand-icon')}
-    </div>`;
-    if (tekExpanded) {
-        html += teukang.map(code => _renderL3Chip(code, code, getTeukangClassStudents(code).length, 'teukang')).join('');
+        if (expanded) {
+            html += list.map(chip).join('');
+        }
     }
 
     container.innerHTML = html;

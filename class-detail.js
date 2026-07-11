@@ -240,25 +240,22 @@ export function switchClassDetailTab(tab) {
 }
 
 // ─── 재사용 카드 빌더 (문자열 반환) ─────────────────────────────────────────
+// 저장값이 구메일(@gw)이어도 정규화된 목록과 동일인 매칭 — @impact7/shared teacher-label 규약
+// 현재 배정자가 목록(homeroom_eligible)에서 빠지면(퇴직·비교수부) 보존 option을 강제 주입한다.
+// 안 하면 "미지정"으로 렌더 → 부담당만 수정해도 담임이 빈값으로 소실된다(H-1).
+function _buildTeacherOptions(selectedEmail) {
+    const preserved = (selectedEmail && !state.teachersList.some(t => isSameTeacher(t.email, selectedEmail)))
+        ? `<option value="${escAttr(selectedEmail)}" selected>${esc(getTeacherName(selectedEmail))} (목록 외)</option>`
+        : '';
+    return preserved + state.teachersList.map(t => {
+        const name = getTeacherName(t.email);
+        return `<option value="${escAttr(t.email)}" ${isSameTeacher(t.email, selectedEmail) ? 'selected' : ''}>${esc(name)}</option>`;
+    }).join('');
+}
+
 function renderClassTeacherCard(classCode) {
-    const currentTeacher = state.classSettings[classCode]?.teacher || '';
-    const currentSubTeacher = state.classSettings[classCode]?.sub_teacher || '';
-    // 저장값이 구메일(@gw)이어도 정규화된 목록과 동일인 매칭 — @impact7/shared teacher-label 규약
-    // 현재 배정자가 목록(homeroom_eligible)에서 빠지면(퇴직·비교수부) 보존 option을 강제 주입한다.
-    // 안 하면 "미지정"으로 렌더 → 부담당만 수정해도 담임이 빈값으로 소실된다(H-1).
-    const _preservedTeacherOption = (assigned) => {
-        if (!assigned) return '';
-        if (state.teachersList.some(t => isSameTeacher(t.email, assigned))) return '';
-        return `<option value="${escAttr(assigned)}" selected>${esc(getTeacherName(assigned))} (목록 외)</option>`;
-    };
-    const teacherOptions = _preservedTeacherOption(currentTeacher) + state.teachersList.map(t => {
-        const name = getTeacherName(t.email);
-        return `<option value="${escAttr(t.email)}" ${isSameTeacher(t.email, currentTeacher) ? 'selected' : ''}>${esc(name)}</option>`;
-    }).join('');
-    const subTeacherOptions = _preservedTeacherOption(currentSubTeacher) + state.teachersList.map(t => {
-        const name = getTeacherName(t.email);
-        return `<option value="${escAttr(t.email)}" ${isSameTeacher(t.email, currentSubTeacher) ? 'selected' : ''}>${esc(name)}</option>`;
-    }).join('');
+    const teacherOptions = _buildTeacherOptions(state.classSettings[classCode]?.teacher || '');
+    const subTeacherOptions = _buildTeacherOptions(state.classSettings[classCode]?.sub_teacher || '');
 
     return `
         <div class="detail-card">
@@ -418,7 +415,9 @@ export function renderClassDetail(classCode) {
     // 특강: 영역숙제/테스트/등원예정시간 카드 없음 — 일반=담당+기간+요일/시간+학생추가, 특이=삭제
     if (isTeukangClass) {
         cardsContainer.innerHTML = renderClassDetailTabbed({
-            '일반': `${teacherCard}${renderTeukangPeriodCard(classCode)}${renderClassScheduleCard(classCode)}${renderTeukangAddStudentCard(classCode)}`,
+            '일반': `${teacherCard}${renderPeriodCard(classCode, {
+                label: '특강', startField: 'special_start', endField: 'special_end', handler: 'saveTeukangPeriod',
+            })}${renderClassScheduleCard(classCode)}${renderTeukangAddStudentCard(classCode)}`,
             '숙제': '',
             '테스트': '',
             '특이': renderClassDeleteCard(classCode, 'teukang'),
@@ -428,7 +427,10 @@ export function renderClassDetail(classCode) {
     }
 
     const dayOrPeriodCards = isFreeMode
-        ? `${renderFreeSemesterPeriodCard(classCode)}${renderClassScheduleCard(classCode)}`
+        ? `${renderPeriodCard(classCode, {
+            label: '자유학기', startField: 'free_start', endField: 'free_end', handler: 'saveFreeSemesterPeriod',
+            footnote: '<div style="font-size:11px;color:var(--text-sec);margin-top:6px;">기간이 지나면 자동으로 정규로 복귀합니다</div>',
+        })}${renderClassScheduleCard(classCode)}`
         : renderRegularClassDayCard(classCode);
 
     cardsContainer.innerHTML = renderClassDetailTabbed({
@@ -708,28 +710,26 @@ export async function saveClassDayTime(classCode, day, time) {
     }
 }
 
-// ─── 특강반 기간 카드 ───────────────────────────────────────────────────────
+// ─── 기간 카드 (자유학기·특강 공용) ─────────────────────────────────────────
 
-// ─── 자유학기 기간 카드 ─────────────────────────────────────────────────────
-
-function renderFreeSemesterPeriodCard(classCode) {
+function renderPeriodCard(classCode, { label, startField, endField, handler, footnote = '' }) {
     const cs = state.classSettings[classCode] || {};
-    const start = cs.free_start || '';
-    const end = cs.free_end || '';
+    const start = cs[startField] || '';
+    const end = cs[endField] || '';
     return `
         <div class="detail-card">
             <div class="detail-card-title">
                 ${msIcon('date_range')}
-                자유학기 기간
+                ${label} 기간
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
-                <input type="date" class="field-input" aria-label="자유학기 시작일" value="${escAttr(start)}" style="flex:1;"
-                    onchange="saveFreeSemesterPeriod('${escAttr(classCode)}', 'free_start', this.value)">
+                <input type="date" class="field-input" aria-label="${label} 시작일" value="${escAttr(start)}" style="flex:1;"
+                    onchange="${handler}('${escAttr(classCode)}', '${startField}', this.value)">
                 <span style="color:var(--text-sec);">~</span>
-                <input type="date" class="field-input" aria-label="자유학기 종료일" value="${escAttr(end)}" style="flex:1;"
-                    onchange="saveFreeSemesterPeriod('${escAttr(classCode)}', 'free_end', this.value)">
+                <input type="date" class="field-input" aria-label="${label} 종료일" value="${escAttr(end)}" style="flex:1;"
+                    onchange="${handler}('${escAttr(classCode)}', '${endField}', this.value)">
             </div>
-            <div style="font-size:11px;color:var(--text-sec);margin-top:6px;">기간이 지나면 자동으로 정규로 복귀합니다</div>
+            ${footnote}
         </div>
     `;
 }
@@ -755,27 +755,6 @@ export async function saveFreeSemesterPeriod(classCode, field, value) {
         console.error('자유학기 기간 저장 실패:', err);
         showSaveIndicator('error');
     }
-}
-
-function renderTeukangPeriodCard(classCode) {
-    const cs = state.classSettings[classCode] || {};
-    const start = cs.special_start || '';
-    const end = cs.special_end || '';
-    return `
-        <div class="detail-card">
-            <div class="detail-card-title">
-                ${msIcon('date_range')}
-                특강 기간
-            </div>
-            <div style="display:flex;gap:8px;align-items:center;">
-                <input type="date" class="field-input" aria-label="특강 시작일" value="${escAttr(start)}" style="flex:1;"
-                    onchange="saveTeukangPeriod('${escAttr(classCode)}', 'special_start', this.value)">
-                <span style="color:var(--text-sec);">~</span>
-                <input type="date" class="field-input" aria-label="특강 종료일" value="${escAttr(end)}" style="flex:1;"
-                    onchange="saveTeukangPeriod('${escAttr(classCode)}', 'special_end', this.value)">
-            </div>
-        </div>
-    `;
 }
 
 export async function saveTeukangPeriod(classCode, field, value) {
@@ -1421,7 +1400,7 @@ export async function removeTestSection(classCode, sectionName) {
 }
 
 export async function resetTestSections(classCode) {
-    await saveClassSettings(classCode, { test_sections: JSON.parse(JSON.stringify(DEFAULT_TEST_SECTIONS)) });
+    await saveClassSettings(classCode, { test_sections: structuredClone(DEFAULT_TEST_SECTIONS) });
     renderClassDetail(classCode);
 }
 

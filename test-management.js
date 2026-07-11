@@ -4,12 +4,9 @@
 
 import { state, DEFAULT_TEST_SECTIONS } from './state.js';
 import {
-    initFailActionShared, renderFailActionCard, reopenFailDomain, selectFailType,
+    initFailActionShared, renderFailActionCard, selectFailType,
     clearFailType, saveFailFields, saveFailAction, completeFailTask, cancelFailTask,
 } from './fail-action-shared.js';
-
-// 명시적으로 편집 요청된 item 추적 (pending이지만 폼 표시)
-const _reopenedTestItems = new Set();
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let getClassDomains;
@@ -28,17 +25,17 @@ export function initTestManagementDeps(deps) {
 
 export function getClassTestSections(classCode) {
     const saved = state.classSettings[classCode]?.test_sections;
+    // Firestore 원본 + 렌더 루프 핫패스 — structuredClone보다 JSON 클론이 빠르고 DataCloneError 없음
     if (saved) return JSON.parse(JSON.stringify(saved));
     // 최초: 리뷰테스트를 영역숙제관리(domains) 기반으로 초기화
-    const sections = JSON.parse(JSON.stringify(DEFAULT_TEST_SECTIONS));
+    const sections = structuredClone(DEFAULT_TEST_SECTIONS);
     sections['리뷰테스트'] = [...getClassDomains(classCode)];
     return sections;
 }
 
 // ─── 테스트 미통과 후속대책 (공유 fail-action 엔진의 test 바인딩) ─────────────
 // hw와의 차이: pending은 폼에서 숨기고(밀린 Task로 이동) "모두 처리됨" 표시,
-// 행 인라인 저장태그 없음, task에 source:'test', docId 접두 'test_', _reopenedTestItems로
-// 명시적 편집요청 추적.
+// 행 인라인 저장태그 없음, task에 source:'test', docId 접두 'test_'.
 const TEST_CONFIG = {
     collection: 'test_fail_tasks',
     docIdPrefix: 'test_',
@@ -54,7 +51,6 @@ const TEST_CONFIG = {
     extraTaskData: { source: 'test' },
     savedTagInline: false,
     hidePendingFromForm: true,
-    reopenedSet: _reopenedTestItems,
     selectFn: 'selectTestFailType',
     clearFn: 'clearTestFailType',
     saveFieldsFn: 'saveTestFailFields',
@@ -64,7 +60,6 @@ export function renderTestFailActionCard(studentId, testSections, t2nd, testFail
     const items = Object.values(testSections).flat();
     return renderFailActionCard({ studentId, items, d2nd: t2nd, failAction: testFailAction, mode, config: TEST_CONFIG });
 }
-export const reopenTestFailDomain = (studentId, item) => reopenFailDomain(studentId, item, TEST_CONFIG);
 export const selectTestFailType = (studentId, item, type, btnEl) => selectFailType(studentId, item, type, TEST_CONFIG);
 export const clearTestFailType = (studentId, item) => clearFailType(studentId, item, TEST_CONFIG);
 export const saveTestFailFields = (studentId, item, btnEl) => saveFailFields(studentId, item, btnEl, TEST_CONFIG);
