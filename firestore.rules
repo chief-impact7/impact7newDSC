@@ -13,8 +13,7 @@ service cloud.firestore {
     function isAuthorized() {
       return isLoggedIn()
         && request.auth.token.email_verified == true
-        && (request.auth.token.email.matches('.*@gw\\.impact7\\.kr$')
-            || request.auth.token.email.matches('.*@impact7\\.kr$'));
+        && request.auth.token.email.matches('.*@impact7\\.kr$');
     }
 
     function withinFieldLimit(max) {
@@ -48,8 +47,7 @@ service cloud.firestore {
     function isImpact7VerifiedEmail() {
       return isLoggedIn()
         && request.auth.token.email_verified == true
-        && (request.auth.token.email.matches('.*@gw\\.impact7\\.kr$')
-            || request.auth.token.email.matches('.*@impact7\\.kr$'));
+        && request.auth.token.email.matches('.*@impact7\\.kr$');
     }
 
     // =========================================================================
