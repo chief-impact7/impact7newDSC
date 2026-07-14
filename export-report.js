@@ -185,7 +185,7 @@ export async function exportDailyReport() {
         const noteClass = rec.note_class_to_study || '';
         const noteParent = rec.note_to_parent || '';
 
-        const startTime = getStudentStartTime(todayEnroll);
+        const startTime = getStudentStartTime(todayEnroll, dayName);
         return [
             code, teacher, s.name, branchFromStudent(s), currentSchool(s), studentGrade(s), statusText,
             startTime ? formatTime12h(startTime) : '', displayAtt, arrTime,

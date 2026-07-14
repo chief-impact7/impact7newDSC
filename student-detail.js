@@ -1224,13 +1224,8 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
                 const code = enrollmentCode(e);
                 const ct = e.class_type || '정규';
                 const days = (e.day || []).join('·');
-                const classDefault = state.classSettings[code]?.default_time || '';
-                const individual = e.start_time || e.time || '';
-                // 합성 내신/자유학기 enrollment는 schedule 객체에 요일별 시간이 있음
-                const scheduleTimes = e.schedule && typeof e.schedule === 'object' ? Object.values(e.schedule).filter(Boolean) : [];
-                const scheduleTime = scheduleTimes[0] || '';
-                const isDefault = !individual || individual === classDefault;
-                const displayTime = isDefault ? (classDefault || scheduleTime) : individual;
+                const displayDay = (e.day || []).includes(dayNameForDetail) ? dayNameForDetail : e.day?.[0];
+                const displayTime = getStudentStartTime(e, displayDay);
                 // 시작 전(start_date 미래) enrollment는 요일이 맞아도 "오늘"로 표시하지 않음
                 const notStarted = /^\d{4}-/.test(e.start_date || '') && e.start_date > state.selectedDate;
                 const isToday = !notStarted && (e.day || []).includes(dayNameForDetail);

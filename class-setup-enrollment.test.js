@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     hasActiveRegularClass,
+    scheduleFieldsForClassType,
     uniquePlanningEnrollments,
 } from './class-setup-enrollment.js';
 
@@ -41,4 +42,12 @@ test('이미 종료된 동일 정규반은 신규 등록을 막지 않는다', (
     ];
 
     assert.equal(hasActiveRegularClass(enrollments, 'I201', '2026-06-06'), false);
+});
+
+test('반 유형별 schedule 필드는 정규를 제외하고 분리 저장한다', () => {
+    const schedule = { 월: '16:00' };
+    assert.deepEqual(scheduleFieldsForClassType('정규', schedule), {});
+    assert.deepEqual(scheduleFieldsForClassType('내신', schedule), { schedule });
+    assert.deepEqual(scheduleFieldsForClassType('자유학기', schedule), { free_schedule: schedule });
+    assert.deepEqual(scheduleFieldsForClassType('특강', schedule), { schedule });
 });

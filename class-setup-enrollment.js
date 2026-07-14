@@ -19,3 +19,9 @@ export function hasActiveRegularClass(enrollments, classCode, date) {
         && (!enrollment.end_date || enrollment.end_date >= date)
     );
 }
+
+export function scheduleFieldsForClassType(classType, schedule) {
+    if (classType === '자유학기') return { free_schedule: schedule };
+    if (classType === '내신' || classType === '특강') return { schedule };
+    return {};
+}

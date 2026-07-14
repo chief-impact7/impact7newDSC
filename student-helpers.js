@@ -6,6 +6,7 @@ import { state, LEVEL_SHORT, LEAVE_STATUSES } from './state.js';
 import { applyNaesinFreeDerivation, isNaesinActiveAt } from '@impact7/shared/enrollment-derivation';
 import { currentSchool, normalizeRealLevelGrade } from '@impact7/shared/student-label';
 import { classSettingsGet } from '@impact7/shared/class-code';
+import { startTime } from '@impact7/shared/expected-arrival';
 import {
     normalizeDays, enrollmentCode, branchFromStudent, allClassCodes,
     makeDailyRecordId, buildNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE,
@@ -197,20 +198,8 @@ export function isFreeSemesterActiveToday(s, dateStr) {
     });
 }
 
-// 학생 등원시간: 개별 시간 → 반 기본 시간 fallback (내신/자유학기: 요일별 schedule 지원)
 export function getStudentStartTime(enrollment, dayName) {
-    if (!enrollment) return '';
-    const cs = csGet(state.classSettings, enrollmentCode(enrollment));
-    if (dayName) {
-        const studentTime = enrollment.schedule?.[dayName];
-        if (studentTime) return studentTime;
-        // 자유학기: free_schedule 조회
-        if (enrollment.class_type === '자유학기' && cs?.free_schedule?.[dayName]) {
-            return cs.free_schedule[dayName];
-        }
-        if (cs?.schedule?.[dayName]) return cs.schedule[dayName];
-    }
-    return enrollment.start_time || enrollment.time || cs?.default_time || '';
+    return enrollment ? startTime(enrollment, dayName, state.classSettings) : '';
 }
 
 // ─── ID & 검색 ─────────────────────────────────────────────────────────────

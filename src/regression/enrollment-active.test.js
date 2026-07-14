@@ -17,6 +17,7 @@ import {
     isPauseExpired,
     pauseExpiredDays,
     activeClassCodes,
+    getStudentStartTime,
 } from '../../student-helpers.js';
 
 // 프로덕션 enrollmentCode를 그대로 사용 — 코드 포맷이 바뀌면 테스트도 함께 따라가
@@ -131,6 +132,26 @@ describe('getActiveEnrollments — 내신/자유 파생', () => {
         const out = getActiveEnrollments(s, TODAY);
         expect(out.map(e => e.class_type)).toEqual(['내신']);  // 자유·정규 모두 숨김
         expect(codes(out)).toEqual(['중2A']);
+    });
+});
+
+describe('getStudentStartTime — shared 반 유형별 시간 우선순위', () => {
+    test('정규의 start_time을 class_settings 잔류 schedule보다 우선한다', () => {
+        state.classSettings = { HA104: { schedule: { 월: '19:00' } } };
+        const enrollment = {
+            class_type: '정규', level_symbol: 'HA', class_number: '104', start_time: '16:00',
+        };
+
+        expect(getStudentStartTime(enrollment, '월')).toBe('16:00');
+    });
+
+    test('내신은 학생별 합성 schedule을 반 기본보다 우선한다', () => {
+        state.classSettings = { NAESIN1: { schedule: { 월: '17:00' } } };
+        const enrollment = {
+            class_type: '내신', class_number: 'NAESIN1', schedule: { 월: '17:30' },
+        };
+
+        expect(getStudentStartTime(enrollment, '월')).toBe('17:30');
     });
 });
 
