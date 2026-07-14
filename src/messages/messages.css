@@ -117,7 +117,7 @@
 .mc-search { display: flex; gap: 7px; margin-bottom: 6px; }
 .mc-search input { flex: 1; border: 1px solid #e3e8e5; border-radius: 7px; padding: 5px 9px; font: inherit; }
 /* 입력 예시(placeholder)는 미리보기 빈 안내문과 같은 크기·색으로 통일 */
-.mc-search input::placeholder, .mc-textarea::placeholder { color: #aeb8c2; font-size: 13px; }
+.mc-search input::placeholder, .mc-textarea::placeholder, .mc-optout-row input::placeholder { color: #aeb8c2; font-size: 13px; opacity: 1; }
 .mc-search button { border: 1px solid #0b7a52; border-radius: 7px; padding: 5px 11px; background: #0b7a52; color: #fff; font-weight: 700; cursor: pointer; white-space: nowrap; font-family: inherit; }
 
 @media (max-width: 1080px) {
