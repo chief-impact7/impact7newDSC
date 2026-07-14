@@ -572,7 +572,7 @@ const TABS = [
         font-weight: 500;
         color: var(--text-main, #1f1f1f);
       }
-      .help-guide-title .material-symbols-outlined {
+      .help-guide-title .i7-icon {
         color: var(--primary, #0b57d0);
         font-size: 24px;
       }
@@ -620,7 +620,7 @@ const TABS = [
         transition: color 0.15s, border-color 0.15s;
         white-space: nowrap;
       }
-      .help-guide-tab .material-symbols-outlined {
+      .help-guide-tab .i7-icon {
         font-size: 18px;
       }
       .help-guide-tab:hover {
@@ -655,7 +655,7 @@ const TABS = [
         color: var(--text-main, #1f1f1f);
         margin-bottom: 10px;
       }
-      .help-guide-section-title .material-symbols-outlined {
+      .help-guide-section-title .i7-icon {
         font-size: 20px;
         color: var(--primary, #0b57d0);
       }
@@ -713,7 +713,7 @@ const TABS = [
       .help-guide-faq-q::-webkit-details-marker {
         display: none;
       }
-      .help-guide-faq-q .material-symbols-outlined:first-child {
+      .help-guide-faq-q .i7-icon:first-child {
         font-size: 20px;
         color: var(--primary, #0b57d0);
       }

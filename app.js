@@ -669,7 +669,7 @@ onAuthStateChanged(auth, async (user) => {
             const labels = { none: 'view_agenda', branch: 'location_city', class: 'school' };
             const titles = { none: '그룹 뷰 (소속별)', branch: '그룹 뷰: 소속별 → 반별로 전환', class: '그룹 뷰: 반별 → 해제' };
             if (btn) {
-                btn.querySelector('.material-symbols-outlined').outerHTML = msIcon(labels[state.groupViewMode]);
+                btn.querySelector('.i7-icon').outerHTML = msIcon(labels[state.groupViewMode]);
                 btn.title = titles[state.groupViewMode];
                 btn.classList.add('active');
             }

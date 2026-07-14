@@ -100,7 +100,7 @@ function AttendanceSummary({ checks, startDate, endDate }) {
         <div className="dash-card attendance">
             <div className="dash-card-header">
                 <span>
-                    <Icon name={ICON_NAME.groups} size={20} className="material-symbols-outlined" />
+                    <Icon name={ICON_NAME.groups} size={20} className="i7-icon" />
                     출결 현황
                 </span>
                 <span className="dash-card-header-meta">

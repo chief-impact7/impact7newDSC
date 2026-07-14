@@ -78,7 +78,7 @@ function HomeworkSummary({ checks }) {
         <div className="dash-card homework">
             <div className="dash-card-header">
                 <span>
-                    <Icon name={ICON_NAME.menu_book} size={20} className="material-symbols-outlined" />
+                    <Icon name={ICON_NAME.menu_book} size={20} className="i7-icon" />
                     숙제 현황
                 </span>
                 <span className="dash-card-header-meta" style={{ fontWeight: 700, color: rateColor }}>

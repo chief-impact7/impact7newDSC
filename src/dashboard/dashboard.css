@@ -236,7 +236,7 @@ body {
     white-space: nowrap;
 }
 .dash-date-nav button:hover { background: var(--bg); }
-.dash-date-nav .material-symbols-outlined { font-size: 20px; }
+.dash-date-nav .i7-icon { font-size: 20px; }
 .dash-range-label {
     font-size: 13px;
     padding: 6px 10px;
@@ -287,7 +287,7 @@ body {
     font-size: 15px;
     border-bottom: 1px solid var(--border-light);
 }
-.dash-card-header .material-symbols-outlined {
+.dash-card-header .i7-icon {
     font-size: 20px;
     margin-right: 6px;
     vertical-align: middle;
@@ -319,7 +319,7 @@ body {
     min-width: 80px;
     flex: 1;
 }
-.dash-stat-box .material-symbols-outlined {
+.dash-stat-box .i7-icon {
     font-size: 24px;
     color: var(--primary);
     display: block;
@@ -468,7 +468,7 @@ body {
     gap: 8px;
     font-weight: 700;
 }
-.period-board-head .material-symbols-outlined {
+.period-board-head .i7-icon {
     color: var(--primary);
 }
 .period-board-head > span {
@@ -497,7 +497,7 @@ body {
     color: var(--text-sec);
     white-space: nowrap;
 }
-.period-metric-label .material-symbols-outlined {
+.period-metric-label .i7-icon {
     font-size: 18px;
     color: var(--primary);
 }
@@ -722,7 +722,7 @@ body {
     margin-bottom: 10px;
 }
 
-.daily-log-metric-label .material-symbols-outlined {
+.daily-log-metric-label .i7-icon {
     color: var(--daily-green);
     font-size: 19px;
 }
@@ -1571,12 +1571,12 @@ body {
     color: #1e7e34;
     text-decoration: none;
 }
-.msg-pricing-btn .material-symbols-outlined,
-.msg-refresh-btn .material-symbols-outlined { font-size: 16px; }
+.msg-pricing-btn .i7-icon,
+.msg-refresh-btn .i7-icon { font-size: 16px; }
 .msg-pricing-btn:hover,
 .msg-refresh-btn:hover:not(:disabled) { background: #f3f5f7; border-color: #c3ccd4; }
 .msg-refresh-btn:disabled { opacity: .55; cursor: default; }
-.msg-refresh-btn.loading .material-symbols-outlined { animation: msg-refresh-spin 1s linear infinite; }
+.msg-refresh-btn.loading .i7-icon { animation: msg-refresh-spin 1s linear infinite; }
 @keyframes msg-refresh-spin { to { transform: rotate(360deg); } }
 
 /* 발송 통계 기간 선택 칩 */
@@ -1690,7 +1690,7 @@ body {
 }
 .consult-export:hover:not(:disabled) { background: var(--primary); color: #fff; }
 .consult-export:disabled { opacity: .4; cursor: not-allowed; }
-.consult-export .material-symbols-outlined { font-size: 18px; }
+.consult-export .i7-icon { font-size: 18px; }
 
 .consult-group {
     background: var(--surface);
@@ -1763,4 +1763,4 @@ body {
     display: flex; flex-direction: column; align-items: center; gap: 10px;
     padding: 56px 20px; color: var(--text-third);
 }
-.consult-empty .material-symbols-outlined { font-size: 40px; opacity: .5; }
+.consult-empty .i7-icon { font-size: 40px; opacity: .5; }

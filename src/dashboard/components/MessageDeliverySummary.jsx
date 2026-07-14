@@ -222,7 +222,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
         <div className="dash-card msg-delivery">
             <div className="dash-card-header">
                 <span>
-                    <Icon name={ICON_NAME.send} size={20} className="material-symbols-outlined" aria-hidden="true" />
+                    <Icon name={ICON_NAME.send} size={20} className="i7-icon" aria-hidden="true" />
                     발송 현황
                 </span>
                 <span className="msg-header-actions">
@@ -234,10 +234,10 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                         title="가격정책"
                         aria-label="가격정책"
                     >
-                        <Icon name={ICON_NAME.payments} size={16} className="material-symbols-outlined" aria-hidden="true" />
+                        <Icon name={ICON_NAME.payments} size={16} className="i7-icon" aria-hidden="true" />
                     </a>
                     <button className={`msg-refresh-btn${loading ? ' loading' : ''}`} onClick={refresh} disabled={loading} title="새로고침">
-                        <Icon name={ICON_NAME.refresh} size={16} className="material-symbols-outlined" aria-hidden="true" />
+                        <Icon name={ICON_NAME.refresh} size={16} className="i7-icon" aria-hidden="true" />
                         {loading ? '불러오는 중' : '새로고침'}
                     </button>
                 </span>

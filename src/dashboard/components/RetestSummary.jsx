@@ -40,7 +40,7 @@ export default function RetestSummary({ checks }) {
         <div className="dash-card retest">
             <div className="dash-card-header">
                 <span>
-                    <Icon name={ICON_NAME.replay} size={20} className="material-symbols-outlined" />
+                    <Icon name={ICON_NAME.replay} size={20} className="i7-icon" />
                     재시 현황
                 </span>
                 <span className="dash-card-header-meta">

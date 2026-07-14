@@ -1,4 +1,4 @@
-// dashboard·messages(React) 전용 material 이름 → @impact7/ui ICON_PATHS 키 매핑.
+// dashboard·messages(React) 기존 이름 → @impact7/ui 공용 아이콘 키 매핑.
 // 바닐라 JS 쪽 브릿지(../../ms-icon.js)와 동일한 이름 규약을 쓰되, React 트리에서는
 // 문자열 svg 대신 @impact7/ui의 <Icon> 컴포넌트를 직접 쓴다(dangerouslySetInnerHTML 불필요).
 export const ICON_NAME = {

@@ -334,7 +334,7 @@ export function toggleGroupView() {
     localStorage.setItem('dsc_groupViewMode', state.groupViewMode);
     const btn = document.getElementById('group-view-btn');
     if (btn) {
-        btn.querySelector('.material-symbols-outlined').outerHTML = msIcon(labels[state.groupViewMode]);
+        btn.querySelector('.i7-icon').outerHTML = msIcon(labels[state.groupViewMode]);
         btn.title = titles[state.groupViewMode];
         btn.classList.toggle('active', state.groupViewMode !== 'none');
     }

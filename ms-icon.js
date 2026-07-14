@@ -1,7 +1,5 @@
-// Material Symbols → @impact7/ui 아이콘 SSoT 브릿지.
-// 코드는 기존 material 이름을 그대로 쓰고, 렌더만 heroicons SVG로 나간다.
-// class는 material-symbols-outlined 유지 — 기존 CSS 크기 규칙(font-size → 1em)이 그대로 적용된다.
-import { ICON_PATHS } from '@impact7/ui/icons';
+// 기존 Material 이름 → @impact7/ui 아이콘 SSoT 브릿지.
+import { ICON_SVGS } from '@impact7/ui/icons';
 
 const MS_TO_SSOT = {
   add: 'plus',
@@ -136,14 +134,14 @@ const MS_TO_SSOT = {
 
 export function msIcon(name, extraClass = '', attrs = '') {
   const key = MS_TO_SSOT[name] || name;
-  const d = ICON_PATHS[key];
-  if (!d) {
+  const body = ICON_SVGS[key];
+  if (!body) {
     console.warn('[ms-icon] unmapped icon:', name);
     return '';
   }
-  const cls = extraClass ? `material-symbols-outlined ${extraClass}` : 'material-symbols-outlined';
+  const cls = extraClass ? `i7-icon ${extraClass}` : 'i7-icon';
   // 아이콘 자체가 인터랙티브(role/tabindex/aria-label 부여)면 aria-hidden을 빼야 스크린리더가 읽는다
   const interactive = /(^|\s)(?:role=|aria-label=|tabindex=)/.test(attrs);
   const a11y = interactive ? '' : ' aria-hidden="true"';
-  return `<svg class="${cls}" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"${a11y}${attrs ? ' ' + attrs : ''}><path d="${d}"/></svg>`;
+  return `<svg class="${cls}" viewBox="0 0 256 256" width="1em" height="1em" fill="currentColor"${a11y}${attrs ? ' ' + attrs : ''}>${body}</svg>`;
 }

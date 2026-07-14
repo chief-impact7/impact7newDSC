@@ -45,7 +45,7 @@ export default function ScheduleSummary({ checks }) {
         <div className="dash-card schedule">
             <div className="dash-card-header">
                 <span>
-                    <Icon name={ICON_NAME.event_note} size={20} className="material-symbols-outlined" />
+                    <Icon name={ICON_NAME.event_note} size={20} className="i7-icon" />
                     다음 숙제/일정
                 </span>
                 <span className="dash-card-header-meta">

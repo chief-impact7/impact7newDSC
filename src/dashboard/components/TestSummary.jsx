@@ -95,7 +95,7 @@ function TestSummary({ checks }) {
         <div className="dash-card test">
             <div className="dash-card-header">
                 <span>
-                    <Icon name={ICON_NAME.quiz} size={20} className="material-symbols-outlined" />
+                    <Icon name={ICON_NAME.quiz} size={20} className="i7-icon" />
                     리뷰테스트 현황
                 </span>
             </div>

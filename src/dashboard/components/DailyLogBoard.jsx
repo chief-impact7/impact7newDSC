@@ -484,7 +484,7 @@ function SummaryCard({ icon, label, value, note }) {
     return (
         <div className="daily-log-metric">
             <div className="daily-log-metric-label">
-                <Icon name={ICON_NAME[icon]} size={19} className="material-symbols-outlined" aria-hidden="true" />
+                <Icon name={ICON_NAME[icon]} size={19} className="i7-icon" aria-hidden="true" />
                 {label}
             </div>
             <div className="daily-log-metric-value">{value}</div>
