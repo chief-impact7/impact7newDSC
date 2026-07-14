@@ -11,11 +11,11 @@ const manageCallable = httpsCallable(functions, 'manageMessageFailure');
 
 // 큐 상태 표시 메타 (계약 §2.4).
 const QUEUE_STATUS = [
-    { key: 'pending', label: '대기', cls: 'pending' },
-    { key: 'processing', label: '처리중', cls: 'processing' },
-    { key: 'failed_retryable', label: '재시도 대기', cls: 'retry' },
-    { key: 'failed_permanent', label: '실패', cls: 'failed' },
-    { key: 'sent', label: '발송완료', cls: 'sent' },
+    { key: 'pending', keys: ['pending'], label: '대기', cls: 'pending' },
+    { key: 'processing', keys: ['processing', 'awaiting_delivery_result'], label: '처리중', cls: 'processing' },
+    { key: 'failed_retryable', keys: ['failed_retryable'], label: '재시도 대기', cls: 'retry' },
+    { key: 'failed_permanent', keys: ['failed_permanent'], label: '재시도 실패', cls: 'failed' },
+    { key: 'sent', keys: ['sent'], label: '발송완료', cls: 'sent' },
 ];
 const CHANNEL_META = {
     kakao: { label: '카카오 알림톡', color: '#FAE100' },
@@ -80,6 +80,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
     const [customFrom, setCustomFrom] = useState('');
     const [customTo, setCustomTo] = useState('');
     const [selectedIds, setSelectedIds] = useState(() => new Set());
+    const [selectedStatus, setSelectedStatus] = useState(null);
 
     // 이름은 fetchStudents 범위(재원생)로만 해석된다. 퇴원생 등 범위 밖이면 doc id 원문을
     // 노출하지 않고 마스킹된 수신자 또는 '(이름 미확인)'으로 표시.
@@ -89,7 +90,13 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
     const queueCounts = data.queueCounts ?? {};
     const channelCounts = data.channelCounts ?? { kakao: 0, sms: 0 };
     const failures = data.failures ?? [];
+    const queueDetails = data.queueDetails ?? {};
     const channelTotal = (channelCounts.kakao ?? 0) + (channelCounts.sms ?? 0);
+    const queueCount = (status) => status.keys.reduce((sum, key) => sum + (queueCounts[key] ?? 0), 0);
+    const selectedStatusMeta = QUEUE_STATUS.find((status) => status.key === selectedStatus);
+    const selectedStatusRows = selectedStatusMeta
+        ? selectedStatusMeta.keys.flatMap((key) => queueDetails[key] ?? [])
+        : [];
 
     // 새로고침 후 목록에서 사라진 항목은 선택에서도 제거.
     useEffect(() => {
@@ -235,12 +242,44 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
             <div className="dash-card-body">
                 <div className="dash-stats">
                     {QUEUE_STATUS.map(s => (
-                        <div className="dash-stat" key={s.key}>
-                            <div className={`dash-stat-value msg-${s.cls}`}>{queueCounts[s.key] ?? 0}</div>
+                        <button
+                            type="button"
+                            className={`dash-stat msg-stat-button${selectedStatus === s.key ? ' active' : ''}`}
+                            key={s.key}
+                            aria-pressed={selectedStatus === s.key}
+                            onClick={() => setSelectedStatus(selectedStatus === s.key ? null : s.key)}
+                        >
+                            <div className={`dash-stat-value msg-${s.cls}`}>{queueCount(s)}</div>
                             <div className="dash-stat-label">{s.label}</div>
-                        </div>
+                        </button>
                     ))}
                 </div>
+
+                {selectedStatusMeta && (
+                    <div className="msg-status-details">
+                        <div className="msg-status-details-head">
+                            <strong>{selectedStatusMeta.label} 내역</strong>
+                            <span>{queueCount(selectedStatusMeta)}건</span>
+                        </div>
+                        {selectedStatusMeta.key === 'sent' ? (
+                            <div className="dash-empty">발송완료 상세는 개인정보 보존 정책상 이 요약에서 제공하지 않습니다.</div>
+                        ) : selectedStatusRows.length ? (
+                            <ul>
+                                {selectedStatusRows.map((row) => (
+                                    <li key={row.id}>
+                                        <strong>{failureName(row)}</strong>
+                                        <span>{row.recipientMasked || '-'}</span>
+                                        <span>{row.lastErrorCode || selectedStatusMeta.label}</span>
+                                        <span>{formatDateTimeKST(row.updatedAt || row.createdAt)}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <div className="dash-empty">해당 기간에 표시할 내역이 없습니다.</div>
+                        )}
+                        {data.queueLimitReached && <p className="msg-period-note">최근 항목 표시 상한에 도달했습니다. 기간을 좁혀주세요.</p>}
+                    </div>
+                )}
 
                 <div className="msg-period-bar" role="group" aria-label="발송 통계 기간">
                     <span className="msg-period-label">발송 통계</span>
@@ -376,7 +415,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                 </div>
                                 <div className="msg-failure-side">
                                     <span className={`msg-badge msg-${f.status === 'failed_permanent' ? 'failed' : 'retry'}`}>
-                                        {f.status === 'failed_permanent' ? '실패' : '재시도 대기'}
+                                        {f.status === 'failed_permanent' ? '재시도 실패' : '재시도 대기'}
                                     </span>
                                     {/* 재발송은 원장 권한. failed_permanent도 허용(원인이 추후 해소되는 실패 실재).
                                         단 보존기간 경과(번호 purge)·홍보성(동의 재확인 불가)은 서버가 거부하므로 버튼을 막는다. */}

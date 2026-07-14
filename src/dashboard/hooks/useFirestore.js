@@ -18,6 +18,7 @@ const emptyDelivery = () => ({
     channelCounts: { kakao: 0, sms: 0, lms: 0 },
     sentCount: 0,
     failedCount: 0,
+    queueDetails: {},
     failures: [],
 });
 

@@ -1437,6 +1437,14 @@ body {
 .msg-delivery .dash-stat-value.msg-retry { color: var(--warning); }
 .msg-delivery .dash-stat-value.msg-failed { color: var(--danger); }
 .msg-delivery .dash-stat-value.msg-sent { color: var(--success); }
+.msg-stat-button { border: 0; font: inherit; cursor: pointer; }
+.msg-stat-button.active { outline: 2px solid var(--primary); outline-offset: -2px; }
+.msg-status-details { margin: 10px 0 14px; border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; background: var(--bg); }
+.msg-status-details-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 7px; font-size: 13px; }
+.msg-status-details ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.msg-status-details li { display: grid; grid-template-columns: minmax(90px, 1fr) 120px 110px 140px; gap: 8px; font-size: 12px; align-items: center; }
+.msg-status-details li span { color: var(--text-sec); }
+@media (max-width: 720px) { .msg-status-details li { grid-template-columns: 1fr 1fr; } }
 
 .msg-delivery-channels {
     display: flex;

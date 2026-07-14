@@ -536,6 +536,7 @@ async function _sendReportAlimtalk() {
         await sendParentNotice({
             studentId: parentMsgStudentId,
             templateKey: 'report',
+            reportDate: state.selectedDate || todayKST(),
             variables: { 날짜: reportDateLabel(), 내용: content },
             recipientFields,
         });
@@ -558,8 +559,7 @@ async function _sendReportWithConsultation() {
     if (!recipientFields.length) { alert('수신 대상을 선택하세요.'); return; }
 
     const btnIds = ['parent-msg-send-btn', 'parent-msg-send-log-btn'];
-    // 학부모 알림 작성엔 날짜 UI가 없으므로 발송일(오늘) 기준 — 대시보드 선택일(state.selectedDate)과 무관.
-    const sendDate = todayKST();
+    const sendDate = state.selectedDate || todayKST();
     _sendingReport = true;
     btnIds.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
     try {
@@ -568,6 +568,7 @@ async function _sendReportWithConsultation() {
         const res = await sendDailyReport({
             studentId: parentMsgStudentId,
             content,
+            reportDate: sendDate,
             recipientField: recipientFields[0],
             recipientFields,
         });

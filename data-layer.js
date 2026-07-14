@@ -1054,8 +1054,9 @@ export const sendDirectMessage = callFn('sendDirectMessage');
 
 // 임의 번호를 솔라피 발송 차단 목록에 등록(관리자 권한).
 export const registerManualOptOut = callFn('registerManualOptOut');
+export const getManualOptOuts = callFn('getManualOptOuts');
 
-// 전날 출석·지각·조퇴 중 학부모 출결 알림이 발송 완료되지 않은 스냅샷.
+// 전날 정규 출석·지각·조퇴 중 학부모 수업 리포트가 발송 완료되지 않은 스냅샷.
 export const getAttendanceNotificationGaps = callFn('getAttendanceNotificationGaps');
 
 // 정보성 대용량 발송(메시지 센터 ②블록, 직원 권한).
