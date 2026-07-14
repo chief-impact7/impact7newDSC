@@ -28,6 +28,7 @@ export default function RecipientHistoryCard({ students = [] }) {
   const [q, setQ] = useState('');
   const [target, setTarget] = useState(null); // { label } — 조회 대상 표시용
   const [items, setItems] = useState(null);   // null=미조회
+  const [historyOpen, setHistoryOpen] = useState(true);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
 
@@ -39,7 +40,7 @@ export default function RecipientHistoryCard({ students = [] }) {
   const phoneSearchable = phoneDigits.length >= 9 && phoneDigits.length <= 11;
 
   async function load(payload, label) {
-    setLoading(true); setMsg(''); setTarget({ label });
+    setLoading(true); setMsg(''); setTarget({ label }); setHistoryOpen(true);
     try {
       const res = await getRecipientMessageHistory(payload);
       setItems(res.items || []);
@@ -100,12 +101,17 @@ export default function RecipientHistoryCard({ students = [] }) {
         {!loading && items && (
           <div className="rh-result">
             <div className="rh-target">
-              {target?.label} — {items.length ? `최근 ${items.length}건` : '발송 이력 없음'}
-              <span className="rh-note">
-                {' '}(전화번호 검색·알림톡 본문은 개인정보 보존기간 7일 내 발송만)
+              <span>
+                {target?.label} — {items.length ? `최근 ${items.length}건` : '발송 이력 없음'}
+                <span className="rh-note">
+                  {' '}(전화번호 검색·알림톡 본문은 개인정보 보존기간 7일 내 발송만)
+                </span>
               </span>
+              <button type="button" className="msg-action-btn" aria-expanded={historyOpen} onClick={() => setHistoryOpen(open => !open)}>
+                {historyOpen ? '접기' : '펼치기'}
+              </button>
             </div>
-            <ul className="rh-timeline">
+            {historyOpen && <ul className="rh-timeline">
               {items.map((it) => {
                 const st = STATUS_META[it.status] || { label: it.status || '-', cls: 'pending' };
                 return (
@@ -123,7 +129,7 @@ export default function RecipientHistoryCard({ students = [] }) {
                   </li>
                 );
               })}
-            </ul>
+            </ul>}
           </div>
         )}
       </div>
