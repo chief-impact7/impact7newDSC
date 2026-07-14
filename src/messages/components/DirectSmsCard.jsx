@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Icon } from '@impact7/ui';
 import { getManualOptOuts, registerManualOptOut, sendDirectMessage } from '../../../data-layer.js';
-import { messageMeta, normalizePhones, readMmsImage } from '../message-format.js';
+import { MESSAGE_KIND_NOTICE, MMS_SIZE_NOTICE, messageMeta, normalizePhones, readMmsImage } from '../message-format.js';
 import { parsePhonesFromFile, sampleCsv } from '../message-import.js';
 import { getMessageExtras, saveMessageExtras, composeWithExtras, DEFAULT_CHANNEL_INVITE } from '../sms-extras.js';
 import TemplateBar from './TemplateBar.jsx';
 import { OPT_OUT_LINE } from '../../../promo-compliance.js';
 import { formatDateTimeKST, todayKST } from '@impact7/shared/datetime';
+import { ICON_NAME } from '../../dashboard/icon-map.js';
 
 const AD_PREFIX = '(광고) [임팩트세븐학원]';
 const SYNC_STATUS_LABEL = {
@@ -197,14 +199,14 @@ export default function DirectSmsCard() {
     <>
     <section className="mc-section">
       <div className="mc-card">
-        <div className="mc-section-title">번호로 대량/임의 문자 발송</div>
+        <div className="mc-section-title"><Icon name={ICON_NAME.send} size={20} aria-hidden="true" /> 번호로 대량/임의 문자 발송</div>
         <div className="bulk-split mc-direct">
           <div className="bulk-left">
             <p className="bulk-col-title">받는 사람</p>
             <div className="mc-content-head">
               <p className="mc-field-label">수신번호 (줄바꿈/쉼표로 여러 명){count ? ` · ${count}명` : ''}</p>
               <div className="mc-vars">
-                <button type="button" className="mc-var-btn" onClick={() => fileRef.current?.click()}>📄 Excel·CSV 업로드</button>
+                <button type="button" className="mc-var-btn mc-icon-btn" onClick={() => fileRef.current?.click()}><Icon name={ICON_NAME.download} size={14} aria-hidden="true" /> Excel·CSV 업로드</button>
                 <button type="button" className="mc-var-btn" onClick={downloadSample}>양식</button>
               </div>
             </div>
@@ -217,10 +219,12 @@ export default function DirectSmsCard() {
           </div>
           <div className="bulk-mid">
             <p className="bulk-col-title">메시지</p>
-            <p className="mc-field-label">종류</p>
-            <div className="mc-seg" role="group" aria-label="문자 종류">
-              <button type="button" className={kind === 'info' ? 'on' : ''} aria-pressed={kind === 'info'} onClick={() => selectKind('info')}>정보성</button>
-              <button type="button" className={kind === 'promo' ? 'on' : ''} aria-pressed={kind === 'promo'} onClick={() => selectKind('promo')}>홍보성</button>
+            <div className="mc-kind-block">
+              <p className="mc-field-label">종류</p>
+              <div className="mc-seg" role="group" aria-label="문자 종류">
+                <button type="button" className={kind === 'info' ? 'on' : ''} aria-pressed={kind === 'info'} onClick={() => selectKind('info')}>정보성</button>
+                <button type="button" className={kind === 'promo' ? 'on' : ''} aria-pressed={kind === 'promo'} onClick={() => selectKind('promo')}>홍보성</button>
+              </div>
             </div>
             <div className="mc-content-head mc-message-tools">
               <p className="mc-field-label">내용</p>
@@ -230,13 +234,18 @@ export default function DirectSmsCard() {
               onChange={(e) => { setText(e.target.value); resetReqId(); }}
               placeholder="안내 내용을 입력하세요." />
             <TemplateBar content={text} onPick={(c) => { setText(c); resetReqId(); }} />
+            <div className="mc-meta">
+              <span>{meta.chars}자 · {meta.bytes}byte</span>
+              <span className={'mc-pill' + ((mmsImage || meta.type === 'LMS') ? ' lms' : '')}>{mmsImage ? 'MMS' : meta.type}</span>
+              {count ? <span>· {count}명</span> : null}
+              <label className="mc-mms-toggle"><input type="checkbox" checked={!!mmsImage} onChange={(e) => { if (e.target.checked) imageRef.current?.click(); else { setMmsImage(null); resetReqId(); } }} /> MMS</label>
+            </div>
             {kind === 'info' && <div className="mc-promo-checks">
               <label title={invite}>
                 <input type="checkbox" checked={withInvite} onChange={(e) => { setWithInvite(e.target.checked); resetReqId(); }} />
                 채널 가입 안내
               </label>
-              <label style={{ opacity: footer ? 1 : 0.5 }}
-                title={footer || '꼬리말이 아직 없습니다 — 문구 설정에서 등록'}>
+              <label title={footer || '꼬리말이 아직 없습니다 — 문구 설정에서 등록'}>
                 <input type="checkbox" checked={withFooter} disabled={!footer} onChange={(e) => { setWithFooter(e.target.checked); resetReqId(); }} />
                 학원 꼬리말
               </label>
@@ -276,12 +285,6 @@ export default function DirectSmsCard() {
                 </div>
               </div>
             )}
-            <div className="mc-meta">
-              <span>{meta.chars}자 · {meta.bytes}byte</span>
-              <span className={'mc-pill' + ((mmsImage || meta.type === 'LMS') ? ' lms' : '')}>{mmsImage ? 'MMS' : meta.type}</span>
-              {count ? <span>· {count}명</span> : null}
-              <label className="mc-mms-toggle"><input type="checkbox" checked={!!mmsImage} onChange={(e) => { if (e.target.checked) imageRef.current?.click(); else { setMmsImage(null); resetReqId(); } }} /> MMS</label>
-            </div>
           </div>
           <div className="bulk-right">
             <p className="bulk-col-title">미리보기 &amp; 발송</p>
@@ -304,17 +307,14 @@ export default function DirectSmsCard() {
               )}
             </div>
             <button className="mc-send bulk-send-btn" disabled={sending} onClick={onSend}>{sending ? '발송 중…' : `${count}명에게 발송`}</button>
-            {msg && (
+            {msg && msg !== MMS_SIZE_NOTICE && (
               <p className="mc-field-label" role="status" aria-live="polite" style={{ marginTop: 8, color: msgTone === 'error' ? '#c62828' : undefined }}>
                 {msgTone === 'success' ? <strong>{msg}</strong> : msg}
                 {msgWarning && <span style={{ color: '#c62828', fontWeight: 600 }}> · {msgWarning}</span>}
               </p>
             )}
-            <div className="mc-note" style={{ marginTop: 10 }}>
-              {kind === 'promo'
-                ? '홍보성 문자는 수신동의 번호에만 발송합니다. 08:00~21:00에만 수신 가능하며, 야간 요청은 다음 허용 시각으로 예약됩니다. (광고)·무료 수신거부 문구를 서버에서도 다시 검증합니다.'
-                : `정보성 안내 전용입니다. 광고성 내용은 홍보성으로 전환해 발송하세요.${mmsImage ? ' MMS는 JPG 1장(200KB 이하, 최대 1500×1440px)이며 HTML은 지원하지 않습니다.' : ''}`}
-            </div>
+            <p className="mc-mms-requirement">{MMS_SIZE_NOTICE}</p>
+            <div className="mc-note" style={{ marginTop: 10 }}>{MESSAGE_KIND_NOTICE[kind]}</div>
           </div>
         </div>
       </div>
@@ -380,7 +380,7 @@ function ManualOptOutCard() {
   return (
     <section className="mc-section">
       <div className="mc-card">
-        <div className="mc-section-title">🚫 수신거부 번호 등록 <span className="mc-tag">솔라피 연동</span></div>
+        <div className="mc-section-title"><Icon name={ICON_NAME.person_off} size={20} aria-hidden="true" /> 수신거부 번호 등록 <span className="mc-tag">솔라피 연동</span></div>
         <div className="mc-optout-row">
           <input type="tel" aria-label="수신거부 휴대폰 번호" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="010-1234-5678" />
           <input type="date" aria-label="수신거부 요청일" value={requestedDate} onChange={(e) => setRequestedDate(e.target.value)} />
@@ -389,7 +389,7 @@ function ManualOptOutCard() {
         </div>
         <p className="mc-field-label" style={{ marginTop: 7 }}>등록된 번호는 솔라피에서 문자·카카오 등 모든 발송 채널이 차단됩니다.</p>
         {msg && <p className="mc-field-label" role="status" aria-live="polite" style={{ marginTop: 7 }}>{msg}</p>}
-        <details className="mc-optout-details" open>
+        <details className="mc-optout-details">
           <summary>
             DSC·솔라피 수신거부 목록 {(registry?.items ?? []).length}건
             <span>일치 {registry?.matchedCount ?? 0} · 솔라피만 {registry?.solapiOnlyCount ?? 0} · DSC만 {registry?.localOnlyCount ?? 0}</span>

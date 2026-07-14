@@ -1,11 +1,13 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { Icon } from '@impact7/ui';
 import { filterStudents } from '../bulk-select.js';
 import { studentFullLabel, currentSchool } from '@impact7/shared/student-label';
 import { allClassCodes } from '../../shared/firestore-helpers.js';
 import GradeFilter from '../../dashboard/components/GradeFilter.jsx';
-import { messageMeta, readMmsImage } from '../message-format.js';
+import { MESSAGE_KIND_NOTICE, MMS_SIZE_NOTICE, messageMeta, readMmsImage } from '../message-format.js';
 import { getMessageExtras, saveMessageExtras, composeWithExtras, DEFAULT_CHANNEL_INVITE } from '../sms-extras.js';
 import TemplateBar from './TemplateBar.jsx';
+import { ICON_NAME } from '../../dashboard/icon-map.js';
 import { createBulkMessage, createPromoCampaign } from '../../../data-layer.js';
 // 광고 규제 표기(정보통신망법 §50)는 공용 모듈 — 발송 시 자동 보정, 버튼은 미리보기 확인용.
 import { OPT_OUT_LINE, ensurePromoCompliance } from '../../../promo-compliance.js';
@@ -218,7 +220,7 @@ export default function BulkSendCard({ students = [] }) {
   return (
     <section className="mc-section">
       <div className="mc-card">
-        <div className="mc-section-title">검색으로 단체/개인 문자 발송 <span className="mc-tag" style={{ background: '#0a6e49' }}>목록·검색·누적</span></div>
+        <div className="mc-section-title"><Icon name={ICON_NAME.groups} size={20} aria-hidden="true" /> 검색으로 단체/개인 문자 발송 <span className="mc-tag" style={{ background: '#0a6e49' }}>목록·검색·누적</span></div>
         <div className="bulk-split">
           <div className="bulk-left">
             <p className="bulk-col-title">받는 사람</p>
@@ -266,11 +268,9 @@ export default function BulkSendCard({ students = [] }) {
 
           <div className="bulk-mid">
             <p className="bulk-col-title">메시지</p>
-            <div className="mc-routing-head">
+            <div className="mc-routing-grid">
               <span className="mc-field-label">받는이 {kind === 'promo' ? '(단일)' : '(다중 선택)'}</span>
-              <span className="mc-field-label">종류</span>
-            </div>
-            <div className="mc-routing-controls">
+              <span className="mc-field-label mc-kind-label">종류</span>
               <div className="mc-seg">
                 {['student', 'parent_1', 'parent_2'].map((f) => (
                   <button key={f} type="button" className={recipientFields.has(f) ? 'on' : ''} aria-pressed={recipientFields.has(f)} onClick={() => toggleRecipient(f)}>
@@ -309,7 +309,6 @@ export default function BulkSendCard({ students = [] }) {
             {attachedLines.length > 0 && <div className="mc-attached-lines">{attachedLines.join('\n\n')}</div>}
             {mmsImage && <div className="mc-mms-file"><img src={mmsImage.previewUrl} alt="MMS 첨부 미리보기" /><span>{mmsImage.name}<br />{mmsImage.width}×{mmsImage.height}px · {Math.ceil(mmsImage.size / 1024)}KB</span><button type="button" className="mc-var-btn" onClick={() => { setMmsImage(null); resetReqId(); }}>제거</button></div>}
             {kind === 'info' && setupOpen && <div className="mc-message-setup"><label className="mc-field-label">채널 가입 안내 문구 (비우면 기본 문구)</label><textarea aria-label="채널 가입 안내 문구" className="mc-textarea" rows={2} value={inviteDraft} onChange={(e) => setInviteDraft(e.target.value)} placeholder={DEFAULT_CHANNEL_INVITE} maxLength={280} /><label className="mc-field-label">학원 꼬리말</label><input aria-label="학원 꼬리말" className="mc-tpl-title" value={footerDraft} onChange={(e) => setFooterDraft(e.target.value)} placeholder="예: -임팩트세븐학원 02-2649-0509" maxLength={200} /><div className="mc-vars"><button type="button" className="mc-var-btn" disabled={setupBusy} onClick={onSaveSetup}>{setupBusy ? '저장 중…' : '저장'}</button><button type="button" className="mc-var-btn" onClick={() => setSetupOpen(false)}>취소</button></div></div>}
-            {kind === 'promo' && <div className="mc-note" style={{ marginTop: 8 }}>홍보성은 수신동의 번호만 자동 선별하며, (광고)와 무료수신거부 문구는 실제 본문에 자동 반영됩니다.</div>}
           </div>
 
           <div className="bulk-right">
@@ -343,7 +342,9 @@ export default function BulkSendCard({ students = [] }) {
             <button className="mc-send bulk-send-btn" disabled={sending} onClick={onSendClick}>
               {sending ? '발송 중…' : confirming ? `확인 후 ${checkedCount}명에게 발송` : `${checkedCount}명에게 발송`}
             </button>
-            {msg && <p className="mc-field-label" role="status" aria-live="polite" style={{ marginTop: 8 }}>{msg}</p>}
+            {msg && msg !== MMS_SIZE_NOTICE && <p className="mc-field-label" role="status" aria-live="polite" style={{ marginTop: 8 }}>{msg}</p>}
+            <p className="mc-mms-requirement">{MMS_SIZE_NOTICE}</p>
+            <div className="mc-note" style={{ marginTop: 10 }}>{MESSAGE_KIND_NOTICE[kind]}</div>
           </div>
         </div>
       </div>

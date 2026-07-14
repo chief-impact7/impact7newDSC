@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { Icon } from '@impact7/ui';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { getAttendanceNotificationGaps } from '../../../data-layer.js';
+import { ICON_NAME } from '../../dashboard/icon-map.js';
 
 const STATUS_LABEL = { not_queued: '미작성', retry_failed: '재시도 실패', retrying: '재시도 중', pending: '발송 미확정' };
 
@@ -28,7 +30,7 @@ export default function AttendanceNotificationGapCard() {
     content = <div className="mc-gap-empty">{data.dateKST} 학부모 알림 작성 미발송 없음 · 정규 등원 {data.attendedCount}명</div>;
   } else {
     content = (
-      <details className="mc-gap-details" open>
+      <details className="mc-gap-details">
         <summary>{data.dateKST} 미발송 {data.missingCount}명 · 정규 등원 {data.attendedCount}명 <span>{formatDateTimeKST(data.generatedAt)} 생성</span></summary>
         <ul className="mc-gap-list">
           {items.map((item) => (
@@ -47,7 +49,7 @@ export default function AttendanceNotificationGapCard() {
     <section className="mc-section">
       <div className="mc-card">
         <div className="mc-section-title">
-          🔔 전날 학부모 알림 작성 미발송
+          <Icon name={ICON_NAME.fact_check} size={20} aria-hidden="true" /> 전날 학부모 알림 작성 미발송
           <span className="mc-tag">매일 오후 3:00 생성</span>
           <button type="button" className="mc-var-btn mc-title-action" disabled={loading} onClick={load}>{loading ? '불러오는 중…' : '새로고침'}</button>
         </div>

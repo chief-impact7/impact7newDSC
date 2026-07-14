@@ -5,6 +5,12 @@ const MMS_MAX_BYTES = 200 * 1024;
 const MMS_MAX_WIDTH = 1500;
 const MMS_MAX_HEIGHT = 1440;
 
+export const MMS_SIZE_NOTICE = 'MMS 이미지는 200KB 이하만 첨부할 수 있습니다.';
+export const MESSAGE_KIND_NOTICE = {
+  info: '정보성 안내 전용입니다. 광고성 내용은 홍보성으로 전환해 발송하세요.',
+  promo: '홍보성 문자는 수신동의 번호에만 발송합니다. 08:00~21:00에만 수신 가능하며, 야간 요청은 다음 허용 시각으로 예약됩니다. (광고)·무료 수신거부 문구를 서버에서도 다시 검증합니다.',
+};
+
 export function smsByteLen(text) {
   let n = 0;
   for (const ch of String(text ?? '')) {
@@ -36,7 +42,7 @@ export function readMmsImage(file) {
     return Promise.reject(new Error('MMS는 JPG 이미지만 첨부할 수 있습니다.'));
   }
   if (file.size > MMS_MAX_BYTES) {
-    return Promise.reject(new Error('MMS 이미지는 200KB 이하만 첨부할 수 있습니다.'));
+    return Promise.reject(new Error(MMS_SIZE_NOTICE));
   }
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

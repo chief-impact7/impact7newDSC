@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { Icon } from '@impact7/ui';
 import { loadTemplates, saveTemplate, deleteTemplate, migrateLegacyTemplates } from '../message-templates.js';
+import { ICON_NAME } from '../../dashboard/icon-map.js';
 
 // 자주 쓰는 문구 불러오기/저장 — 전 직원 공유(Firestore). content를 받아 저장하고,
 // 선택 시 onPick(content)로 본문에 채운다. 첫 마운트에 개인 단말(localStorage) 템플릿을 1회 이관.
@@ -73,7 +75,7 @@ export default function TemplateBar({ content, onPick }) {
         {list.map((t) => <option key={t.title} value={t.title}>{t.title}</option>)}
       </select>
       <button type="button" className="mc-tpl-manage-btn" aria-expanded={manageOpen}
-        onClick={async () => { if (!manageOpen) await refresh(); setManageOpen(!manageOpen); }}>📋 템플릿 관리</button>
+        onClick={async () => { if (!manageOpen) await refresh(); setManageOpen(!manageOpen); }}><Icon name={ICON_NAME.quiz} size={14} aria-hidden="true" /> 템플릿 관리</button>
       {saveOpen ? (
         <>
           <input aria-label="템플릿 이름" className="mc-tpl-title" value={titleInput} onChange={(e) => setTitleInput(e.target.value)}

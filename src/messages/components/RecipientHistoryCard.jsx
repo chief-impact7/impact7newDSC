@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
+import { Icon } from '@impact7/ui';
 import { studentFullLabel } from '@impact7/shared/student-label';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { filterStudents } from '../bulk-select.js';
 import { getRecipientMessageHistory } from '../../../data-layer.js';
 import { onlyDigits } from '../message-format.js';
+import { ICON_NAME } from '../../dashboard/icon-map.js';
 
 // 수신자별 발송 이력 타임라인. 카카오 관리자센터는 API 발송 알림톡 원문을 보여주지 않으므로
 // 학부모 답장이 왔을 때 "무엇을 보냈는지"를 여기서 확인한다.
@@ -28,7 +30,7 @@ export default function RecipientHistoryCard({ students = [] }) {
   const [q, setQ] = useState('');
   const [target, setTarget] = useState(null); // { label } — 조회 대상 표시용
   const [items, setItems] = useState(null);   // null=미조회
-  const [historyOpen, setHistoryOpen] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
 
@@ -40,7 +42,7 @@ export default function RecipientHistoryCard({ students = [] }) {
   const phoneSearchable = phoneDigits.length >= 9 && phoneDigits.length <= 11;
 
   async function load(payload, label) {
-    setLoading(true); setMsg(''); setTarget({ label }); setHistoryOpen(true);
+    setLoading(true); setMsg(''); setTarget({ label }); setHistoryOpen(false);
     try {
       const res = await getRecipientMessageHistory(payload);
       setItems(res.items || []);
@@ -58,7 +60,7 @@ export default function RecipientHistoryCard({ students = [] }) {
   return (
     <section className="mc-section">
       <div className="mc-card">
-        <div className="mc-section-title">🕘 수신자별 발송 이력</div>
+        <div className="mc-section-title"><Icon name={ICON_NAME.schedule} size={20} aria-hidden="true" /> 수신자별 발송 이력</div>
         <p className="mc-field-label">
           이 학부모/번호에게 우리가 보낸 알림톡·문자 원문을 시간순으로 확인합니다.
           (카카오 관리자센터에는 API 발송 원문이 표시되지 않음)
