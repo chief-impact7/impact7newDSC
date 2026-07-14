@@ -22,7 +22,7 @@ import { batchSet, batchUpdate, normalizeImpact7Email } from './audit.js';
 import { recordTeacherChange } from './teacher-history.js';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { canonicalizeTeacherEmails, teacherDisplayName } from '@impact7/shared/teacher-label';
-import { hasActiveRegularClass } from './class-setup-enrollment.js';
+import { buildClassTimeFields, hasActiveRegularClass } from './class-setup-enrollment.js';
 import { esc } from './ui-utils.js';
 import {
     wizardData,
@@ -162,6 +162,11 @@ window.prevStep = function () {
 function collectFormData() {
     buildClassCode();
     wizardData.teacher = document.getElementById('input-teacher').value;
+    if (wizardData.classType === '정규') {
+        wizardData.defaultTime = document.getElementById('time-default')?.value || '16:00';
+        wizardData.schedule = {};
+        return;
+    }
     wizardData.schedule = Object.fromEntries(
         wizardData.days.map(day => [
             day,
@@ -227,7 +232,7 @@ function resetWizardForTypeChange() {
         specialStart: '', specialEnd: '',
         freeStart: '', freeEnd: '',
         teacher: '',
-        students: [], days: [], schedule: {},
+        students: [], days: [], defaultTime: '', schedule: {},
     });
 
     [
@@ -672,6 +677,15 @@ window.toggleDay = function (day) {
 
 function renderTimeSettings() {
     const container = document.getElementById('time-settings');
+    if (wizardData.classType === '정규') {
+        wizardData.defaultTime ||= '16:00';
+        container.innerHTML = `<div class="time-row">
+                    <label for="time-default">공통</label>
+                    <input type="time" id="time-default" value="${wizardData.defaultTime}" oninput="syncTimeFromInputs()">
+                </div>`;
+        renderSummary();
+        return;
+    }
     container.innerHTML = wizardData.days.map(day => {
         const time = wizardData.schedule[day] || '16:00';
         wizardData.schedule[day] = time;
@@ -684,6 +698,11 @@ function renderTimeSettings() {
 }
 
 window.syncTimeFromInputs = function () {
+    if (wizardData.classType === '정규') {
+        wizardData.defaultTime = document.getElementById('time-default')?.value || '16:00';
+        renderSummary();
+        return;
+    }
     wizardData.days.forEach(day => {
         const input = document.getElementById(`time-${day}`);
         if (input) wizardData.schedule[day] = input.value || '16:00';
@@ -729,20 +748,19 @@ window.submitWizard = async function () {
         }
 
         // 2. class_settings 데이터 준비 (commit은 batch에서 한번에)
-        const classSettingsData = { teacher: d.teacher || '' };
+        const classSettingsData = {
+            teacher: d.teacher || '',
+            ...buildClassTimeFields(d.classType, d.days, d.schedule, d.defaultTime),
+        };
         if (d.classType === '내신') {
             classSettingsData.class_type = '내신';
             classSettingsData.naesin_start = d.naesinStart;
             classSettingsData.naesin_end = d.naesinEnd;
-            classSettingsData.schedule = d.schedule;
         } else if (d.classType === '자유학기') {
-            // 자유학기는 정규와 class_code 공유 → schedule 덮어쓰지 않고 free_schedule에 저장
-            classSettingsData.free_schedule = d.schedule;
             if (d.freeStart) classSettingsData.free_start = d.freeStart;
             if (d.freeEnd) classSettingsData.free_end = d.freeEnd;
         } else {
             classSettingsData.class_type = d.classType;
-            classSettingsData.schedule = d.schedule;
             if (d.classType === '특강') {
                 if (d.feeType) classSettingsData.fee_type = d.feeType;
                 if (d.specialStart) classSettingsData.special_start = d.specialStart;

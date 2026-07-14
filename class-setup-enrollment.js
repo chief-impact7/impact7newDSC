@@ -19,3 +19,11 @@ export function hasActiveRegularClass(enrollments, classCode, date) {
         && (!enrollment.end_date || enrollment.end_date >= date)
     );
 }
+
+export function buildClassTimeFields(classType, days, schedule, defaultTime) {
+    if (classType === '정규') {
+        return { default_days: [...days], default_time: defaultTime || '16:00' };
+    }
+    if (classType === '자유학기') return { free_schedule: { ...schedule } };
+    return { schedule: { ...schedule } };
+}

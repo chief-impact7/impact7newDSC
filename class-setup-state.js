@@ -29,6 +29,7 @@ export const wizardData = {
     teacher: '',
     students: [],        // [{ docId, name, school, grade, status, enrollments }]
     days: [],            // ['월', '수', '금']
+    defaultTime: '',     // 정규반 공통 등원시간
     schedule: {},        // { '월': '16:00', '수': '16:00' }
 };
 
@@ -54,7 +55,7 @@ export function renderSummary() {
     const d = wizardData;
     const teacherName = d.teacher ? staffLabel(d.teacher) : '미지정';
     const dayTimeStr = d.days.length
-        ? d.days.map(day => `${day} ${d.schedule[day] || ''}`).join(', ')
+        ? d.days.map(day => `${day} ${d.classType === '정규' ? d.defaultTime : (d.schedule[day] || '')}`).join(', ')
         : '미선택';
 
     let typeLabel = d.classType || '미선택';
