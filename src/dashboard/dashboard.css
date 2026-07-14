@@ -1607,6 +1607,7 @@ body {
 }
 .msg-period-chip:hover { background: #f3f5f7; }
 .msg-period-chip.active { background: #0b7a52; border-color: #0b7a52; color: #fff; }
+.msg-period-chip:disabled { opacity: .4; cursor: default; }
 .msg-period-custom { display: inline-flex; align-items: center; gap: 5px; }
 .msg-period-custom input[type="date"] {
     font: inherit;

@@ -10,6 +10,7 @@ import {
     fetchDashboardDailyLogData,
     fetchConsultationsForRange,
 } from '../../shared/firestore-helpers.js';
+import { kstDayRangeParams } from '../message-period.js';
 
 const getDeliveryStatus = httpsCallable(functions, 'getMessageDeliveryStatus');
 
@@ -154,7 +155,7 @@ export function useMessageDelivery(user) {
     const [error, setError] = useState(null);
     const reqIdRef = useRef(0);
 
-    // params: { fromMs?, toMs? } — 발송 통계 기간 필터(생략 시 전체=최근 스캔분).
+    // params: { fromMs?, toMs? } — 발송 통계 기간 필터.
     const reload = useCallback((params) => {
         if (!user) return;
         const reqId = ++reqIdRef.current; // 빠른 기간 전환 시 느린 이전 응답이 최신을 덮지 않도록. F-03
@@ -170,7 +171,7 @@ export function useMessageDelivery(user) {
             .finally(() => { if (reqId === reqIdRef.current) setLoading(false); });
     }, [user]);
 
-    useEffect(() => { reload(); }, [reload]);
+    useEffect(() => { reload(kstDayRangeParams()); }, [reload]);
 
     return { data, loading, reload, error };
 }

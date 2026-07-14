@@ -4,7 +4,8 @@ import { ICON_NAME } from '../icon-map.js';
 import ReactECharts from '../echarts.jsx';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../../firebase-config.js';
-import { formatDateTimeKST } from '@impact7/shared/datetime';
+import { formatDateKST, formatDateTimeKST } from '@impact7/shared/datetime';
+import { dateInputToKstMs, kstDayRangeParams, kstDayStartMs, kstMonthStartMs } from '../message-period.js';
 
 const retryCallable = httpsCallable(functions, 'retryMessageDelivery');
 const manageCallable = httpsCallable(functions, 'manageMessageFailure');
@@ -22,22 +23,6 @@ const CHANNEL_META = {
     sms: { label: '문자(SMS/LMS)', color: '#1a73e8' },
 };
 
-// 발송 통계 기간 프리셋. 경계는 KST 기준(자정/1일) — 서버는 epoch ms만 받는다.
-const KST_OFFSET_MS = 9 * 3600 * 1000;
-function kstDayStartMs(offsetDays = 0) {
-    const shifted = new Date(Date.now() + KST_OFFSET_MS);
-    return Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate() + offsetDays) - KST_OFFSET_MS;
-}
-function kstMonthStartMs() {
-    const shifted = new Date(Date.now() + KST_OFFSET_MS);
-    return Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), 1) - KST_OFFSET_MS;
-}
-function dateInputToKstMs(value, endOfDay) {
-    if (!value) return null;
-    const [y, m, d] = value.split('-').map(Number);
-    const startMs = Date.UTC(y, m - 1, d) - KST_OFFSET_MS;
-    return endOfDay ? startMs + 24 * 3600 * 1000 - 1 : startMs;
-}
 const PERIODS = [
     { key: 'today', label: '오늘' },
     { key: 'week', label: '최근 7일' },
@@ -76,7 +61,8 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
     const [busy, setBusy] = useState(false);
     const [notice, setNotice] = useState(null); // { kind: 'error'|'info', text }
     const [expandedId, setExpandedId] = useState(null); // 본문 펼침 상태(한 번에 하나)
-    const [period, setPeriod] = useState('all');
+    const [period, setPeriod] = useState('today');
+    const [dayOffset, setDayOffset] = useState(0);
     const [customFrom, setCustomFrom] = useState('');
     const [customTo, setCustomTo] = useState('');
     const [selectedIds, setSelectedIds] = useState(() => new Set());
@@ -97,6 +83,9 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
     const selectedStatusRows = selectedStatusMeta
         ? selectedStatusMeta.keys.flatMap((key) => queueDetails[key] ?? [])
         : [];
+    const dayLabel = period === 'today' && dayOffset < 0
+        ? formatDateKST(new Date(kstDayStartMs(dayOffset)))
+        : '오늘';
 
     // 새로고침 후 목록에서 사라진 항목은 선택에서도 제거.
     useEffect(() => {
@@ -115,7 +104,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
     const manageEligible = selected.filter(MANAGE_ELIGIBLE);
 
     function rangeParams(p = period) {
-        if (p === 'today') return { fromMs: kstDayStartMs() };
+        if (p === 'today') return kstDayRangeParams(dayOffset);
         if (p === 'week') return { fromMs: kstDayStartMs(-6) };
         if (p === 'month') return { fromMs: kstMonthStartMs() };
         if (p === 'custom') {
@@ -130,7 +119,19 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
     }
     function selectPeriod(p) {
         setPeriod(p);
+        if (p === 'today') {
+            setDayOffset(0);
+            onReload(kstDayRangeParams());
+            return;
+        }
         if (p !== 'custom') onReload(rangeParams(p));
+    }
+    function moveDay(delta) {
+        const base = period === 'today' ? dayOffset : 0;
+        const next = Math.min(0, base + delta);
+        setDayOffset(next);
+        setPeriod('today');
+        onReload(kstDayRangeParams(next));
     }
     const refresh = () => {
         if (period === 'custom' && customFrom && customTo && customFrom > customTo) {
@@ -220,7 +221,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
             <div className="dash-card-header">
                 <span>
                     <Icon name={ICON_NAME.send} size={20} className="material-symbols-outlined" aria-hidden="true" />
-                    발송 현황 (출결 알림)
+                    발송 현황
                 </span>
                 <span className="msg-header-actions">
                     <a
@@ -286,7 +287,27 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
 
                 <div className="msg-period-bar" role="group" aria-label="발송 통계 기간">
                     <span className="msg-period-label">발송 통계</span>
-                    {PERIODS.map(p => (
+                    {PERIODS.map(p => p.key === 'today' ? (
+                        <React.Fragment key={p.key}>
+                            <button type="button" className="msg-period-chip" onClick={() => moveDay(-1)} aria-label="이전 날짜">&lt;</button>
+                            <button
+                                type="button"
+                                className={`msg-period-chip${period === p.key ? ' active' : ''}`}
+                                onClick={() => selectPeriod(p.key)}
+                            >
+                                {dayLabel}
+                            </button>
+                            <button
+                                type="button"
+                                className="msg-period-chip"
+                                onClick={() => moveDay(1)}
+                                disabled={period === 'today' && dayOffset === 0}
+                                aria-label="다음 날짜"
+                            >
+                                &gt;
+                            </button>
+                        </React.Fragment>
+                    ) : (
                         <button
                             key={p.key}
                             type="button"
