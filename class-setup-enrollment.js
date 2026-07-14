@@ -20,8 +20,15 @@ export function hasActiveRegularClass(enrollments, classCode, date) {
     );
 }
 
-export function scheduleFieldsForClassType(classType, schedule) {
-    if (classType === '자유학기') return { free_schedule: schedule };
-    if (classType === '내신' || classType === '특강') return { schedule };
+export function buildClassTimeFields(classType, days, schedule, defaultTime) {
+    if (classType === '정규') {
+        return { default_days: [...days], default_time: defaultTime || '16:00' };
+    }
+    if (classType === '자유학기') return { free_schedule: { ...schedule } };
+    if (classType === '내신' || classType === '특강') return { schedule: { ...schedule } };
     return {};
+}
+
+export function resolveRegularDefaultTime(inputTime, edited, existingTime) {
+    return edited ? inputTime : (existingTime || inputTime);
 }

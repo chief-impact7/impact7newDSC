@@ -22,7 +22,11 @@ import { batchSet, batchUpdate, normalizeImpact7Email } from './audit.js';
 import { recordTeacherChange } from './teacher-history.js';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { canonicalizeTeacherEmails, teacherDisplayName } from '@impact7/shared/teacher-label';
-import { hasActiveRegularClass, scheduleFieldsForClassType } from './class-setup-enrollment.js';
+import {
+    buildClassTimeFields,
+    hasActiveRegularClass,
+    resolveRegularDefaultTime,
+} from './class-setup-enrollment.js';
 import { esc } from './ui-utils.js';
 import {
     wizardData,
@@ -162,6 +166,11 @@ window.prevStep = function () {
 function collectFormData() {
     buildClassCode();
     wizardData.teacher = document.getElementById('input-teacher').value;
+    if (wizardData.classType === '정규') {
+        wizardData.defaultTime = document.getElementById('time-default')?.value || '16:00';
+        wizardData.schedule = {};
+        return;
+    }
     wizardData.schedule = Object.fromEntries(
         wizardData.days.map(day => [
             day,
@@ -227,7 +236,7 @@ function resetWizardForTypeChange() {
         specialStart: '', specialEnd: '',
         freeStart: '', freeEnd: '',
         teacher: '',
-        students: [], days: [], schedule: {},
+        students: [], days: [], defaultTime: '', defaultTimeEdited: false, schedule: {},
     });
 
     [
@@ -672,6 +681,15 @@ window.toggleDay = function (day) {
 
 function renderTimeSettings() {
     const container = document.getElementById('time-settings');
+    if (wizardData.classType === '정규') {
+        wizardData.defaultTime ||= '16:00';
+        container.innerHTML = `<div class="time-row">
+                    <label for="time-default">공통</label>
+                    <input type="time" id="time-default" value="${wizardData.defaultTime}" oninput="syncTimeFromInputs()">
+                </div>`;
+        renderSummary();
+        return;
+    }
     container.innerHTML = wizardData.days.map(day => {
         const time = wizardData.schedule[day] || '16:00';
         wizardData.schedule[day] = time;
@@ -684,6 +702,12 @@ function renderTimeSettings() {
 }
 
 window.syncTimeFromInputs = function () {
+    if (wizardData.classType === '정규') {
+        wizardData.defaultTime = document.getElementById('time-default')?.value || '16:00';
+        wizardData.defaultTimeEdited = true;
+        renderSummary();
+        return;
+    }
     wizardData.days.forEach(day => {
         const input = document.getElementById(`time-${day}`);
         if (input) wizardData.schedule[day] = input.value || '16:00';
@@ -715,10 +739,11 @@ window.submitWizard = async function () {
 
         // 1. 기존 class_settings에 같은 코드가 있는지 확인
         const existingDoc = await getDoc(doc(db, 'class_settings', d.classCode));
+        const existingSettings = existingDoc.exists() ? existingDoc.data() : {};
         if (existingDoc.exists()) {
             // 내신 기간 변경 시 학생 enrollment.end_date 자동 sync 안내
             // (Cloud Function onClassSettingsNaesinPeriodChanged가 처리하지만 사용자에게 명시 인지시킴)
-            const ex = existingDoc.data();
+            const ex = existingSettings;
             let periodNote = '';
             if (d.classType === '내신' && ex.class_type === '내신' &&
                 (ex.naesin_start !== d.naesinStart || ex.naesin_end !== d.naesinEnd)) {
@@ -731,7 +756,16 @@ window.submitWizard = async function () {
         // 2. class_settings 데이터 준비 (commit은 batch에서 한번에)
         const classSettingsData = {
             teacher: d.teacher || '',
-            ...scheduleFieldsForClassType(d.classType, d.schedule),
+            ...buildClassTimeFields(
+                d.classType,
+                d.days,
+                d.schedule,
+                resolveRegularDefaultTime(
+                    d.defaultTime,
+                    d.defaultTimeEdited,
+                    existingSettings.default_time,
+                ),
+            ),
         };
         if (d.classType === '내신') {
             classSettingsData.class_type = '내신';
