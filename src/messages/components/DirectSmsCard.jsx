@@ -199,14 +199,14 @@ export default function DirectSmsCard() {
     <>
     <section className="mc-section">
       <div className="mc-card">
-        <div className="mc-section-title"><Icon name={ICON_NAME.send} size={20} aria-hidden="true" /> 번호로 대량/임의 문자 발송</div>
+        <div className="mc-section-title"><Icon name={ICON_NAME.direct_message} size={20} aria-hidden="true" /> 번호로 대량/임의 문자 발송</div>
         <div className="bulk-split mc-direct">
           <div className="bulk-left">
             <p className="bulk-col-title">받는 사람</p>
             <div className="mc-content-head">
               <p className="mc-field-label">수신번호 (줄바꿈/쉼표로 여러 명){count ? ` · ${count}명` : ''}</p>
               <div className="mc-vars">
-                <button type="button" className="mc-var-btn mc-icon-btn" onClick={() => fileRef.current?.click()}><Icon name={ICON_NAME.download} size={14} aria-hidden="true" /> Excel·CSV 업로드</button>
+                <button type="button" className="mc-var-btn mc-icon-btn" onClick={() => fileRef.current?.click()}><Icon name={ICON_NAME.upload} size={14} aria-hidden="true" /> Excel·CSV 업로드</button>
                 <button type="button" className="mc-var-btn" onClick={downloadSample}>양식</button>
               </div>
             </div>
@@ -380,7 +380,7 @@ function ManualOptOutCard() {
   return (
     <section className="mc-section">
       <div className="mc-card">
-        <div className="mc-section-title"><Icon name={ICON_NAME.person_off} size={20} aria-hidden="true" /> 수신거부 번호 등록 <span className="mc-tag">솔라피 연동</span></div>
+        <div className="mc-section-title"><Icon name={ICON_NAME.phone_opt_out} size={20} aria-hidden="true" /> 수신거부 번호 등록 <span className="mc-tag">솔라피 연동</span></div>
         <div className="mc-optout-row">
           <input type="tel" aria-label="수신거부 휴대폰 번호" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="010-1234-5678" />
           <input type="date" aria-label="수신거부 요청일" value={requestedDate} onChange={(e) => setRequestedDate(e.target.value)} />

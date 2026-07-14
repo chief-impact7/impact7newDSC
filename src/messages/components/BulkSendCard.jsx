@@ -220,7 +220,7 @@ export default function BulkSendCard({ students = [] }) {
   return (
     <section className="mc-section">
       <div className="mc-card">
-        <div className="mc-section-title"><Icon name={ICON_NAME.groups} size={20} aria-hidden="true" /> 검색으로 단체/개인 문자 발송 <span className="mc-tag" style={{ background: '#0a6e49' }}>목록·검색·누적</span></div>
+        <div className="mc-section-title"><Icon name={ICON_NAME.bulk_message} size={20} aria-hidden="true" /> 검색으로 단체/개인 문자 발송 <span className="mc-tag" style={{ background: '#0a6e49' }}>목록·검색·누적</span></div>
         <div className="bulk-split">
           <div className="bulk-left">
             <p className="bulk-col-title">받는 사람</p>

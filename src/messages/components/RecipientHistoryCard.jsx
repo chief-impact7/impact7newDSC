@@ -60,7 +60,7 @@ export default function RecipientHistoryCard({ students = [] }) {
   return (
     <section className="mc-section">
       <div className="mc-card">
-        <div className="mc-section-title"><Icon name={ICON_NAME.schedule} size={20} aria-hidden="true" /> 수신자별 발송 이력</div>
+        <div className="mc-section-title"><Icon name={ICON_NAME.message_history} size={20} aria-hidden="true" /> 수신자별 발송 이력</div>
         <p className="mc-field-label">
           이 학부모/번호에게 우리가 보낸 알림톡·문자 원문을 시간순으로 확인합니다.
           (카카오 관리자센터에는 API 발송 원문이 표시되지 않음)
