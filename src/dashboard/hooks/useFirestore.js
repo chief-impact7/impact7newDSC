@@ -16,7 +16,7 @@ const getDeliveryStatus = httpsCallable(functions, 'getMessageDeliveryStatus');
 
 const emptyDelivery = () => ({
     queueCounts: { pending: 0, processing: 0, failed_retryable: 0, failed_permanent: 0, sent: 0 },
-    channelCounts: { kakao: 0, sms: 0, lms: 0 },
+    channelCounts: { kakao: 0, sms: 0, mms: 0 },
     sentCount: 0,
     failedCount: 0,
     queueDetails: {},

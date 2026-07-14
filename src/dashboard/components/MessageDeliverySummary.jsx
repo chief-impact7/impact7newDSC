@@ -21,6 +21,7 @@ const QUEUE_STATUS = [
 const CHANNEL_META = {
     kakao: { label: '카카오 알림톡', color: '#FAE100' },
     sms: { label: '문자(SMS/LMS)', color: '#1a73e8' },
+    mms: { label: '사진 문자(MMS)', color: '#7b61c9' },
 };
 
 const PERIODS = [
@@ -74,10 +75,10 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
     const failureName = (f) => nameById.get(f.studentId) || f.recipientMasked || '(이름 미확인)';
 
     const queueCounts = data.queueCounts ?? {};
-    const channelCounts = data.channelCounts ?? { kakao: 0, sms: 0 };
+    const channelCounts = data.channelCounts ?? { kakao: 0, sms: 0, mms: 0 };
     const failures = data.failures ?? [];
     const queueDetails = data.queueDetails ?? {};
-    const channelTotal = (channelCounts.kakao ?? 0) + (channelCounts.sms ?? 0);
+    const channelTotal = (channelCounts.kakao ?? 0) + (channelCounts.sms ?? 0) + (channelCounts.mms ?? 0);
     const queueCount = (status) => status.keys.reduce((sum, key) => sum + (queueCounts[key] ?? 0), 0);
     const selectedStatusMeta = QUEUE_STATUS.find((status) => status.key === selectedStatus);
     const selectedStatusRows = selectedStatusMeta

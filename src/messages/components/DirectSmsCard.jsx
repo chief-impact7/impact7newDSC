@@ -8,6 +8,9 @@ import { OPT_OUT_LINE } from '../../../promo-compliance.js';
 import { formatDateTimeKST, todayKST } from '@impact7/shared/datetime';
 
 const AD_PREFIX = '(광고) [임팩트세븐학원]';
+const MMS_MAX_BYTES = 200 * 1024;
+const MMS_MAX_WIDTH = 1500;
+const MMS_MAX_HEIGHT = 1440;
 const SYNC_STATUS_LABEL = {
   matched: '일치',
   solapi_only: '솔라피만',
@@ -30,6 +33,40 @@ function newReqId() {
   return 'direct-' + (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + '-' + performance.now().toString(36));
 }
 
+function readMmsImage(file) {
+  if (!/\.jpe?g$/i.test(file.name) || (file.type && file.type !== 'image/jpeg')) {
+    return Promise.reject(new Error('MMS는 JPG 이미지만 첨부할 수 있습니다.'));
+  }
+  if (file.size > MMS_MAX_BYTES) {
+    return Promise.reject(new Error('MMS 이미지는 200KB 이하만 첨부할 수 있습니다.'));
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('이미지를 읽지 못했습니다.'));
+    reader.onload = () => {
+      const previewUrl = String(reader.result ?? '');
+      const image = new Image();
+      image.onerror = () => reject(new Error('올바른 JPG 이미지가 아닙니다.'));
+      image.onload = () => {
+        if (image.width > MMS_MAX_WIDTH || image.height > MMS_MAX_HEIGHT) {
+          reject(new Error(`MMS 이미지는 최대 ${MMS_MAX_WIDTH}×${MMS_MAX_HEIGHT}px까지 사용할 수 있습니다.`));
+          return;
+        }
+        resolve({
+          name: file.name,
+          dataBase64: previewUrl.split(',')[1] ?? '',
+          previewUrl,
+          width: image.width,
+          height: image.height,
+          size: file.size,
+        });
+      };
+      image.src = previewUrl;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 // 클라이언트 1차 방어 상한 — 최종 검증은 서버 callable. F-02
 const MAX_RECIPIENTS = 100;
 
@@ -44,6 +81,9 @@ export default function DirectSmsCard() {
   const [scheduledAt, setScheduledAt] = useState('');
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState('');
+  const [msgTone, setMsgTone] = useState('info');
+  const [msgWarning, setMsgWarning] = useState('');
+  const [mmsImage, setMmsImage] = useState(null);
   const [footer, setFooter] = useState('');            // 공유 꼬리말(로드된 값)
   const [invite, setInvite] = useState(DEFAULT_CHANNEL_INVITE); // 채널 안내(설정||기본)
   const [inviteCustom, setInviteCustom] = useState(''); // 채널 안내 설정 원본(''=기본 사용)
@@ -55,6 +95,7 @@ export default function DirectSmsCard() {
   const [setupBusy, setSetupBusy] = useState(false);
   const reqIdRef = useRef(newReqId());
   const fileRef = useRef(null);
+  const imageRef = useRef(null);
 
   useEffect(() => {
     let alive = true;
@@ -66,6 +107,11 @@ export default function DirectSmsCard() {
   }, []);
 
   function resetReqId() { reqIdRef.current = newReqId(); }
+  function showMsg(text, tone = 'error', warning = '') {
+    setMsg(text);
+    setMsgTone(tone);
+    setMsgWarning(warning);
+  }
   async function onSaveSetup() {
     if (setupBusy) return;
     setSetupBusy(true);
@@ -76,9 +122,9 @@ export default function DirectSmsCard() {
       setInvite(nextInviteCustom || DEFAULT_CHANNEL_INVITE);
       setFooter(footerDraft.trim());
       setSetupOpen(false);
-      setMsg('문구를 저장했습니다 — 전 직원의 수동 문자 작성에 적용됩니다.');
+      showMsg('문구를 저장했습니다 — 전 직원의 수동 문자 작성에 적용됩니다.', 'success');
     } catch (e) {
-      setMsg('문구 저장 실패: ' + (e?.message || e));
+      showMsg('문구 저장 실패: ' + (e?.message || e));
     } finally {
       setSetupBusy(false);
     }
@@ -89,15 +135,31 @@ export default function DirectSmsCard() {
     if (!file) return;
     try {
       const phones = await parsePhonesFromFile(file);
-      if (!phones.length) { setMsg('파일에서 유효한 번호를 찾지 못했습니다.'); return; }
+      if (!phones.length) { showMsg('파일에서 유효한 번호를 찾지 못했습니다.'); return; }
       // 기존 입력에 없는 번호만 이어붙인다(중복 제거 — 발송과 동일한 정규화 기준).
       const have = new Set(normalizePhones(recipients));
       const add = phones.filter((p) => !have.has(p));
       setRecipients(recipients.trim() ? recipients.replace(/\s*$/, '') + '\n' + add.join('\n') : add.join('\n'));
-      setMsg(`${file.name} — ${phones.length}개 인식 · ${add.length}개 추가`);
+      showMsg(`${file.name} — ${phones.length}개 인식 · ${add.length}개 추가`, 'info');
       resetReqId();
     } catch (err) {
-      setMsg('파일 읽기 실패: ' + (err?.message || err));
+      showMsg('파일 읽기 실패: ' + (err?.message || err));
+    } finally {
+      e.target.value = '';
+    }
+  }
+
+  async function onMmsImage(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const next = await readMmsImage(file);
+      setMmsImage(next);
+      showMsg(`${file.name} 첨부 완료 · MMS로 발송됩니다.`, 'info');
+      resetReqId();
+    } catch (error) {
+      setMmsImage(null);
+      showMsg(error?.message || String(error));
     } finally {
       e.target.value = '';
     }
@@ -124,32 +186,37 @@ export default function DirectSmsCard() {
       setWithOptOut(true);
       setConsentConfirmed(false);
     }
-    setMsg('');
+    showMsg('', 'info');
     resetReqId();
   }
 
   async function onSend() {
     if (sending) return;
-    if (!baseText.trim()) { setMsg('내용을 입력하세요.'); return; }
-    if (!recipients.trim()) { setMsg('수신번호를 입력하세요.'); return; }
-    if (kind === 'promo' && (!withAdLabel || !withOptOut)) { setMsg('홍보성 문자는 광고 문구와 무료 수신거부 안내가 모두 필요합니다.'); return; }
-    if (kind === 'promo' && !consentConfirmed) { setMsg('광고 수신동의를 확인한 번호인지 체크하세요.'); return; }
-    if (when === 'schedule' && !scheduledAt) { setMsg('예약 시각을 입력하세요.'); return; }
+    if (!baseText.trim()) { showMsg('내용을 입력하세요.'); return; }
+    if (!recipients.trim()) { showMsg('수신번호를 입력하세요.'); return; }
+    if (kind === 'promo' && (!withAdLabel || !withOptOut)) { showMsg('홍보성 문자는 광고 문구와 무료 수신거부 안내가 모두 필요합니다.'); return; }
+    if (kind === 'promo' && !consentConfirmed) { showMsg('광고 수신동의를 확인한 번호인지 체크하세요.'); return; }
+    if (when === 'schedule' && !scheduledAt) { showMsg('예약 시각을 입력하세요.'); return; }
     const phoneCount = new Set(normalizePhones(recipients)).size;
-    if (phoneCount > MAX_RECIPIENTS) { setMsg(`한 번에 최대 ${MAX_RECIPIENTS}명까지 발송할 수 있습니다 (현재 ${phoneCount}명). 대상을 나눠 보내세요.`); return; }
-    setSending(true); setMsg('');
+    if (phoneCount > MAX_RECIPIENTS) { showMsg(`한 번에 최대 ${MAX_RECIPIENTS}명까지 발송할 수 있습니다 (현재 ${phoneCount}명). 대상을 나눠 보내세요.`); return; }
+    setSending(true); showMsg('', 'info');
     try {
       const payload = { recipients, text: effectiveText, messageKind: kind, consentConfirmed, requestId: reqIdRef.current };
       if (when === 'schedule') payload.scheduledAt = scheduledAt.slice(0, 16).replace('T', ' ') + ':00';
+      if (mmsImage) payload.mmsImage = { name: mmsImage.name, dataBase64: mmsImage.dataBase64 };
       const res = await sendDirectMessage(payload);
       if (res.duplicate) {
-        setMsg('이미 발송된 요청입니다.');
+        showMsg('이미 발송된 요청입니다.', 'info');
       } else {
-        setMsg(`${res.queued}건 발송 접수${res.invalid?.length ? ` · 무효 번호 ${res.invalid.length}건 제외` : ''}`);
-        setRecipients(''); setText(''); setConsentConfirmed(false); resetReqId();
+        showMsg(
+          `${res.queued}건 발송 접수`,
+          'success',
+          res.invalid?.length ? `무효 번호 ${res.invalid.length}건 제외` : '',
+        );
+        setRecipients(''); setText(''); setMmsImage(null); setConsentConfirmed(false); resetReqId();
       }
     } catch (e) {
-      setMsg('발송 실패: ' + (e?.message || e));
+      showMsg('발송 실패: ' + (e?.message || e));
     } finally {
       setSending(false);
     }
@@ -158,6 +225,7 @@ export default function DirectSmsCard() {
   const meta = messageMeta(effectiveText);
   const count = new Set(normalizePhones(recipients)).size;
   const attachedLines = [withInvite ? invite : '', withFooter ? footer : ''].filter((l) => l && !text.includes(l));
+  const sendButtonLabel = sending ? '발송 중…' : mmsImage ? 'MMS 발송' : '발송';
 
   return (
     <>
@@ -188,8 +256,12 @@ export default function DirectSmsCard() {
           <div>
             <div className="mc-content-head">
               <p className="mc-field-label">내용</p>
-              <TemplateBar content={text} onPick={(c) => { setText(c); resetReqId(); }} />
+              <div className="mc-vars">
+                <TemplateBar content={text} onPick={(c) => { setText(c); resetReqId(); }} />
+                <button type="button" className="mc-var-btn" onClick={() => imageRef.current?.click()}>🖼 사진 첨부 (MMS)</button>
+              </div>
             </div>
+            <input ref={imageRef} type="file" accept="image/jpeg,.jpg,.jpeg" aria-label="MMS 사진 첨부" style={{ display: 'none' }} onChange={onMmsImage} />
             <textarea aria-label="메시지 내용" className="mc-textarea" value={text}
               onChange={(e) => { setText(e.target.value); resetReqId(); }}
               placeholder="안내 내용을 입력하세요." />
@@ -217,6 +289,13 @@ export default function DirectSmsCard() {
                 {attachedLines.join('\n\n')}
               </div>
             )}
+            {mmsImage && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 6, padding: '7px 9px', border: '1px solid #d8e2dc', borderRadius: 8, background: '#fafcfb' }}>
+                <img src={mmsImage.previewUrl} alt="MMS 첨부 미리보기" style={{ width: 54, height: 54, objectFit: 'cover', borderRadius: 6 }} />
+                <span className="mc-field-label" style={{ flex: 1, margin: 0 }}>{mmsImage.name}<br />{mmsImage.width}×{mmsImage.height}px · {Math.ceil(mmsImage.size / 1024)}KB · MMS</span>
+                <button type="button" className="mc-var-btn" onClick={() => { setMmsImage(null); resetReqId(); }}>첨부 제거</button>
+              </div>
+            )}
             {setupOpen && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6, border: '1px solid #e3e8e5', borderRadius: 8, padding: '8px 10px', background: '#fafaf7' }}>
                 <label className="mc-field-label" style={{ margin: 0 }}>채널 가입 안내 문구 (비우면 기본 문구)</label>
@@ -234,7 +313,7 @@ export default function DirectSmsCard() {
             )}
             <div className="mc-meta">
               <span>{meta.chars}자 · {meta.bytes}byte</span>
-              <span className={'mc-pill' + (meta.type === 'LMS' ? ' lms' : '')}>{meta.type}</span>
+              <span className={'mc-pill' + ((mmsImage || meta.type === 'LMS') ? ' lms' : '')}>{mmsImage ? 'MMS' : meta.type}</span>
               {count ? <span>· {count}명</span> : null}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
@@ -246,14 +325,19 @@ export default function DirectSmsCard() {
                 <input aria-label="예약 발송 시각" type="datetime-local" value={scheduledAt} onChange={(e) => { setScheduledAt(e.target.value); resetReqId(); }} />
               )}
               <button className="mc-send" style={{ marginLeft: 'auto' }} disabled={sending} onClick={onSend}>
-                {sending ? '발송 중…' : '발송'}
+                {sendButtonLabel}
               </button>
             </div>
-            {msg && <p className="mc-field-label" role="status" aria-live="polite" style={{ marginTop: 8 }}>{msg}</p>}
+            {msg && (
+              <p className="mc-field-label" role="status" aria-live="polite" style={{ marginTop: 8, color: msgTone === 'error' ? '#c62828' : undefined }}>
+                {msgTone === 'success' ? <strong>{msg}</strong> : msg}
+                {msgWarning && <span style={{ color: '#c62828', fontWeight: 600 }}> · {msgWarning}</span>}
+              </p>
+            )}
             <div className="mc-note" style={{ marginTop: 10 }}>
               {kind === 'promo'
-                ? '홍보성 문자는 수신동의 번호에만 발송하며, (광고)·무료 수신거부 문구를 서버에서도 다시 검증합니다.'
-                : '정보성 안내 전용입니다. 광고성 내용은 홍보성으로 전환해 발송하세요.'}
+                ? '홍보성 문자는 수신동의 번호에만 발송합니다. 08:00~21:00에만 수신 가능하며, 야간 요청은 다음 허용 시각으로 예약됩니다. (광고)·무료 수신거부 문구를 서버에서도 다시 검증합니다.'
+                : `정보성 안내 전용입니다. 광고성 내용은 홍보성으로 전환해 발송하세요.${mmsImage ? ' MMS는 JPG 1장(200KB 이하, 최대 1500×1440px)이며 HTML은 지원하지 않습니다.' : ''}`}
             </div>
           </div>
         </div>

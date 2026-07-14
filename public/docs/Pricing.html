@@ -177,7 +177,7 @@
 <body>
   <main>
     <h1>Solapi 메시지 가격 및 운영 구분</h1>
-    <p class="meta">기준일: 2026-07-14 · Solapi는 공개 표준 단가(VAT 별도), ACA는 2026-07-01 청구서 기준</p>
+    <p class="meta">기준일: 2026-07-15 · Solapi는 공개 표준 단가(VAT 별도), ACA는 2026-07-01 청구서 기준</p>
 
     <section class="summary" aria-label="운영 요약">
       <p><strong>우리 원칙:</strong> 출결·수업·상담·청구·운영 공지는 알림톡 우선, 승인 템플릿이 없거나 긴급 공지면 SMS/LMS를 사용한다.</p>
@@ -192,121 +192,122 @@
         <thead>
           <tr>
             <th>화면</th>
-            <th>버튼·동작</th>
+            <th>버튼동작</th>
+            <th>수신가능시간</th>
+            <th>최종발송채널</th>
             <th>서버 연결</th>
             <th>큐 종류</th>
-            <th>최종 발송 채널</th>
-            <th>운영 기준</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <th>학생 상세</th>
             <td>등원·외출·귀원·하원</td>
+            <td>24시간<br>야간에는 긴급·필수 안내만</td>
+            <td>카카오 알림톡 우선<br>실패 시 SMS/LMS 자동 fallback</td>
             <td><code>tabletCheckin</code></td>
             <td><code>attendance</code></td>
-            <td>카카오 알림톡 우선<br>실패 시 SMS/LMS 자동 fallback</td>
-            <td>출결 기록 반영과 발송 큐 등록을 분리한다. 승인된 출결 템플릿을 사용한다.</td>
           </tr>
           <tr>
             <th>학생 상세</th>
             <td>미등원 알림톡</td>
+            <td>24시간<br>야간에는 긴급·필수 안내만</td>
+            <td>카카오 알림톡 우선<br>실패 시 SMS/LMS 자동 fallback</td>
             <td><code>sendAbsenceNotice</code></td>
             <td><code>parent_notice</code></td>
-            <td>카카오 알림톡 우선<br>실패 시 SMS/LMS 자동 fallback</td>
-            <td>같은 날짜·학생·수신자에 대한 중복 발송을 막는다.</td>
           </tr>
           <tr>
             <th>학생 상세 &gt; 메시지</th>
             <td>정보성 안내 탭 &gt; 알림톡 발송</td>
+            <td>24시간<br>야간에는 긴급·필수 안내만</td>
+            <td>카카오 알림톡 우선<br>실패 시 SMS/LMS 자동 fallback</td>
             <td><code>sendParentNotice</code></td>
             <td><code>parent_notice</code></td>
-            <td>카카오 알림톡 우선<br>실패 시 SMS/LMS 자동 fallback</td>
-            <td>정상 알림톡 버튼이다. 승인된 학부모 알림 템플릿을 사용한다.</td>
           </tr>
           <tr>
             <th>학생 상세 &gt; 메시지</th>
             <td>자유 안내 탭 &gt; 문자 발송</td>
+            <td>24시간<br>야간에는 긴급·필수 안내만</td>
+            <td>SMS/LMS<br>본문 길이에 따라 자동 선택</td>
             <td><code>sendDailyReport</code></td>
             <td><code>direct</code></td>
-            <td>문자<br>길이에 따라 SMS/LMS 자동 선택</td>
-            <td>승인 템플릿이 없는 정보성 안내다. BMS를 거치지 않으며 광고성 내용은 보낼 수 없다.</td>
           </tr>
           <tr>
             <th>학생 상세 &gt; 메시지</th>
             <td>홍보(광고) 탭 &gt; 홍보 문자 발송</td>
+            <td>08:00~21:00<br>야간 요청은 허용 시각으로 예약</td>
+            <td>SMS/LMS<br>본문 길이에 따라 자동 선택</td>
             <td><code>createPromoCampaign</code></td>
             <td><code>promo_sms</code></td>
-            <td>문자<br>길이에 따라 SMS/LMS 자동 선택</td>
-            <td>광고 수신동의, (광고) 표기, 무료수신거부 080, 야간 제한을 적용한다.</td>
           </tr>
           <tr>
             <th>소속 &gt; 반 상세 &gt; 메시지</th>
             <td>단체 안내 &gt; 발송</td>
+            <td>24시간<br>야간에는 긴급·필수 안내만</td>
+            <td>SMS/LMS<br>본문 길이에 따라 자동 선택</td>
             <td><code>createBulkMessage</code></td>
             <td><code>direct</code></td>
-            <td>문자<br>길이에 따라 SMS/LMS 자동 선택</td>
-            <td>체크한 학생과 수신 대상에게 보내는 정보성 문자다. 동일 번호는 합치며, 홍보 내용은 홍보 문자 경로를 사용해야 한다.</td>
           </tr>
           <tr>
             <th>학부모 알림 작성</th>
             <td>알림톡</td>
+            <td>24시간<br>야간에는 긴급·필수 안내만</td>
+            <td>카카오 알림톡 우선<br>실패 시 SMS/LMS 자동 fallback</td>
             <td><code>sendParentNotice</code></td>
             <td><code>parent_notice</code></td>
-            <td>카카오 알림톡 우선<br>실패 시 SMS/LMS 자동 fallback</td>
-            <td>상담 기록과 별개로 승인된 알림톡 템플릿을 발송한다.</td>
           </tr>
           <tr>
             <th>학부모 알림 작성</th>
             <td>상담+문자</td>
+            <td>24시간<br>야간에는 긴급·필수 안내만</td>
+            <td>SMS/LMS<br>본문 길이에 따라 자동 선택</td>
             <td><code>sendDailyReport</code><br><code>addConsultation</code></td>
             <td><code>direct</code></td>
-            <td>문자<br>길이에 따라 SMS/LMS 자동 선택</td>
-            <td>문자 발송 후 상담 기록을 저장한다. 상담 기록 저장 실패가 이미 접수된 문자를 취소하지는 않는다.</td>
           </tr>
           <tr>
             <th>메시지 센터</th>
             <td>정보 문자 발송</td>
+            <td>24시간<br>야간에는 긴급·필수 안내만</td>
+            <td>SMS/LMS<br>본문 길이에 따라 자동 선택</td>
             <td><code>createBulkMessage</code></td>
             <td><code>direct</code></td>
-            <td>문자<br>길이에 따라 SMS/LMS 자동 선택</td>
-            <td>광고가 아닌 대량 안내다. 동일 번호 중복을 제거하며 광고 동의 게이트를 사용하지 않는다.</td>
           </tr>
           <tr>
             <th>메시지 센터</th>
             <td>홍보 문자 발송</td>
+            <td>08:00~21:00<br>야간 요청은 허용 시각으로 예약</td>
+            <td>SMS/LMS<br>본문 길이에 따라 자동 선택</td>
             <td><code>createPromoCampaign</code></td>
             <td><code>promo_sms</code></td>
-            <td>문자<br>길이에 따라 SMS/LMS 자동 선택</td>
-            <td>광고 수신동의, (광고) 표기, 무료수신거부 080, 야간 제한을 적용한다.</td>
           </tr>
           <tr>
             <th>메시지 센터</th>
-            <td>전화번호 직접 문자</td>
+            <td>휴대폰 문자 발송 &gt; 발송</td>
+            <td>정보성 24시간<br>홍보성 08:00~21:00</td>
+            <td>SMS/LMS<br>본문 길이에 따라 자동 선택</td>
             <td><code>sendDirectMessage</code></td>
-            <td><code>direct</code></td>
-            <td>문자<br>길이에 따라 SMS/LMS 자동 선택</td>
-            <td>채널 가입 안내 체크는 문자 본문에 안내 문구를 붙이는 수동 옵션일 뿐, BMS나 채널 친구 판정으로 전환하지 않는다.</td>
+            <td>정보성 <code>direct</code><br>홍보성 <code>promo_sms</code></td>
+          </tr>
+          <tr>
+            <th>메시지 센터</th>
+            <td>휴대폰 문자 발송 &gt; 사진 첨부(MMS) &gt; MMS 발송</td>
+            <td>정보성 24시간<br>홍보성 08:00~21:00</td>
+            <td>MMS<br>JPG 1장 + 본문</td>
+            <td><code>sendDirectMessage</code><br>Solapi Storage 업로드</td>
+            <td>정보성 <code>direct</code><br>홍보성 <code>promo_sms</code><br><code>image_id</code> 포함</td>
           </tr>
           <tr>
             <th>발송 현황</th>
             <td>재시도</td>
+            <td>원 발송 유형의 수신가능시간 적용</td>
+            <td>원래 발송 경로 유지</td>
             <td><code>retryMessageDelivery</code></td>
             <td>기존 큐 종류 유지</td>
-            <td>원래 발송 경로 유지</td>
-            <td>재시도 가능한 실패 건만 다시 큐에 올린다.</td>
-          </tr>
-          <tr>
-            <th>제거됨</th>
-            <td>채널 가입 유도 카드·대상 관리 버튼</td>
-            <td><code>getChannelInviteTargets</code><br><code>manageChannelInviteTarget</code> 제거</td>
-            <td>없음</td>
-            <td>없음</td>
-            <td>BMS_FREE 제거 후 사용되지 않는 UI와 callable을 함께 삭제했다.</td>
           </tr>
         </tbody>
       </table>
     </div>
+    <p class="meta">수신가능시간은 KST 기준이다. 홍보성 문자는 별도 야간 수신동의가 없는 운영 기준이며, 서버가 야간 요청을 다음 허용 시각으로 보정한다.</p>
 
     <h2>비교표</h2>
     <div class="table-wrap">
@@ -403,7 +404,7 @@
             <td>정보성은 일반 발송. 광고성은 21:00~08:00 별도 동의 없으면 금지</td>
             <td>대체발송 미지원. 통신사 실패 시 재시도하고 최종 실패는 실패목록에 남김</td>
             <td>행사 포스터, 시간표, 준비물 이미지처럼 그림 자체가 필요한 안내</td>
-            <td>JPG 1장(최대 200KB)과 본문 2,000바이트. HTML은 지원하지 않으며 현재 DSC 발송 화면에는 이미지 첨부 기능이 없음</td>
+            <td>JPG 1장(최대 200KB, 1500×1440px)과 본문 2,000바이트. HTML은 지원하지 않으며 메시지 센터의 휴대폰 문자 발송에서 사진을 첨부한다</td>
           </tr>
         </tbody>
       </table>
