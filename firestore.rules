@@ -96,10 +96,19 @@ service cloud.firestore {
                 data.parent_phone_1 is string
                 && data.parent_phone_1.size() > 0
              ))
+          && (!data.keys().hasAny(['acquisition_source']) || (
+                data.acquisition_source is string
+                && data.acquisition_source.size() > 0
+                && data.acquisition_source.size() <= 50
+             ))
+          && (!data.keys().hasAny(['acquisition_branch']) || (
+                data.acquisition_branch is string
+                && data.acquisition_branch in ['2단지', '10단지']
+             ))
           && (!data.keys().hasAny(['branch']) || data.branch is string);
       }
 
-      // 클라이언트가 생성/수정할 수 있는 필드 목록(50개). 서버 전용 필드(message_consent —
+      // 클라이언트가 생성/수정할 수 있는 필드 목록. 서버 전용 필드(message_consent —
       // promoConsent/optOut080Sync가 admin으로 기록)는 여기 넣지 않는다 — update가 diff 기반이라
       // 서버가 학생 문서에 새 필드를 추가해도 기존 문서의 클라 편집이 깨지지 않고, 클라는
       // 서버 전용 필드를 위조할 수 없다.
@@ -108,6 +117,7 @@ service cloud.firestore {
           'name', 'level', 'grade',
           'school_elementary', 'school_middle', 'school_high', 'school_level_grade',
           'student_phone', 'parent_phone_1', 'parent_phone_2', 'other_phone',
+          'acquisition_source', 'acquisition_branch',
           'guardian_name_1', 'guardian_name_2',
           'branch', 'status', 'status2', 'enrollments',
           'enrollments_cleared_at', 'enrollments_cleared_by',
@@ -128,8 +138,7 @@ service cloud.firestore {
           'parent_message_recipient_fields'
         ];
       }
-      // withinFieldLimit는 create의 클라 필드 목록 크기(51)와 맞춘다 — 과거 36은 hasOnly가 이미
-      // 허용한 필드를 다 채운 정상 문서를 조용히 거부했음(O-04). 목록 확장 시 이 값도 함께 올린다.
+      // create 필드 상한은 clientStudentFields가 단일 소스다.
 
       // DB/DSC: 읽기+쓰기, Director: 읽기만
       allow read: if isAuthorized();
@@ -143,7 +152,6 @@ service cloud.firestore {
       allow create: if isAuthorized()
         && hasRequiredStudentFields()
         && request.resource.data.keys().hasOnly(clientStudentFields())
-        && withinFieldLimit(51)
         && enrollmentStatusConsistent();
 
       // update는 클라가 실제 변경한 키만 검증(diff.affectedKeys) — 문서 전체 키를 hasOnly로
@@ -152,6 +160,12 @@ service cloud.firestore {
       allow update: if isAuthorized()
         && hasRequiredStudentFields()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(clientStudentFields())
+        && (!resource.data.keys().hasAny(['acquisition_source'])
+          || resource.data.acquisition_source.size() == 0
+          || request.resource.data.acquisition_source == resource.data.acquisition_source)
+        && (!resource.data.keys().hasAny(['acquisition_branch'])
+          || resource.data.acquisition_branch.size() == 0
+          || request.resource.data.acquisition_branch == resource.data.acquisition_branch)
         && (!resource.data.keys().hasAny(['status']) || request.resource.data.keys().hasAny(['status']))
         && enrollmentStatusConsistent();
 
