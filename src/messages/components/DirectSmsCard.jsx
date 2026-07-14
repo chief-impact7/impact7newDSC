@@ -231,15 +231,10 @@ export default function DirectSmsCard() {
     <>
     <section className="mc-section">
       <div className="mc-card">
-        <div className="mc-section-title">
-          📱 휴대폰 문자 발송
-          <div className="mc-seg" role="group" aria-label="문자 종류">
-            <button type="button" className={kind === 'info' ? 'on' : ''} aria-pressed={kind === 'info'} onClick={() => selectKind('info')}>정보성</button>
-            <button type="button" className={kind === 'promo' ? 'on' : ''} aria-pressed={kind === 'promo'} onClick={() => selectKind('promo')}>홍보성</button>
-          </div>
-        </div>
-        <div className="mc-direct">
-          <div>
+        <div className="mc-section-title">📱 휴대폰 문자 발송</div>
+        <div className="bulk-split mc-direct">
+          <div className="bulk-left">
+            <p className="bulk-col-title">받는 사람</p>
             <div className="mc-content-head">
               <p className="mc-field-label">수신번호 (줄바꿈/쉼표로 여러 명){count ? ` · ${count}명` : ''}</p>
               <div className="mc-vars">
@@ -253,9 +248,15 @@ export default function DirectSmsCard() {
               placeholder={'010-1234-5678\n010-9876-5432'} />
             <p className="mc-field-label" style={{ marginTop: 6 }}>학생 DB에 없는 번호도 가능 · 발신 02-2649-0509</p>
           </div>
-          <div>
+          <div className="bulk-mid">
+            <p className="bulk-col-title">메시지</p>
+            <p className="mc-field-label">종류</p>
+            <div className="mc-seg" role="group" aria-label="문자 종류">
+              <button type="button" className={kind === 'info' ? 'on' : ''} aria-pressed={kind === 'info'} onClick={() => selectKind('info')}>정보성</button>
+              <button type="button" className={kind === 'promo' ? 'on' : ''} aria-pressed={kind === 'promo'} onClick={() => selectKind('promo')}>홍보성</button>
+            </div>
             <div className="mc-content-head">
-              <p className="mc-field-label">내용</p>
+              <p className="mc-field-label" style={{ marginTop: 8 }}>내용</p>
               <div className="mc-vars">
                 <TemplateBar content={text} onPick={(c) => { setText(c); resetReqId(); }} />
                 <button type="button" className="mc-var-btn" onClick={() => imageRef.current?.click()}>🖼 사진 첨부 (MMS)</button>
@@ -316,7 +317,19 @@ export default function DirectSmsCard() {
               <span className={'mc-pill' + ((mmsImage || meta.type === 'LMS') ? ' lms' : '')}>{mmsImage ? 'MMS' : meta.type}</span>
               {count ? <span>· {count}명</span> : null}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+          </div>
+          <div className="bulk-right">
+            <p className="bulk-col-title">미리보기 &amp; 발송</p>
+            <div className="mc-phone">
+              <p className="mc-phone-sender">임팩트세븐학원 → {count ? `${count}명` : '수신번호 미입력'}</p>
+              <div className={'mc-bubble' + (effectiveText ? '' : ' empty')}>
+                {mmsImage && <img className="mc-preview-image" src={mmsImage.previewUrl} alt="MMS 첨부 미리보기" />}
+                {effectiveText || '내용을 입력하면 여기에 표시됩니다.'}
+              </div>
+            </div>
+            <p className="mc-preview-foot">실제 발송되는 문구와 첨부 이미지 기준</p>
+            <div className="bulk-summary">대상 {count}명 · {mmsImage ? 'MMS' : meta.type} · {kind === 'promo' ? '홍보성' : '정보성'}</div>
+            <div className="bulk-send-row">
               <div className="mc-seg">
                 <button type="button" className={when === 'now' ? 'on' : ''} aria-pressed={when === 'now'} onClick={() => setWhen('now')}>즉시</button>
                 <button type="button" className={when === 'schedule' ? 'on' : ''} aria-pressed={when === 'schedule'} onClick={() => setWhen('schedule')}>예약</button>
@@ -324,10 +337,8 @@ export default function DirectSmsCard() {
               {when === 'schedule' && (
                 <input aria-label="예약 발송 시각" type="datetime-local" value={scheduledAt} onChange={(e) => { setScheduledAt(e.target.value); resetReqId(); }} />
               )}
-              <button className="mc-send" style={{ marginLeft: 'auto' }} disabled={sending} onClick={onSend}>
-                {sendButtonLabel}
-              </button>
             </div>
+            <button className="mc-send bulk-send-btn" disabled={sending} onClick={onSend}>{sendButtonLabel}</button>
             {msg && (
               <p className="mc-field-label" role="status" aria-live="polite" style={{ marginTop: 8, color: msgTone === 'error' ? '#c62828' : undefined }}>
                 {msgTone === 'success' ? <strong>{msg}</strong> : msg}
