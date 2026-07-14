@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Icon } from '@impact7/ui';
 import { getManualOptOuts, registerManualOptOut, sendDirectMessage } from '../../../data-layer.js';
 import { messageMeta, normalizePhones, readMmsImage } from '../message-format.js';
 import { parsePhonesFromFile, sampleCsv } from '../message-import.js';
@@ -138,7 +137,9 @@ export default function DirectSmsCard() {
   }
 
   // 체크된 부가 문구를 합성한 실제 발송 본문 — 글자수·SMS/LMS 판정·발송 모두 이 값을 쓴다.
-  const baseText = composeWithExtras(text, [withInvite ? invite : '', withFooter ? footer : '']);
+  const baseText = kind === 'info'
+    ? composeWithExtras(text, [withInvite ? invite : '', withFooter ? footer : ''])
+    : text.trim();
   const effectiveText = kind === 'promo'
     ? composePromoText(baseText, withAdLabel, withOptOut)
     : baseText;
@@ -188,7 +189,9 @@ export default function DirectSmsCard() {
 
   const meta = messageMeta(effectiveText);
   const count = new Set(normalizePhones(recipients)).size;
-  const attachedLines = [withInvite ? invite : '', withFooter ? footer : ''].filter((l) => l && !text.includes(l));
+  const attachedLines = kind === 'info'
+    ? [withInvite ? invite : '', withFooter ? footer : ''].filter((l) => l && !text.includes(l))
+    : [];
 
   return (
     <>
@@ -209,7 +212,7 @@ export default function DirectSmsCard() {
             <textarea aria-label="수신번호 목록" className="mc-textarea" value={recipients}
               onChange={(e) => { setRecipients(e.target.value); resetReqId(); }}
               placeholder={'010-1234-5678\n010-9876-5432'} />
-            <div className="bulk-cart"><span>누적 대상 {count}명</span></div>
+            <div className="bulk-cart"><span>발신대상 {count}명</span></div>
             <p className="mc-field-label" style={{ marginTop: 6 }}>학생 DB에 없는 번호도 가능 · 발신 02-2649-0509</p>
           </div>
           <div className="bulk-mid">
@@ -220,28 +223,25 @@ export default function DirectSmsCard() {
               <button type="button" className={kind === 'promo' ? 'on' : ''} aria-pressed={kind === 'promo'} onClick={() => selectKind('promo')}>홍보성</button>
             </div>
             <div className="mc-content-head mc-message-tools">
-              <p className="mc-field-label mc-icon-label" title="내용"><Icon name="documentText" size={16} aria-hidden="true" /><span className="mc-compact-label">내용</span></p>
-              <div className="mc-vars">
-                <TemplateBar content={text} onPick={(c) => { setText(c); resetReqId(); }} />
-                <button type="button" className="mc-var-btn mc-icon-btn" title="MMS 사진 첨부" aria-label="MMS 사진 첨부" onClick={() => imageRef.current?.click()}><Icon name="photo" size={17} aria-hidden="true" /><span className="mc-compact-label">MMS</span></button>
-              </div>
+              <p className="mc-field-label">내용</p>
             </div>
             <input ref={imageRef} type="file" accept="image/jpeg,.jpg,.jpeg" aria-label="MMS 사진 첨부" style={{ display: 'none' }} onChange={onMmsImage} />
             <textarea aria-label="메시지 내용" className="mc-textarea" value={text}
               onChange={(e) => { setText(e.target.value); resetReqId(); }}
               placeholder="안내 내용을 입력하세요." />
-            <div className="mc-vars" style={{ marginTop: 6, alignItems: 'center' }}>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, margin: 0, cursor: 'pointer' }} title={invite}>
+            <TemplateBar content={text} onPick={(c) => { setText(c); resetReqId(); }} />
+            {kind === 'info' && <div className="mc-promo-checks">
+              <label title={invite}>
                 <input type="checkbox" checked={withInvite} onChange={(e) => { setWithInvite(e.target.checked); resetReqId(); }} />
                 채널 가입 안내
               </label>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, margin: 0, cursor: footer ? 'pointer' : 'default', opacity: footer ? 1 : 0.5 }}
+              <label style={{ opacity: footer ? 1 : 0.5 }}
                 title={footer || '꼬리말이 아직 없습니다 — 문구 설정에서 등록'}>
                 <input type="checkbox" checked={withFooter} disabled={!footer} onChange={(e) => { setWithFooter(e.target.checked); resetReqId(); }} />
                 학원 꼬리말
               </label>
-              <button type="button" className="mc-var-btn" onClick={() => { setFooterDraft(footer); setInviteDraft(inviteCustom); setSetupOpen(!setupOpen); }}>문구 설정⚙</button>
-            </div>
+              <button type="button" className="mc-var-btn" onClick={() => { setFooterDraft(footer); setInviteDraft(inviteCustom); setSetupOpen(!setupOpen); }}>문구 설정</button>
+            </div>}
             {kind === 'promo' && (
               <div className="mc-promo-checks">
                 <label><input type="checkbox" checked={withAdLabel} onChange={(e) => { setWithAdLabel(e.target.checked); resetReqId(); }} /> 광고 문구</label>
@@ -250,7 +250,7 @@ export default function DirectSmsCard() {
               </div>
             )}
             {attachedLines.length > 0 && (
-              <div style={{ marginTop: 5, border: '1px dashed #cfd8d2', borderRadius: 8, padding: '6px 9px', background: '#fafcfb', fontSize: 12, color: '#5f6b76', whiteSpace: 'pre-wrap' }}>
+              <div className="mc-attached-lines">
                 {attachedLines.join('\n\n')}
               </div>
             )}
@@ -261,13 +261,13 @@ export default function DirectSmsCard() {
                 <button type="button" className="mc-var-btn" onClick={() => { setMmsImage(null); resetReqId(); }}>첨부 제거</button>
               </div>
             )}
-            {setupOpen && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6, border: '1px solid #e3e8e5', borderRadius: 8, padding: '8px 10px', background: '#fafaf7' }}>
-                <label className="mc-field-label" style={{ margin: 0 }}>채널 가입 안내 문구 (비우면 기본 문구)</label>
+            {kind === 'info' && setupOpen && (
+              <div className="mc-message-setup">
+                <label className="mc-field-label">채널 가입 안내 문구 (비우면 기본 문구)</label>
                 <textarea aria-label="채널 가입 안내 문구" className="mc-textarea" rows={2} style={{ minHeight: 44 }}
                   value={inviteDraft} onChange={(e) => setInviteDraft(e.target.value)}
                   placeholder={DEFAULT_CHANNEL_INVITE} maxLength={280} />
-                <label className="mc-field-label" style={{ margin: 0 }}>학원 꼬리말</label>
+                <label className="mc-field-label">학원 꼬리말</label>
                 <input aria-label="학원 꼬리말" className="mc-tpl-title" value={footerDraft}
                   onChange={(e) => setFooterDraft(e.target.value)} placeholder="예: -임팩트세븐학원 02-2649-0509" maxLength={200} />
                 <div style={{ display: 'flex', gap: 6 }}>
@@ -280,6 +280,7 @@ export default function DirectSmsCard() {
               <span>{meta.chars}자 · {meta.bytes}byte</span>
               <span className={'mc-pill' + ((mmsImage || meta.type === 'LMS') ? ' lms' : '')}>{mmsImage ? 'MMS' : meta.type}</span>
               {count ? <span>· {count}명</span> : null}
+              <label className="mc-mms-toggle"><input type="checkbox" checked={!!mmsImage} onChange={(e) => { if (e.target.checked) imageRef.current?.click(); else { setMmsImage(null); resetReqId(); } }} /> MMS</label>
             </div>
           </div>
           <div className="bulk-right">

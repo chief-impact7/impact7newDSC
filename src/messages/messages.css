@@ -11,7 +11,8 @@
 .mc-title-action { margin-left: auto; }
 .mc-tag { font-size: 11px; font-weight: 700; color: #fff; background: #5d6b64; border-radius: 20px; padding: 2px 9px; }
 
-.mc-direct .bulk-left textarea { min-height: 210px; }
+.mc-direct .bulk-left textarea,
+.mc-direct .bulk-mid > .mc-textarea { min-height: 210px; }
 
 .mc-field-label { color: #7c8a83; font-size: 12px; margin: 0 0 3px; }
 .mc-textarea { width: 100%; min-height: 70px; overflow: auto; border: 1px solid #e3e8e5; border-radius: 8px; padding: 9px; font: inherit; resize: vertical; }
@@ -55,12 +56,12 @@
 
 .bulk-split { display: grid; grid-template-columns: 1fr 1.05fr 0.85fr; gap: 0; border: 1px solid #e3e8e5; border-radius: 11px; overflow: hidden; }
 .bulk-left { padding: 14px; border-right: 1px solid #e3e8e5; }
-.bulk-mid { container-type: inline-size; padding: 14px; border-right: 1px solid #e3e8e5; display: flex; flex-direction: column; }
+.bulk-mid { padding: 14px; border-right: 1px solid #e3e8e5; display: flex; flex-direction: column; }
 .bulk-right { min-width: 0; min-height: 0; padding: 14px; background: #fbfdfc; display: flex; flex-direction: column; }
 .bulk-col-title { font-size: 15px; font-weight: 800; color: #1f2933; margin: 0 0 12px; }
-.bulk-col-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.mc-kind-row { display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
-.mc-kind-row .mc-field-label { margin: 0; }
+.mc-routing-head, .mc-routing-controls { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; }
+.mc-routing-head { margin-bottom: 3px; }
+.mc-routing-head > :last-child, .mc-routing-controls > :last-child { justify-self: end; }
 .bulk-filters { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
 .bulk-filters select { border: 1px solid #e3e8e5; border-radius: 7px; padding: 5px 9px; font-family: inherit; font-size: 12px; }
 .bulk-cart { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; background: #e8f5ef; border: 1px solid #cfe9df; border-radius: 8px; padding: 7px 11px; font-size: 12.5px; font-weight: 700; color: #0a6e49; }
@@ -88,8 +89,7 @@
 .bulk-content { flex: 1; min-height: 130px; }
 .mc-content-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .mc-message-tools { margin-top: 8px; }
-.mc-icon-label, .mc-icon-btn { display: inline-flex; align-items: center; gap: 4px; }
-.mc-icon-label { margin: 0; }
+.mc-mms-toggle { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; color: #5d6b64; font-weight: 700; cursor: pointer; }
 .mc-mms-file { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 7px 9px; border: 1px solid #d8e2dc; border-radius: 8px; background: #fafcfb; font-size: 11.5px; color: #5f6b76; }
 .mc-mms-file img { width: 42px; height: 42px; border-radius: 5px; object-fit: cover; }
 .mc-mms-file span { min-width: 0; flex: 1; overflow: auto; }
@@ -99,7 +99,9 @@
 .mc-var-btn:disabled { opacity: .55; cursor: default; }
 
 /* 템플릿 불러오기/저장 바 */
-.mc-tpl { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.mc-tpl { display: flex; align-items: center; gap: 5px; flex-wrap: nowrap; margin-top: 6px; }
+.mc-tpl select { min-width: 0; flex: 1; }
+.mc-tpl button, .mc-tpl input { flex: 0 0 auto; }
 .mc-tpl select, .mc-tpl-title { font-size: 11.5px; border: 1px solid #e3e8e5; border-radius: 6px; padding: 2px 6px; font-family: inherit; }
 .mc-tpl-title { width: 110px; }
 .mc-tpl-save { font-size: 11px; border: 1px solid #0b7a52; background: #0b7a52; color: #fff; border-radius: 6px; padding: 2px 8px; cursor: pointer; font-family: inherit; }
@@ -108,6 +110,9 @@
 .mc-meta { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: 7px; font-size: 12px; color: #7c8a83; }
 .mc-pill { background: #e8f5ef; border: 1px solid #cfe9df; border-radius: 20px; padding: 1px 9px; font-weight: 800; color: #0a6e49; }
 .mc-pill.lms { background: #fff4e6; border-color: #f3d9b3; color: #a4671a; }
+.mc-attached-lines { margin-top: 5px; border: 1px dashed #cfd8d2; border-radius: 8px; padding: 6px 9px; background: #fafcfb; font-size: 12px; color: #5f6b76; white-space: pre-wrap; }
+.mc-message-setup { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; border: 1px solid #e3e8e5; border-radius: 8px; padding: 8px 10px; background: #fafaf7; }
+.mc-message-setup .mc-field-label { margin: 0; }
 
 /* 미리보기 말풍선 */
 .mc-phone { background: #9bbbd4; border-radius: 14px; padding: 12px 11px; }
@@ -138,9 +143,6 @@
 @media (max-width: 680px) {
   .bulk-split { grid-template-columns: 1fr; }
   .bulk-left, .bulk-mid { border-right: 0; border-bottom: 1px solid #e3e8e5; }
-}
-@container (max-width: 420px) {
-  .bulk-mid .mc-compact-label { display: none; }
 }
 
 /* ── 수신자별 발송 이력 타임라인 ───────────────────────────── */

@@ -1,10 +1,10 @@
-import React, { useState, useMemo, useRef } from 'react';
-import { Icon } from '@impact7/ui';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { filterStudents } from '../bulk-select.js';
 import { studentFullLabel, currentSchool } from '@impact7/shared/student-label';
 import { allClassCodes } from '../../shared/firestore-helpers.js';
 import GradeFilter from '../../dashboard/components/GradeFilter.jsx';
 import { messageMeta, readMmsImage } from '../message-format.js';
+import { getMessageExtras, saveMessageExtras, composeWithExtras, DEFAULT_CHANNEL_INVITE } from '../sms-extras.js';
 import TemplateBar from './TemplateBar.jsx';
 import { createBulkMessage, createPromoCampaign } from '../../../data-layer.js';
 // 광고 규제 표기(정보통신망법 §50)는 공용 모듈 — 발송 시 자동 보정, 버튼은 미리보기 확인용.
@@ -50,9 +50,29 @@ export default function BulkSendCard({ students = [] }) {
   const [msg, setMsg] = useState('');
   const [confirming, setConfirming] = useState(false);
   const [mmsImage, setMmsImage] = useState(null);
+  const [footer, setFooter] = useState('');
+  const [invite, setInvite] = useState(DEFAULT_CHANNEL_INVITE);
+  const [inviteCustom, setInviteCustom] = useState('');
+  const [withInvite, setWithInvite] = useState(false);
+  const [withFooter, setWithFooter] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [footerDraft, setFooterDraft] = useState('');
+  const [inviteDraft, setInviteDraft] = useState('');
+  const [setupBusy, setSetupBusy] = useState(false);
   const reqIdRef = useRef(newReqId());
   const imageRef = useRef(null);
   const resetReqId = () => { reqIdRef.current = newReqId(); setConfirming(false); };
+
+  useEffect(() => {
+    let alive = true;
+    getMessageExtras().then((extras) => {
+      if (!alive) return;
+      setFooter(extras.footer);
+      setInvite(extras.channelInvite);
+      setInviteCustom(extras.channelInviteCustom);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   const matches = useMemo(
     () => filterStudents(students, { branch, grades, status, q }),
@@ -116,6 +136,25 @@ export default function BulkSendCard({ students = [] }) {
     }
   }
 
+  async function onSaveSetup() {
+    if (setupBusy) return;
+    setSetupBusy(true);
+    try {
+      await saveMessageExtras({ footer: footerDraft, channelInvite: inviteDraft });
+      const nextInviteCustom = inviteDraft.trim();
+      setInviteCustom(nextInviteCustom);
+      setInvite(nextInviteCustom || DEFAULT_CHANNEL_INVITE);
+      setFooter(footerDraft.trim());
+      setSetupOpen(false);
+      setMsg('문구를 저장했습니다.');
+      resetReqId();
+    } catch (error) {
+      setMsg('문구 저장 실패: ' + (error?.message || error));
+    } finally {
+      setSetupBusy(false);
+    }
+  }
+
   function onSendClick() {
     if (sending) return;
     const ids = rows.filter((v) => v.on).map((v) => v.student.id);
@@ -136,7 +175,7 @@ export default function BulkSendCard({ students = [] }) {
     try {
       const fields = [...recipientFields];
       // 홍보는 (광고)·080 표기를 발송 직전 자동 보정 — 깜빡해도 법적 표기가 빠지지 않는다.
-      const body = kind === 'promo' ? ensurePromoCompliance(content) : content;
+      const body = effectiveContent;
       const payload = { title: '문자 발송', content: body, studentIds: ids, recipientFields: fields, recipientField: fields[0], requestId: reqIdRef.current };
       if (when === 'schedule') payload.scheduledAt = scheduledAt.slice(0, 16).replace('T', ' ') + ':00';
       if (mmsImage) payload.mmsImage = { name: mmsImage.name, dataBase64: mmsImage.dataBase64 };
@@ -164,11 +203,17 @@ export default function BulkSendCard({ students = [] }) {
     } finally { setSending(false); }
   }
 
-  const effectiveContent = kind === 'promo' ? ensurePromoCompliance(content) : content;
+  const baseContent = kind === 'info'
+    ? composeWithExtras(content, [withInvite ? invite : '', withFooter ? footer : ''])
+    : content;
+  const effectiveContent = kind === 'promo' ? ensurePromoCompliance(baseContent) : baseContent;
   const meta = messageMeta(effectiveContent);
   const messageType = mmsImage ? 'MMS' : meta.type;
   const firstStudent = rows.find((v) => v.on)?.student;
   const recipientText = [...recipientFields].map((f) => RECIPIENT_LABELS[f]).join('·');
+  const attachedLines = kind === 'info'
+    ? [withInvite ? invite : '', withFooter ? footer : ''].filter((line) => line && !content.includes(line))
+    : [];
 
   return (
     <section className="mc-section">
@@ -220,23 +265,26 @@ export default function BulkSendCard({ students = [] }) {
           </div>
 
           <div className="bulk-mid">
-            <div className="bulk-col-head">
-              <p className="bulk-col-title">메시지</p>
-              <div className="mc-kind-row"><span className="mc-field-label">종류</span><div className="mc-seg">
+            <p className="bulk-col-title">메시지</p>
+            <div className="mc-routing-head">
+              <span className="mc-field-label">받는이 {kind === 'promo' ? '(단일)' : '(다중 선택)'}</span>
+              <span className="mc-field-label">종류</span>
+            </div>
+            <div className="mc-routing-controls">
+              <div className="mc-seg">
+                {['student', 'parent_1', 'parent_2'].map((f) => (
+                  <button key={f} type="button" className={recipientFields.has(f) ? 'on' : ''} aria-pressed={recipientFields.has(f)} onClick={() => toggleRecipient(f)}>
+                    {RECIPIENT_LABELS[f]}
+                  </button>
+                ))}
+              </div>
+              <div className="mc-seg">
                 <button type="button" className={kind === 'info' ? 'on' : ''} aria-pressed={kind === 'info'} onClick={() => selectKind('info')}>정보성</button>
                 <button type="button" className={kind === 'promo' ? 'on' : ''} aria-pressed={kind === 'promo'} onClick={() => selectKind('promo')}>홍보성</button>
-              </div></div>
-            </div>
-            <p className="mc-field-label">받는이 {kind === 'promo' ? '(단일)' : '(다중 선택)'}</p>
-            <div className="mc-seg">
-              {['student', 'parent_1', 'parent_2'].map((f) => (
-                <button key={f} type="button" className={recipientFields.has(f) ? 'on' : ''} aria-pressed={recipientFields.has(f)} onClick={() => toggleRecipient(f)}>
-                  {RECIPIENT_LABELS[f]}
-                </button>
-              ))}
+              </div>
             </div>
             <div className="mc-content-head mc-message-tools">
-              <p className="mc-field-label mc-icon-label" title="내용"><Icon name="documentText" size={16} aria-hidden="true" /><span className="mc-compact-label">내용</span></p>
+              <p className="mc-field-label">내용</p>
               <div className="mc-vars">
                 {VARS.map((v) => (
                   <button key={v} type="button" className="mc-var-btn" onClick={() => { setContent((c) => c + v); resetReqId(); }}>{v}</button>
@@ -244,20 +292,23 @@ export default function BulkSendCard({ students = [] }) {
                 {kind === 'promo' && (
                   <button type="button" className="mc-var-btn" title="발송 시 자동으로 붙지만, 미리보기로 확인하려면 클릭" onClick={() => { setContent((c) => ensurePromoCompliance(c)); resetReqId(); }}>+ (광고)·080</button>
                 )}
-                <button type="button" className="mc-var-btn mc-icon-btn" title="MMS 사진 첨부" aria-label="MMS 사진 첨부" onClick={() => imageRef.current?.click()}><Icon name="photo" size={17} aria-hidden="true" /><span className="mc-compact-label">MMS</span></button>
               </div>
             </div>
             <input ref={imageRef} type="file" accept="image/jpeg,.jpg,.jpeg" aria-label="MMS 사진 첨부" style={{ display: 'none' }} onChange={onMmsImage} />
-            <TemplateBar content={content} onPick={(c) => { setContent(c); resetReqId(); }} />
             <textarea aria-label="메시지 내용" className="mc-textarea bulk-content" value={content} onChange={(e) => { setContent(e.target.value); resetReqId(); }}
               placeholder={kind === 'promo' ? `(광고) [임팩트세븐학원]\n\n...\n\n${OPT_OUT_LINE}` : '안내 내용을 입력하세요.'} />
+            <TemplateBar content={content} onPick={(c) => { setContent(c); resetReqId(); }} />
             <div className="mc-meta">
               <span>{meta.chars}자 · {meta.bytes}byte</span>
               <span className={'mc-pill' + (messageType !== 'SMS' ? ' lms' : '')}>{messageType}</span>
               <span>· {checkedCount}명 × {recipientFields.size}</span>
+              <label className="mc-mms-toggle"><input type="checkbox" checked={!!mmsImage} onChange={(e) => { if (e.target.checked) imageRef.current?.click(); else { setMmsImage(null); resetReqId(); } }} /> MMS</label>
             </div>
+            {kind === 'info' && <div className="mc-promo-checks"><label title={invite}><input type="checkbox" checked={withInvite} onChange={(e) => { setWithInvite(e.target.checked); resetReqId(); }} /> 채널 가입 안내</label><label title={footer || '문구 설정에서 꼬리말을 등록하세요'}><input type="checkbox" checked={withFooter} disabled={!footer} onChange={(e) => { setWithFooter(e.target.checked); resetReqId(); }} /> 학원 꼬리말</label><button type="button" className="mc-var-btn" onClick={() => { setFooterDraft(footer); setInviteDraft(inviteCustom); setSetupOpen(!setupOpen); }}>문구 설정</button></div>}
             {kind === 'promo' && <div className="mc-promo-checks"><label><input type="checkbox" checked readOnly /> 광고 문구</label><label><input type="checkbox" checked readOnly /> 수신거부</label><label><input type="checkbox" checked readOnly /> 수신동의 번호 자동 확인</label></div>}
+            {attachedLines.length > 0 && <div className="mc-attached-lines">{attachedLines.join('\n\n')}</div>}
             {mmsImage && <div className="mc-mms-file"><img src={mmsImage.previewUrl} alt="MMS 첨부 미리보기" /><span>{mmsImage.name}<br />{mmsImage.width}×{mmsImage.height}px · {Math.ceil(mmsImage.size / 1024)}KB</span><button type="button" className="mc-var-btn" onClick={() => { setMmsImage(null); resetReqId(); }}>제거</button></div>}
+            {kind === 'info' && setupOpen && <div className="mc-message-setup"><label className="mc-field-label">채널 가입 안내 문구 (비우면 기본 문구)</label><textarea aria-label="채널 가입 안내 문구" className="mc-textarea" rows={2} value={inviteDraft} onChange={(e) => setInviteDraft(e.target.value)} placeholder={DEFAULT_CHANNEL_INVITE} maxLength={280} /><label className="mc-field-label">학원 꼬리말</label><input aria-label="학원 꼬리말" className="mc-tpl-title" value={footerDraft} onChange={(e) => setFooterDraft(e.target.value)} placeholder="예: -임팩트세븐학원 02-2649-0509" maxLength={200} /><div className="mc-vars"><button type="button" className="mc-var-btn" disabled={setupBusy} onClick={onSaveSetup}>{setupBusy ? '저장 중…' : '저장'}</button><button type="button" className="mc-var-btn" onClick={() => setSetupOpen(false)}>취소</button></div></div>}
             {kind === 'promo' && <div className="mc-note" style={{ marginTop: 8 }}>홍보성은 수신동의 번호만 자동 선별하며, (광고)와 무료수신거부 문구는 실제 본문에 자동 반영됩니다.</div>}
           </div>
 
