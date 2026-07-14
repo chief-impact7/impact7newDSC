@@ -1,6 +1,6 @@
 // 반 단체 안내(정보성) 인라인 발송 — 소속반 상세의 '메시지' 탭.
 // message-card.js의 개별 발송과 독립. createBulkMessage(정보성)는 서버가 실제 발송하며
-// BMS_FREE를 쓰지 않고 LMS/SMS로 큐잉한다. (광고) 규정 대상 아님.
+// SMS/LMS로 큐잉한다. (광고) 규정 대상 아님.
 
 import { msIcon } from './ms-icon.js';
 import { state } from './state.js';

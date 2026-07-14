@@ -1,7 +1,6 @@
 // 휴대폰 문자 전송 부가 문구 — 채널 가입 안내와 학원 꼬리말. 둘 다 전 직원 공유 설정
 // (message_settings/global)이며, 채널 안내는 미설정 시 아래 기본 문구를 쓴다.
-// 기본 문구는 서버 fallback(functions-shared/src/channelInvite.js)과 쌍둥이 — 서버도 같은
-// 설정(channel_invite)을 우선 읽으므로, 설정을 바꾸면 수동 삽입·자동 전환 문자 모두 바뀐다.
+// 기본 문구와 운영자 설정은 수동 문자 작성의 선택 첨부 문구로 사용한다.
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../../firebase-config.js';
 

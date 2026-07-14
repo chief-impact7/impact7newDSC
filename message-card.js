@@ -1,4 +1,4 @@
-// 학생 상세의 [메시지] 탭 — 개별 발송. 정보성 안내(알림톡 템플릿) / 자유 안내(LMS/SMS) / 홍보 문자.
+// 학생 상세의 [메시지] 탭 — 개별 발송. 정보성 안내(알림톡 템플릿) / 자유 안내(SMS/LMS) / 홍보 문자.
 // 수신 대상(학생/학부모1/학부모2/기타) 선택. 대규모/다수 발송은 별도 화면.
 // 권한·광고 규제는 서버 callable이 검증한다.
 
@@ -21,7 +21,7 @@ import { onlyDigits } from './src/messages/message-format.js';
 let _deps = {};
 let _mode = 'notice'; // 'notice'(템플릿 안내) | 'free'(자유 안내) | 'promo'(홍보)
 let _alimtalkRecipientFields = new Set(['parent_1']);
-let _bmsRecipientFields = new Set(['parent_1']);
+let _smsRecipientFields = new Set(['parent_1']);
 let _sending = false;
 let _quickBusy = false;
 // 멱등키 — 폼 단위로 안정 유지(응답 타임아웃 후 재시도의 중복 발송 차단), 발송 성공 시 재발급.
@@ -95,11 +95,11 @@ const HISTORY_LIMIT = 50;
 export function initMessageCardDeps(deps) { _deps = deps; }
 
 function selectedRecipientFields(channel) {
-  return [...(channel === 'alimtalk' ? _alimtalkRecipientFields : _bmsRecipientFields)];
+  return [...(channel === 'alimtalk' ? _alimtalkRecipientFields : _smsRecipientFields)];
 }
 
 function currentRecipientSettings() {
-  return buildRecipientSettings(_alimtalkRecipientFields, _bmsRecipientFields);
+  return buildRecipientSettings(_alimtalkRecipientFields, _smsRecipientFields);
 }
 
 const enqueueRecipientSettingsSave = createRecipientSettingsSaveQueue(
@@ -131,7 +131,7 @@ export function renderMessageTab(studentId) {
   const availableFields = available.map((o) => o.field);
   const savedRecipients = student[MESSAGE_RECIPIENT_SETTINGS_FIELD];
   _alimtalkRecipientFields = new Set(resolveRecipientFields(savedRecipients, 'alimtalk', availableFields));
-  _bmsRecipientFields = new Set(resolveRecipientFields(savedRecipients, 'bms', availableFields));
+  _smsRecipientFields = new Set(resolveRecipientFields(savedRecipients, 'sms', availableFields));
   const hasRecipient = available.length > 0;
 
   const recipientChecks = (channel, selected) => available.map((o) =>
@@ -156,7 +156,7 @@ export function renderMessageTab(studentId) {
                 <span style="color:#555;min-width:74px;">알림톡 수신</span>${recipientChecks('alimtalk', _alimtalkRecipientFields)}
               </div>
               <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;">
-                <span style="color:#555;min-width:74px;">문자 수신</span>${recipientChecks('bms', _bmsRecipientFields)}
+                <span style="color:#555;min-width:74px;">문자 수신</span>${recipientChecks('sms', _smsRecipientFields)}
               </div>
             </div>`
           : '<div style="color:#c82014;margin-bottom:6px;font-size:13px;">등록된 연락처가 없어 발송할 수 없습니다.</div>'}
@@ -180,10 +180,10 @@ export function renderMessageTab(studentId) {
       void saveRecipientSettings(studentId);
     });
   });
-  el.querySelectorAll('input[name="msg-recipient-bms"]').forEach((r) => {
+  el.querySelectorAll('input[name="msg-recipient-sms"]').forEach((r) => {
     r.addEventListener('change', () => {
-      if (r.checked) _bmsRecipientFields.add(r.value);
-      else _bmsRecipientFields.delete(r.value);
+      if (r.checked) _smsRecipientFields.add(r.value);
+      else _smsRecipientFields.delete(r.value);
       void saveRecipientSettings(studentId);
     });
   });
@@ -402,9 +402,9 @@ function renderForm(studentId, hasRecipient, readonly) {
     document.getElementById('msg-send').addEventListener('click', () => sendNotice(studentId, sel));
   } else if (_mode === 'free') {
     form.innerHTML = `
-      <div style="font-size:12px;color:#999;margin-bottom:5px;">승인 템플릿이 없는 정보성 안내는 LMS/SMS로 발송합니다. 광고성은 '홍보' 모드를 사용하세요.</div>
+      <div style="font-size:12px;color:#999;margin-bottom:5px;">승인 템플릿이 없는 정보성 안내는 SMS/LMS로 발송합니다. 광고성은 '홍보' 모드를 사용하세요.</div>
       <textarea id="msg-content" class="field-input" aria-label="자유 안내 본문" rows="4" style="width:100%;box-sizing:border-box;margin:0;" placeholder="보낼 내용을 입력하세요." ${dis}></textarea>
-      <button type="button" id="msg-send" class="btn btn-primary" style="margin-top:8px;padding:6px 16px;" ${dis}>메시지 발송</button>
+      <button type="button" id="msg-send" class="btn btn-primary" style="margin-top:8px;padding:6px 16px;" ${dis}>문자 발송</button>
     `;
     document.getElementById('msg-send').addEventListener('click', () => sendFree(studentId));
   } else {
@@ -532,7 +532,7 @@ async function sendNotice(studentId, sel) {
 
 async function sendPromo(studentId) {
   if (_sending) return;
-  const recipientFields = selectedRecipientFields('bms');
+  const recipientFields = selectedRecipientFields('sms');
   if (!recipientFields.length) { _deps.toast?.('문자 수신 대상을 선택하세요.', 'error'); return; }
   const raw = document.getElementById('msg-content').value.trim();
   if (!raw) { _deps.toast?.('본문을 입력하세요.', 'error'); return; }
@@ -549,11 +549,11 @@ async function sendPromo(studentId) {
   );
 }
 
-// 자유 안내(템플릿 없음) — BMS_FREE를 쓰지 않고 LMS/SMS로 보낸다.
+// 자유 안내(템플릿 없음) — SMS/LMS로 보낸다.
 // 멱등키 없이 재발송 허용(더블클릭은 _sending으로 차단) — parent-message.js 정책과 동일.
 async function sendFree(studentId) {
   if (_sending) return;
-  const recipientFields = selectedRecipientFields('bms');
+  const recipientFields = selectedRecipientFields('sms');
   if (!recipientFields.length) { _deps.toast?.('문자 수신 대상을 선택하세요.', 'error'); return; }
   const content = document.getElementById('msg-content').value.trim();
   if (!content) { _deps.toast?.('내용을 입력하세요.', 'error'); return; }

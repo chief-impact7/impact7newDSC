@@ -5,7 +5,7 @@ import { filterStudents } from '../bulk-select.js';
 import { getRecipientMessageHistory } from '../../../data-layer.js';
 import { onlyDigits } from '../message-format.js';
 
-// 수신자별 발송 이력 타임라인. 카카오 관리자센터는 API 발송(알림톡/BMS) 원문을 보여주지 않으므로
+// 수신자별 발송 이력 타임라인. 카카오 관리자센터는 API 발송 알림톡 원문을 보여주지 않으므로
 // 학부모 답장이 왔을 때 "무엇을 보냈는지"를 여기서 확인한다.
 // 학생 검색은 영구(student_id), 전화번호 검색은 평문 번호가 남아있는 최근(purge 전) 발송만 매칭.
 

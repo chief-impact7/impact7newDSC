@@ -52,7 +52,7 @@ export default function DirectSmsCard() {
       setInvite(nextInviteCustom || DEFAULT_CHANNEL_INVITE);
       setFooter(footerDraft.trim());
       setSetupOpen(false);
-      setMsg('문구를 저장했습니다 — 전 직원·자동 전환 문자에 적용됩니다.');
+      setMsg('문구를 저장했습니다 — 전 직원의 수동 문자 작성에 적용됩니다.');
     } catch (e) {
       setMsg('문구 저장 실패: ' + (e?.message || e));
     } finally {
@@ -165,7 +165,7 @@ export default function DirectSmsCard() {
             )}
             {setupOpen && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6, border: '1px solid #e3e8e5', borderRadius: 8, padding: '8px 10px', background: '#fafaf7' }}>
-                <label className="mc-field-label" style={{ margin: 0 }}>채널 가입 안내 문구 — 자동 전환 문자에도 적용 (비우면 기본 문구)</label>
+                <label className="mc-field-label" style={{ margin: 0 }}>채널 가입 안내 문구 (비우면 기본 문구)</label>
                 <textarea aria-label="채널 가입 안내 문구" className="mc-textarea" rows={2} style={{ minHeight: 44 }}
                   value={inviteDraft} onChange={(e) => setInviteDraft(e.target.value)}
                   placeholder={DEFAULT_CHANNEL_INVITE} maxLength={280} />

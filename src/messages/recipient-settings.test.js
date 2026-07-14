@@ -26,13 +26,17 @@ describe('message recipient settings', () => {
   });
 
   it('빈 배열로 저장된 경우 새로고침 후에도 빈 선택을 유지한다', () => {
-    expect(resolveRecipientFields({ bms: [] }, 'bms', ['parent_1'])).toEqual([]);
+    expect(resolveRecipientFields({ sms: [] }, 'sms', ['parent_1'])).toEqual([]);
+  });
+
+  it('구형 bms 수신 설정을 문자 설정으로 복원한다', () => {
+    expect(resolveRecipientFields({ bms: ['parent_2'] }, 'sms', ['parent_1', 'parent_2'])).toEqual(['parent_2']);
   });
 
   it('현재 선택값을 저장 payload로 만든다', () => {
     expect(buildRecipientSettings(new Set(['parent_1']), new Set(['student', 'parent_2']))).toEqual({
       alimtalk: ['parent_1'],
-      bms: ['student', 'parent_2'],
+      sms: ['student', 'parent_2'],
     });
   });
 
@@ -44,18 +48,18 @@ describe('message recipient settings', () => {
       return new Promise((resolve) => releases.push(resolve));
     });
 
-    const first = enqueue('s1', { alimtalk: ['parent_1'], bms: ['parent_1'] });
-    const second = enqueue('s1', { alimtalk: ['parent_1', 'parent_2'], bms: ['parent_1', 'parent_2'] });
+    const first = enqueue('s1', { alimtalk: ['parent_1'], sms: ['parent_1'] });
+    const second = enqueue('s1', { alimtalk: ['parent_1', 'parent_2'], sms: ['parent_1', 'parent_2'] });
 
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(calls).toEqual([{ studentId: 's1', settings: { alimtalk: ['parent_1'], bms: ['parent_1'] } }]);
+    expect(calls).toEqual([{ studentId: 's1', settings: { alimtalk: ['parent_1'], sms: ['parent_1'] } }]);
 
     releases[0]();
     await first;
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(calls).toEqual([
-      { studentId: 's1', settings: { alimtalk: ['parent_1'], bms: ['parent_1'] } },
-      { studentId: 's1', settings: { alimtalk: ['parent_1', 'parent_2'], bms: ['parent_1', 'parent_2'] } },
+      { studentId: 's1', settings: { alimtalk: ['parent_1'], sms: ['parent_1'] } },
+      { studentId: 's1', settings: { alimtalk: ['parent_1', 'parent_2'], sms: ['parent_1', 'parent_2'] } },
     ]);
 
     releases[1]();
@@ -68,12 +72,12 @@ describe('message recipient settings', () => {
       calls.push({ studentId, settings });
     });
 
-    await enqueue('s1', { alimtalk: ['parent_1'], bms: ['parent_1'] });
-    await enqueue('s2', { alimtalk: ['parent_2'], bms: ['parent_2'] });
+    await enqueue('s1', { alimtalk: ['parent_1'], sms: ['parent_1'] });
+    await enqueue('s2', { alimtalk: ['parent_2'], sms: ['parent_2'] });
 
     expect(calls).toEqual([
-      { studentId: 's1', settings: { alimtalk: ['parent_1'], bms: ['parent_1'] } },
-      { studentId: 's2', settings: { alimtalk: ['parent_2'], bms: ['parent_2'] } },
+      { studentId: 's1', settings: { alimtalk: ['parent_1'], sms: ['parent_1'] } },
+      { studentId: 's2', settings: { alimtalk: ['parent_2'], sms: ['parent_2'] } },
     ]);
   });
 });

@@ -17,21 +17,22 @@ export function normalizeRecipientFields(fields, availableFields) {
 }
 
 export function resolveRecipientFields(settings, channel, availableFields) {
-  const saved = normalizeRecipientFields(settings?.[channel], availableFields);
+  const stored = channel === 'sms' ? (settings?.sms ?? settings?.bms) : settings?.[channel];
+  const saved = normalizeRecipientFields(stored, availableFields);
   return saved ?? defaultRecipientFields(availableFields);
 }
 
-export function buildRecipientSettings(alimtalkFields, bmsFields) {
+export function buildRecipientSettings(alimtalkFields, smsFields) {
   return {
     alimtalk: [...alimtalkFields],
-    bms: [...bmsFields],
+    sms: [...smsFields],
   };
 }
 
 export function createRecipientSettingsSaveQueue(writeSettings, onError) {
   let chain = Promise.resolve();
   return function enqueue(studentId, settings) {
-    const snapshot = buildRecipientSettings(settings.alimtalk ?? [], settings.bms ?? []);
+    const snapshot = buildRecipientSettings(settings.alimtalk ?? [], settings.sms ?? settings.bms ?? []);
     chain = chain
       .catch(() => {})
       .then(() => writeSettings(studentId, snapshot))

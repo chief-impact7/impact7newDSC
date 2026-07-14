@@ -128,7 +128,7 @@ export default function BulkSendCard({ students = [] }) {
       else {
         const s = res.stats || {};
         const parts = [];
-        if (s.friend_bms != null || s.ad_sms != null) {
+        if (s.ad_sms != null) {
           parts.push(`문자광고 ${s.ad_sms || 0}`);
           if (s.skipped_no_consent) parts.push(`미동의 제외 ${s.skipped_no_consent}`);
         } else {

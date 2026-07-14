@@ -19,8 +19,7 @@ const QUEUE_STATUS = [
 ];
 const CHANNEL_META = {
     kakao: { label: '카카오 알림톡', color: '#FAE100' },
-    sms: { label: 'SMS 대체', color: '#1a73e8' },
-    lms: { label: 'LMS 대체', color: '#00754A' },
+    sms: { label: '문자(SMS/LMS)', color: '#1a73e8' },
 };
 
 // 발송 통계 기간 프리셋. 경계는 KST 기준(자정/1일) — 서버는 epoch ms만 받는다.
@@ -88,9 +87,9 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
     const failureName = (f) => nameById.get(f.studentId) || f.recipientMasked || '(이름 미확인)';
 
     const queueCounts = data.queueCounts ?? {};
-    const channelCounts = data.channelCounts ?? { kakao: 0, sms: 0, lms: 0 };
+    const channelCounts = data.channelCounts ?? { kakao: 0, sms: 0 };
     const failures = data.failures ?? [];
-    const channelTotal = (channelCounts.kakao ?? 0) + (channelCounts.sms ?? 0) + (channelCounts.lms ?? 0);
+    const channelTotal = (channelCounts.kakao ?? 0) + (channelCounts.sms ?? 0);
 
     // 새로고침 후 목록에서 사라진 항목은 선택에서도 제거.
     useEffect(() => {

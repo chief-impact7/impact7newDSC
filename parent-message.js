@@ -549,8 +549,8 @@ async function _sendReportAlimtalk() {
     }
 }
 
-// 상담+발송은 상담 기록을 남긴 뒤 LMS/SMS로 발송한다.
-async function _sendReportBmsWithConsultation() {
+// 상담+문자는 SMS/LMS 발송을 요청한 뒤 상담 기록을 남긴다.
+async function _sendReportWithConsultation() {
     if (_sendingReport || !parentMsgStudentId) return;
     const content = parentMessageContent();
     if (!content) { alert('발송할 내용이 없습니다.'); return; }
@@ -605,4 +605,4 @@ async function _sendReportBmsWithConsultation() {
 }
 
 export function sendParentMessage() { return _sendReportAlimtalk(); }
-export function sendParentMessageWithConsult() { return _sendReportBmsWithConsultation(); }
+export function sendParentMessageWithConsult() { return _sendReportWithConsultation(); }

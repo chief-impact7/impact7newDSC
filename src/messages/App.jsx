@@ -7,7 +7,6 @@ import MessageDeliverySummary from '../dashboard/components/MessageDeliverySumma
 import DirectSmsCard from './components/DirectSmsCard.jsx';
 import BulkSendCard from './components/BulkSendCard.jsx';
 import RecipientHistoryCard from './components/RecipientHistoryCard.jsx';
-import ChannelInviteCard from './components/ChannelInviteCard.jsx';
 import ErrorBoundary from '../dashboard/components/ErrorBoundary.jsx';
 
 export default function App() {
@@ -75,7 +74,6 @@ export default function App() {
         <RecipientHistoryCard students={students} />
         <BulkSendCard students={students} />
         <DirectSmsCard />
-        <ChannelInviteCard />
       </div>
     </div>
   );
