@@ -14,7 +14,7 @@
 .mc-direct .bulk-left textarea { min-height: 210px; }
 
 .mc-field-label { color: #7c8a83; font-size: 12px; margin: 0 0 3px; }
-.mc-textarea { width: 100%; min-height: 70px; border: 1px solid #e3e8e5; border-radius: 8px; padding: 9px; font: inherit; resize: vertical; }
+.mc-textarea { width: 100%; min-height: 70px; overflow: auto; border: 1px solid #e3e8e5; border-radius: 8px; padding: 9px; font: inherit; resize: vertical; }
 
 .mc-seg { display: flex; gap: 6px; }
 .mc-seg button { font-size: 11.5px; border: 1px solid #e3e8e5; border-radius: 7px; padding: 4px 10px; background: #fff; cursor: pointer; font-family: inherit; }
@@ -55,12 +55,16 @@
 
 .bulk-split { display: grid; grid-template-columns: 1fr 1.05fr 0.85fr; gap: 0; border: 1px solid #e3e8e5; border-radius: 11px; overflow: hidden; }
 .bulk-left { padding: 14px; border-right: 1px solid #e3e8e5; }
-.bulk-mid { padding: 14px; border-right: 1px solid #e3e8e5; display: flex; flex-direction: column; }
+.bulk-mid { container-type: inline-size; padding: 14px; border-right: 1px solid #e3e8e5; display: flex; flex-direction: column; }
 .bulk-right { min-width: 0; min-height: 0; padding: 14px; background: #fbfdfc; display: flex; flex-direction: column; }
 .bulk-col-title { font-size: 15px; font-weight: 800; color: #1f2933; margin: 0 0 12px; }
+.bulk-col-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.mc-kind-row { display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
+.mc-kind-row .mc-field-label { margin: 0; }
 .bulk-filters { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
 .bulk-filters select { border: 1px solid #e3e8e5; border-radius: 7px; padding: 5px 9px; font-family: inherit; font-size: 12px; }
 .bulk-cart { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; background: #e8f5ef; border: 1px solid #cfe9df; border-radius: 8px; padding: 7px 11px; font-size: 12.5px; font-weight: 700; color: #0a6e49; }
+.bulk-cart > span:first-child { max-height: 48px; overflow: auto; }
 .bulk-cart-actions { display: flex; gap: 10px; flex: 0 0 auto; }
 .bulk-cart-actions button { border: 0; background: none; color: #0a6e49; cursor: pointer; font-size: 11.5px; font-weight: 700; font-family: inherit; }
 .bulk-cart-actions button:disabled { color: #a9b6af; cursor: default; }
@@ -83,6 +87,12 @@
 /* 작성 메타: 글자수 · SMS/LMS · 건수 */
 .bulk-content { flex: 1; min-height: 130px; }
 .mc-content-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mc-message-tools { margin-top: 8px; }
+.mc-icon-label, .mc-icon-btn { display: inline-flex; align-items: center; gap: 4px; }
+.mc-icon-label { margin: 0; }
+.mc-mms-file { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 7px 9px; border: 1px solid #d8e2dc; border-radius: 8px; background: #fafcfb; font-size: 11.5px; color: #5f6b76; }
+.mc-mms-file img { width: 42px; height: 42px; border-radius: 5px; object-fit: cover; }
+.mc-mms-file span { min-width: 0; flex: 1; overflow: auto; }
 .mc-vars { display: flex; gap: 5px; }
 .mc-var-btn { font-size: 11px; border: 1px solid #cfe9df; background: #e8f5ef; color: #0a6e49; border-radius: 6px; padding: 2px 7px; cursor: pointer; font-family: inherit; }
 .mc-var-btn:hover { background: #d6ede2; }
@@ -115,7 +125,7 @@
 .bulk-send-btn { width: 100%; margin-top: 10px; }
 
 .mc-search { display: flex; gap: 7px; margin-bottom: 6px; }
-.mc-search input { flex: 1; border: 1px solid #e3e8e5; border-radius: 7px; padding: 5px 9px; font: inherit; }
+.mc-search input { min-width: 0; flex: 1; overflow: auto; border: 1px solid #e3e8e5; border-radius: 7px; padding: 5px 9px; font: inherit; }
 /* 입력 예시(placeholder)는 미리보기 빈 안내문과 같은 크기·색으로 통일 */
 .mc-search input::placeholder, .mc-textarea::placeholder, .mc-optout-row input::placeholder { color: #aeb8c2; font-size: 13px; opacity: 1; }
 .mc-search button { border: 1px solid #0b7a52; border-radius: 7px; padding: 5px 11px; background: #0b7a52; color: #fff; font-weight: 700; cursor: pointer; white-space: nowrap; font-family: inherit; }
@@ -128,6 +138,9 @@
 @media (max-width: 680px) {
   .bulk-split { grid-template-columns: 1fr; }
   .bulk-left, .bulk-mid { border-right: 0; border-bottom: 1px solid #e3e8e5; }
+}
+@container (max-width: 420px) {
+  .bulk-mid .mc-compact-label { display: none; }
 }
 
 /* ── 수신자별 발송 이력 타임라인 ───────────────────────────── */

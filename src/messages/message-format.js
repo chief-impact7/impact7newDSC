@@ -1,6 +1,9 @@
 // 문자 길이/종류 표시용. 솔라피 SMS 기준 90바이트(한글·전각 2바이트, ASCII 1바이트, EUC-KR 근사).
 // 90바이트 이하면 SMS(단문), 초과하면 LMS(장문)로 자동 분류된다.
 const SMS_BYTE_LIMIT = 90;
+const MMS_MAX_BYTES = 200 * 1024;
+const MMS_MAX_WIDTH = 1500;
+const MMS_MAX_HEIGHT = 1440;
 
 export function smsByteLen(text) {
   let n = 0;
@@ -26,4 +29,38 @@ export function messageMeta(text) {
   const s = String(text ?? '');
   const bytes = smsByteLen(s);
   return { chars: [...s].length, bytes, type: bytes <= SMS_BYTE_LIMIT ? 'SMS' : 'LMS', limit: SMS_BYTE_LIMIT };
+}
+
+export function readMmsImage(file) {
+  if (!/\.jpe?g$/i.test(file.name) || (file.type && file.type !== 'image/jpeg')) {
+    return Promise.reject(new Error('MMS는 JPG 이미지만 첨부할 수 있습니다.'));
+  }
+  if (file.size > MMS_MAX_BYTES) {
+    return Promise.reject(new Error('MMS 이미지는 200KB 이하만 첨부할 수 있습니다.'));
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('이미지를 읽지 못했습니다.'));
+    reader.onload = () => {
+      const previewUrl = String(reader.result ?? '');
+      const image = new Image();
+      image.onerror = () => reject(new Error('올바른 JPG 이미지가 아닙니다.'));
+      image.onload = () => {
+        if (image.width > MMS_MAX_WIDTH || image.height > MMS_MAX_HEIGHT) {
+          reject(new Error(`MMS 이미지는 최대 ${MMS_MAX_WIDTH}×${MMS_MAX_HEIGHT}px까지 사용할 수 있습니다.`));
+          return;
+        }
+        resolve({
+          name: file.name,
+          dataBase64: previewUrl.split(',')[1] ?? '',
+          previewUrl,
+          width: image.width,
+          height: image.height,
+          size: file.size,
+        });
+      };
+      image.src = previewUrl;
+    };
+    reader.readAsDataURL(file);
+  });
 }

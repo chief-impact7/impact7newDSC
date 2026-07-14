@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useRef } from 'react';
+import { Icon } from '@impact7/ui';
 import { filterStudents } from '../bulk-select.js';
 import { studentFullLabel, currentSchool } from '@impact7/shared/student-label';
 import { allClassCodes } from '../../shared/firestore-helpers.js';
 import GradeFilter from '../../dashboard/components/GradeFilter.jsx';
-import { messageMeta } from '../message-format.js';
+import { messageMeta, readMmsImage } from '../message-format.js';
 import TemplateBar from './TemplateBar.jsx';
 import { createBulkMessage, createPromoCampaign } from '../../../data-layer.js';
 // 광고 규제 표기(정보통신망법 §50)는 공용 모듈 — 발송 시 자동 보정, 버튼은 미리보기 확인용.
@@ -48,7 +49,9 @@ export default function BulkSendCard({ students = [] }) {
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState('');
   const [confirming, setConfirming] = useState(false);
+  const [mmsImage, setMmsImage] = useState(null);
   const reqIdRef = useRef(newReqId());
+  const imageRef = useRef(null);
   const resetReqId = () => { reqIdRef.current = newReqId(); setConfirming(false); };
 
   const matches = useMemo(
@@ -98,6 +101,21 @@ export default function BulkSendCard({ students = [] }) {
     resetReqId();
   }
 
+  async function onMmsImage(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setMmsImage(await readMmsImage(file));
+      setMsg(`${file.name} 첨부 완료 · MMS로 발송됩니다.`);
+      resetReqId();
+    } catch (error) {
+      setMmsImage(null);
+      setMsg(error?.message || String(error));
+    } finally {
+      e.target.value = '';
+    }
+  }
+
   function onSendClick() {
     if (sending) return;
     const ids = rows.filter((v) => v.on).map((v) => v.student.id);
@@ -121,6 +139,7 @@ export default function BulkSendCard({ students = [] }) {
       const body = kind === 'promo' ? ensurePromoCompliance(content) : content;
       const payload = { title: '문자 발송', content: body, studentIds: ids, recipientFields: fields, recipientField: fields[0], requestId: reqIdRef.current };
       if (when === 'schedule') payload.scheduledAt = scheduledAt.slice(0, 16).replace('T', ' ') + ':00';
+      if (mmsImage) payload.mmsImage = { name: mmsImage.name, dataBase64: mmsImage.dataBase64 };
       let res;
       if (kind === 'promo') { payload.targeting = 'M'; res = await createPromoCampaign(payload); }
       else { res = await createBulkMessage(payload); }
@@ -138,21 +157,23 @@ export default function BulkSendCard({ students = [] }) {
         if (s.skipped_no_phone) parts.push(`번호없음 ${s.skipped_no_phone}`);
         if (s.skipped_revoked) parts.push(`수신거부 ${s.skipped_revoked}`);
         setMsg('발송 접수 — ' + parts.join(' · '));
-        clearAll(); setContent(''); resetReqId();
+        clearAll(); setContent(''); setMmsImage(null); resetReqId();
       }
     } catch (e) {
       setMsg('발송 실패: ' + (e?.message || e));
     } finally { setSending(false); }
   }
 
-  const meta = messageMeta(content);
+  const effectiveContent = kind === 'promo' ? ensurePromoCompliance(content) : content;
+  const meta = messageMeta(effectiveContent);
+  const messageType = mmsImage ? 'MMS' : meta.type;
   const firstStudent = rows.find((v) => v.on)?.student;
   const recipientText = [...recipientFields].map((f) => RECIPIENT_LABELS[f]).join('·');
 
   return (
     <section className="mc-section">
       <div className="mc-card">
-        <div className="mc-section-title">💬 단체 문자 발송 <span className="mc-tag" style={{ background: '#0a6e49' }}>목록·검색·누적</span></div>
+        <div className="mc-section-title">검색으로 단체/개인 문자 발송 <span className="mc-tag" style={{ background: '#0a6e49' }}>목록·검색·누적</span></div>
         <div className="bulk-split">
           <div className="bulk-left">
             <p className="bulk-col-title">받는 사람</p>
@@ -199,7 +220,13 @@ export default function BulkSendCard({ students = [] }) {
           </div>
 
           <div className="bulk-mid">
-            <p className="bulk-col-title">메시지</p>
+            <div className="bulk-col-head">
+              <p className="bulk-col-title">메시지</p>
+              <div className="mc-kind-row"><span className="mc-field-label">종류</span><div className="mc-seg">
+                <button type="button" className={kind === 'info' ? 'on' : ''} aria-pressed={kind === 'info'} onClick={() => selectKind('info')}>정보성</button>
+                <button type="button" className={kind === 'promo' ? 'on' : ''} aria-pressed={kind === 'promo'} onClick={() => selectKind('promo')}>홍보성</button>
+              </div></div>
+            </div>
             <p className="mc-field-label">받는이 {kind === 'promo' ? '(단일)' : '(다중 선택)'}</p>
             <div className="mc-seg">
               {['student', 'parent_1', 'parent_2'].map((f) => (
@@ -208,13 +235,8 @@ export default function BulkSendCard({ students = [] }) {
                 </button>
               ))}
             </div>
-            <p className="mc-field-label" style={{ marginTop: 8 }}>종류</p>
-            <div className="mc-seg">
-              <button type="button" className={kind === 'info' ? 'on' : ''} aria-pressed={kind === 'info'} onClick={() => selectKind('info')}>정보성</button>
-              <button type="button" className={kind === 'promo' ? 'on' : ''} aria-pressed={kind === 'promo'} onClick={() => selectKind('promo')}>홍보성</button>
-            </div>
-            <div className="mc-content-head">
-              <p className="mc-field-label" style={{ marginTop: 8 }}>내용</p>
+            <div className="mc-content-head mc-message-tools">
+              <p className="mc-field-label mc-icon-label" title="내용"><Icon name="documentText" size={16} aria-hidden="true" /><span className="mc-compact-label">내용</span></p>
               <div className="mc-vars">
                 {VARS.map((v) => (
                   <button key={v} type="button" className="mc-var-btn" onClick={() => { setContent((c) => c + v); resetReqId(); }}>{v}</button>
@@ -222,29 +244,34 @@ export default function BulkSendCard({ students = [] }) {
                 {kind === 'promo' && (
                   <button type="button" className="mc-var-btn" title="발송 시 자동으로 붙지만, 미리보기로 확인하려면 클릭" onClick={() => { setContent((c) => ensurePromoCompliance(c)); resetReqId(); }}>+ (광고)·080</button>
                 )}
+                <button type="button" className="mc-var-btn mc-icon-btn" title="MMS 사진 첨부" aria-label="MMS 사진 첨부" onClick={() => imageRef.current?.click()}><Icon name="photo" size={17} aria-hidden="true" /><span className="mc-compact-label">MMS</span></button>
               </div>
             </div>
+            <input ref={imageRef} type="file" accept="image/jpeg,.jpg,.jpeg" aria-label="MMS 사진 첨부" style={{ display: 'none' }} onChange={onMmsImage} />
             <TemplateBar content={content} onPick={(c) => { setContent(c); resetReqId(); }} />
             <textarea aria-label="메시지 내용" className="mc-textarea bulk-content" value={content} onChange={(e) => { setContent(e.target.value); resetReqId(); }}
               placeholder={kind === 'promo' ? `(광고) [임팩트세븐학원]\n\n...\n\n${OPT_OUT_LINE}` : '안내 내용을 입력하세요.'} />
             <div className="mc-meta">
               <span>{meta.chars}자 · {meta.bytes}byte</span>
-              <span className={'mc-pill' + (meta.type === 'LMS' ? ' lms' : '')}>{meta.type}</span>
+              <span className={'mc-pill' + (messageType !== 'SMS' ? ' lms' : '')}>{messageType}</span>
               <span>· {checkedCount}명 × {recipientFields.size}</span>
             </div>
-            {kind === 'promo' && <div className="mc-note" style={{ marginTop: 8 }}>홍보성은 광고 수신동의자에게만 발송됩니다. 본문에 (광고)·무료수신거부를 포함하세요.</div>}
+            {kind === 'promo' && <div className="mc-promo-checks"><label><input type="checkbox" checked readOnly /> 광고 문구</label><label><input type="checkbox" checked readOnly /> 수신거부</label><label><input type="checkbox" checked readOnly /> 수신동의 번호 자동 확인</label></div>}
+            {mmsImage && <div className="mc-mms-file"><img src={mmsImage.previewUrl} alt="MMS 첨부 미리보기" /><span>{mmsImage.name}<br />{mmsImage.width}×{mmsImage.height}px · {Math.ceil(mmsImage.size / 1024)}KB</span><button type="button" className="mc-var-btn" onClick={() => { setMmsImage(null); resetReqId(); }}>제거</button></div>}
+            {kind === 'promo' && <div className="mc-note" style={{ marginTop: 8 }}>홍보성은 수신동의 번호만 자동 선별하며, (광고)와 무료수신거부 문구는 실제 본문에 자동 반영됩니다.</div>}
           </div>
 
           <div className="bulk-right">
             <p className="bulk-col-title">미리보기 &amp; 발송</p>
             <div className="mc-phone">
               <p className="mc-phone-sender">임팩트세븐학원 → {firstStudent ? `${firstStudent.name} ${recipientText}` : recipientText}</p>
-              <div className={'mc-bubble' + (content ? '' : ' empty')}>
-                {content ? applyVars(content, firstStudent) : '내용을 입력하면 여기에 표시됩니다.'}
+              <div className={'mc-bubble' + (effectiveContent ? '' : ' empty')}>
+                {mmsImage && <img className="mc-preview-image" src={mmsImage.previewUrl} alt="MMS 첨부 미리보기" />}
+                {effectiveContent ? applyVars(effectiveContent, firstStudent) : '내용을 입력하면 여기에 표시됩니다.'}
               </div>
             </div>
             <p className="mc-preview-foot">{firstStudent ? `${firstStudent.name} 기준` : '대상 미선택'} · 실제는 각 대상에게 발송</p>
-            <div className="bulk-summary">대상 {checkedCount}명 · 받는이 {recipientText} · {meta.type} · {kind === 'promo' ? '홍보성' : '정보성'}</div>
+            <div className="bulk-summary">대상 {checkedCount}명 · 받는이 {recipientText} · {messageType} · {kind === 'promo' ? '홍보성' : '정보성'}</div>
             <div className="bulk-send-row">
               <div className="mc-seg">
                 <button type="button" className={when === 'now' ? 'on' : ''} aria-pressed={when === 'now'} onClick={() => setWhen('now')}>즉시</button>

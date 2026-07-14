@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Icon } from '@impact7/ui';
 import { getManualOptOuts, registerManualOptOut, sendDirectMessage } from '../../../data-layer.js';
-import { messageMeta, normalizePhones } from '../message-format.js';
+import { messageMeta, normalizePhones, readMmsImage } from '../message-format.js';
 import { parsePhonesFromFile, sampleCsv } from '../message-import.js';
 import { getMessageExtras, saveMessageExtras, composeWithExtras, DEFAULT_CHANNEL_INVITE } from '../sms-extras.js';
 import TemplateBar from './TemplateBar.jsx';
@@ -8,9 +9,6 @@ import { OPT_OUT_LINE } from '../../../promo-compliance.js';
 import { formatDateTimeKST, todayKST } from '@impact7/shared/datetime';
 
 const AD_PREFIX = '(광고) [임팩트세븐학원]';
-const MMS_MAX_BYTES = 200 * 1024;
-const MMS_MAX_WIDTH = 1500;
-const MMS_MAX_HEIGHT = 1440;
 const SYNC_STATUS_LABEL = {
   matched: '일치',
   solapi_only: '솔라피만',
@@ -24,47 +22,13 @@ function providerDateLabel(value) {
 function composePromoText(text, withAdLabel, withOptOut) {
   let result = text.trim();
   if (withAdLabel && !/\(광고\)/.test(result)) result = `${AD_PREFIX}\n${result}`;
-  if (withOptOut && !/(무료거부|수신거부|080)/.test(result)) result = `${result}\n${OPT_OUT_LINE}`;
+  if (withOptOut && !/(무료거부|수신거부|080)/.test(result)) result = `${result}\n\n${OPT_OUT_LINE}`;
   return result;
 }
 
 function newReqId() {
   // 입력 1회분 멱등키. 발송 성공 또는 내용 변경 시 리셋. randomUUID는 secure context 전용이라 LAN http dev용 fallback 유지.
   return 'direct-' + (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + '-' + performance.now().toString(36));
-}
-
-function readMmsImage(file) {
-  if (!/\.jpe?g$/i.test(file.name) || (file.type && file.type !== 'image/jpeg')) {
-    return Promise.reject(new Error('MMS는 JPG 이미지만 첨부할 수 있습니다.'));
-  }
-  if (file.size > MMS_MAX_BYTES) {
-    return Promise.reject(new Error('MMS 이미지는 200KB 이하만 첨부할 수 있습니다.'));
-  }
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('이미지를 읽지 못했습니다.'));
-    reader.onload = () => {
-      const previewUrl = String(reader.result ?? '');
-      const image = new Image();
-      image.onerror = () => reject(new Error('올바른 JPG 이미지가 아닙니다.'));
-      image.onload = () => {
-        if (image.width > MMS_MAX_WIDTH || image.height > MMS_MAX_HEIGHT) {
-          reject(new Error(`MMS 이미지는 최대 ${MMS_MAX_WIDTH}×${MMS_MAX_HEIGHT}px까지 사용할 수 있습니다.`));
-          return;
-        }
-        resolve({
-          name: file.name,
-          dataBase64: previewUrl.split(',')[1] ?? '',
-          previewUrl,
-          width: image.width,
-          height: image.height,
-          size: file.size,
-        });
-      };
-      image.src = previewUrl;
-    };
-    reader.readAsDataURL(file);
-  });
 }
 
 // 클라이언트 1차 방어 상한 — 최종 검증은 서버 callable. F-02
@@ -225,13 +189,12 @@ export default function DirectSmsCard() {
   const meta = messageMeta(effectiveText);
   const count = new Set(normalizePhones(recipients)).size;
   const attachedLines = [withInvite ? invite : '', withFooter ? footer : ''].filter((l) => l && !text.includes(l));
-  const sendButtonLabel = sending ? '발송 중…' : mmsImage ? 'MMS 발송' : '발송';
 
   return (
     <>
     <section className="mc-section">
       <div className="mc-card">
-        <div className="mc-section-title">📱 휴대폰 문자 발송</div>
+        <div className="mc-section-title">번호로 대량/임의 문자 발송</div>
         <div className="bulk-split mc-direct">
           <div className="bulk-left">
             <p className="bulk-col-title">받는 사람</p>
@@ -246,6 +209,7 @@ export default function DirectSmsCard() {
             <textarea aria-label="수신번호 목록" className="mc-textarea" value={recipients}
               onChange={(e) => { setRecipients(e.target.value); resetReqId(); }}
               placeholder={'010-1234-5678\n010-9876-5432'} />
+            <div className="bulk-cart"><span>누적 대상 {count}명</span></div>
             <p className="mc-field-label" style={{ marginTop: 6 }}>학생 DB에 없는 번호도 가능 · 발신 02-2649-0509</p>
           </div>
           <div className="bulk-mid">
@@ -255,11 +219,11 @@ export default function DirectSmsCard() {
               <button type="button" className={kind === 'info' ? 'on' : ''} aria-pressed={kind === 'info'} onClick={() => selectKind('info')}>정보성</button>
               <button type="button" className={kind === 'promo' ? 'on' : ''} aria-pressed={kind === 'promo'} onClick={() => selectKind('promo')}>홍보성</button>
             </div>
-            <div className="mc-content-head">
-              <p className="mc-field-label" style={{ marginTop: 8 }}>내용</p>
+            <div className="mc-content-head mc-message-tools">
+              <p className="mc-field-label mc-icon-label" title="내용"><Icon name="documentText" size={16} aria-hidden="true" /><span className="mc-compact-label">내용</span></p>
               <div className="mc-vars">
                 <TemplateBar content={text} onPick={(c) => { setText(c); resetReqId(); }} />
-                <button type="button" className="mc-var-btn" onClick={() => imageRef.current?.click()}>🖼 사진 첨부 (MMS)</button>
+                <button type="button" className="mc-var-btn mc-icon-btn" title="MMS 사진 첨부" aria-label="MMS 사진 첨부" onClick={() => imageRef.current?.click()}><Icon name="photo" size={17} aria-hidden="true" /><span className="mc-compact-label">MMS</span></button>
               </div>
             </div>
             <input ref={imageRef} type="file" accept="image/jpeg,.jpg,.jpeg" aria-label="MMS 사진 첨부" style={{ display: 'none' }} onChange={onMmsImage} />
@@ -338,7 +302,7 @@ export default function DirectSmsCard() {
                 <input aria-label="예약 발송 시각" type="datetime-local" value={scheduledAt} onChange={(e) => { setScheduledAt(e.target.value); resetReqId(); }} />
               )}
             </div>
-            <button className="mc-send bulk-send-btn" disabled={sending} onClick={onSend}>{sendButtonLabel}</button>
+            <button className="mc-send bulk-send-btn" disabled={sending} onClick={onSend}>{sending ? '발송 중…' : `${count}명에게 발송`}</button>
             {msg && (
               <p className="mc-field-label" role="status" aria-live="polite" style={{ marginTop: 8, color: msgTone === 'error' ? '#c62828' : undefined }}>
                 {msgTone === 'success' ? <strong>{msg}</strong> : msg}

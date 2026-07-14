@@ -7,6 +7,6 @@ export const OPT_OUT_LINE = '무료수신거부 080-500-4233';
 export function ensurePromoCompliance(content) {
   let c = content;
   if (!/\(광고\)/.test(c)) c = '(광고) [임팩트세븐학원]\n' + c;
-  if (!/(무료거부|수신거부|080)/.test(c)) c = c.replace(/\s*$/, '') + '\n' + OPT_OUT_LINE;
+  if (!/(무료거부|수신거부|080)/.test(c)) c = c.replace(/\s*$/, '') + '\n\n' + OPT_OUT_LINE;
   return c;
 }
