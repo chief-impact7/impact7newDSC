@@ -84,6 +84,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
     const selectedStatusRows = selectedStatusMeta
         ? selectedStatusMeta.keys.flatMap((key) => queueDetails[key] ?? [])
         : [];
+    const selectedStatusCount = selectedStatusMeta ? queueCount(selectedStatusMeta) : 0;
     const dayLabel = period === 'today' && dayOffset < 0
         ? formatDateKST(new Date(kstDayStartMs(dayOffset)))
         : '오늘';
@@ -262,13 +263,12 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                         <div className="msg-status-details-head">
                             <strong>{selectedStatusMeta.label} 내역</strong>
                             <span className="msg-status-details-actions">
-                                {queueCount(selectedStatusMeta)}건
+                                {selectedStatusCount}건
+                                {selectedStatusCount > selectedStatusRows.length && ` · 최근 ${selectedStatusRows.length}건 표시`}
                                 <button type="button" className="msg-action-btn" onClick={() => setSelectedStatus(null)}>접기</button>
                             </span>
                         </div>
-                        {selectedStatusMeta.key === 'sent' ? (
-                            <div className="dash-empty">발송완료 상세는 개인정보 보존 정책상 이 요약에서 제공하지 않습니다.</div>
-                        ) : selectedStatusRows.length ? (
+                        {selectedStatusRows.length ? (
                             <ul>
                                 {selectedStatusRows.map((row) => (
                                     <li key={row.id}>

@@ -342,8 +342,8 @@ export default function BulkSendCard({ students = [] }) {
             <button className="mc-send bulk-send-btn" disabled={sending} onClick={onSendClick}>
               {sending ? '발송 중…' : confirming ? `확인 후 ${checkedCount}명에게 발송` : `${checkedCount}명에게 발송`}
             </button>
-            {msg && msg !== MMS_SIZE_NOTICE && <p className="mc-field-label" role="status" aria-live="polite" style={{ marginTop: 8 }}>{msg}</p>}
-            <p className="mc-mms-requirement">{MMS_SIZE_NOTICE}</p>
+            {msg && <p className="mc-field-label" role="status" aria-live="polite" style={{ marginTop: 8 }}>{msg}</p>}
+            {mmsImage && <p className="mc-mms-requirement">{MMS_SIZE_NOTICE}</p>}
             <div className="mc-note" style={{ marginTop: 10 }}>{MESSAGE_KIND_NOTICE[kind]}</div>
           </div>
         </div>

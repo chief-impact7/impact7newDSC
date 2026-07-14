@@ -307,13 +307,13 @@ export default function DirectSmsCard() {
               )}
             </div>
             <button className="mc-send bulk-send-btn" disabled={sending} onClick={onSend}>{sending ? '발송 중…' : `${count}명에게 발송`}</button>
-            {msg && msg !== MMS_SIZE_NOTICE && (
+            {msg && (
               <p className="mc-field-label" role="status" aria-live="polite" style={{ marginTop: 8, color: msgTone === 'error' ? '#c62828' : undefined }}>
                 {msgTone === 'success' ? <strong>{msg}</strong> : msg}
                 {msgWarning && <span style={{ color: '#c62828', fontWeight: 600 }}> · {msgWarning}</span>}
               </p>
             )}
-            <p className="mc-mms-requirement">{MMS_SIZE_NOTICE}</p>
+            {mmsImage && <p className="mc-mms-requirement">{MMS_SIZE_NOTICE}</p>}
             <div className="mc-note" style={{ marginTop: 10 }}>{MESSAGE_KIND_NOTICE[kind]}</div>
           </div>
         </div>
