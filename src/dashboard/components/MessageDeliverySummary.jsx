@@ -292,6 +292,11 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                 )}
 
                 {failures.length > 0 ? (
+                    <details className="msg-failure-accordion">
+                        <summary>
+                            미발송·실패 항목 {failures.length}건
+                            {(data.archivedCount ?? 0) > 0 && <span className="msg-archived-count"> · 보관됨 {data.archivedCount}건</span>}
+                        </summary>
                     <div className="msg-failure-list">
                         <div className="msg-failure-head">
                             <label className="msg-check">
@@ -301,9 +306,8 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                     onChange={toggleSelectAll}
                                     aria-label="실패 항목 전체 선택"
                                 />
+                                <span>전체 선택</span>
                             </label>
-                            미발송·실패 항목
-                            {(data.archivedCount ?? 0) > 0 && <span className="msg-archived-count"> · 보관됨 {data.archivedCount}건</span>}
                             {selected.length > 0 && (
                                 <span className="msg-bulk-actions">
                                     <span className="msg-bulk-count">{selected.length}건 선택</span>
@@ -411,6 +415,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                             </div>
                         ))}
                     </div>
+                    </details>
                 ) : (
                     <div className="dash-empty">
                         미발송·실패 항목 없음

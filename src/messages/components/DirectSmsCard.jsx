@@ -1,9 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { sendDirectMessage } from '../../../data-layer.js';
+import { registerManualOptOut, sendDirectMessage } from '../../../data-layer.js';
 import { messageMeta, normalizePhones } from '../message-format.js';
 import { parsePhonesFromFile, sampleCsv } from '../message-import.js';
 import { getMessageExtras, saveMessageExtras, composeWithExtras, DEFAULT_CHANNEL_INVITE } from '../sms-extras.js';
 import TemplateBar from './TemplateBar.jsx';
+import { OPT_OUT_LINE } from '../../../promo-compliance.js';
+
+const AD_PREFIX = '(광고) [임팩트세븐학원]';
+
+function composePromoText(text, withAdLabel, withOptOut) {
+  let result = text.trim();
+  if (withAdLabel && !/\(광고\)/.test(result)) result = `${AD_PREFIX}\n${result}`;
+  if (withOptOut && !/(무료거부|수신거부|080)/.test(result)) result = `${result}\n${OPT_OUT_LINE}`;
+  return result;
+}
 
 function newReqId() {
   // 입력 1회분 멱등키. 발송 성공 또는 내용 변경 시 리셋. randomUUID는 secure context 전용이라 LAN http dev용 fallback 유지.
@@ -11,11 +21,15 @@ function newReqId() {
 }
 
 // 클라이언트 1차 방어 상한 — 최종 검증은 서버 callable. F-02
-const MAX_RECIPIENTS = 500;
+const MAX_RECIPIENTS = 100;
 
 export default function DirectSmsCard() {
   const [recipients, setRecipients] = useState('');
   const [text, setText] = useState('');
+  const [kind, setKind] = useState('info');
+  const [withAdLabel, setWithAdLabel] = useState(true);
+  const [withOptOut, setWithOptOut] = useState(true);
+  const [consentConfirmed, setConsentConfirmed] = useState(false);
   const [when, setWhen] = useState('now'); // 'now' | 'schedule'
   const [scheduledAt, setScheduledAt] = useState('');
   const [sending, setSending] = useState(false);
@@ -88,25 +102,41 @@ export default function DirectSmsCard() {
   }
 
   // 체크된 부가 문구를 합성한 실제 발송 본문 — 글자수·SMS/LMS 판정·발송 모두 이 값을 쓴다.
-  const effectiveText = composeWithExtras(text, [withInvite ? invite : '', withFooter ? footer : '']);
+  const baseText = composeWithExtras(text, [withInvite ? invite : '', withFooter ? footer : '']);
+  const effectiveText = kind === 'promo'
+    ? composePromoText(baseText, withAdLabel, withOptOut)
+    : baseText;
+
+  function selectKind(nextKind) {
+    setKind(nextKind);
+    if (nextKind === 'promo') {
+      setWithAdLabel(true);
+      setWithOptOut(true);
+      setConsentConfirmed(false);
+    }
+    setMsg('');
+    resetReqId();
+  }
 
   async function onSend() {
     if (sending) return;
-    if (!effectiveText.trim()) { setMsg('내용을 입력하세요.'); return; }
+    if (!baseText.trim()) { setMsg('내용을 입력하세요.'); return; }
     if (!recipients.trim()) { setMsg('수신번호를 입력하세요.'); return; }
+    if (kind === 'promo' && (!withAdLabel || !withOptOut)) { setMsg('홍보성 문자는 광고 문구와 무료 수신거부 안내가 모두 필요합니다.'); return; }
+    if (kind === 'promo' && !consentConfirmed) { setMsg('광고 수신동의를 확인한 번호인지 체크하세요.'); return; }
     if (when === 'schedule' && !scheduledAt) { setMsg('예약 시각을 입력하세요.'); return; }
     const phoneCount = new Set(normalizePhones(recipients)).size;
     if (phoneCount > MAX_RECIPIENTS) { setMsg(`한 번에 최대 ${MAX_RECIPIENTS}명까지 발송할 수 있습니다 (현재 ${phoneCount}명). 대상을 나눠 보내세요.`); return; }
     setSending(true); setMsg('');
     try {
-      const payload = { recipients, text: effectiveText, requestId: reqIdRef.current };
+      const payload = { recipients, text: effectiveText, messageKind: kind, consentConfirmed, requestId: reqIdRef.current };
       if (when === 'schedule') payload.scheduledAt = scheduledAt.slice(0, 16).replace('T', ' ') + ':00';
       const res = await sendDirectMessage(payload);
       if (res.duplicate) {
         setMsg('이미 발송된 요청입니다.');
       } else {
         setMsg(`${res.queued}건 발송 접수${res.invalid?.length ? ` · 무효 번호 ${res.invalid.length}건 제외` : ''}`);
-        setRecipients(''); setText(''); resetReqId();
+        setRecipients(''); setText(''); setConsentConfirmed(false); resetReqId();
       }
     } catch (e) {
       setMsg('발송 실패: ' + (e?.message || e));
@@ -120,9 +150,16 @@ export default function DirectSmsCard() {
   const attachedLines = [withInvite ? invite : '', withFooter ? footer : ''].filter((l) => l && !text.includes(l));
 
   return (
+    <>
     <section className="mc-section">
       <div className="mc-card">
-        <div className="mc-section-title">📱 휴대폰 문자 전송 <span className="mc-tag">정보성 전용</span></div>
+        <div className="mc-section-title">
+          📱 휴대폰 문자 발송
+          <div className="mc-seg" role="group" aria-label="문자 종류">
+            <button type="button" className={kind === 'info' ? 'on' : ''} aria-pressed={kind === 'info'} onClick={() => selectKind('info')}>정보성</button>
+            <button type="button" className={kind === 'promo' ? 'on' : ''} aria-pressed={kind === 'promo'} onClick={() => selectKind('promo')}>홍보성</button>
+          </div>
+        </div>
         <div className="mc-direct">
           <div>
             <div className="mc-content-head">
@@ -158,6 +195,13 @@ export default function DirectSmsCard() {
               </label>
               <button type="button" className="mc-var-btn" onClick={() => { setFooterDraft(footer); setInviteDraft(inviteCustom); setSetupOpen(!setupOpen); }}>문구 설정⚙</button>
             </div>
+            {kind === 'promo' && (
+              <div className="mc-promo-checks">
+                <label><input type="checkbox" checked={withAdLabel} onChange={(e) => { setWithAdLabel(e.target.checked); resetReqId(); }} /> 광고 문구</label>
+                <label><input type="checkbox" checked={withOptOut} onChange={(e) => { setWithOptOut(e.target.checked); resetReqId(); }} /> 수신거부</label>
+                <label><input type="checkbox" checked={consentConfirmed} onChange={(e) => { setConsentConfirmed(e.target.checked); resetReqId(); }} /> 광고 수신동의 번호 확인</label>
+              </div>
+            )}
             {attachedLines.length > 0 && (
               <div style={{ marginTop: 5, border: '1px dashed #cfd8d2', borderRadius: 8, padding: '6px 9px', background: '#fafcfb', fontSize: 12, color: '#5f6b76', whiteSpace: 'pre-wrap' }}>
                 {attachedLines.join('\n\n')}
@@ -196,9 +240,52 @@ export default function DirectSmsCard() {
               </button>
             </div>
             {msg && <p className="mc-field-label" role="status" aria-live="polite" style={{ marginTop: 8 }}>{msg}</p>}
-            <div className="mc-note" style={{ marginTop: 10 }}>정보성 안내 전용입니다. 광고성 내용은 보낼 수 없습니다(미동의 번호 광고 = 위법).</div>
+            <div className="mc-note" style={{ marginTop: 10 }}>
+              {kind === 'promo'
+                ? '홍보성 문자는 수신동의 번호에만 발송하며, (광고)·무료 수신거부 문구를 서버에서도 다시 검증합니다.'
+                : '정보성 안내 전용입니다. 광고성 내용은 홍보성으로 전환해 발송하세요.'}
+            </div>
           </div>
         </div>
+      </div>
+    </section>
+    <ManualOptOutCard />
+    </>
+  );
+}
+
+function ManualOptOutCard() {
+  const [phone, setPhone] = useState('');
+  const [memo, setMemo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  async function onRegister() {
+    if (busy) return;
+    if (normalizePhones(phone).length !== 1) { setMsg('휴대폰 번호 1개를 입력하세요.'); return; }
+    setBusy(true); setMsg('');
+    try {
+      const result = await registerManualOptOut({ phone, memo });
+      setMsg(`${result.recipientMasked} 솔라피 발송 차단 등록 완료`);
+      setPhone(''); setMemo('');
+    } catch (e) {
+      setMsg('등록 실패: ' + (e?.message || e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mc-section">
+      <div className="mc-card">
+        <div className="mc-section-title">🚫 수신거부 번호 등록 <span className="mc-tag">솔라피 연동</span></div>
+        <div className="mc-optout-row">
+          <input type="tel" aria-label="수신거부 휴대폰 번호" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="010-1234-5678" />
+          <input aria-label="수신거부 메모" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="메모 (선택)" maxLength={250} />
+          <button className="mc-send" disabled={busy} onClick={onRegister}>{busy ? '등록 중…' : '솔라피에 등록'}</button>
+        </div>
+        <p className="mc-field-label" style={{ marginTop: 7 }}>등록된 번호는 솔라피에서 문자·카카오 등 모든 발송 채널이 차단됩니다.</p>
+        {msg && <p className="mc-field-label" role="status" aria-live="polite" style={{ marginTop: 7 }}>{msg}</p>}
       </div>
     </section>
   );

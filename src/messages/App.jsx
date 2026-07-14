@@ -7,6 +7,7 @@ import MessageDeliverySummary from '../dashboard/components/MessageDeliverySumma
 import DirectSmsCard from './components/DirectSmsCard.jsx';
 import BulkSendCard from './components/BulkSendCard.jsx';
 import RecipientHistoryCard from './components/RecipientHistoryCard.jsx';
+import AttendanceNotificationGapCard from './components/AttendanceNotificationGapCard.jsx';
 import ErrorBoundary from '../dashboard/components/ErrorBoundary.jsx';
 
 export default function App() {
@@ -71,6 +72,7 @@ export default function App() {
             <MessageDeliverySummary data={msgDelivery} students={students} loading={msgLoading} onReload={reloadMsg} />
           </ErrorBoundary>
         </section>
+        <AttendanceNotificationGapCard />
         <RecipientHistoryCard students={students} />
         <BulkSendCard students={students} />
         <DirectSmsCard />

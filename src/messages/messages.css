@@ -7,6 +7,8 @@
 .mc-section { margin-bottom: 18px; }
 
 .mc-section-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 800; margin: 0 0 12px; }
+.mc-section-title > .mc-seg { margin-left: auto; }
+.mc-title-action { margin-left: auto; }
 .mc-tag { font-size: 11px; font-weight: 700; color: #fff; background: #5d6b64; border-radius: 20px; padding: 2px 9px; }
 
 .mc-direct { display: grid; grid-template-columns: 1fr 1.3fr; gap: 14px; }
@@ -23,6 +25,21 @@
 .mc-send:disabled { opacity: .55; cursor: default; }
 
 .mc-note { font-size: 12px; color: #5d6b64; background: #fff8ea; border: 1px solid #f0e2bf; border-radius: 8px; padding: 8px 11px; }
+.mc-promo-checks { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; font-size: 12.5px; color: #5d6b64; }
+.mc-promo-checks label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.mc-optout-row { display: grid; grid-template-columns: 1fr 1.3fr auto; gap: 8px; }
+.mc-optout-row input { min-width: 0; border: 1px solid #e3e8e5; border-radius: 8px; padding: 9px; font: inherit; }
+@media (max-width: 680px) { .mc-optout-row { grid-template-columns: 1fr; } }
+.mc-gap-empty { font-size: 13px; color: #5d6b64; padding: 5px 0; }
+.mc-gap-details summary { cursor: pointer; font-size: 13px; font-weight: 700; color: #2d3a34; }
+.mc-gap-details summary span { margin-left: 6px; color: #7c8a83; font-weight: 400; }
+.mc-gap-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; }
+.mc-gap-list li { display: flex; align-items: center; gap: 8px; border: 1px solid #e3e8e5; border-radius: 8px; padding: 7px 10px; font-size: 12.5px; }
+.mc-gap-list li strong { margin-right: auto; }
+.mc-gap-status { border-radius: 999px; padding: 2px 7px; font-size: 11px; font-weight: 700; }
+.mc-gap-status.not_queued { background: #eef1f4; color: #5f6b76; }
+.mc-gap-status.failed { background: #fce8e6; color: #c5221f; }
+.mc-gap-status.pending { background: #fff3e0; color: #b26a00; }
 
 .bulk-split { display: grid; grid-template-columns: 1fr 1.05fr 0.85fr; gap: 0; border: 1px solid #e3e8e5; border-radius: 11px; overflow: hidden; }
 .bulk-left { padding: 14px; border-right: 1px solid #e3e8e5; }

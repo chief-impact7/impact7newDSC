@@ -1484,6 +1484,18 @@ body {
     margin-top: 8px;
     padding-top: 8px;
 }
+.msg-failure-accordion {
+    border-top: 1px solid var(--border, #e7e7e7);
+    margin-top: 8px;
+    padding-top: 8px;
+}
+.msg-failure-accordion > summary {
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-sec);
+}
+.msg-failure-accordion .msg-failure-list { border-top: 0; }
 .msg-failure-head {
     display: flex;
     align-items: center;
@@ -1598,7 +1610,7 @@ body {
 .msg-period-note { font-size: 11.5px; color: #b26a00; }
 
 /* 체크박스·일괄 액션 */
-.msg-check { display: inline-flex; align-items: center; flex-shrink: 0; }
+.msg-check { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; }
 .msg-check input[type="checkbox"] {
     width: 15px;
     height: 15px;
