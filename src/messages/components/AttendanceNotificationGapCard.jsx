@@ -51,7 +51,7 @@ export default function AttendanceNotificationGapCard() {
           {items.map((item) => (
             <li key={item.student_id}>
               <strong>{item.student_name}</strong>
-              <span>{item.class_name || '-'}{item.teacher_name ? ` · ${item.teacher_name}` : ''}</span>
+              <span>{item.class_name || '-'}</span>
               <span>{item.attendance_status}</span>
               <span className={`mc-gap-status ${item.notification_status}`}>{STATUS_LABEL[item.notification_status] || item.notification_status}</span>
             </li>
