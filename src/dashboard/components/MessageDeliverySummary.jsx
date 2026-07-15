@@ -5,6 +5,7 @@ import ReactECharts from '../echarts.jsx';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../../firebase-config.js';
 import { formatDateKST, formatDateTimeKST } from '@impact7/shared/datetime';
+import { formatPhone } from '@impact7/shared/phone';
 import { dateInputToKstMs, kstDayRangeParams, kstDayStartMs, kstMonthStartMs } from '../message-period.js';
 
 const retryCallable = httpsCallable(functions, 'retryMessageDelivery');
@@ -22,6 +23,12 @@ const CHANNEL_META = {
     kakao: { label: '카카오 알림톡', color: '#FAE100' },
     sms: { label: '문자(SMS/LMS)', color: '#1a73e8' },
     mms: { label: '사진 문자(MMS)', color: '#7b61c9' },
+};
+const RECIPIENT_ROLE_LABEL = {
+    student: '본인',
+    parent_1: '학부모1',
+    parent_2: '학부모2',
+    other: '기타',
 };
 
 const PERIODS = [
@@ -56,8 +63,7 @@ async function runWithConcurrency(items, worker, concurrency) {
     return results;
 }
 
-// data는 getMessageDeliveryStatus callable 집계 결과(서버에서 카운트+번호 마스킹 완료).
-// 평문 번호는 서버를 벗어나지 않으므로 이 컴포넌트는 표시만 한다.
+// data는 권한 확인을 거친 getMessageDeliveryStatus callable 집계 결과다.
 function MessageDeliverySummary({ data, students, loading, onReload }) {
     const [busy, setBusy] = useState(false);
     const [notice, setNotice] = useState(null); // { kind: 'error'|'info', text }
@@ -272,8 +278,11 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                             <ul>
                                 {selectedStatusRows.map((row) => (
                                     <li key={row.id}>
-                                        <strong>{failureName(row)}</strong>
-                                        <span>{row.recipientMasked || '-'}</span>
+                                        <strong>
+                                            {failureName(row)}
+                                            {row.recipientRole && ` · ${RECIPIENT_ROLE_LABEL[row.recipientRole] || row.recipientRole}`}
+                                        </strong>
+                                        <span>{row.recipientPhone ? formatPhone(row.recipientPhone) : row.recipientMasked || '-'}</span>
                                         <span>{row.lastErrorCode || selectedStatusMeta.label}</span>
                                         <span>{formatDateTimeKST(row.updatedAt || row.createdAt)}</span>
                                     </li>
