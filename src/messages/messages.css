@@ -46,7 +46,7 @@
 .mc-gap-empty { font-size: 13px; color: #5d6b64; padding: 5px 0; }
 .mc-gap-details summary { cursor: pointer; font-size: 13px; font-weight: 700; color: #2d3a34; }
 .mc-gap-details summary span { margin-left: 6px; color: #7c8a83; font-weight: 400; }
-.mc-gap-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; }
+.mc-gap-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 6px; }
 .mc-gap-list li { display: flex; align-items: center; gap: 8px; border: 1px solid #e3e8e5; border-radius: 8px; padding: 7px 10px; font-size: 12.5px; }
 .mc-gap-list li strong { margin-right: auto; }
 .mc-gap-status { border-radius: 999px; padding: 2px 7px; font-size: 11px; font-weight: 700; }
