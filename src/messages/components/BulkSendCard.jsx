@@ -17,7 +17,7 @@ function newReqId() { return 'bulk-' + (crypto.randomUUID?.() ?? Math.random().t
 
 // 대량 발송 blast radius 제한. 서버가 최종 검증하지만 클라 1차 방어로 오발송 규모를 줄인다. F-02
 const BULK_CONFIRM_THRESHOLD = 30; // 이 인원 이상이면 발송 전 확인 단계를 요구
-const BULK_MAX_RECIPIENTS = { info: 10000, promo: 1000 };
+const BULK_MAX_MESSAGES = 10000;
 
 const RECIPIENT_LABELS = { student: '학생', parent_1: '학부모1', parent_2: '학부모2' };
 const STATUS_LABELS = { enrolled: '재원', non: '비원생' };
@@ -82,6 +82,7 @@ export default function BulkSendCard({ students = [] }) {
   );
   const rows = useMemo(() => [...picked.values()], [picked]);
   const checkedCount = useMemo(() => rows.reduce((n, v) => n + (v.on ? 1 : 0), 0), [rows]);
+  const estimatedMessageCount = checkedCount * recipientFields.size;
 
   function commitSearch() {
     const found = filterStudents(students, { branch, grades, status, q });
@@ -163,9 +164,9 @@ export default function BulkSendCard({ students = [] }) {
     if (!ids.length) { setMsg('대상이 없습니다. 검색으로 추가하세요.'); return; }
     if (!content.trim()) { setMsg('내용을 입력하세요.'); return; }
     if (when === 'schedule' && !scheduledAt) { setMsg('예약 시각을 입력하세요.'); return; }
-    const maxRecipients = BULK_MAX_RECIPIENTS[kind];
-    if (ids.length > maxRecipients) {
-      setMsg(`한 번에 최대 ${maxRecipients}명까지 발송할 수 있습니다 (현재 ${ids.length}명). 대상을 나눠 보내세요.`);
+    const estimatedCount = ids.length * recipientFields.size;
+    if (estimatedCount > BULK_MAX_MESSAGES) {
+      setMsg(`한 번에 최대 ${BULK_MAX_MESSAGES}건까지 발송할 수 있습니다 (현재 예상 ${estimatedCount}건). 대상이나 받는이를 나눠 보내세요.`);
       return;
     }
     if (ids.length >= BULK_CONFIRM_THRESHOLD && !confirming) { setConfirming(true); setMsg(''); return; }
@@ -302,7 +303,7 @@ export default function BulkSendCard({ students = [] }) {
             <div className="mc-meta">
               <span>{meta.chars}자 · {meta.bytes}byte</span>
               <span className={'mc-pill' + (messageType !== 'SMS' ? ' lms' : '')}>{messageType}</span>
-              <span>· {checkedCount}명 × {recipientFields.size}</span>
+              <span>· {checkedCount}명 × {recipientFields.size} · 예상 {estimatedMessageCount}건</span>
               <label className="mc-mms-toggle"><input type="checkbox" checked={!!mmsImage} onChange={(e) => { if (e.target.checked) imageRef.current?.click(); else { setMmsImage(null); resetReqId(); } }} /> MMS</label>
             </div>
             {kind === 'info' && <div className="mc-promo-checks"><label title={invite}><input type="checkbox" checked={withInvite} onChange={(e) => { setWithInvite(e.target.checked); resetReqId(); }} /> 채널 가입 안내</label><label title={footer || '문구 설정에서 꼬리말을 등록하세요'}><input type="checkbox" checked={withFooter} disabled={!footer} onChange={(e) => { setWithFooter(e.target.checked); resetReqId(); }} /> 학원 꼬리말</label><button type="button" className="mc-var-btn" onClick={() => { setFooterDraft(footer); setInviteDraft(inviteCustom); setSetupOpen(!setupOpen); }}>문구 설정</button></div>}
@@ -322,7 +323,7 @@ export default function BulkSendCard({ students = [] }) {
               </div>
             </div>
             <p className="mc-preview-foot">{firstStudent ? `${firstStudent.name} 기준` : '대상 미선택'} · 실제는 각 대상에게 발송</p>
-            <div className="bulk-summary">대상 {checkedCount}명 · 받는이 {recipientText} · {messageType} · {kind === 'promo' ? '홍보성' : '정보성'}</div>
+            <div className="bulk-summary">대상 {checkedCount}명 · 예상 {estimatedMessageCount}건 · 받는이 {recipientText} · {messageType} · {kind === 'promo' ? '홍보성' : '정보성'}</div>
             <div className="bulk-send-row">
               <div className="mc-seg">
                 <button type="button" className={when === 'now' ? 'on' : ''} aria-pressed={when === 'now'} onClick={() => setWhen('now')}>즉시</button>
@@ -333,7 +334,7 @@ export default function BulkSendCard({ students = [] }) {
             {confirming && (
               <div className="mc-note" role="alertdialog" aria-label="발송 확인" style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
                 <span>
-                  {checkedCount}명 · 받는이 {recipientText} · {kind === 'promo' ? '홍보성' : '정보성'}
+                  {checkedCount}명 · 예상 {estimatedMessageCount}건 · 받는이 {recipientText} · {kind === 'promo' ? '홍보성' : '정보성'}
                   {when === 'schedule' && scheduledAt ? ` · 예약 ${scheduledAt.replace('T', ' ')}` : ' · 즉시 발송'}
                   — 맞으면 아래 버튼을 다시 눌러 발송하세요.
                 </span>
