@@ -25,11 +25,12 @@ export default function AttendanceNotificationGapCard() {
   function downloadList() {
     downloadCsv(
       `학부모알림_미작성_${data.dateKST}.csv`,
-      ['날짜', '학생명', '반명', '등원여부', '발송상태'],
+      ['날짜', '학생명', '반명', '담당선생님', '등원여부', '발송상태'],
       items.map((item) => [
         data.dateKST,
         item.student_name,
         item.class_name || '',
+        item.teacher_name || '',
         item.attendance_status,
         STATUS_LABEL[item.notification_status] || item.notification_status,
       ]),
@@ -50,7 +51,7 @@ export default function AttendanceNotificationGapCard() {
           {items.map((item) => (
             <li key={item.student_id}>
               <strong>{item.student_name}</strong>
-              <span>{item.class_name || '-'}</span>
+              <span>{item.class_name || '-'}{item.teacher_name ? ` · ${item.teacher_name}` : ''}</span>
               <span>{item.attendance_status}</span>
               <span className={`mc-gap-status ${item.notification_status}`}>{STATUS_LABEL[item.notification_status] || item.notification_status}</span>
             </li>
