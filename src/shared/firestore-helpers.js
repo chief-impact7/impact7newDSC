@@ -52,10 +52,12 @@ export function getSemestersForDate(dateStr, semesterSettings) {
     );
 }
 
-// 학생 전체 목록 쿼리 (재원 학생만 — 퇴원 제외, 상담 포함) + 특강(status2).
-function studentQueries() {
+// 학생 목록 쿼리 (기본: 퇴원·종강 제외) + 특강(status2).
+function studentQueries(includeEnded = false) {
+    const statuses = [...ACTIVE_STUDENT_STATUSES];
+    if (includeEnded) statuses.push(...PAST_STUDENT_STATUSES);
     return [
-        query(collection(db, 'students'), where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원', '상담'])),
+        query(collection(db, 'students'), where('status', 'in', statuses)),
         query(collection(db, 'students'), where('status2', '==', '특강')),
     ];
 }
@@ -76,17 +78,17 @@ function mergeStudentSnaps(activeSnap, specialSnap) {
     return list;
 }
 
-export async function fetchStudents() {
-    const [activeSnap, specialSnap] = await Promise.all(studentQueries().map(q => getDocs(q)));
+export async function fetchStudents(includeEnded = false) {
+    const [activeSnap, specialSnap] = await Promise.all(studentQueries(includeEnded).map(q => getDocs(q)));
     return mergeStudentSnaps(activeSnap, specialSnap);
 }
 
 // 디스크 캐시(persistentLocalCache)에서 즉시 — 새로고침 시 네트워크 왕복 없이 선표시.
 // 캐시 미스/빈 경우 null(호출측이 서버 결과를 기다림). getDocs는 온라인에서 항상 서버 우선이라
 // 캐시가 있어도 무시되므로, 재방문 즉시 표시를 위해 명시적으로 cache를 먼저 읽는다.
-export async function fetchStudentsFromCache() {
+export async function fetchStudentsFromCache(includeEnded = false) {
     try {
-        const [activeSnap, specialSnap] = await Promise.all(studentQueries().map(q => getDocsFromCache(q)));
+        const [activeSnap, specialSnap] = await Promise.all(studentQueries(includeEnded).map(q => getDocsFromCache(q)));
         if (activeSnap.size + specialSnap.size === 0) return null;
         return mergeStudentSnaps(activeSnap, specialSnap);
     } catch {
