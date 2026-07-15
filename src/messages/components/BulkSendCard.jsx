@@ -17,7 +17,7 @@ function newReqId() { return 'bulk-' + (crypto.randomUUID?.() ?? Math.random().t
 
 // 대량 발송 blast radius 제한. 서버가 최종 검증하지만 클라 1차 방어로 오발송 규모를 줄인다. F-02
 const BULK_CONFIRM_THRESHOLD = 30; // 이 인원 이상이면 발송 전 확인 단계를 요구
-const BULK_MAX_RECIPIENTS = 500; // 클라이언트 상한 — 초과 시 발송 자체를 차단
+const BULK_MAX_RECIPIENTS = { info: 10000, promo: 1000 };
 
 const RECIPIENT_LABELS = { student: '학생', parent_1: '학부모1', parent_2: '학부모2' };
 const STATUS_LABELS = { enrolled: '재원', non: '비원생' };
@@ -163,8 +163,9 @@ export default function BulkSendCard({ students = [] }) {
     if (!ids.length) { setMsg('대상이 없습니다. 검색으로 추가하세요.'); return; }
     if (!content.trim()) { setMsg('내용을 입력하세요.'); return; }
     if (when === 'schedule' && !scheduledAt) { setMsg('예약 시각을 입력하세요.'); return; }
-    if (ids.length > BULK_MAX_RECIPIENTS) {
-      setMsg(`한 번에 최대 ${BULK_MAX_RECIPIENTS}명까지 발송할 수 있습니다 (현재 ${ids.length}명). 대상을 나눠 보내세요.`);
+    const maxRecipients = BULK_MAX_RECIPIENTS[kind];
+    if (ids.length > maxRecipients) {
+      setMsg(`한 번에 최대 ${maxRecipients}명까지 발송할 수 있습니다 (현재 ${ids.length}명). 대상을 나눠 보내세요.`);
       return;
     }
     if (ids.length >= BULK_CONFIRM_THRESHOLD && !confirming) { setConfirming(true); setMsg(''); return; }
@@ -219,8 +220,8 @@ export default function BulkSendCard({ students = [] }) {
 
   return (
     <section className="mc-section">
-      <div className="mc-card">
-        <div className="mc-section-title"><Icon name={ICON_NAME.bulk_message} size={20} aria-hidden="true" /> 검색으로 단체/개인 문자 발송 <span className="mc-tag" style={{ background: '#0a6e49' }}>목록·검색·누적</span></div>
+      <details className="mc-card">
+        <summary className="mc-section-title"><Icon name={ICON_NAME.bulk_message} size={20} aria-hidden="true" /> 검색으로 단체/개인 문자 발송 <span className="mc-tag" style={{ background: '#0a6e49' }}>목록·검색·누적</span><Icon name="chevronDown" size={18} className="mc-disclosure-icon" aria-hidden="true" /></summary>
         <div className="bulk-split">
           <div className="bulk-left">
             <p className="bulk-col-title">받는 사람</p>
@@ -347,7 +348,7 @@ export default function BulkSendCard({ students = [] }) {
             <div className="mc-note" style={{ marginTop: 10 }}>{MESSAGE_KIND_NOTICE[kind]}</div>
           </div>
         </div>
-      </div>
+      </details>
     </section>
   );
 }

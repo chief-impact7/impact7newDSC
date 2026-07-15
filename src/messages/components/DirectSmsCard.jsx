@@ -198,8 +198,8 @@ export default function DirectSmsCard() {
   return (
     <>
     <section className="mc-section">
-      <div className="mc-card">
-        <div className="mc-section-title"><Icon name={ICON_NAME.direct_message} size={20} aria-hidden="true" /> 번호로 대량/임의 문자 발송</div>
+      <details className="mc-card">
+        <summary className="mc-section-title"><Icon name={ICON_NAME.direct_message} size={20} aria-hidden="true" /> 번호로 대량/임의 문자 발송 <Icon name="chevronDown" size={18} className="mc-disclosure-icon" aria-hidden="true" /></summary>
         <div className="bulk-split mc-direct">
           <div className="bulk-left">
             <p className="bulk-col-title">받는 사람</p>
@@ -317,7 +317,7 @@ export default function DirectSmsCard() {
             <div className="mc-note" style={{ marginTop: 10 }}>{MESSAGE_KIND_NOTICE[kind]}</div>
           </div>
         </div>
-      </div>
+      </details>
     </section>
     <ManualOptOutCard />
     </>
@@ -379,8 +379,8 @@ function ManualOptOutCard() {
 
   return (
     <section className="mc-section">
-      <div className="mc-card">
-        <div className="mc-section-title"><Icon name={ICON_NAME.phone_opt_out} size={20} aria-hidden="true" /> 수신거부 번호 등록 <span className="mc-tag">솔라피 연동</span></div>
+      <details className="mc-card">
+        <summary className="mc-section-title"><Icon name={ICON_NAME.phone_opt_out} size={20} aria-hidden="true" /> 수신거부 번호 등록 <span className="mc-tag">솔라피 연동</span><Icon name="chevronDown" size={18} className="mc-disclosure-icon" aria-hidden="true" /></summary>
         <div className="mc-optout-row">
           <input type="tel" aria-label="수신거부 휴대폰 번호" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="010-1234-5678" />
           <input type="date" aria-label="수신거부 요청일" value={requestedDate} onChange={(e) => setRequestedDate(e.target.value)} />
@@ -420,7 +420,7 @@ function ManualOptOutCard() {
           )}
           {registry?.localLimitReached && <p className="mc-field-label">DSC 이력 최근 500건 기준으로 대조했습니다.</p>}
         </details>
-      </div>
+      </details>
     </section>
   );
 }

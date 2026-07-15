@@ -8,6 +8,10 @@
 
 .mc-section-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 800; margin: 0 0 12px; }
 .mc-section-title > .mc-seg { margin-left: auto; }
+details.mc-card > summary.mc-section-title { margin-bottom: 0; cursor: pointer; }
+details.mc-card[open] > summary.mc-section-title { margin-bottom: 12px; }
+.mc-disclosure-icon { margin-left: auto; transition: transform .15s; }
+details.mc-card[open] .mc-disclosure-icon { transform: rotate(180deg); }
 .mc-title-action { margin-left: auto; }
 .mc-tag { font-size: 11px; font-weight: 700; color: #fff; background: #5d6b64; border-radius: 20px; padding: 2px 9px; }
 

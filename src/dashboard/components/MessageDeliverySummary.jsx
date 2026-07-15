@@ -44,6 +44,7 @@ const MANAGE_ELIGIBLE = (f) => f.status === 'failed_permanent';
 
 // 일괄 재처리 동시 callable 호출 상한. 무제한 Promise.all은 대량 선택 시 서버에 순간 부하. F-04
 const BULK_CONCURRENCY = 5;
+const STATUS_PAGE_SIZE = 10;
 // Promise.allSettled와 동일한 형태({status, value|reason})를 인덱스 순서대로 반환하되,
 // 동시 실행은 concurrency로 제한한다.
 async function runWithConcurrency(items, worker, concurrency) {
@@ -74,6 +75,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
     const [customTo, setCustomTo] = useState('');
     const [selectedIds, setSelectedIds] = useState(() => new Set());
     const [selectedStatus, setSelectedStatus] = useState(null);
+    const [selectedStatusPage, setSelectedStatusPage] = useState(1);
 
     // 이름은 fetchStudents 범위(재원생)로만 해석된다. 퇴원생 등 범위 밖이면 doc id 원문을
     // 노출하지 않고 마스킹된 수신자 또는 '(이름 미확인)'으로 표시.
@@ -91,6 +93,12 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
         ? selectedStatusMeta.keys.flatMap((key) => queueDetails[key] ?? [])
         : [];
     const selectedStatusCount = selectedStatusMeta ? queueCount(selectedStatusMeta) : 0;
+    const selectedStatusPageCount = Math.max(1, Math.ceil(selectedStatusRows.length / STATUS_PAGE_SIZE));
+    const currentStatusPage = Math.min(selectedStatusPage, selectedStatusPageCount);
+    const pagedStatusRows = selectedStatusRows.slice(
+        (currentStatusPage - 1) * STATUS_PAGE_SIZE,
+        currentStatusPage * STATUS_PAGE_SIZE,
+    );
     const dayLabel = period === 'today' && dayOffset < 0
         ? formatDateKST(new Date(kstDayStartMs(dayOffset)))
         : '오늘';
@@ -103,6 +111,10 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
             return next.size === prev.size ? prev : next;
         });
     }, [failures]);
+
+    useEffect(() => {
+        setSelectedStatusPage(1);
+    }, [queueDetails]);
 
     const selected = failures.filter(f => selectedIds.has(f.id));
     const allSelected = failures.length > 0 && selected.length === failures.length;
@@ -256,7 +268,10 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                             className={`dash-stat msg-stat-button${selectedStatus === s.key ? ' active' : ''}`}
                             key={s.key}
                             aria-pressed={selectedStatus === s.key}
-                            onClick={() => setSelectedStatus(selectedStatus === s.key ? null : s.key)}
+                            onClick={() => {
+                                setSelectedStatus(selectedStatus === s.key ? null : s.key);
+                                setSelectedStatusPage(1);
+                            }}
                         >
                             <div className={`dash-stat-value msg-${s.cls}`}>{queueCount(s)}</div>
                             <div className="dash-stat-label">{s.label}</div>
@@ -276,7 +291,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                         </div>
                         {selectedStatusRows.length ? (
                             <ul>
-                                {selectedStatusRows.map((row) => (
+                                {pagedStatusRows.map((row) => (
                                     <li key={row.id}>
                                         <strong>
                                             {failureName(row)}
@@ -290,6 +305,34 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                             </ul>
                         ) : (
                             <div className="dash-empty">해당 기간에 표시할 내역이 없습니다.</div>
+                        )}
+                        {selectedStatusPageCount > 1 && (
+                            <div className="msg-status-pagination" role="navigation" aria-label={`${selectedStatusMeta.label} 내역 페이지`}>
+                                <button
+                                    type="button"
+                                    className="msg-status-page"
+                                    aria-label="이전 페이지"
+                                    disabled={currentStatusPage === 1}
+                                    onClick={() => setSelectedStatusPage(currentStatusPage - 1)}
+                                >&lt;</button>
+                                {Array.from({ length: selectedStatusPageCount }, (_, index) => index + 1).map((page) => (
+                                    <button
+                                        type="button"
+                                        className={`msg-status-page${page === currentStatusPage ? ' active' : ''}`}
+                                        key={page}
+                                        aria-current={page === currentStatusPage ? 'page' : undefined}
+                                        disabled={page === currentStatusPage}
+                                        onClick={() => setSelectedStatusPage(page)}
+                                    >{page}</button>
+                                ))}
+                                <button
+                                    type="button"
+                                    className="msg-status-page"
+                                    aria-label="다음 페이지"
+                                    disabled={currentStatusPage === selectedStatusPageCount}
+                                    onClick={() => setSelectedStatusPage(currentStatusPage + 1)}
+                                >&gt;</button>
+                            </div>
                         )}
                         {data.queueLimitReached && <p className="msg-period-note">최근 항목 표시 상한에 도달했습니다. 기간을 좁혀주세요.</p>}
                     </div>

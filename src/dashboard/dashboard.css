@@ -1445,6 +1445,10 @@ body {
 .msg-status-details ul { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; display: grid; gap: 5px; }
 .msg-status-details li { display: grid; grid-template-columns: minmax(90px, 1fr) 120px 110px 140px; gap: 8px; font-size: 12px; align-items: center; }
 .msg-status-details li span { color: var(--text-sec); }
+.msg-status-pagination { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin-top: 10px; }
+.msg-status-page { min-width: 30px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; background: #fff; color: var(--text); cursor: pointer; }
+.msg-status-page.active { border-color: var(--primary); background: var(--primary); color: #fff; }
+.msg-status-page:disabled { cursor: default; }
 @media (max-width: 720px) { .msg-status-details li { grid-template-columns: 1fr 1fr; } }
 
 .msg-delivery-channels {
