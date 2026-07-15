@@ -36,7 +36,7 @@ const emptyDailyLogData = () => ({
 });
 
 // 학생 목록 로드 (앱 시작 시 1회)
-export function useStudents(user) {
+export function useStudents(user, includeEnded = false) {
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -47,11 +47,11 @@ export function useStudents(user) {
         setLoading(true);
         setError(null);
         // 1) 디스크 캐시에서 즉시 선표시 — 새로고침 시 네트워크 왕복을 기다리지 않게.
-        fetchStudentsFromCache().then(cached => {
+        fetchStudentsFromCache(includeEnded).then(cached => {
             if (!cancelled && cached) { setStudents(cached); setLoading(false); }
         }).catch(() => {});
         // 2) 서버 최신으로 갱신.
-        fetchStudents()
+        fetchStudents(includeEnded)
             .then(list => { if (!cancelled) { setStudents(list); setError(null); } })
             .catch(err => {
                 if (cancelled) return;
@@ -60,7 +60,7 @@ export function useStudents(user) {
             })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
-    }, [user]);
+    }, [user, includeEnded]);
 
     return { students, loading, error };
 }

@@ -36,6 +36,13 @@ describe('filterStudents', () => {
     expect(out.map((s) => s.name)).toEqual(['A']);
   });
 
+  it('비원생은 상담·퇴원·종강을 모두 포함한다', () => {
+    const list = ['등원예정', '재원', '실휴원', '가휴원', '상담', '퇴원', '종강']
+      .map((status) => S({ name: status, status }));
+    expect(filterStudents(list, { status: 'non' }).map((s) => s.status))
+      .toEqual(['상담', '퇴원', '종강']);
+  });
+
   it('returns all when no criteria', () => {
     const list = [S(), S({ name: 'B' })];
     expect(filterStudents(list, {})).toHaveLength(2);

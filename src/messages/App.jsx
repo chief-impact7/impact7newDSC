@@ -35,7 +35,7 @@ export default function App() {
     return unsub;
   }, []);
 
-  const { students } = useStudents(user);
+  const { students } = useStudents(user, true);
   const { data: msgDelivery, loading: msgLoading, reload: reloadMsg } = useMessageDelivery(user);
 
   if (authLoading) return <div className="dash-loading">로딩 중…</div>;
