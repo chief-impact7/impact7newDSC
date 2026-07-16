@@ -393,6 +393,59 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // [Board] 칸반 카드 — impact7board SPA. board: ops(학원 업무)/students(학생 관리)
+    // 단일 컬렉션, column = 보드별 상태. 삭제는 금지, archived 플래그로 보관만 허용.
+    // =========================================================================
+    match /board_cards/{cardId} {
+
+      function hasOnlyAllowedBoardCardCreateFields() {
+        return request.resource.data.keys().hasOnly([
+          'board', 'column', 'order', 'title', 'description',
+          'student_id', 'student_name', 'branch', 'assignees', 'due_date', 'labels',
+          'checklist', 'links', 'attachments', 'parent_id', 'related', 'archived',
+          'created_by', 'created_at', 'updated_by', 'updated_at',
+          'completed_by', 'completed_at'
+        ]);
+      }
+
+      function hasOnlyAllowedBoardCardUpdateFields() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'column', 'order', 'title', 'description',
+          'student_id', 'student_name', 'branch', 'assignees', 'due_date', 'labels',
+          'checklist', 'links', 'attachments', 'parent_id', 'related', 'archived',
+          'updated_by', 'updated_at', 'completed_by', 'completed_at'
+        ]);
+      }
+
+      function boardCardColumnValid() {
+        return (request.resource.data.board == 'ops'
+              && request.resource.data.column in ['ideas', 'todo', 'doing', 'review', 'done'])
+          || (request.resource.data.board == 'students'
+              && request.resource.data.column in ['intake', 'placement', 'enrolling', 'followup', 'done']);
+      }
+
+      allow read: if isAuthorized();
+
+      allow create: if isAuthorized()
+        && hasOnlyAllowedBoardCardCreateFields()
+        && request.resource.data.board in ['ops', 'students']
+        && request.resource.data.title is string
+        && boardCardColumnValid();
+
+      allow update: if isAuthorized()
+        && hasOnlyAllowedBoardCardUpdateFields()
+        && boardCardColumnValid();
+
+      allow delete: if false;  // 보관(archived)만, 삭제 금지
+    }
+
+    // [Board] 주간 AI 브리핑 — 서버(Functions callable)만 생성, 클라이언트는 읽기만.
+    match /board_briefings/{weekKey} {
+      allow read: if isAuthorized();
+      allow write: if false;
+    }
+
+    // =========================================================================
     // [DSC] User Settings (역할 설정)
     // =========================================================================
     match /user_settings/{email} {
