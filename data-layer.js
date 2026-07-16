@@ -1061,6 +1061,7 @@ export const getAttendanceNotificationGaps = callFn('getAttendanceNotificationGa
 
 // 정보성 대용량 발송(메시지 센터 ②블록, 직원 권한).
 export const createBulkMessage = callFn('createBulkMessage');
+export const getBulkStaffRecipients = callFn('getBulkStaffRecipients');
 
 // 일일 학습 리포트 발송(직원 권한). 자유 본문은 LMS/SMS로 발송.
 export const sendDailyReport = callFn('sendDailyReport');

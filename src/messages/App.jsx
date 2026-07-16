@@ -4,7 +4,7 @@ import { auth, dataAuthReady } from '../../firebase-config.js';
 import { signInWithGoogle, logout } from '../../auth.js';
 import { useStudents, useMessageDelivery } from '../dashboard/hooks/useFirestore.js';
 import MessageDeliverySummary from '../dashboard/components/MessageDeliverySummary.jsx';
-import DirectSmsCard from './components/DirectSmsCard.jsx';
+import ManualOptOutCard from './components/DirectSmsCard.jsx';
 import BulkSendCard from './components/BulkSendCard.jsx';
 import RecipientHistoryCard from './components/RecipientHistoryCard.jsx';
 import AttendanceNotificationGapCard from './components/AttendanceNotificationGapCard.jsx';
@@ -75,7 +75,7 @@ export default function App() {
         <AttendanceNotificationGapCard />
         <RecipientHistoryCard students={students} />
         <BulkSendCard students={students} />
-        <DirectSmsCard />
+        <ManualOptOutCard />
       </div>
     </div>
   );

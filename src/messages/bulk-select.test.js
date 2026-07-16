@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterStudents } from './bulk-select.js';
+import { filterStaff, filterStudents } from './bulk-select.js';
 
 // S: 기본 학생 픽스처. level/grade는 normalizeRealLevelGrade가 사용하는 실제 필드명.
 const S = (over) => ({ name: '홍길동', status: '재원', level: '중등', grade: '1', ...over });
@@ -46,5 +46,24 @@ describe('filterStudents', () => {
   it('returns all when no criteria', () => {
     const list = [S(), S({ name: 'B' })];
     expect(filterStudents(list, {})).toHaveLength(2);
+  });
+});
+
+describe('filterStaff', () => {
+  const staff = [
+    { id: 'a', name: '김재직', status: 'active', department: '교수', affiliation: '2단지', phoneAvailable: true },
+    { id: 'b', name: '박휴직', status: 'inactive', department: '행정', affiliation: '10단지', phoneAvailable: false },
+    { id: 'c', name: '이퇴직', status: 'terminated', department: '교수', affiliation: '2단지', phoneAvailable: true },
+  ];
+
+  it('재직·휴직·퇴직 상태로 필터링한다', () => {
+    expect(filterStaff(staff, { status: 'active' }).map((s) => s.id)).toEqual(['a']);
+    expect(filterStaff(staff, { status: 'inactive' }).map((s) => s.id)).toEqual(['b']);
+    expect(filterStaff(staff, { status: 'terminated' }).map((s) => s.id)).toEqual(['c']);
+  });
+
+  it('이름·부서·소속을 검색하고 전체 상태를 지원한다', () => {
+    expect(filterStaff(staff, { status: 'all', q: '행정' }).map((s) => s.id)).toEqual(['b']);
+    expect(filterStaff(staff, { status: 'all', q: '2단지' }).map((s) => s.id)).toEqual(['a', 'c']);
   });
 });
