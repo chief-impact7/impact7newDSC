@@ -176,15 +176,15 @@ export default function BulkSendCard({ students = [] }) {
   function commitSearch() {
     if (isStaff && kind === 'promo') { setMsg('교직원은 정보성 문자에서만 추가할 수 있습니다.'); return; }
     if (!matches.length) { setMsg(q.trim() ? `"${q.trim()}" 결과 없음` : '추가할 대상이 없습니다.'); return; }
+    const fresh = matches.filter((target) => !picked.has(`${audience}:${target.id}`));
+    if (!fresh.length) { setQ(''); setMsg('검색 결과가 모두 이미 담겨 있습니다.'); return; }
     setPicked((prev) => {
       const next = new Map(prev);
-      for (const target of matches) {
-        const key = `${audience}:${target.id}`;
-        if (!next.has(key)) next.set(key, { audience, target, on: true });
-      }
+      for (const target of fresh) next.set(`${audience}:${target.id}`, { audience, target, on: true });
       return next;
     });
-    setQ(''); setMsg(''); resetReqId();
+    const dup = matches.length - fresh.length;
+    setQ(''); setMsg(`${fresh.length}명 추가${dup ? ` · ${dup}명 이미 담김` : ''}`); resetReqId();
   }
   function toggle(key) {
     const entry = picked.get(key);
