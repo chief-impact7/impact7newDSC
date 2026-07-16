@@ -62,6 +62,7 @@ details.mc-card[open] .mc-disclosure-icon { transform: rotate(180deg); }
 .mc-gap-status.pending { background: #fff3e0; color: #b26a00; }
 
 .bulk-split { display: grid; grid-template-columns: 1fr 1.05fr 0.85fr; gap: 0; border: 1px solid #e3e8e5; border-radius: 11px; overflow: hidden; }
+.bulk-send-fieldset { min-width: 0; min-inline-size: 0; margin: 0; padding: 0; }
 .bulk-left { padding: 14px; border-right: 1px solid #e3e8e5; }
 .bulk-mid { padding: 14px; border-right: 1px solid #e3e8e5; display: flex; flex-direction: column; }
 .bulk-right { min-width: 0; min-height: 0; padding: 14px; background: #fbfdfc; display: flex; flex-direction: column; }
@@ -72,6 +73,8 @@ details.mc-card[open] .mc-disclosure-icon { transform: rotate(180deg); }
 .mc-kind-block { display: flex; flex-direction: column; align-items: flex-start; align-self: flex-end; }
 .bulk-filters { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
 .bulk-filters select { border: 1px solid #e3e8e5; border-radius: 7px; padding: 5px 9px; font-family: inherit; font-size: 12px; }
+.bulk-filters-row { flex-wrap: nowrap; align-items: center; overflow-x: auto; padding-bottom: 2px; }
+.bulk-filters-row > * { flex: 0 0 auto; }
 .bulk-cart { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; background: #e8f5ef; border: 1px solid #cfe9df; border-radius: 8px; padding: 7px 11px; font-size: 12.5px; font-weight: 700; color: #0a6e49; }
 .bulk-cart > span:first-child { max-height: 48px; overflow: auto; }
 .bulk-cart-actions { display: flex; gap: 10px; flex: 0 0 auto; }
@@ -85,6 +88,9 @@ details.mc-card[open] .mc-disclosure-icon { transform: rotate(180deg); }
 .bulk-row:hover { background: #f3f7f5; }
 .bulk-row input { width: 16px; height: 16px; flex: 0 0 auto; accent-color: #0b7a52; cursor: pointer; }
 .bulk-name { font-size: 13px; font-weight: 600; color: #1f2933; }
+.bulk-type { flex: 0 0 auto; border-radius: 10px; padding: 1px 6px; font-size: 10.5px; font-weight: 700; background: #edf2ef; color: #5d6b64; }
+.bulk-type.staff { background: #e8f0fe; color: #315ca8; }
+.bulk-type.direct { background: #fff3e0; color: #9a5b00; }
 .bulk-meta { margin-left: auto; font-size: 11.5px; color: #7c8a83; white-space: nowrap; }
 .bulk-empty { color: #99a3ad; font-size: 12.5px; padding: 16px 8px; text-align: center; }
 
@@ -104,6 +110,10 @@ details.mc-card[open] .mc-disclosure-icon { transform: rotate(180deg); }
 .mc-vars { display: flex; gap: 5px; }
 .mc-icon-btn, .mc-tpl-manage-btn { display: inline-flex; align-items: center; gap: 4px; }
 .mc-var-btn { font-size: 11px; border: 1px solid #cfe9df; background: #e8f5ef; color: #0a6e49; border-radius: 6px; padding: 2px 7px; cursor: pointer; font-family: inherit; }
+.mc-file-actions { flex-wrap: nowrap; }
+.mc-icon-only { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.bulk-add-direct { width: 100%; height: 34px; margin-top: 7px; }
+.mc-recipient-fixed { margin: 5px 0 0; color: #7c8a83; font-size: 11px; }
 .mc-var-btn:hover { background: #d6ede2; }
 .mc-var-btn:disabled { opacity: .55; cursor: default; }
 

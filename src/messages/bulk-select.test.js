@@ -62,8 +62,9 @@ describe('filterStaff', () => {
     expect(filterStaff(staff, { status: 'terminated' }).map((s) => s.id)).toEqual(['c']);
   });
 
-  it('이름·부서·소속을 검색하고 전체 상태를 지원한다', () => {
+  it('이름·부서·소속을 검색하고 부서 필터와 전체 상태를 지원한다', () => {
     expect(filterStaff(staff, { status: 'all', q: '행정' }).map((s) => s.id)).toEqual(['b']);
     expect(filterStaff(staff, { status: 'all', q: '2단지' }).map((s) => s.id)).toEqual(['a', 'c']);
+    expect(filterStaff(staff, { status: 'all', department: '교수' }).map((s) => s.id)).toEqual(['a', 'c']);
   });
 });

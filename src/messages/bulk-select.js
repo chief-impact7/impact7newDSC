@@ -24,11 +24,12 @@ export function filterStudents(students, criteria = {}) {
 }
 
 export function filterStaff(staff, criteria = {}) {
-  const { status, affiliation, q } = criteria;
+  const { status, affiliation, department, q } = criteria;
   const needle = String(q ?? '').trim().toLowerCase();
   return (staff || []).filter((person) => {
     if (status && status !== 'all' && person.status !== status) return false;
     if (affiliation && person.affiliation !== affiliation) return false;
+    if (department && person.department !== department) return false;
     if (needle) {
       const haystack = [person.name, person.department, person.affiliation]
         .map((value) => String(value ?? '').toLowerCase());
