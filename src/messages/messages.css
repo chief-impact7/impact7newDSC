@@ -48,6 +48,7 @@ details.mc-card[open] .mc-disclosure-icon { transform: rotate(180deg); }
 .mc-sync.solapi_only { background: #fff3e0; color: #9a5a00; }
 .mc-sync.local_only { background: #fce8e6; color: #c5221f; }
 .mc-gap-empty { font-size: 13px; color: #5d6b64; padding: 5px 0; }
+.mc-gap-date { border: 1px solid #cfe9df; border-radius: 6px; padding: 2px 7px; color: #2d3a34; background: #fff; font: 11px "Noto Sans KR", sans-serif; }
 .mc-gap-details summary { cursor: pointer; font-size: 13px; font-weight: 700; color: #2d3a34; }
 .mc-gap-details summary span { margin-left: 6px; color: #7c8a83; font-weight: 400; }
 .mc-gap-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 6px; }
