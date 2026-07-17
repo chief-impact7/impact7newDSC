@@ -2,6 +2,19 @@ import { studentGradeKey, branchFromStudent, allClassCodes } from '../shared/fir
 import { studentSearchTerms } from '@impact7/shared/student-label';
 import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 
+export function studentMatchesQuery(s, needle) {
+  if (!needle) return true;
+  if (String(s.name ?? '').toLowerCase().includes(needle)) return true;
+  if (studentSearchTerms(s).some((t) => t.toLowerCase().includes(needle))) return true;
+  return allClassCodes(s).some((c) => c.toLowerCase().includes(needle));
+}
+
+export function staffMatchesQuery(person, needle) {
+  if (!needle) return true;
+  return [person.name, person.department, person.affiliation]
+    .some((value) => String(value ?? '').toLowerCase().includes(needle));
+}
+
 // 학생 목록을 필터 조건으로 좁힌다. 모든 분류 의미는 공유 헬퍼에 위임(로컬 재구현 금지).
 export function filterStudents(students, criteria = {}) {
   const { branch, grades, classCode, status, q } = criteria;
@@ -12,14 +25,7 @@ export function filterStudents(students, criteria = {}) {
     if (classCode && !allClassCodes(s).includes(classCode)) return false;
     if (status === 'enrolled' && !ENROLLABLE_STATUSES.has(s.status)) return false;
     if (status === 'non' && ENROLLABLE_STATUSES.has(s.status)) return false;
-    if (needle) {
-      const nameMatch = String(s.name ?? '').toLowerCase().includes(needle);
-      const terms = studentSearchTerms(s);
-      const termMatch = terms.some((t) => t.toLowerCase().includes(needle));
-      const classMatch = allClassCodes(s).some((c) => c.toLowerCase().includes(needle));
-      if (!nameMatch && !termMatch && !classMatch) return false;
-    }
-    return true;
+    return studentMatchesQuery(s, needle);
   });
 }
 
@@ -30,11 +36,6 @@ export function filterStaff(staff, criteria = {}) {
     if (status && status !== 'all' && person.status !== status) return false;
     if (affiliation && person.affiliation !== affiliation) return false;
     if (department && person.department !== department) return false;
-    if (needle) {
-      const haystack = [person.name, person.department, person.affiliation]
-        .map((value) => String(value ?? '').toLowerCase());
-      if (!haystack.some((value) => value.includes(needle))) return false;
-    }
-    return true;
+    return staffMatchesQuery(person, needle);
   });
 }

@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Icon } from '@impact7/ui';
-import { filterStaff, filterStudents } from '../bulk-select.js';
+import { filterStaff, filterStudents, staffMatchesQuery, studentMatchesQuery } from '../bulk-select.js';
 import { studentFullLabel, currentSchool } from '@impact7/shared/student-label';
 import { formatPhone } from '@impact7/shared/phone';
 import { allClassCodes } from '../../shared/firestore-helpers.js';
 import GradeFilter from '../../dashboard/components/GradeFilter.jsx';
-import { MESSAGE_KIND_NOTICE, MMS_SIZE_NOTICE, messageMeta, normalizePhones, readMmsImage } from '../message-format.js';
+import { MESSAGE_KIND_NOTICE, MMS_SIZE_NOTICE, messageMeta, normalizePhones, onlyDigits, readMmsImage } from '../message-format.js';
 import { parsePhonesFromFile, sampleCsv } from '../message-import.js';
 import {
   BULK_MAX_MESSAGES,
@@ -33,6 +33,7 @@ const RECIPIENT_LABELS = { student: '학생', parent_1: '학부모1', parent_2: 
 const STATUS_LABELS = { enrolled: '재원', non: '비원생' };
 const STAFF_STATUS_LABELS = { all: '전체', active: '재직', inactive: '휴직', terminated: '퇴직' };
 const AUDIENCE_LABELS = { student: '학생', staff: '교직원', direct: '번호' };
+const AUDIENCE_DISPLAY_ORDER = { direct: 0, staff: 1, student: 2 }; // 누적 목록 표시 순서
 
 // 학생의 현재 반코드(첫 수강). enrollmentCode는 enrollment 객체를 받으므로 학생엔 allClassCodes를 쓴다.
 function classOf(s) { return allClassCodes(s)[0] || ''; }
@@ -158,6 +159,17 @@ export default function BulkSendCard({ students = [] }) {
     return filterStudents(students, { branch, grades, status, q });
   }, [isDirect, isStaff, students, staff, branch, grades, status, staffStatus, staffAffiliation, staffDepartment, q]);
   const rows = useMemo(() => [...picked.values()], [picked]);
+  // 검색어는 새로 담을 대상뿐 아니라 이미 담긴 누적 목록도 함께 좁힌다(목록 안에서 학생 찾기).
+  const displayRows = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const filtered = !needle ? rows : rows.filter((entry) => {
+      if (entry.audience === 'student') return studentMatchesQuery(entry.target, needle);
+      if (entry.audience === 'staff') return staffMatchesQuery(entry.target, needle);
+      const digits = onlyDigits(needle);
+      return Boolean(digits) && entry.target.id.includes(digits);
+    });
+    return [...filtered].sort((a, b) => AUDIENCE_DISPLAY_ORDER[a.audience] - AUDIENCE_DISPLAY_ORDER[b.audience]);
+  }, [rows, q]);
   const selectedGroups = useMemo(() => groupSelectedTargets(rows), [rows]);
   const selectedCount = selectedGroups.student.length + selectedGroups.staff.length + selectedGroups.direct.length;
   const directPhones = useMemo(() => [...new Set(normalizePhones(directRecipients))], [directRecipients]);
@@ -446,14 +458,14 @@ export default function BulkSendCard({ students = [] }) {
               {isStaff && staffError && <p className="mc-field-label" role="alert">교직원 명단 조회 실패: {staffError}</p>}
             </>}
             <div className="bulk-cart">
-              <span>누적 대상 {selectedCount}명</span>
+              <span>누적 대상 {selectedCount}명{q.trim() && picked.size ? ` · 검색 일치 ${displayRows.length}명` : ''}</span>
               <span className="bulk-cart-actions">
                 <button onClick={() => setAllOn(true)} disabled={!picked.size}>전체선택</button>
                 <button onClick={clearAll} disabled={!picked.size}>비우기</button>
               </span>
             </div>
             <ul className="bulk-list">
-              {rows.map((entry) => {
+              {displayRows.map((entry) => {
                 const key = `${entry.audience}:${entry.target.id}`;
                 return (
                   <li key={key} className={entry.on ? '' : 'off'}>
@@ -467,21 +479,24 @@ export default function BulkSendCard({ students = [] }) {
                 );
               })}
               {picked.size === 0 && <li className="bulk-empty">학생·교직원·번호를 추가하면 여기에 함께 표시됩니다.</li>}
+              {picked.size > 0 && displayRows.length === 0 && <li className="bulk-empty">"{q.trim()}" 일치하는 누적 대상이 없습니다.</li>}
             </ul>
           </div>
 
           <div className="bulk-mid">
             <p className="bulk-col-title">메시지</p>
             <div className="mc-routing-grid">
-              <span className="mc-field-label">학생 받는이 {kind === 'promo' ? '(단일)' : '(다중 선택)'}</span>
+              <span className="mc-field-label">받는이 {audience === 'student' ? (kind === 'promo' ? '(단일)' : '(다중 선택)') : '(고정)'}</span>
               <span className="mc-field-label mc-kind-label">종류</span>
-              <div className="mc-seg">
+              {audience === 'student' ? <div className="mc-seg">
                 {['student', 'parent_1', 'parent_2'].map((f) => (
                   <button key={f} type="button" className={recipientFields.has(f) ? 'on' : ''} aria-pressed={recipientFields.has(f)} onClick={() => toggleRecipient(f)}>
                     {RECIPIENT_LABELS[f]}
                   </button>
                 ))}
-              </div>
+              </div> : <div className="mc-seg">
+                <button type="button" className="on" aria-disabled="true" style={{ cursor: 'default' }}>{isStaff ? '교직원 본인' : '입력 번호'}</button>
+              </div>}
               <div className="mc-seg">
                 <button type="button" className={kind === 'info' ? 'on' : ''} aria-pressed={kind === 'info'} onClick={() => selectKind('info')}>정보성</button>
                 <button type="button" disabled={hasStaffTargets} title={hasStaffTargets ? '교직원은 정보성 문자만 지원합니다.' : ''} className={kind === 'promo' ? 'on' : ''} aria-pressed={kind === 'promo'} onClick={() => selectKind('promo')}>홍보성</button>
