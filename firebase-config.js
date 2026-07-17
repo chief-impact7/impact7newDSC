@@ -47,17 +47,14 @@ export const auth = getAuth(app);
 // dataApp의 Firestore가 인증 토큰을 받도록 [DEFAULT] auth를 미러링.
 // 세션 저장은 [DEFAULT]가 담당하므로 여기는 in-memory.
 const dataAuth = initializeAuth(dataApp, { persistence: inMemoryPersistence });
-let _mirrorReady = Promise.resolve();
-let _firstMirrorResolve;
-const _firstMirror = new Promise((r) => { _firstMirrorResolve = r; });
-onIdTokenChanged(auth, (user) => {
-    _mirrorReady = dataAuth.updateCurrentUser(user)
-        .catch(err => console.warn('[auth-mirror] dataApp 동기화 실패:', err))
-        .finally(() => _firstMirrorResolve());
-});
-// Firestore 첫 쿼리 전에 미러링 완료를 보장 — onAuthStateChanged 콜백 첫 줄에서 await.
-// 첫 미러 완료를 명시적으로 기다리므로 리스너 등록 순서에 의존하지 않는다.
-export const dataAuthReady = () => _firstMirror.then(() => _mirrorReady);
+const mirrorDataAuth = (user) => dataAuth.updateCurrentUser(user)
+    .catch(async (err) => {
+        console.warn('[auth-mirror] dataApp 동기화 실패:', err);
+        await dataAuth.updateCurrentUser(null).catch(() => {});
+    });
+onIdTokenChanged(auth, mirrorDataAuth);
+// onAuthStateChanged 시점에는 auth.currentUser가 확정돼 있으므로 이벤트 순서를 다시 기다리지 않는다.
+export const dataAuthReady = () => mirrorDataAuth(auth.currentUser);
 
 let db;
 if (import.meta.env.VITE_USE_EMULATOR === 'true') {
