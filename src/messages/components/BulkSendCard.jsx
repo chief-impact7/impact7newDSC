@@ -284,8 +284,11 @@ export default function BulkSendCard({ students = [] }) {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      setMmsImage(await readMmsImage(file));
-      setMsg(`${file.name} 첨부 완료 · MMS로 발송됩니다.`);
+      const image = await readMmsImage(file);
+      setMmsImage(image);
+      setMsg(image.converted
+        ? `${file.name} → JPG 변환·압축 (${Math.ceil(image.size / 1024)}KB) · MMS로 발송됩니다.`
+        : `${file.name} 첨부 완료 · MMS로 발송됩니다.`);
       resetReqId();
     } catch (error) {
       setMmsImage(null);
@@ -514,7 +517,7 @@ export default function BulkSendCard({ students = [] }) {
                 )}
               </div>
             </div>
-            <input ref={imageRef} type="file" accept="image/jpeg,.jpg,.jpeg" aria-label="MMS 사진 첨부" style={{ display: 'none' }} onChange={onMmsImage} />
+            <input ref={imageRef} type="file" accept="image/*,.pdf,application/pdf" aria-label="MMS 사진 첨부" style={{ display: 'none' }} onChange={onMmsImage} />
             <textarea aria-label="메시지 내용" className="mc-textarea bulk-content" value={content} onChange={(e) => { setContent(e.target.value); resetReqId(); }}
               placeholder={kind === 'promo' ? `(광고) [임팩트세븐학원]\n\n...\n\n${OPT_OUT_LINE}` : '안내 내용을 입력하세요.'} />
             <TemplateBar content={content} onPick={(c) => { setContent(c); resetReqId(); }} />
