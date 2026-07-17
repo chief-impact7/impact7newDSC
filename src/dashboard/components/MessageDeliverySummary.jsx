@@ -30,7 +30,7 @@ const RECIPIENT_ROLE_LABEL = {
     parent_2: '학부모2',
     other: '기타',
 };
-// 솔라피 실패 status_code 한글 라벨 (발송 인사이트 수용) — 미등록 코드는 '코드 N'으로 표시.
+// 실패 status_code 한글 라벨 (발송 인사이트 수용) — 솔라피 숫자 코드 + 내부 워커 코드. 미등록은 '코드 N'.
 const SOLAPI_ERROR_LABELS = {
     1042: '템플릿 오류',
     3040: '전송시간 초과',
@@ -39,6 +39,12 @@ const SOLAPI_ERROR_LABELS = {
     3104: '카카오톡 미사용',
     3108: '발송 가능 시간 아님',
     3120: '카카오 수신 불가',
+    delivery_result_timeout: '결과 확인 시간 초과',
+    crash_after_dispatch: '발송 중 중단',
+    missing_group_id: '접수 정보 유실',
+    unresolved_message_vars: '변수 치환 실패',
+    kind_not_allowed: '허용되지 않은 종류',
+    no_messages: '발송 대상 없음',
 };
 // 자동충전 꺼진 상태에서 이 금액 밑이면 경고색 — 잔액 고갈은 전 채널 발송 실패.
 const LOW_BALANCE_WARN = 10000;
