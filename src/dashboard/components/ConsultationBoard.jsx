@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Icon } from '@impact7/ui';
+import { Icon, IconButton } from '@impact7/ui';
 import { ICON_NAME } from '../icon-map.js';
 import { branchFromStudent, enrollmentCode, allClassCodes } from '../../../student-core.js';
 import { studentGradeKey, studentShortLabel } from '../../shared/firestore-helpers.js';
@@ -99,10 +99,7 @@ export default function ConsultationBoard({
                         onChange={e => setSearch(e.target.value)} />
                 )}
                 <span className="consult-count">총 {exportRows.length}건 · {groups.length}{mode.unit}</span>
-                <button type="button" className="consult-export" onClick={handleExport} disabled={!exportRows.length} aria-label="CSV 다운로드">
-                    <Icon name={ICON_NAME.download} size={18} aria-hidden="true" />
-                    CSV 다운로드
-                </button>
+                <IconButton style={{ marginLeft: 'auto' }} icon={ICON_NAME.download} label="CSV 다운로드" onClick={handleExport} disabled={!exportRows.length} />
             </div>
 
             {!groups.length ? (

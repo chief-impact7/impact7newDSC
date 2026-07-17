@@ -81,6 +81,7 @@ export default function RetestSummary({ checks }) {
                                 className="dash-expand-btn"
                                 onClick={() => setExpanded(v => !v)}
                             >
+                                <Icon name={expanded ? ICON_NAME.expand_less : ICON_NAME.expand_more} size={18} />
                                 {expanded ? '접기' : `더 보기 (${records.length - INITIAL_ROWS}건)`}
                             </button>
                         )}

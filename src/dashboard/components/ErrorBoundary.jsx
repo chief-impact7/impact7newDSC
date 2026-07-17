@@ -1,5 +1,5 @@
 import React from 'react';
-import { Icon } from '@impact7/ui';
+import { Icon, IconButton } from '@impact7/ui';
 import { ICON_NAME } from '../icon-map.js';
 
 export default class ErrorBoundary extends React.Component {
@@ -29,9 +29,7 @@ export default class ErrorBoundary extends React.Component {
                         <p style={{ color: 'var(--text-sec)', marginBottom: 16 }}>
                             이 섹션을 불러올 수 없습니다
                         </p>
-                        <button className="dash-error-retry" onClick={this.handleRetry}>
-                            다시 시도
-                        </button>
+                        <IconButton icon={ICON_NAME.replay} label="다시 시도" onClick={this.handleRetry} />
                     </div>
                 </div>
             );

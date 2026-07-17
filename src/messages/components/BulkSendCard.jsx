@@ -560,7 +560,7 @@ export default function BulkSendCard({ students = [] }) {
                   {when === 'schedule' && scheduledAt ? ` · 예약 ${scheduledAt.replace('T', ' ')}` : ' · 즉시 발송'}
                   — 맞으면 아래 버튼을 다시 눌러 발송하세요.
                 </span>
-                <button type="button" className="mc-var-btn" onClick={() => setConfirming(false)}>취소</button>
+                <IconButton icon="xMark" label="취소" onClick={() => setConfirming(false)} />
               </div>
             )}
             <button className="mc-send bulk-send-btn" disabled={sending} onClick={onSendClick}>
