@@ -455,7 +455,7 @@ export default function BulkSendCard({ students = [] }) {
                   onKeyDown={(e) => {
                     if ((e.key === 'Enter' || e.key === 'Tab') && !e.nativeEvent.isComposing) { e.preventDefault(); commitSearch(); }
                   }}
-                  placeholder={isStaff ? '이름·부서·소속 검색 후 엔터' : '이름·학교·반 검색 후 엔터 (예: 노현담, 영도초6, PA101)'} />
+                  placeholder={isStaff ? '이름·부서·소속 검색 후 엔터' : '이름·학교·반·전화번호 검색 후 엔터 (예: 노현담, 영도초6, 5678)'} />
                 <button onClick={commitSearch} disabled={isStaff && staffLoading}>{staffLoading ? '불러오는 중…' : q.trim() ? `결과 ${matches.length}명 담기` : '검색 결과 담기'}</button>
               </div>
               {isStaff && staffError && <p className="mc-field-label" role="alert">교직원 명단 조회 실패: {staffError}</p>}

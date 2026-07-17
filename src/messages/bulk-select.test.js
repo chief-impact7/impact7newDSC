@@ -43,6 +43,18 @@ describe('filterStudents', () => {
       .toEqual(['상담', '퇴원', '종강']);
   });
 
+  it('4자리 이상 숫자는 학생·학부모 전화번호를 매칭한다', () => {
+    const list = [
+      S({ name: 'A', parent_phone_1: '010-1234-5678' }),
+      S({ name: 'B', student_phone: '01099990000' }),
+      S({ name: 'C' }),
+    ];
+    expect(filterStudents(list, { q: '5678' }).map((s) => s.name)).toEqual(['A']);
+    expect(filterStudents(list, { q: '010-9999' }).map((s) => s.name)).toEqual(['B']);
+    // 3자리 이하 숫자는 번호 매칭 안 함(반코드와 소음 방지)
+    expect(filterStudents(list, { q: '999' })).toHaveLength(0);
+  });
+
   it('returns all when no criteria', () => {
     const list = [S(), S({ name: 'B' })];
     expect(filterStudents(list, {})).toHaveLength(2);
