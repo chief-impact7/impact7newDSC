@@ -10,6 +10,7 @@ import { auditDelete, auditUpdate, auditSet, auditAdd } from './audit.js';
 import { todayStr } from './src/shared/firestore-helpers.js';
 import { SCHOOL_FIELD, schoolLevelGradeLabel } from '@impact7/shared/student-label';
 import { staffLabel } from '@impact7/shared/staff-label';
+import { normalizeStudentMemos } from './role-memo.js';
 
 const _normalizePhone = (phone) => (phone || '').replace(/\D/g, '').replace(/^0(?=\d{10}$)/, '');
 
@@ -256,9 +257,16 @@ export function openTempAttendanceModal() {
 // 첫데이터입력 → students 컬렉션 직접 upsert
 // - 신규: status='상담' + 빈 enrollments로 생성
 // - 기존: status/enrollments는 건드리지 않고 기본 정보만 merge
+// 첫데이터 메모는 학생 문서의 고정 메모로 실어 나중에 등록해도 상세패널에 따라온다
+const _tempMemoEntry = (text) => ({
+    text, pinned: true, date: todayStr(), created_at: todayStr(),
+    created_by: state.currentUser?.email || '',
+});
+
 // 날짜 없는 첫데이터에서는 이 upsert가 유일한 저장이므로 오류를 삼키지 않고
 // 호출부(saveTempAttendance)의 alert로 올린다
-async function _upsertStudentFromTemp(data) {
+// prevMemo: 수정 저장 시 이전 temp 메모 — 같은 텍스트의 고정 메모를 교체해 중복 축적을 막는다
+async function _upsertStudentFromTemp(data, prevMemo) {
     if (!data.parent_phone_1 || !data.name) return;
     const studentDocId = _makeContactDocId(data.name, data.parent_phone_1);
     const ref = doc(db, 'students', studentDocId);
@@ -277,6 +285,14 @@ async function _upsertStudentFromTemp(data) {
     const snap = await getDoc(ref);
     if (snap.exists()) {
         // 기존 학생 — status/enrollments는 보존, 기본 필드만 merge
+        // 메모는 같은 내용이 이미 있으면 중복 추가하지 않는다 (수정 저장이 upsert를 재호출)
+        const memos = normalizeStudentMemos(snap.data());
+        if (data.memo && !memos.some(m => m.text === data.memo)) {
+            const prevIdx = prevMemo ? memos.findIndex(m => m.pinned && m.text === prevMemo) : -1;
+            if (prevIdx >= 0) memos[prevIdx] = { ...memos[prevIdx], text: data.memo };
+            else memos.push(_tempMemoEntry(data.memo));
+            baseFields.memo = memos;
+        }
         await auditSet(ref, baseFields, { merge: true });
         // 로컬 캐시 업데이트
         const cached = state.allStudents.find(s => s.docId === studentDocId);
@@ -289,6 +305,7 @@ async function _upsertStudentFromTemp(data) {
             enrollments: [],
             first_registered: data.temp_date || todayStr(),
         };
+        if (data.memo) newDoc.memo = [_tempMemoEntry(data.memo)];
         await auditSet(ref, newDoc);
         // 로컬 캐시 추가 (loadStudents 재호출 없이 즉시 반영)
         state.allStudents.push({ docId: studentDocId, ...newDoc });
@@ -400,7 +417,7 @@ async function _doUpdateTempAttendance(docId, existing, data) {
             ...data,
             edit_history: arrayUnion(historyEntry)
         }),
-        _upsertStudentFromTemp(data)
+        _upsertStudentFromTemp(data, existing.memo)
     ]);
 
     const cached = state.tempAttendances.find(t => t.docId === docId);
