@@ -1551,6 +1551,36 @@ body {
     align-items: center;
     gap: 8px;
 }
+.msg-balance {
+    font-size: 12px;
+    font-weight: 600;
+    color: #5f6b64;
+    background: #f1f5f3;
+    border: 1px solid #e0e8e3;
+    border-radius: 999px;
+    padding: 4px 11px;
+    white-space: nowrap;
+}
+.msg-balance.low {
+    color: #b3261e;
+    background: #fdeceb;
+    border-color: #f5c6c2;
+}
+.msg-failed-codes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.msg-failed-code {
+    font-size: 11px;
+    font-weight: 600;
+    color: #9a4a00;
+    background: #fff3e0;
+    border: 1px solid #f2ddba;
+    border-radius: 999px;
+    padding: 2px 8px;
+    white-space: nowrap;
+}
 .msg-pricing-btn,
 .msg-refresh-btn {
     display: inline-flex;

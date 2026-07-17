@@ -30,6 +30,18 @@ const RECIPIENT_ROLE_LABEL = {
     parent_2: '학부모2',
     other: '기타',
 };
+// 솔라피 실패 status_code 한글 라벨 (발송 인사이트 수용) — 미등록 코드는 '코드 N'으로 표시.
+const SOLAPI_ERROR_LABELS = {
+    1042: '템플릿 오류',
+    3040: '전송시간 초과',
+    3046: '단말기 문제',
+    3058: '전송경로 없음',
+    3104: '카카오톡 미사용',
+    3108: '발송 가능 시간 아님',
+    3120: '카카오 수신 불가',
+};
+// 자동충전 꺼진 상태에서 이 금액 밑이면 경고색 — 잔액 고갈은 전 채널 발송 실패.
+const LOW_BALANCE_WARN = 10000;
 
 const PERIODS = [
     { key: 'today', label: '오늘' },
@@ -244,6 +256,15 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                     발송 현황
                 </span>
                 <span className="msg-header-actions">
+                    {data.solapiBalance && (
+                        <span
+                            className={`msg-balance${data.solapiBalance.balance < LOW_BALANCE_WARN && !(data.solapiBalance.autoRecharge > 0) ? ' low' : ''}`}
+                            title={`포인트 ${data.solapiBalance.point ?? 0}P · 자동충전 ${data.solapiBalance.autoRecharge > 0 ? `${(data.solapiBalance.rechargeTo ?? 0).toLocaleString()}원까지` : '꺼짐'}`}
+                        >
+                            잔액 {Math.round(data.solapiBalance.balance).toLocaleString()}원
+                            {!(data.solapiBalance.autoRecharge > 0) && ' · 자동충전 꺼짐'}
+                        </span>
+                    )}
                     <a
                         className="msg-pricing-btn"
                         href={`${import.meta.env.BASE_URL}docs/Pricing.html`}
@@ -397,7 +418,20 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                         ))}
                         <li className="msg-channel-total">
                             발송 완료 <strong>{data.sentCount ?? 0}</strong> · 실패 <strong>{data.failedCount ?? 0}</strong>
+                            {(data.sentCount ?? 0) + (data.failedCount ?? 0) > 0 && (
+                                <> · 성공률 <strong>{(((data.sentCount ?? 0) / ((data.sentCount ?? 0) + (data.failedCount ?? 0))) * 100).toFixed(1)}%</strong></>
+                            )}
                         </li>
+                        {Object.keys(data.failedCodeCounts ?? {}).length > 0 && (
+                            <li className="msg-failed-codes">
+                                {Object.entries(data.failedCodeCounts)
+                                    .sort((a, b) => b[1] - a[1])
+                                    .slice(0, 4)
+                                    .map(([code, count]) => (
+                                        <span key={code} className="msg-failed-code">{SOLAPI_ERROR_LABELS[code] || `코드 ${code}`} {count}건</span>
+                                    ))}
+                            </li>
+                        )}
                     </ul>
                 </div>
 
