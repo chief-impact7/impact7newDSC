@@ -79,7 +79,9 @@ export default function AttendanceNotificationGapCard() {
           <button type="button" className="mc-var-btn" disabled={!items.length} onClick={downloadList}>
             <Icon name={ICON_NAME.download} size={14} aria-hidden="true" /> 명단 다운로드
           </button>
-          <button type="button" className="mc-var-btn" disabled={loading} onClick={() => load()}>{loading ? '불러오는 중…' : '새로고침'}</button>
+          <button type="button" className="mc-var-btn mc-icon-only" disabled={loading} onClick={() => load()} title="새로고침" aria-label="새로고침">
+            <Icon name={ICON_NAME.refresh} size={16} aria-hidden="true" />
+          </button>
         </div>
         {content}
       </div>

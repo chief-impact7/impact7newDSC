@@ -281,9 +281,8 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                     >
                         <Icon name={ICON_NAME.payments} size={16} className="i7-icon" aria-hidden="true" />
                     </a>
-                    <button className={`msg-refresh-btn${loading ? ' loading' : ''}`} onClick={refresh} disabled={loading} title="새로고침">
+                    <button className={`msg-refresh-btn${loading ? ' loading' : ''}`} onClick={refresh} disabled={loading} title="새로고침" aria-label="새로고침">
                         <Icon name={ICON_NAME.refresh} size={16} className="i7-icon" aria-hidden="true" />
-                        {loading ? '불러오는 중' : '새로고침'}
                     </button>
                 </span>
             </div>
