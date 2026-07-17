@@ -5,7 +5,7 @@ import { msIcon } from './ms-icon.js';
 import { collection, doc, getDoc, getDocs, query, where, serverTimestamp, arrayUnion, deleteField } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { state, TEMP_FIELD_LABELS } from './state.js';
-import { esc, formatTime12h, nowTimeStr, showSaveIndicator, stripEmailDomain, _fmtTs } from './ui-utils.js';
+import { esc, formatTime12h, showSaveIndicator, stripEmailDomain, _fmtTs } from './ui-utils.js';
 import { auditDelete, auditUpdate, auditSet, auditAdd } from './audit.js';
 import { todayStr } from './src/shared/firestore-helpers.js';
 import { SCHOOL_FIELD, schoolLevelGradeLabel } from '@impact7/shared/student-label';
@@ -235,7 +235,7 @@ async function _tryTempContactAutofill() {
 export function openTempAttendanceModal() {
     state._editingTempDocId = null;
     _lastTempAutofillId = null;
-    document.getElementById('temp-att-modal-title').textContent = '첫데이터 및 진단평가입력';
+    document.getElementById('temp-att-modal-title').textContent = '첫데이터 입력';
     document.getElementById('temp-att-save-btn').textContent = '저장';
     document.getElementById('temp-att-edit-history').innerHTML = '';
     _hideDuplicatePrompt();
@@ -247,53 +247,52 @@ export function openTempAttendanceModal() {
     document.getElementById('temp-att-student-phone').value = '';
     document.getElementById('temp-att-parent-phone').value = '';
     document.getElementById('temp-att-memo').value = '';
-    document.getElementById('temp-att-date').value = state.selectedDate;
-    document.getElementById('temp-att-time').value = nowTimeStr();
+    // 진단평가일/시간은 newtest 자동등록으로 대체 — 수동 첫데이터는 미예약이 기본
+    document.getElementById('temp-att-date').value = '';
+    document.getElementById('temp-att-time').value = '';
     document.getElementById('temp-attendance-modal').style.display = '';
 }
 
 // 첫데이터입력 → students 컬렉션 직접 upsert
 // - 신규: status='상담' + 빈 enrollments로 생성
 // - 기존: status/enrollments는 건드리지 않고 기본 정보만 merge
+// 날짜 없는 첫데이터에서는 이 upsert가 유일한 저장이므로 오류를 삼키지 않고
+// 호출부(saveTempAttendance)의 alert로 올린다
 async function _upsertStudentFromTemp(data) {
     if (!data.parent_phone_1 || !data.name) return;
-    try {
-        const studentDocId = _makeContactDocId(data.name, data.parent_phone_1);
-        const ref = doc(db, 'students', studentDocId);
+    const studentDocId = _makeContactDocId(data.name, data.parent_phone_1);
+    const ref = doc(db, 'students', studentDocId);
 
-        const baseFields = {
-            name: data.name,
-            level: data.level || '',
-            grade: data.grade || '',
-            student_phone: data.student_phone || '',
-            parent_phone_1: data.parent_phone_1,
+    const baseFields = {
+        name: data.name,
+        level: data.level || '',
+        grade: data.grade || '',
+        student_phone: data.student_phone || '',
+        parent_phone_1: data.parent_phone_1,
+    };
+    const _sf = SCHOOL_FIELD[data.level];
+    if (_sf && data.school) baseFields[_sf] = data.school;
+    if (data.branch) baseFields.branch = data.branch;
+
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+        // 기존 학생 — status/enrollments는 보존, 기본 필드만 merge
+        await auditSet(ref, baseFields, { merge: true });
+        // 로컬 캐시 업데이트
+        const cached = state.allStudents.find(s => s.docId === studentDocId);
+        if (cached) Object.assign(cached, baseFields);
+    } else {
+        // 신규 — '상담' 상태로 생성
+        const newDoc = {
+            ...baseFields,
+            status: '상담',
+            enrollments: [],
+            first_registered: data.temp_date || todayStr(),
         };
-        const _sf = SCHOOL_FIELD[data.level];
-        if (_sf && data.school) baseFields[_sf] = data.school;
-        if (data.branch) baseFields.branch = data.branch;
-
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-            // 기존 학생 — status/enrollments는 보존, 기본 필드만 merge
-            await auditSet(ref, baseFields, { merge: true });
-            // 로컬 캐시 업데이트
-            const cached = state.allStudents.find(s => s.docId === studentDocId);
-            if (cached) Object.assign(cached, baseFields);
-        } else {
-            // 신규 — '상담' 상태로 생성
-            const newDoc = {
-                ...baseFields,
-                status: '상담',
-                enrollments: [],
-                first_registered: data.temp_date,
-            };
-            await auditSet(ref, newDoc);
-            // 로컬 캐시 추가 (loadStudents 재호출 없이 즉시 반영)
-            state.allStudents.push({ docId: studentDocId, ...newDoc });
-            state.allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
-        }
-    } catch (err) {
-        console.warn('[STUDENT UPSERT FROM TEMP]', err);
+        await auditSet(ref, newDoc);
+        // 로컬 캐시 추가 (loadStudents 재호출 없이 즉시 반영)
+        state.allStudents.push({ docId: studentDocId, ...newDoc });
+        state.allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
     }
 }
 
@@ -309,6 +308,10 @@ export async function saveTempAttendance() {
     if (!school) { alert('학교를 입력하세요.'); document.getElementById('temp-att-school').focus(); return; }
     if (!level) { alert('학부(초/중/고)를 선택하세요.'); document.getElementById('temp-att-level').focus(); return; }
     if (!grade) { alert('학년을 입력하세요.'); document.getElementById('temp-att-grade').focus(); return; }
+    // 신규 생성 시 학생 문서 ID가 이름_학부모전화로 만들어지므로 전화 없인 아무것도 저장되지 않는다
+    if (!state._editingTempDocId && !document.getElementById('temp-att-parent-phone').value.trim()) {
+        alert('학부모연락처를 입력하세요.'); document.getElementById('temp-att-parent-phone').focus(); return;
+    }
 
     const data = {
         name,
@@ -331,11 +334,14 @@ export async function saveTempAttendance() {
             return;
         }
 
-        const duplicates = await _findUpcomingTempByContact(data.name, data.parent_phone_1);
-        if (duplicates.length > 0) {
-            duplicates.sort((a, b) => (a.temp_date || '').localeCompare(b.temp_date || ''));
-            _showDuplicatePrompt(duplicates[0], data);
-            return;
+        // 날짜 없는 첫데이터는 학생 upsert만 하므로(문서 ID 고정 = 멱등) 중복 예약 검사가 무의미
+        if (data.temp_date) {
+            const duplicates = await _findUpcomingTempByContact(data.name, data.parent_phone_1);
+            if (duplicates.length > 0) {
+                duplicates.sort((a, b) => (a.temp_date || '').localeCompare(b.temp_date || ''));
+                _showDuplicatePrompt(duplicates[0], data);
+                return;
+            }
         }
 
         await _doCreateTempAttendance(data);
@@ -349,17 +355,18 @@ async function _doCreateTempAttendance(data) {
     data.created_at = serverTimestamp();
     data.created_by = state.currentUser?.email || '';
 
-    await Promise.all([
-        auditAdd(collection(db, 'temp_attendance'), data),
-        _upsertStudentFromTemp(data)
-    ]);
+    // 날짜 없는 첫데이터는 방문 예약이 아니다 — temp_attendance에 쓰면
+    // 날짜 기반 쿼리(loadTempAttendances)에 영원히 안 잡히는 고아 문서가 된다
+    const writes = [_upsertStudentFromTemp(data)];
+    if (data.temp_date) writes.push(auditAdd(collection(db, 'temp_attendance'), data));
+    await Promise.all(writes);
     document.getElementById('temp-attendance-modal').style.display = 'none';
 
     if (data.temp_date === state.selectedDate) {
         await loadTempAttendances(state.selectedDate);
-        renderSubFilters();
-        renderListPanel();
     }
+    renderSubFilters();
+    renderListPanel();
     showSaveIndicator('saved');
 }
 
@@ -469,7 +476,12 @@ function _showDuplicatePrompt(existing, pendingData) {
             alert(`${label}에 실패했습니다.\n${err.message || err}`);
         }
     };
-    document.getElementById('temp-att-dup-edit').onclick = runDup('일정 변경', () => _doUpdateTempAttendance(existing.docId, existing, pendingData));
+    // 모달에서 날짜/시간이 숨겨져 pendingData가 빈 값일 수 있다 — 기존 예약 일시를 지우면 안 된다
+    document.getElementById('temp-att-dup-edit').onclick = runDup('일정 변경', () => _doUpdateTempAttendance(existing.docId, existing, {
+        ...pendingData,
+        temp_date: pendingData.temp_date || existing.temp_date || '',
+        temp_time: pendingData.temp_time || existing.temp_time || '',
+    }));
     document.getElementById('temp-att-dup-add').onclick = runDup('진단평가 저장', () => _doCreateTempAttendance(pendingData));
     document.getElementById('temp-att-dup-cancel').onclick = _hideDuplicatePrompt;
 }
@@ -481,7 +493,7 @@ export function openTempAttendanceForEdit(docId) {
     state._editingTempDocId = docId;
     _lastTempAutofillId = null;
 
-    document.getElementById('temp-att-modal-title').textContent = '첫데이터 및 진단평가 수정';
+    document.getElementById('temp-att-modal-title').textContent = '첫데이터 수정';
     document.getElementById('temp-att-save-btn').textContent = '수정';
     _hideDuplicatePrompt();
 
@@ -493,7 +505,7 @@ export function openTempAttendanceForEdit(docId) {
     document.getElementById('temp-att-student-phone').value = ta.student_phone || '';
     document.getElementById('temp-att-parent-phone').value = ta.parent_phone_1 || '';
     document.getElementById('temp-att-memo').value = ta.memo || '';
-    document.getElementById('temp-att-date').value = ta.temp_date || state.selectedDate;
+    document.getElementById('temp-att-date').value = ta.temp_date || '';
     document.getElementById('temp-att-time').value = ta.temp_time || '';
 
     renderTempEditHistory(ta.edit_history);
