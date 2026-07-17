@@ -12,12 +12,15 @@ import { dateInputToKstMs, kstDayRangeParams, kstDayStartMs, kstMonthStartMs } f
 const retryCallable = httpsCallable(functions, 'retryMessageDelivery');
 const manageCallable = httpsCallable(functions, 'manageMessageFailure');
 
-// 큐 상태 표시 메타 (계약 §2.4).
+// 접수 성공 후 결과 미수신으로 종결된 코드 — 실패 확정이 아니라서 '최종 실패'와 분리 표시한다.
+const UNCONFIRMED_CODE = 'delivery_result_timeout';
+// 큐 상태 표시 메타 (계약 §2.4). failed_permanent는 미확정/확정으로 나눠 두 카드로 보여준다.
 const QUEUE_STATUS = [
     { key: 'pending', keys: ['pending'], label: '대기', cls: 'pending' },
     { key: 'processing', keys: ['processing', 'awaiting_delivery_result'], label: '처리중', cls: 'processing' },
     { key: 'failed_retryable', keys: ['failed_retryable'], label: '재시도 대기', cls: 'retry' },
-    { key: 'failed_permanent', keys: ['failed_permanent'], label: '최종 실패', cls: 'failed' },
+    { key: 'failed_unconfirmed', keys: ['failed_permanent'], label: '결과 미확정', cls: 'retry', codeFilter: (code) => code === UNCONFIRMED_CODE },
+    { key: 'failed_permanent', keys: ['failed_permanent'], label: '최종 실패', cls: 'failed', codeFilter: (code) => code !== UNCONFIRMED_CODE },
     { key: 'sent', keys: ['sent'], label: '발송완료', cls: 'sent' },
 ];
 const CHANNEL_META = {
@@ -84,16 +87,34 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
     // 노출하지 않고 마스킹된 수신자 또는 '(이름 미확인)'으로 표시.
     const nameById = useMemo(() => new Map(students.map(s => [s.id, s.name])), [students]);
     const failureName = (f) => nameById.get(f.studentId) || f.recipientMasked || '(이름 미확인)';
+    const failureBadge = (f) => {
+        if (f.status !== 'failed_permanent') return { label: '재시도 대기', cls: 'retry' };
+        if (f.lastErrorCode === UNCONFIRMED_CODE) return { label: '결과 미확정', cls: 'retry' };
+        return { label: '최종 실패', cls: 'failed' };
+    };
 
     const queueCounts = data.queueCounts ?? {};
     const channelCounts = data.channelCounts ?? { kakao: 0, sms: 0, mms: 0 };
     const failures = data.failures ?? [];
     const queueDetails = data.queueDetails ?? {};
     const channelTotal = (channelCounts.kakao ?? 0) + (channelCounts.sms ?? 0) + (channelCounts.mms ?? 0);
-    const queueCount = (status) => status.keys.reduce((sum, key) => sum + (queueCounts[key] ?? 0), 0);
+    // 구버전 서버(필드 없음)에서는 상세 목록 기준으로 근사 계산.
+    const unconfirmedPermanent = data.unconfirmedPermanentCount
+        ?? (queueDetails.failed_permanent ?? []).filter((row) => row.lastErrorCode === UNCONFIRMED_CODE).length;
+    // 발송 로그 통계도 미확정(결과 미수신)을 실패에서 분리 — 성공률은 확정 결과 기준.
+    const sentCount = data.sentCount ?? 0;
+    const unconfirmedFailed = (data.failedCodeCounts ?? {})[UNCONFIRMED_CODE] ?? 0;
+    const confirmedFailed = Math.max(0, (data.failedCount ?? 0) - unconfirmedFailed);
+    const queueCount = (status) => {
+        const total = status.keys.reduce((sum, key) => sum + (queueCounts[key] ?? 0), 0);
+        if (status.key === 'failed_unconfirmed') return unconfirmedPermanent;
+        if (status.key === 'failed_permanent') return Math.max(0, total - unconfirmedPermanent);
+        return total;
+    };
     const selectedStatusMeta = QUEUE_STATUS.find((status) => status.key === selectedStatus);
     const selectedStatusRows = selectedStatusMeta
         ? selectedStatusMeta.keys.flatMap((key) => queueDetails[key] ?? [])
+            .filter((row) => !selectedStatusMeta.codeFilter || selectedStatusMeta.codeFilter(row.lastErrorCode))
         : [];
     const selectedStatusCount = selectedStatusMeta ? queueCount(selectedStatusMeta) : 0;
     const selectedStatusPageCount = Math.max(1, Math.ceil(selectedStatusRows.length / STATUS_PAGE_SIZE));
@@ -407,9 +428,10 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                             </li>
                         ))}
                         <li className="msg-channel-total">
-                            발송 완료 <strong>{data.sentCount ?? 0}</strong> · 실패 <strong>{data.failedCount ?? 0}</strong>
-                            {(data.sentCount ?? 0) + (data.failedCount ?? 0) > 0 && (
-                                <> · 성공률 <strong>{(((data.sentCount ?? 0) / ((data.sentCount ?? 0) + (data.failedCount ?? 0))) * 100).toFixed(1)}%</strong></>
+                            발송 완료 <strong>{sentCount}</strong> · 실패 <strong>{confirmedFailed}</strong>
+                            {unconfirmedFailed > 0 && <> · 미확정 <strong>{unconfirmedFailed}</strong></>}
+                            {sentCount + confirmedFailed > 0 && (
+                                <> · 성공률 <strong>{((sentCount / (sentCount + confirmedFailed)) * 100).toFixed(1)}%</strong></>
                             )}
                         </li>
                         {Object.keys(data.failedCodeCounts ?? {}).length > 0 && (
@@ -515,8 +537,8 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                     )}
                                 </div>
                                 <div className="msg-failure-side">
-                                    <span className={`msg-badge msg-${f.status === 'failed_permanent' ? 'failed' : 'retry'}`}>
-                                        {f.status === 'failed_permanent' ? '최종 실패' : '재시도 대기'}
+                                    <span className={`msg-badge msg-${failureBadge(f).cls}`}>
+                                        {failureBadge(f).label}
                                     </span>
                                     {/* 재발송은 원장 권한. failed_permanent도 허용(원인이 추후 해소되는 실패 실재).
                                         단 보존기간 경과(번호 purge)·홍보성(동의 재확인 불가)은 서버가 거부하므로 버튼을 막는다. */}
