@@ -667,7 +667,7 @@ const ABSENCE_STATUS_META = {
     processing: { label: '발송 처리중…', cls: 'pending' },
     failed_retryable: { label: '재시도 중…', cls: 'pending' },
     sent: { label: '알림톡 발송됨 ✓', cls: 'sent' },
-    failed_permanent: { label: '발송 실패 ⚠', cls: 'failed' },
+    failed_permanent: { label: '발송 최종 실패 ⚠', cls: 'failed' },
 };
 
 // 미도착(연락) 그룹 — 연락처(tel 링크)·예정시각과 함께, 사람이 확인 후 누르는 미등원 알림톡 발송

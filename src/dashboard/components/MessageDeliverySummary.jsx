@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Icon, IconButton } from '@impact7/ui';
 import { ICON_NAME } from '../icon-map.js';
+import { SOLAPI_ERROR_LABELS } from '../message-error-labels.js';
 import ReactECharts from '../echarts.jsx';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../../firebase-config.js';
@@ -16,7 +17,7 @@ const QUEUE_STATUS = [
     { key: 'pending', keys: ['pending'], label: '대기', cls: 'pending' },
     { key: 'processing', keys: ['processing', 'awaiting_delivery_result'], label: '처리중', cls: 'processing' },
     { key: 'failed_retryable', keys: ['failed_retryable'], label: '재시도 대기', cls: 'retry' },
-    { key: 'failed_permanent', keys: ['failed_permanent'], label: '재시도 실패', cls: 'failed' },
+    { key: 'failed_permanent', keys: ['failed_permanent'], label: '최종 실패', cls: 'failed' },
     { key: 'sent', keys: ['sent'], label: '발송완료', cls: 'sent' },
 ];
 const CHANNEL_META = {
@@ -29,22 +30,6 @@ const RECIPIENT_ROLE_LABEL = {
     parent_1: '학부모1',
     parent_2: '학부모2',
     other: '기타',
-};
-// 실패 status_code 한글 라벨 (발송 인사이트 수용) — 솔라피 숫자 코드 + 내부 워커 코드. 미등록은 '코드 N'.
-const SOLAPI_ERROR_LABELS = {
-    1042: '템플릿 오류',
-    3040: '전송시간 초과',
-    3046: '단말기 문제',
-    3058: '전송경로 없음',
-    3104: '카카오톡 미사용',
-    3108: '발송 가능 시간 아님',
-    3120: '카카오 수신 불가',
-    delivery_result_timeout: '결과 확인 시간 초과',
-    crash_after_dispatch: '발송 중 중단',
-    missing_group_id: '접수 정보 유실',
-    unresolved_message_vars: '변수 치환 실패',
-    kind_not_allowed: '허용되지 않은 종류',
-    no_messages: '발송 대상 없음',
 };
 // 자동충전 꺼진 상태에서 이 금액 밑이면 경고색 — 잔액 고갈은 전 채널 발송 실패.
 const LOW_BALANCE_WARN = 10000;
@@ -324,7 +309,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                             {row.recipientRole && ` · ${RECIPIENT_ROLE_LABEL[row.recipientRole] || row.recipientRole}`}
                                         </strong>
                                         <span>{row.recipientPhone ? formatPhone(row.recipientPhone) : row.recipientMasked || '-'}</span>
-                                        <span>{row.lastErrorCode || selectedStatusMeta.label}</span>
+                                        <span>{SOLAPI_ERROR_LABELS[row.lastErrorCode] || row.lastErrorCode || selectedStatusMeta.label}</span>
                                         <span>{formatDateTimeKST(row.updatedAt || row.createdAt)}</span>
                                     </li>
                                 ))}
@@ -510,7 +495,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                     <span className="msg-failure-name">{failureName(f)}</span>
                                     <span className="msg-failure-meta">
                                         {f.recipientMasked || '-'}
-                                        {f.lastErrorCode ? ` · ${f.lastErrorCode}` : ''}
+                                        {f.lastErrorCode ? ` · ${SOLAPI_ERROR_LABELS[f.lastErrorCode] || f.lastErrorCode}` : ''}
                                         {f.updatedAt ? ` · ${formatDateTimeKST(f.updatedAt)}` : ''}
                                     </span>
                                     {f.content ? (
@@ -531,7 +516,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                 </div>
                                 <div className="msg-failure-side">
                                     <span className={`msg-badge msg-${f.status === 'failed_permanent' ? 'failed' : 'retry'}`}>
-                                        {f.status === 'failed_permanent' ? '재시도 실패' : '재시도 대기'}
+                                        {f.status === 'failed_permanent' ? '최종 실패' : '재시도 대기'}
                                     </span>
                                     {/* 재발송은 원장 권한. failed_permanent도 허용(원인이 추후 해소되는 실패 실재).
                                         단 보존기간 경과(번호 purge)·홍보성(동의 재확인 불가)은 서버가 거부하므로 버튼을 막는다. */}

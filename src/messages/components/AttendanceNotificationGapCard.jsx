@@ -5,7 +5,7 @@ import { getAttendanceNotificationGaps } from '../../../data-layer.js';
 import { downloadCsv } from '../../shared/csv.js';
 import { ICON_NAME } from '../../dashboard/icon-map.js';
 
-const STATUS_LABEL = { not_queued: '미작성', complete: '완료', retry_failed: '재시도 실패', retrying: '재시도 중', pending: '발송 미확정' };
+const STATUS_LABEL = { not_queued: '미작성', complete: '완료', retry_failed: '최종 실패', retrying: '재시도 중', pending: '발송 미확정' };
 
 export default function AttendanceNotificationGapCard() {
   const [data, setData] = useState(null);

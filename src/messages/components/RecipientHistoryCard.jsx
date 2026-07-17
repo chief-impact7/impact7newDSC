@@ -6,6 +6,7 @@ import { filterStudents } from '../bulk-select.js';
 import { getRecipientMessageHistory } from '../../../data-layer.js';
 import { onlyDigits } from '../message-format.js';
 import { ICON_NAME } from '../../dashboard/icon-map.js';
+import { SOLAPI_ERROR_LABELS } from '../../dashboard/message-error-labels.js';
 
 // 수신자별 발송 이력 타임라인. 카카오 관리자센터는 API 발송 알림톡 원문을 보여주지 않으므로
 // 학부모 답장이 왔을 때 "무엇을 보냈는지"를 여기서 확인한다.
@@ -21,7 +22,7 @@ const STATUS_META = {
   awaiting_delivery_result: { label: '결과 확인중', cls: 'pending' },
   sent: { label: '발송완료', cls: 'sent' },
   failed_retryable: { label: '재시도 대기', cls: 'retry' },
-  failed_permanent: { label: '실패', cls: 'failed' },
+  failed_permanent: { label: '최종 실패', cls: 'failed' },
   converted_to_sms: { label: '문자 전환', cls: 'converted' },
   archived: { label: '보관됨', cls: 'archived' },
 };
@@ -121,7 +122,7 @@ export default function RecipientHistoryCard({ students = [] }) {
                       <span className="rh-kind">{KIND_LABEL[it.kind] || it.kind || '-'}</span>
                       <span className={`msg-badge msg-${st.cls}`}>{st.label}</span>
                       <span className="rh-cand-meta">{it.recipientMasked || ''}</span>
-                      {it.lastErrorCode && <span className="rh-err">오류 {it.lastErrorCode}</span>}
+                      {it.lastErrorCode && <span className="rh-err">{SOLAPI_ERROR_LABELS[it.lastErrorCode] || `오류 ${it.lastErrorCode}`}</span>}
                     </div>
                     <div className="rh-content">
                       {it.content || (it.piiPurged ? '(보존기간 경과로 본문이 삭제되었습니다)' : '(본문 없음)')}
