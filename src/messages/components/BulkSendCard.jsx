@@ -431,9 +431,9 @@ export default function BulkSendCard({ students = [] }) {
                   <option value="">소속 전체</option><option value="2단지">2단지</option><option value="10단지">10단지</option>
                 </select>
                 <select aria-label="수신 상태" value={status} onChange={(e) => setStatus(e.target.value)}>
-                  <option value="enrolled">재원</option><option value="all">재원+비원생</option><option value="non">비원생</option>
+                  <option value="all">전체</option><option value="enrolled">재원</option><option value="non">비원생</option>
                 </select>
-                <GradeFilter value={grades} onChange={setGrades} />
+                <GradeFilter value={grades} onChange={setGrades} compact />
               </div> : <div className="bulk-filters bulk-filters-row">
                 <select aria-label="교직원 상태" value={staffStatus} onChange={(e) => setStaffStatus(e.target.value)}>
                   <option value="active">재직</option><option value="inactive">휴직</option><option value="terminated">퇴직</option><option value="all">전체</option>

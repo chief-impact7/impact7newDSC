@@ -6,9 +6,9 @@ const GRADE_GROUPS = [
     { level: '고등', short: '고', grades: ['1', '2', '3'] },
 ];
 
-// value: Set<string> (예: {'초6','중1'}), onChange: (Set) => void
+// value: Set<string> (예: {'초6','중1'}), onChange: (Set) => void, compact: 버튼 라벨 초/중/고 축약
 // 학부 버튼 3단 토글: 1번=학년 선택 드롭다운, 2번=학부 전체 선택, 3번=학부 전체 해제(→다시 1번)
-export default function GradeFilter({ value, onChange }) {
+export default function GradeFilter({ value, onChange, compact = false }) {
     const [openLevel, setOpenLevel] = useState(null);
     const ref = useRef(null);
 
@@ -64,8 +64,9 @@ export default function GradeFilter({ value, onChange }) {
                             onClick={() => cycleLevel(level, short, grades)}
                             aria-haspopup="true"
                             aria-expanded={openLevel === level}
+                            aria-label={level}
                         >
-                            {level}
+                            {compact ? short : level}
                         </button>
                         {openLevel === level && (
                             <div className="dash-grade-dropdown">
