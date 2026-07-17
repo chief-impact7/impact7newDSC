@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Icon } from '@impact7/ui';
+import { Icon, IconButton } from '@impact7/ui';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { getAttendanceNotificationGaps } from '../../../data-layer.js';
 import { downloadCsv } from '../../shared/csv.js';
@@ -76,12 +76,8 @@ export default function AttendanceNotificationGapCard() {
           <span className="mc-tag">매일 오후 3:00 생성</span>
           <input type="date" className="mc-gap-date mc-title-action" aria-label="미발송 이력 날짜" value={dateKST}
             max={latestDateKST} disabled={loading} onChange={(event) => { setDateKST(event.target.value); void load(event.target.value); }} />
-          <button type="button" className="mc-var-btn" disabled={!items.length} onClick={downloadList}>
-            <Icon name={ICON_NAME.download} size={14} aria-hidden="true" /> 명단 다운로드
-          </button>
-          <button type="button" className="mc-var-btn mc-icon-only" disabled={loading} onClick={() => load()} title="새로고침" aria-label="새로고침">
-            <Icon name={ICON_NAME.refresh} size={16} aria-hidden="true" />
-          </button>
+          <IconButton icon={ICON_NAME.download} label="명단 다운로드" disabled={!items.length} onClick={downloadList} />
+          <IconButton icon={ICON_NAME.refresh} label="새로고침" disabled={loading} onClick={() => load()} />
         </div>
         {content}
       </div>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Icon } from '@impact7/ui';
+import { Icon, IconButton } from '@impact7/ui';
 import { formatDateTimeKST, todayKST } from '@impact7/shared/datetime';
 import { getManualOptOuts, registerManualOptOut } from '../../../data-layer.js';
 import { normalizePhones } from '../message-format.js';
@@ -86,8 +86,8 @@ export default function ManualOptOutCard() {
             <span>일치 {registry?.matchedCount ?? 0} · 솔라피만 {registry?.solapiOnlyCount ?? 0} · DSC만 {registry?.localOnlyCount ?? 0}</span>
           </summary>
           <div className="mc-optout-actions">
-            <button type="button" className="mc-var-btn" disabled={listBusy} onClick={loadRegistry}>{listBusy ? '조회 중…' : '솔라피와 다시 대조'}</button>
-            <button type="button" className="mc-var-btn" disabled={listBusy || !(registry?.items ?? []).length} onClick={downloadCsv}>CSV 다운로드</button>
+            <IconButton icon="arrowsRightLeft" label={listBusy ? '조회 중…' : '솔라피와 다시 대조'} disabled={listBusy} onClick={loadRegistry} />
+            <IconButton icon="download" label="CSV 다운로드" disabled={listBusy || !(registry?.items ?? []).length} onClick={downloadCsv} />
           </div>
           {!listBusy && (registry?.items ?? []).length === 0 ? (
             <div className="mc-gap-empty">등록된 수신거부 번호가 없습니다.</div>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { Icon } from '@impact7/ui';
+import { Icon, IconButton } from '@impact7/ui';
 import { filterStaff, filterStudents, staffMatchesQuery, studentMatchesQuery } from '../bulk-select.js';
 import { studentFullLabel, currentSchool } from '@impact7/shared/student-label';
 import { formatPhone } from '@impact7/shared/phone';
@@ -418,8 +418,8 @@ export default function BulkSendCard({ students = [] }) {
               <div className="mc-content-head">
                 <p className="mc-field-label">수신번호 (줄바꿈/쉼표로 여러 명) · 입력 {directPhones.length}명</p>
                 <div className="mc-vars mc-file-actions">
-                  <button type="button" className="mc-var-btn mc-icon-only" aria-label="Excel·CSV 업로드" title="Excel·CSV 업로드" onClick={() => fileRef.current?.click()}><Icon name={ICON_NAME.upload} size={16} aria-hidden="true" /></button>
-                  <button type="button" className="mc-var-btn mc-icon-only" aria-label="양식 다운로드" title="양식 다운로드" onClick={downloadRecipientSample}><Icon name={ICON_NAME.download} size={16} aria-hidden="true" /></button>
+                  <IconButton icon={ICON_NAME.upload} label="Excel·CSV 업로드" onClick={() => fileRef.current?.click()} />
+                  <IconButton icon={ICON_NAME.download} label="양식 다운로드" onClick={downloadRecipientSample} />
                 </div>
               </div>
               <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" aria-label="번호 파일 업로드" style={{ display: 'none' }} onChange={onRecipientFile} />
@@ -463,8 +463,8 @@ export default function BulkSendCard({ students = [] }) {
             <div className="bulk-cart">
               <span>누적 대상 {selectedCount}명{q.trim() && picked.size ? ` · 검색 일치 ${displayRows.length}명` : ''}</span>
               <span className="bulk-cart-actions">
-                <button onClick={() => setAllOn(true)} disabled={!picked.size}>전체선택</button>
-                <button onClick={clearAll} disabled={!picked.size}>비우기</button>
+                <IconButton icon="checkCircle" label="전체선택" disabled={!picked.size} onClick={() => setAllOn(true)} />
+                <IconButton icon="trash" label="비우기" disabled={!picked.size} onClick={clearAll} />
               </span>
             </div>
             <ul className="bulk-list">
@@ -527,12 +527,12 @@ export default function BulkSendCard({ students = [] }) {
               <span>· 대상 {selectedCount}명 · 예상 {estimatedMessageCount}건</span>
               <label className="mc-mms-toggle"><input type="checkbox" checked={!!mmsImage} onChange={(e) => { if (e.target.checked) imageRef.current?.click(); else { setMmsImage(null); resetReqId(); } }} /> MMS</label>
             </div>
-            {kind === 'info' && <div className="mc-promo-checks"><label title={invite}><input type="checkbox" checked={withInvite} onChange={(e) => { setWithInvite(e.target.checked); resetReqId(); }} /> 채널 가입 안내</label><label title={footer || '문구 설정에서 꼬리말을 등록하세요'}><input type="checkbox" checked={withFooter} disabled={!footer} onChange={(e) => { setWithFooter(e.target.checked); resetReqId(); }} /> 학원 꼬리말</label><button type="button" className="mc-var-btn" onClick={() => { setFooterDraft(footer); setInviteDraft(inviteCustom); setSetupOpen(!setupOpen); }}>문구 설정</button></div>}
+            {kind === 'info' && <div className="mc-promo-checks"><label title={invite}><input type="checkbox" checked={withInvite} onChange={(e) => { setWithInvite(e.target.checked); resetReqId(); }} /> 채널 가입 안내</label><label title={footer || '문구 설정에서 꼬리말을 등록하세요'}><input type="checkbox" checked={withFooter} disabled={!footer} onChange={(e) => { setWithFooter(e.target.checked); resetReqId(); }} /> 학원 꼬리말</label><IconButton icon="cog" label="문구 설정" aria-expanded={setupOpen} onClick={() => { setFooterDraft(footer); setInviteDraft(inviteCustom); setSetupOpen(!setupOpen); }} /></div>}
             {hasStaffTargets && <div className="mc-note">교직원 문자는 관리자 이상만 발송할 수 있으며 업무성 정보 문자만 지원합니다.</div>}
             {kind === 'promo' && <div className="mc-promo-checks"><label><input type="checkbox" checked readOnly /> 광고 문구</label><label><input type="checkbox" checked readOnly /> 수신거부</label>{hasDirectTargets ? <label><input type="checkbox" checked={directConsentConfirmed} onChange={(e) => { setDirectConsentConfirmed(e.target.checked); resetReqId(); }} /> 직접 번호 광고 수신동의 확인</label> : <label><input type="checkbox" checked readOnly /> 학생 수신동의 자동 확인</label>}</div>}
             {attachedLines.length > 0 && <div className="mc-attached-lines">{attachedLines.join('\n\n')}</div>}
-            {mmsImage && <div className="mc-mms-file"><img src={mmsImage.previewUrl} alt="MMS 첨부 미리보기" /><span>{mmsImage.name}<br />{mmsImage.width}×{mmsImage.height}px · {Math.ceil(mmsImage.size / 1024)}KB</span><button type="button" className="mc-var-btn" onClick={() => { setMmsImage(null); resetReqId(); }}>제거</button></div>}
-            {kind === 'info' && setupOpen && <div className="mc-message-setup"><label className="mc-field-label">채널 가입 안내 문구 (비우면 기본 문구)</label><textarea aria-label="채널 가입 안내 문구" className="mc-textarea" rows={2} value={inviteDraft} onChange={(e) => setInviteDraft(e.target.value)} placeholder={DEFAULT_CHANNEL_INVITE} maxLength={280} /><label className="mc-field-label">학원 꼬리말</label><input aria-label="학원 꼬리말" className="mc-tpl-title" value={footerDraft} onChange={(e) => setFooterDraft(e.target.value)} placeholder="예: -임팩트세븐학원 02-2649-0509" maxLength={200} /><div className="mc-vars"><button type="button" className="mc-var-btn" disabled={setupBusy} onClick={onSaveSetup}>{setupBusy ? '저장 중…' : '저장'}</button><button type="button" className="mc-var-btn" onClick={() => setSetupOpen(false)}>취소</button></div></div>}
+            {mmsImage && <div className="mc-mms-file"><img src={mmsImage.previewUrl} alt="MMS 첨부 미리보기" /><span>{mmsImage.name}<br />{mmsImage.width}×{mmsImage.height}px · {Math.ceil(mmsImage.size / 1024)}KB</span><IconButton icon="xMark" label="첨부 제거" onClick={() => { setMmsImage(null); resetReqId(); }} /></div>}
+            {kind === 'info' && setupOpen && <div className="mc-message-setup"><label className="mc-field-label">채널 가입 안내 문구 (비우면 기본 문구)</label><textarea aria-label="채널 가입 안내 문구" className="mc-textarea" rows={2} value={inviteDraft} onChange={(e) => setInviteDraft(e.target.value)} placeholder={DEFAULT_CHANNEL_INVITE} maxLength={280} /><label className="mc-field-label">학원 꼬리말</label><input aria-label="학원 꼬리말" className="mc-tpl-title" value={footerDraft} onChange={(e) => setFooterDraft(e.target.value)} placeholder="예: -임팩트세븐학원 02-2649-0509" maxLength={200} /><div className="mc-vars"><button type="button" className="mc-var-btn" disabled={setupBusy} onClick={onSaveSetup}>{setupBusy ? '저장 중…' : '저장'}</button><IconButton icon="xMark" label="취소" onClick={() => setSetupOpen(false)} /></div></div>}
           </div>
 
           <div className="bulk-right">

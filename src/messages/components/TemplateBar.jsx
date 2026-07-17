@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Icon } from '@impact7/ui';
+import { IconButton } from '@impact7/ui';
 import { loadTemplates, saveTemplate, deleteTemplate, migrateLegacyTemplates } from '../message-templates.js';
 import { ICON_NAME } from '../../dashboard/icon-map.js';
 
@@ -74,14 +74,14 @@ export default function TemplateBar({ content, onPick }) {
         <option value="">템플릿 불러오기…</option>
         {list.map((t) => <option key={t.title} value={t.title}>{t.title}</option>)}
       </select>
-      <button type="button" className="mc-tpl-manage-btn" aria-expanded={manageOpen}
-        onClick={async () => { if (!manageOpen) await refresh(); setManageOpen(!manageOpen); }}><Icon name={ICON_NAME.quiz} size={14} aria-hidden="true" /> 템플릿 관리</button>
+      <IconButton icon={ICON_NAME.quiz} label="템플릿 관리" aria-expanded={manageOpen}
+        onClick={async () => { if (!manageOpen) await refresh(); setManageOpen(!manageOpen); }} />
       {saveOpen ? (
         <>
           <input aria-label="템플릿 이름" className="mc-tpl-title" value={titleInput} onChange={(e) => setTitleInput(e.target.value)}
             placeholder="템플릿 이름" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSave(); } }} />
           <button type="button" className="mc-tpl-save" onClick={onSave} disabled={busy || !titleInput.trim() || !content.trim()}>{busy ? '저장 중…' : '저장'}</button>
-          <button type="button" className="mc-tpl-del" onClick={() => { setSaveOpen(false); setTitleInput(''); }}>취소</button>
+          <IconButton icon="xMark" label="취소" onClick={() => { setSaveOpen(false); setTitleInput(''); }} />
         </>
       ) : (
         <button type="button" className="mc-tpl-save" onClick={() => setSaveOpen(true)} disabled={!content.trim()}>현재 내용 저장</button>
@@ -92,7 +92,7 @@ export default function TemplateBar({ content, onPick }) {
           onKeyDown={(e) => { if (e.key === 'Escape') setManageOpen(false); }}>
           <div className="mc-tpl-manage-head">
             템플릿 관리 <span style={{ color: '#999', fontWeight: 400 }}>{list.length}개 · 전 직원 공유</span>
-            <button type="button" className="mc-tpl-del" style={{ marginLeft: 'auto' }} onClick={() => setManageOpen(false)}>닫기</button>
+            <IconButton icon="xMark" label="닫기" style={{ marginLeft: 'auto' }} onClick={() => setManageOpen(false)} />
           </div>
           {list.length === 0 && <div style={{ color: '#888', fontSize: 12.5, padding: '6px 0' }}>저장된 템플릿이 없습니다.</div>}
           {list.map((t) => (
@@ -101,8 +101,8 @@ export default function TemplateBar({ content, onPick }) {
                 <div className="mc-tpl-manage-title">{t.title}</div>
                 <div className="mc-tpl-manage-preview">{t.content}</div>
               </div>
-              <button type="button" className="mc-var-btn" disabled={busy} title="본문에 불러온 뒤 고쳐서 [저장]하면 덮어씁니다" onClick={() => startEdit(t)}>수정</button>
-              <button type="button" className="mc-var-btn" style={{ color: '#c5221f' }} disabled={busy} onClick={() => removeTemplate(t.title)}>삭제</button>
+              <IconButton icon="pencil" label="수정 — 본문에 불러온 뒤 저장하면 덮어씀" disabled={busy} onClick={() => startEdit(t)} />
+              <IconButton icon="trash" tone="danger" label="삭제" disabled={busy} onClick={() => removeTemplate(t.title)} />
             </div>
           ))}
         </div>

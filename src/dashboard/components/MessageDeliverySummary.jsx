@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Icon } from '@impact7/ui';
+import { Icon, IconButton } from '@impact7/ui';
 import { ICON_NAME } from '../icon-map.js';
 import ReactECharts from '../echarts.jsx';
 import { httpsCallable } from 'firebase/functions';
@@ -312,7 +312,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                             <span className="msg-status-details-actions">
                                 {selectedStatusCount}건
                                 {selectedStatusCount > selectedStatusRows.length && ` · 최근 ${selectedStatusRows.length}건 표시`}
-                                <button type="button" className="msg-action-btn" onClick={() => setSelectedStatus(null)}>접기</button>
+                                <IconButton icon="chevronUp" label="접기" onClick={() => setSelectedStatus(null)} />
                             </span>
                         </div>
                         {selectedStatusRows.length ? (
@@ -401,7 +401,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                             <input type="date" aria-label="시작일" value={customFrom} onChange={e => setCustomFrom(e.target.value)} />
                             <span>~</span>
                             <input type="date" aria-label="종료일" value={customTo} onChange={e => setCustomTo(e.target.value)} />
-                            <button type="button" className="msg-action-btn" disabled={!customFrom && !customTo} onClick={refresh}>적용</button>
+                            <IconButton icon="check" label="기간 적용" disabled={!customFrom && !customTo} onClick={refresh} />
                         </span>
                     )}
                     {data.logLimitReached && <span className="msg-period-note">표시 상한 도달 — 기간을 좁히면 정확해집니다</span>}
@@ -535,35 +535,30 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                     </span>
                                     {/* 재발송은 원장 권한. failed_permanent도 허용(원인이 추후 해소되는 실패 실재).
                                         단 보존기간 경과(번호 purge)·홍보성(동의 재확인 불가)은 서버가 거부하므로 버튼을 막는다. */}
-                                    <button
-                                        className="msg-action-btn msg-action-retry"
-                                        title={f.piiPurged ? '보존기간이 지나 재발송할 수 없습니다'
+                                    <IconButton
+                                        icon="arrowClockwise"
+                                        label={f.piiPurged ? '보존기간이 지나 재발송할 수 없습니다'
                                             : (f.kind === 'promo' || f.kind === 'promo_sms') ? '홍보성 메시지는 수동 재발송할 수 없습니다'
-                                            : undefined}
+                                            : '재발송'}
                                         onClick={() => singleRetry(f)}
                                         disabled={busy || RETRY_INELIGIBLE(f)}
-                                    >
-                                        재발송
-                                    </button>
+                                    />
                                     {/* 보관/삭제는 종결 상태(failed_permanent)만 — 재시도 대기는 sweeper가 아직 처리 중. */}
                                     {MANAGE_ELIGIBLE(f) && (
                                         <>
-                                            <button
-                                                className="msg-action-btn"
-                                                title="목록에서 숨깁니다 (발송 이력은 보존)"
+                                            <IconButton
+                                                icon="archiveBox"
+                                                label="보관 — 목록에서 숨김 (발송 이력은 보존)"
                                                 onClick={() => singleManage(f, 'archive')}
                                                 disabled={busy}
-                                            >
-                                                보관
-                                            </button>
-                                            <button
-                                                className="msg-action-btn msg-action-danger"
-                                                title="항목을 삭제합니다 (발송 로그·삭제 기록은 보존)"
+                                            />
+                                            <IconButton
+                                                icon="trash"
+                                                tone="danger"
+                                                label="삭제 (발송 로그·삭제 기록은 보존)"
                                                 onClick={() => singleManage(f, 'delete')}
                                                 disabled={busy}
-                                            >
-                                                삭제
-                                            </button>
+                                            />
                                         </>
                                     )}
                                 </div>

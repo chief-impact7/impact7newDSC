@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Icon } from '@impact7/ui';
+import { Icon, IconButton } from '@impact7/ui';
 import { studentFullLabel } from '@impact7/shared/student-label';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { filterStudents } from '../bulk-select.js';
@@ -109,9 +109,7 @@ export default function RecipientHistoryCard({ students = [] }) {
                   {' '}(전화번호 검색·알림톡 본문은 개인정보 보존기간 7일 내 발송만)
                 </span>
               </span>
-              <button type="button" className="msg-action-btn" aria-expanded={historyOpen} onClick={() => setHistoryOpen(open => !open)}>
-                {historyOpen ? '접기' : '펼치기'}
-              </button>
+              <IconButton icon={historyOpen ? 'chevronUp' : 'chevronDown'} label={historyOpen ? '접기' : '펼치기'} aria-expanded={historyOpen} onClick={() => setHistoryOpen(open => !open)} />
             </div>
             {historyOpen && <ul className="rh-timeline">
               {items.map((it) => {
