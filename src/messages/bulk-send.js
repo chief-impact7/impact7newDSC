@@ -26,6 +26,35 @@ export function invalidVariablesForGroups(groups, content) {
   return variables.filter((variable) => content.includes(variable));
 }
 
+export function alimtalkInputVariables(template) {
+  return [...new Set((template?.variables || []).filter((variable) => variable && variable !== '#{학생명}'))];
+}
+
+export function applyAlimtalkPreview(template, values = {}, studentName = '') {
+  let content = String(template?.content || '').replaceAll('#{학생명}', studentName);
+  for (const variable of alimtalkInputVariables(template)) {
+    content = content.replaceAll(variable, String(values[variable] || variable));
+  }
+  return content;
+}
+
+export function buildAlimtalkAudienceRequest({ studentIds, recipientFields, templateId, templateVariables, requestId, scheduledAt }) {
+  return {
+    audience: 'student',
+    call: 'bulk',
+    payload: {
+      channel: 'alimtalk',
+      studentIds,
+      recipientFields,
+      recipientField: recipientFields[0],
+      templateId,
+      templateVariables,
+      requestId: `${requestId}-student`,
+      ...(scheduledAt ? { scheduledAt } : {}),
+    },
+  };
+}
+
 export function completedTargetKeys(requests, results, groups) {
   const keys = [];
   results.forEach((result, index) => {

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   audienceMaxMessages,
+  alimtalkInputVariables,
+  applyAlimtalkPreview,
+  buildAlimtalkAudienceRequest,
   buildAudienceRequest,
   buildAudienceRequests,
   completedTargetKeys,
@@ -52,6 +55,46 @@ describe('buildAudienceRequest', () => {
         requestId: 'req-1',
         scheduledAt: '2026-07-17 10:00:00',
         mmsImage: { name: 'a.jpg' },
+      },
+    });
+  });
+});
+
+describe('알림톡 단체발송 요청', () => {
+  const template = {
+    content: '#{학생명} 학부모님, #{수업명} 안내입니다.',
+    variables: ['#{학생명}', '#{수업명}', '#{수업명}'],
+  };
+
+  it('학생명 외 공통 입력 변수만 중복 없이 표시한다', () => {
+    expect(alimtalkInputVariables(template)).toEqual(['#{수업명}']);
+  });
+
+  it('선택 학생과 공통 변수로 미리보기를 만든다', () => {
+    expect(applyAlimtalkPreview(template, { '#{수업명}': '중등 수학' }, '김학생'))
+      .toBe('김학생 학부모님, 중등 수학 안내입니다.');
+  });
+
+  it('문자 자유입력 없이 템플릿 계약만 대량 API에 전달한다', () => {
+    expect(buildAlimtalkAudienceRequest({
+      studentIds: ['s1'],
+      recipientFields: ['parent_1', 'parent_2'],
+      templateId: 'KA01TP1',
+      templateVariables: { '#{수업명}': '중등 수학' },
+      requestId: 'bulk-1',
+      scheduledAt: '2026-07-18 10:00:00',
+    })).toEqual({
+      audience: 'student',
+      call: 'bulk',
+      payload: {
+        channel: 'alimtalk',
+        studentIds: ['s1'],
+        recipientFields: ['parent_1', 'parent_2'],
+        recipientField: 'parent_1',
+        templateId: 'KA01TP1',
+        templateVariables: { '#{수업명}': '중등 수학' },
+        requestId: 'bulk-1-student',
+        scheduledAt: '2026-07-18 10:00:00',
       },
     });
   });
