@@ -393,8 +393,10 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // [Board] 칸반 카드 — impact7board SPA. board: ops(학원 업무)/students(학생 관리)
-    // 단일 컬렉션, column = 보드별 상태. 삭제는 금지, archived 플래그로 보관만 허용.
+    // [Board] 칸반 카드 — impact7board SPA. board: ops(학원 업무)/students(학생 관리)/
+    // personal(내 업무 — 클라이언트 표시 필터로 작성자 전용, 서버 강제 없음: 신뢰 직원 전제).
+    // 단일 컬렉션, column = 보드별 상태. update로 board 변경 허용(보드 간 이동).
+    // 삭제는 작성자 본인만, 그 외는 archived 플래그로 보관.
     // =========================================================================
     match /board_cards/{cardId} {
 
@@ -402,6 +404,7 @@ service cloud.firestore {
         return request.resource.data.keys().hasOnly([
           'board', 'column', 'order', 'title', 'description',
           'student_id', 'student_name', 'branch', 'assignees', 'due_date', 'labels',
+          'due_time', 'location', 'priority', 'pinned', 'recurrence',
           'checklist', 'links', 'attachments', 'parent_id', 'related', 'archived',
           'created_by', 'created_at', 'updated_by', 'updated_at',
           'completed_by', 'completed_at'
@@ -410,8 +413,9 @@ service cloud.firestore {
 
       function hasOnlyAllowedBoardCardUpdateFields() {
         return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'column', 'order', 'title', 'description',
+          'board', 'column', 'order', 'title', 'description',
           'student_id', 'student_name', 'branch', 'assignees', 'due_date', 'labels',
+          'due_time', 'location', 'priority', 'pinned', 'recurrence',
           'checklist', 'links', 'attachments', 'parent_id', 'related', 'archived',
           'updated_by', 'updated_at', 'completed_by', 'completed_at'
         ]);
@@ -421,14 +425,16 @@ service cloud.firestore {
         return (request.resource.data.board == 'ops'
               && request.resource.data.column in ['ideas', 'todo', 'doing', 'review', 'done'])
           || (request.resource.data.board == 'students'
-              && request.resource.data.column in ['intake', 'placement', 'enrolling', 'followup', 'done']);
+              && request.resource.data.column in ['intake', 'placement', 'enrolling', 'followup', 'done'])
+          || (request.resource.data.board == 'personal'
+              && request.resource.data.column in ['todo', 'doing', 'done']);
       }
 
       allow read: if isAuthorized();
 
       allow create: if isAuthorized()
         && hasOnlyAllowedBoardCardCreateFields()
-        && request.resource.data.board in ['ops', 'students']
+        && request.resource.data.board in ['ops', 'students', 'personal']
         && request.resource.data.title is string
         && boardCardColumnValid();
 
@@ -436,7 +442,10 @@ service cloud.firestore {
         && hasOnlyAllowedBoardCardUpdateFields()
         && boardCardColumnValid();
 
-      allow delete: if false;  // 보관(archived)만, 삭제 금지
+      // 영구 삭제는 작성자 본인만 — created_by는 auditAdd가 정규화(@impact7.kr) 이메일로 찍는다.
+      // 레거시(created_by 없음) 카드는 삭제 불가, 보관만.
+      allow delete: if isAuthorized()
+        && resource.data.get('created_by', '') == request.auth.token.email;
     }
 
     // [Board] 주간 AI 브리핑 — 서버(Functions callable)만 생성, 클라이언트는 읽기만.
