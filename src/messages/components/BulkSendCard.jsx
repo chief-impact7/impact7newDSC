@@ -577,15 +577,17 @@ export default function BulkSendCard({ students = [] }) {
             <p className="bulk-col-title">메시지</p>
             {isAlimtalk ? <>
               <div className="mc-routing-grid">
-                <span className="mc-field-label">받는이 (다중 선택)</span>
+                <span className="mc-field-label">받는이 {audience === 'student' ? '(다중 선택)' : '(고정)'}</span>
                 <span className="mc-field-label mc-kind-label">종류</span>
-                <div className="mc-seg">
+                {audience === 'student' ? <div className="mc-seg">
                   {['student', 'parent_1', 'parent_2'].map((f) => (
                     <button key={f} type="button" className={recipientFields.has(f) ? 'on' : ''} aria-pressed={recipientFields.has(f)} onClick={() => toggleRecipient(f)}>
                       {RECIPIENT_LABELS[f]}
                     </button>
                   ))}
-                </div>
+                </div> : <div className="mc-seg">
+                  <button type="button" className="on" aria-disabled="true" style={{ cursor: 'default' }}>{isStaff ? '교직원 본인' : '입력 번호'}</button>
+                </div>}
                 <div className="mc-seg"><button type="button" className="on" aria-disabled="true">정보성</button></div>
               </div>
               <label className="mc-field-label" htmlFor="alimtalk-template">솔라피 승인 템플릿</label>
