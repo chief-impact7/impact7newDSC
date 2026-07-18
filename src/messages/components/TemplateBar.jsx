@@ -81,7 +81,7 @@ export default function TemplateBar({ content, onPick }) {
           <input aria-label="템플릿 이름" className="mc-tpl-title" value={titleInput} onChange={(e) => setTitleInput(e.target.value)}
             placeholder="템플릿 이름" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSave(); } }} />
           <button type="button" className="mc-tpl-save" onClick={onSave} disabled={busy || !titleInput.trim() || !content.trim()}>{busy ? '저장 중…' : '저장'}</button>
-          <IconButton icon="xMark" label="취소" onClick={() => { setSaveOpen(false); setTitleInput(''); }} />
+          <IconButton icon="x" label="취소" onClick={() => { setSaveOpen(false); setTitleInput(''); }} />
         </>
       ) : (
         <button type="button" className="mc-tpl-save" onClick={() => setSaveOpen(true)} disabled={!content.trim()}>현재 내용 저장</button>
@@ -92,7 +92,7 @@ export default function TemplateBar({ content, onPick }) {
           onKeyDown={(e) => { if (e.key === 'Escape') setManageOpen(false); }}>
           <div className="mc-tpl-manage-head">
             템플릿 관리 <span style={{ color: '#999', fontWeight: 400 }}>{list.length}개 · 전 직원 공유</span>
-            <IconButton icon="xMark" label="닫기" style={{ marginLeft: 'auto' }} onClick={() => setManageOpen(false)} />
+            <IconButton icon="x" label="닫기" style={{ marginLeft: 'auto' }} onClick={() => setManageOpen(false)} />
           </div>
           {list.length === 0 && <div style={{ color: '#888', fontSize: 12.5, padding: '6px 0' }}>저장된 템플릿이 없습니다.</div>}
           {list.map((t) => (

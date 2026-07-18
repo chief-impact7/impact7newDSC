@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
-import { Icon } from '@impact7/ui';
+import { Icon, IconButton } from '@impact7/ui';
 import { ICON_NAME } from './icon-map.js';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, dataAuthReady } from '../../firebase-config.js';
@@ -267,12 +267,12 @@ export default function App() {
             }}>
                 <p style={{ fontWeight: 500 }}>데이터 로드 실패</p>
                 <p style={{ fontSize: '14px', marginTop: '8px' }}>{(error || dashError)?.message || '알 수 없는 오류가 발생했습니다'}</p>
-                <button
+                <IconButton
+                    icon={ICON_NAME.refresh}
+                    label="새로고침"
                     onClick={() => window.location.reload()}
-                    style={{ marginTop: '12px', padding: '8px 16px', cursor: 'pointer', borderRadius: '4px', border: '1px solid #c5221f', background: 'white', color: '#c5221f' }}
-                >
-                    새로고침
-                </button>
+                    style={{ marginTop: '12px' }}
+                />
             </div>
         );
     }
@@ -349,9 +349,7 @@ export default function App() {
                             <button type="button" aria-label="다음 주" onClick={() => setBaseDate(addDays(normalizedBaseDate, 7))}>
                                 <Icon name={ICON_NAME.chevron_right} size={20} aria-hidden="true" />
                             </button>
-                            <button className="dash-text-btn" onClick={() => setBaseDate(todayStr())}>
-                                이번 주
-                            </button>
+                            <IconButton icon="calendar-dots" label="이번 주" onClick={() => setBaseDate(todayStr())} />
                             <span className="dash-range-label week">{formatWeekRangeLabel(startDate, endDate)}</span>
                         </div>
                     </div>

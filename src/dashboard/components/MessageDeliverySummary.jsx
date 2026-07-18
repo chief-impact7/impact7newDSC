@@ -318,7 +318,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                             <span className="msg-status-details-actions">
                                 {selectedStatusCount}건
                                 {selectedStatusCount > selectedStatusRows.length && ` · 최근 ${selectedStatusRows.length}건 표시`}
-                                <IconButton icon="chevronUp" label="접기" onClick={() => setSelectedStatus(null)} />
+                                <IconButton icon="caret-up" label="접기" onClick={() => setSelectedStatus(null)} />
                             </span>
                         </div>
                         {selectedStatusRows.length ? (
@@ -346,7 +346,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                     aria-label="이전 페이지"
                                     disabled={currentStatusPage === 1}
                                     onClick={() => setSelectedStatusPage(currentStatusPage - 1)}
-                                >&lt;</button>
+                                ><Icon name={ICON_NAME.chevron_left} size={16} aria-hidden="true" /></button>
                                 {Array.from({ length: selectedStatusPageCount }, (_, index) => index + 1).map((page) => (
                                     <button
                                         type="button"
@@ -363,7 +363,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                     aria-label="다음 페이지"
                                     disabled={currentStatusPage === selectedStatusPageCount}
                                     onClick={() => setSelectedStatusPage(currentStatusPage + 1)}
-                                >&gt;</button>
+                                ><Icon name={ICON_NAME.chevron_right} size={16} aria-hidden="true" /></button>
                             </div>
                         )}
                         {data.queueLimitReached && <p className="msg-period-note">최근 항목 표시 상한에 도달했습니다. 기간을 좁혀주세요.</p>}
@@ -374,7 +374,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                     <span className="msg-period-label">발송 통계</span>
                     {PERIODS.map(p => p.key === 'today' ? (
                         <React.Fragment key={p.key}>
-                            <button type="button" className="msg-period-chip" onClick={() => moveDay(-1)} aria-label="이전 날짜">&lt;</button>
+                            <button type="button" className="msg-period-chip" onClick={() => moveDay(-1)} aria-label="이전 날짜"><Icon name={ICON_NAME.chevron_left} size={16} aria-hidden="true" /></button>
                             <button
                                 type="button"
                                 className={`msg-period-chip${period === p.key ? ' active' : ''}`}
@@ -389,7 +389,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                 disabled={period === 'today' && dayOffset === 0}
                                 aria-label="다음 날짜"
                             >
-                                &gt;
+                                <Icon name={ICON_NAME.chevron_right} size={16} aria-hidden="true" />
                             </button>
                         </React.Fragment>
                     ) : (
@@ -482,24 +482,23 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                     >
                                         일괄 재발송 ({retryEligible.length})
                                     </button>
-                                    <button
-                                        type="button"
-                                        className="msg-action-btn"
+                                    <IconButton
+                                        icon="archive"
+                                        label={manageEligible.length
+                                            ? `일괄 보관 (${manageEligible.length}) — 목록에서 숨김 (발송 이력은 보존)`
+                                            : '실패 확정 건만 보관할 수 있습니다 — 재시도 대기 건은 자동 재처리가 끝나면 실패 확정으로 바뀝니다'}
                                         disabled={busy || !manageEligible.length}
-                                        title={manageEligible.length ? undefined : '실패 확정 건만 보관할 수 있습니다 — 재시도 대기 건은 자동 재처리가 끝나면 실패 확정으로 바뀝니다'}
                                         onClick={() => bulkManage('archive')}
-                                    >
-                                        일괄 보관 ({manageEligible.length})
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="msg-action-btn msg-action-danger"
+                                    />
+                                    <IconButton
+                                        icon="trash"
+                                        tone="danger"
+                                        label={manageEligible.length
+                                            ? `일괄 삭제 (${manageEligible.length}) — 발송 로그·삭제 기록은 보존`
+                                            : '실패 확정 건만 삭제할 수 있습니다 — 재시도 대기 건은 자동 재처리가 끝나면 실패 확정으로 바뀝니다'}
                                         disabled={busy || !manageEligible.length}
-                                        title={manageEligible.length ? undefined : '실패 확정 건만 삭제할 수 있습니다 — 재시도 대기 건은 자동 재처리가 끝나면 실패 확정으로 바뀝니다'}
                                         onClick={() => bulkManage('delete')}
-                                    >
-                                        일괄 삭제 ({manageEligible.length})
-                                    </button>
+                                    />
                                 </span>
                             )}
                         </div>
@@ -543,7 +542,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                     {/* 재발송은 원장 권한. failed_permanent도 허용(원인이 추후 해소되는 실패 실재).
                                         단 보존기간 경과(번호 purge)·홍보성(동의 재확인 불가)은 서버가 거부하므로 버튼을 막는다. */}
                                     <IconButton
-                                        icon="arrowClockwise"
+                                        icon="arrow-clockwise"
                                         label={f.piiPurged ? '보존기간이 지나 재발송할 수 없습니다'
                                             : (f.kind === 'promo' || f.kind === 'promo_sms') ? '홍보성 메시지는 수동 재발송할 수 없습니다'
                                             : '재발송'}
@@ -554,7 +553,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                     {MANAGE_ELIGIBLE(f) && (
                                         <>
                                             <IconButton
-                                                icon="archiveBox"
+                                                icon="archive"
                                                 label="보관 — 목록에서 숨김 (발송 이력은 보존)"
                                                 onClick={() => singleManage(f, 'archive')}
                                                 disabled={busy}

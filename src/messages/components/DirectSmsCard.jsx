@@ -71,7 +71,7 @@ export default function ManualOptOutCard() {
   return (
     <section className="mc-section">
       <details className="mc-card">
-        <summary className="mc-section-title"><Icon name={ICON_NAME.phone_opt_out} size={20} aria-hidden="true" /> 수신거부 번호 등록 <span className="mc-tag">솔라피 연동</span><Icon name="chevronDown" size={18} className="mc-disclosure-icon" aria-hidden="true" /></summary>
+        <summary className="mc-section-title"><Icon name={ICON_NAME.phone_opt_out} size={20} aria-hidden="true" /> 수신거부 번호 등록 <span className="mc-tag">솔라피 연동</span><Icon name="caret-down" size={18} className="mc-disclosure-icon" aria-hidden="true" /></summary>
         <div className="mc-optout-row">
           <input type="tel" aria-label="수신거부 휴대폰 번호" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="010-1234-5678" />
           <input type="date" aria-label="수신거부 요청일" value={requestedDate} onChange={(e) => setRequestedDate(e.target.value)} />
@@ -86,7 +86,7 @@ export default function ManualOptOutCard() {
             <span>일치 {registry?.matchedCount ?? 0} · 솔라피만 {registry?.solapiOnlyCount ?? 0} · DSC만 {registry?.localOnlyCount ?? 0}</span>
           </summary>
           <div className="mc-optout-actions">
-            <IconButton icon="arrowsRightLeft" label={listBusy ? '조회 중…' : '솔라피와 다시 대조'} disabled={listBusy} onClick={loadRegistry} />
+            <IconButton icon="arrows-left-right" label={listBusy ? '조회 중…' : '솔라피와 다시 대조'} disabled={listBusy} onClick={loadRegistry} />
             <IconButton icon="download" label="CSV 다운로드" disabled={listBusy || !(registry?.items ?? []).length} onClick={downloadCsv} />
           </div>
           {!listBusy && (registry?.items ?? []).length === 0 ? (

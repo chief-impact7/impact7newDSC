@@ -93,6 +93,7 @@ export default function ScheduleSummary({ checks }) {
                                         className="dash-expand-btn"
                                         onClick={() => toggleClass(cls)}
                                     >
+                                        <Icon name={isExpanded ? ICON_NAME.expand_less : ICON_NAME.expand_more} size={18} />
                                         {isExpanded ? '접기' : `더 보기 (${recs.length - INITIAL_ROWS}건)`}
                                     </button>
                                 )}
