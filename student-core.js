@@ -1,7 +1,7 @@
 // student-core.js — Firebase/DOM/state 의존 없는 순수 함수 모음. node:test 가능.
 // state가 필요한 함수는 student-helpers.js에 둔다.
 
-import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
+import { ENROLLABLE_STATUSES, NON_ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 
 export function normalizeDays(day) {
     if (!day) return [];
@@ -25,6 +25,46 @@ export const allClassCodes = (s) =>
 
 export function makeDailyRecordId(studentDocId, date) {
     return `${studentDocId}_${date}`;
+}
+
+export function studentMatchesSearchTerms(student, query, extraTerms = []) {
+    const needle = String(query || '').trim().toLowerCase();
+    if (!needle) return false;
+    const phones = [student.student_phone, student.parent_phone_1, student.parent_phone_2].filter(Boolean);
+    const textTerms = [student.name, ...phones, ...extraTerms].filter(Boolean);
+    if (textTerms.some(term => String(term).toLowerCase().includes(needle))) return true;
+    const digits = needle.replace(/\D/g, '');
+    return digits.length >= 3 && phones.some(phone => phone.replace(/\D/g, '').includes(digits));
+}
+
+export function siblingStatusSuffix(status) {
+    return NON_ENROLLABLE_STATUSES.has(status) ? ` (${status})` : '';
+}
+
+export function createSiblingMap(students) {
+    const siblingMap = {};
+    const idToStudent = new Map(students.map(s => [s.docId, s]));
+    const phoneToIds = {};
+    students.forEach(s => {
+        const phones = [...new Set([s.parent_phone_1, s.parent_phone_2]
+            .map(p => (p || '').replace(/\D/g, '')).filter(p => p.length >= 9))];
+        phones.forEach(phone => {
+            if (!phoneToIds[phone]) phoneToIds[phone] = [];
+            phoneToIds[phone].push(s.docId);
+        });
+    });
+    Object.values(phoneToIds).forEach(ids => {
+        const uniqueIds = [...new Set(ids)];
+        uniqueIds.forEach(id => {
+            const student = idToStudent.get(id);
+            const siblings = uniqueIds.filter(siblingId => {
+                const sibling = idToStudent.get(siblingId);
+                return siblingId !== id && sibling?.name !== student?.name;
+            });
+            if (siblings.length) siblingMap[id] = new Set(siblings);
+        });
+    });
+    return siblingMap;
 }
 
 export function buildNaesinCsKey({ branch, school, level, grade, group }) {

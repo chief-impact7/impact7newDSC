@@ -40,7 +40,6 @@ import {
     openTempAttendanceModal, openTempAttendanceForEdit, saveTempAttendance,
     openContactAsTemp
 } from './diagnostic.js';
-import { _searchContactsDSC, _renderPastContacts } from './past-search.js';
 import {
     initLeaveRequestDeps,
     renderLeaveRequestList, selectLeaveRequest,
@@ -658,6 +657,9 @@ onAuthStateChanged(auth, async (user) => {
                 renderListPanel();
                 await new Promise(r => (window.requestIdleCallback || ((f) => setTimeout(f, 3000)))(r));
                 await loadWithdrawnStudents();
+                buildSiblingMap();
+                renderListPanel();
+                if (state.selectedStudentId) renderStudentDetail(state.selectedStudentId);
             } catch (err) {
                 console.error('[init-deferred] 후속 로드 중 오류:', err);
             }
@@ -790,7 +792,7 @@ window.refreshData = async () => {
     await backfillStudentNumbers();
     await promoteWithdrawalDate();
     await promoteScheduledLeave();
-    // 퇴원생(1.5만+건)은 전체 로드된 적 있을 때만 갱신 (검색의 부분 push는 제외)
+    // 비원생(1.5만+건)은 전체 로드된 적 있을 때만 갱신 (검색의 부분 push는 제외)
     if (state._withdrawnFullyLoaded) await loadWithdrawnStudents();
     await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadRoleMemos(), loadClassSettings(true), loadClassNextHw(state.selectedDate), loadTeachers()]);
     await syncAbsenceRecords();
@@ -879,8 +881,6 @@ window.confirmVisitStatus = confirmVisitStatus;
 window.toggleDiagnosticReschedule = toggleDiagnosticReschedule;
 window.saveDiagnosticReschedule = saveDiagnosticReschedule;
 window.confirmDiagnosticCancel = confirmDiagnosticCancel;
-
-// _searchContactsDSC, _renderPastContacts → imported from past-search.js
 
 // _makeContactDocId, _tryTempContactAutofill, openTempAttendanceModal,
 // _upsertStudentFromTemp, saveTempAttendance, openTempAttendanceForEdit,
@@ -992,4 +992,3 @@ window.migrateNaesinEnrollments = async function(save = false) {
     console.log(`[migrate] 완료: 성공 ${ok}명, 실패 ${fail}명`);
     if (ok > 0) renderListPanel();
 };
-

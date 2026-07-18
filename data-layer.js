@@ -10,7 +10,7 @@ import {
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from './firebase-config.js';
 import { auditUpdate, auditSet, auditAdd, auditDelete, batchUpdate, batchSet, READ_ONLY } from './audit.js';
-import { parseDateKST, toDateStrKST, todayStr, getDayName } from './src/shared/firestore-helpers.js';
+import { parseDateKST, toDateStrKST, todayStr, getDayName, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { state, DEFAULT_DOMAINS, LEAVE_STATUSES, DEFAULT_TEST_SECTIONS } from './state.js';
 import { showSaveIndicator, showToast } from './ui-utils.js';
 import { openKoreanDatePicker } from './date-picker.js';
@@ -843,7 +843,7 @@ export async function autoCloseOldRecords() {
     }
 }
 
-// 퇴원생 전체 로드 (1.5만+건 — 시스템 전반이 비원생 포함 전제라 전체 적재 필요).
+// 비원생 전체 로드 (1.5만+건 — 시스템 전반이 비원생 포함 전제라 전체 적재 필요).
 // 첫 조작(학생 클릭) 응답성을 지키기 위해:
 //  1) IndexedDB 캐시를 먼저 통째로 적용 — 재방문 시 네트워크 전에 기능 가용
 //  2) 서버 갱신은 청크 분할(2,500건 + 사이마다 yield)로 메인스레드 블로킹 분산
@@ -852,41 +852,47 @@ const WITHDRAWN_CHUNK = 2500;
 let _withdrawnLoading = null;
 export function loadWithdrawnStudents() {
     if (_withdrawnLoading) return _withdrawnLoading;
+    state._withdrawnFullyLoaded = false;
     _withdrawnLoading = (async () => {
-        const baseQ = query(collection(db, 'students'), where('status', '==', '퇴원'));
         try {
             try {
-                const cached = await getDocsFromCache(baseQ);
-                if (cached.size > 0) {
+                const cachedDocs = [];
+                for (const status of PAST_STUDENT_STATUSES) {
+                    const cached = await getDocsFromCache(query(collection(db, 'students'), where('status', '==', status)));
+                    cachedDocs.push(...cached.docs);
+                }
+                if (cachedDocs.length > 0) {
                     // 1.5만 건 d.data() 역직렬화도 한 방이면 메인스레드를 수백 ms 막는다 — 분할
                     const arr = [];
-                    for (let i = 0; i < cached.docs.length; i += WITHDRAWN_CHUNK) {
-                        cached.docs.slice(i, i + WITHDRAWN_CHUNK).forEach(d => arr.push({ docId: d.id, ...d.data() }));
-                        if (i + WITHDRAWN_CHUNK < cached.docs.length) await new Promise(r => setTimeout(r, 50));
+                    for (let i = 0; i < cachedDocs.length; i += WITHDRAWN_CHUNK) {
+                        cachedDocs.slice(i, i + WITHDRAWN_CHUNK).forEach(d => arr.push({ docId: d.id, ...d.data() }));
+                        if (i + WITHDRAWN_CHUNK < cachedDocs.length) await new Promise(r => setTimeout(r, 50));
                     }
                     state.withdrawnStudents = arr;
-                    state._withdrawnFullyLoaded = true;
                 }
             } catch { /* 캐시 없음 — 서버 로드로 계속 */ }
 
             const fresh = [];
-            let cursor = null;
-            for (;;) {
-                const parts = [where('status', '==', '퇴원'), orderBy(documentId()), limit(WITHDRAWN_CHUNK)];
-                if (cursor) parts.push(startAfter(cursor));
-                const snap = await getDocs(query(collection(db, 'students'), ...parts));
-                snap.forEach(d => fresh.push({ docId: d.id, ...d.data() }));
-                if (snap.size < WITHDRAWN_CHUNK) break;
-                cursor = snap.docs[snap.docs.length - 1];
-                await new Promise(r => setTimeout(r, 50));
+            for (const status of PAST_STUDENT_STATUSES) {
+                let cursor = null;
+                for (;;) {
+                    const parts = [where('status', '==', status), orderBy(documentId()), limit(WITHDRAWN_CHUNK)];
+                    if (cursor) parts.push(startAfter(cursor));
+                    const snap = await getDocs(query(collection(db, 'students'), ...parts));
+                    snap.forEach(d => fresh.push({ docId: d.id, ...d.data() }));
+                    if (snap.size < WITHDRAWN_CHUNK) break;
+                    cursor = snap.docs[snap.docs.length - 1];
+                    await new Promise(r => setTimeout(r, 50));
+                }
             }
             state.withdrawnStudents = fresh;
             state._withdrawnFullyLoaded = true;
         } catch (err) {
-            console.error('퇴원 학생 로드 실패:', err.message);
+            console.error('비원생 로드 실패:', err.message);
         } finally {
             _withdrawnLoading = null;
         }
+        return state._withdrawnFullyLoaded;
     })();
     return _withdrawnLoading;
 }

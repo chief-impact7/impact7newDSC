@@ -26,7 +26,7 @@ import {
     enrollmentCode, findStudent,
     branchFromStudent, makeDailyRecordId,
     getActiveEnrollments, getStudentStartTime,
-    allClassCodes, isNaesinActiveToday, deriveClassLabelAt
+    allClassCodes, isNaesinActiveToday, deriveClassLabelAt, siblingStatusSuffix
 } from './student-helpers.js';
 import {
     currentSchool, studentGrade, todayStr, getDayName
@@ -1066,14 +1066,15 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     }
 
     // 특강 모드: 특강 전용 상세 패널 (반 비소속 학생이면 false 반환 → 표준 상세로 계속)
-    if (state._classMgmtMode === 'teukang' && state.selectedClassCode) {
+    const searching = !!state.searchQuery?.trim();
+    if (!searching && state._classMgmtMode === 'teukang' && state.selectedClassCode) {
         if (window.renderTeukangDetail?.(studentId)) return;
     }
 
     // 내신 모드: naesin.js로 위임 (간소화된 상세 패널)
     // 특강 모드에서 폴백된 학생은 잔존 naesin 서브필터에 걸리지 않고 표준 상세로 가야 함
-    if ((state.currentCategory === 'attendance' && state.currentSubFilter.has('naesin') && state._classMgmtMode !== 'teukang') ||
-        (state._classMgmtMode === 'naesin' && state.selectedClassCode && _isNaesinClassCode(state.selectedClassCode))) {
+    if (!searching && ((state.currentCategory === 'attendance' && state.currentSubFilter.has('naesin') && state._classMgmtMode !== 'teukang') ||
+        (state._classMgmtMode === 'naesin' && state.selectedClassCode && _isNaesinClassCode(state.selectedClassCode)))) {
         if (window.renderNaesinDetail) {
             window.renderNaesinDetail(studentId);
             return;
@@ -1105,6 +1106,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     // 숨긴다 — 내신 종료 후 정규 복귀 시 자동 재표시. (1차 판정, 아래 분기에서 재사용)
     const isNaesinActive = isNaesinActiveToday(student, state.selectedDate);
 
+    const isInactive = _isInactiveDetailStudent(student);
     const isWithdrawn = student.status === '퇴원';
     // 퇴원 학생: leave_request 한 번만 조회 (프로필 태그 + 퇴원 정보 카드에서 공유)
     const wdLeaveReq = isWithdrawn ? state.leaveRequests.find(lr => lr.student_id === studentId && lr.status === 'approved' &&
@@ -1144,14 +1146,12 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
         tagText = showTime ? `${displayStatus} ${formatTime12h(arrivalTime)}` : displayStatus;
     }
 
-    const siblings = state.siblingMap[studentId]?.size > 0
-        ? [...state.siblingMap[studentId]]
-            .map(sid => ({ id: sid, name: state.allStudents.find(x => x.docId === sid)?.name }))
-            .filter(s => s.name)
-        : [];
+    const siblings = [...(state.siblingMap[studentId] || [])]
+        .map(sid => findStudent(sid))
+        .filter(s => s?.name);
     const siblingHtml = siblings.length
         ? `<span class="tag tag-sibling">${msIcon('group', '', 'style="font-size:13px;"')} ${
-            siblings.map(s => `<span style="cursor:pointer;text-decoration:underline;" role="link" tabindex="0" data-keyclick onclick="event.stopPropagation();selectStudent('${escAttr(s.id)}')">${esc(s.name)}</span>`).join(', ')
+            siblings.map(s => `<span style="cursor:pointer;text-decoration:underline;" role="link" tabindex="0" data-keyclick onclick="event.stopPropagation();selectStudent('${escAttr(s.docId)}')">${esc(s.name)}${esc(siblingStatusSuffix(s.status))}</span>`).join(', ')
           }</span>`
         : '';
 
@@ -1209,7 +1209,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     const levelPeriodHtml = lp.start
         ? `${lpLevel ? `<span class="stay-level-tag">${esc(lpLevel)}</span> ` : ''}${lp.start} &middot; ${lp.label}`
         : '—';
-    const arrivalTimeHtml = (isLeaveStudent || isWithdrawn) ? '' : semesterEnrollments.length > 0 ? `
+    const arrivalTimeHtml = (isLeaveStudent || isInactive) ? '' : semesterEnrollments.length > 0 ? `
         <div class="detail-card">
             <div class="detail-card-title">
                 ${msIcon('schedule', '', 'style="color:var(--primary);font-size:18px;"')}
@@ -1407,7 +1407,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
         const wdReason = wdLeaveReq?.reason || '';
         const wdReqBy = wdLeaveReq ? getTeacherName(wdLeaveReq.requested_by) : '';
         const wdAppBy = wdLeaveReq ? getTeacherName(wdLeaveReq.approved_by) : '';
-        const enrollInfo = enrollments.map((e, idx) => {
+        const enrollInfo = enrollments.map(e => {
             const code = enrollmentCode(e);
             const days = (e.day || []).join('·');
             const ct = e.class_type || '정규';
@@ -1419,7 +1419,6 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
                 <span style="font-size:12px;color:var(--text-sec);">${esc(days)}</span>
                 ${time ? `<span style="font-size:12px;">${esc(formatTime12h(time))}</span>` : ''}
                 ${period ? `<span style="font-size:11px;color:var(--text-sec);">${esc(period)}</span>` : ''}
-                ${msIcon('edit', '', `style="font-size:14px;color:var(--text-sec);cursor:pointer;margin-left:auto;" role="button" tabindex="0" data-keyclick aria-label="수강 정보 편집" onclick="openEnrollmentModal('${escAttr(studentId)}', ${idx})"`)}
             </div>`;
         }).join('');
         withdrawnHtml = `
@@ -1442,11 +1441,21 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
                     수강 이력
                 </div>
                 ${enrollInfo}
-            </div>` : ''}
-            ${renderAbsenceRecordCard(studentId)}`;
+            </div>` : ''}`;
     }
 
-    const cardsHtml = isWithdrawn ? withdrawnHtml : `
+    const inactiveHtml = isWithdrawn ? withdrawnHtml : `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                ${msIcon('person_off', '', 'style="color:var(--text-sec);font-size:18px;"')}
+                ${esc(student.status || '비원생')} 학생
+            </div>
+            <div style="font-size:13px;color:var(--text-sec);">
+                진단평가 입력은 상단 진단평가 버튼에서 진행할 수 있습니다.
+            </div>
+        </div>`;
+
+    const cardsHtml = isInactive ? inactiveHtml : `
         <!-- AI 종합 상태 카드 (비동기 마운트) -->
         <div id="student-status-mount" data-student-id="${escAttr(studentId)}"></div>
 
@@ -1493,14 +1502,14 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     // detail-cards는 naesin/class/diagnostic 등과 공유되므로 마커로 점유 출처를 확인해
     // 다른 화면이 컨테이너를 점유한 사이의 stale skip을 방지한다.
     const cardsUnchanged = incremental && !studentChanged && _lastCardsHtml === cardsHtml &&
-        !isWithdrawn && !!cardsContainer.querySelector(`#student-status-mount[data-student-id="${CSS.escape(studentId)}"]`);
+        !isInactive && !!cardsContainer.querySelector(`#student-status-mount[data-student-id="${CSS.escape(studentId)}"]`);
 
     if (!cardsUnchanged) {
         cardsContainer.innerHTML = cardsHtml;
         _lastCardsHtml = cardsHtml;
 
         // 체크리스트 완료 캐시 backfill — 실제 카드 갱신 시에만(M-15). 값이 바뀐 경우에만 write.
-        if (!isWithdrawn) {
+        if (!isInactive) {
             syncChecklistCache(studentId, getStudentChecklistStatus(studentId))
                 .catch(err => console.warn('[checklist-cache] 동기화 실패:', err));
         }
@@ -1509,7 +1518,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
         if (document.getElementById('detail-header-tenure')) fillTenure(studentId, student);
 
         // AI 종합 상태 카드 — 비동기 마운트 (퇴원 뷰 제외)
-        if (!isWithdrawn) {
+        if (!isInactive) {
             const statusMount = document.getElementById('student-status-mount');
             if (statusMount) {
                 import('./student-status-card.js').then(({ renderStudentStatusCard, initStudentStatusCardDeps }) => {

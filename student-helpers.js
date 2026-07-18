@@ -11,14 +11,14 @@ import {
     normalizeDays, enrollmentCode, branchFromStudent, allClassCodes,
     makeDailyRecordId, buildNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE,
     resolveNaesinCsKey, displayCodeFromCsKey, isWithdrawnAt, isOnLeaveAt,
-    isValidDateStr,
+    isValidDateStr, createSiblingMap, studentMatchesSearchTerms, siblingStatusSuffix,
 } from './student-core.js';
 
 export {
     normalizeDays, enrollmentCode, branchFromStudent, allClassCodes,
     makeDailyRecordId, buildNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE,
     resolveNaesinCsKey, displayCodeFromCsKey, isWithdrawnAt, isOnLeaveAt,
-    isValidDateStr,
+    isValidDateStr, studentMatchesSearchTerms, siblingStatusSuffix,
 };
 
 // 휴원 기간 만료 판정 (실제 오늘 KST 기준).
@@ -210,32 +210,5 @@ export function findStudent(studentId) {
 
 // ─── 형제 맵 빌드 ──────────────────────────────────────────────────────────
 export function buildSiblingMap() {
-    state.siblingMap = {};
-    const idToStudent = new Map(state.allStudents.map(s => [s.docId, s]));
-    const phoneToIds = {};
-    state.allStudents.forEach(s => {
-        const phones = [...new Set([s.parent_phone_1, s.parent_phone_2]
-            .map(p => (p || '').replace(/\D/g, '')).filter(p => p.length >= 9))];
-        phones.forEach(p => {
-            if (!phoneToIds[p]) phoneToIds[p] = [];
-            phoneToIds[p].push(s.docId);
-        });
-    });
-    Object.values(phoneToIds).forEach(ids => {
-        const uniqueIds = [...new Set(ids)];
-        if (uniqueIds.length < 2) return;
-        uniqueIds.forEach(id => {
-            const student = idToStudent.get(id);
-            if (!student) return;
-            const siblings = uniqueIds.filter(sid => {
-                if (sid === id) return false;
-                const other = idToStudent.get(sid);
-                return other && other.name !== student.name;
-            });
-            if (siblings.length > 0) {
-                if (!state.siblingMap[id]) state.siblingMap[id] = new Set();
-                siblings.forEach(sid => state.siblingMap[id].add(sid));
-            }
-        });
-    });
+    state.siblingMap = createSiblingMap([...state.allStudents, ...state.withdrawnStudents]);
 }
