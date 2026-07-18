@@ -12,6 +12,9 @@ import {
     displayCodeFromCsKey,
     isWithdrawnAt,
     isOnLeaveAt,
+    createSiblingMap,
+    studentMatchesSearchTerms,
+    siblingStatusSuffix,
 } from './student-core.js';
 
 // ─── normalizeDays ────────────────────────────────────────────────────────────
@@ -104,6 +107,33 @@ test('allClassCodes: 코드 목록 반환, 빈 코드 제외', () => {
 
 test('makeDailyRecordId: studentId_date 형식', () => {
     assert.equal(makeDailyRecordId('abc123', '2026-06-09'), 'abc123_2026-06-09');
+});
+
+test('createSiblingMap: 재원·퇴원 학생도 같은 학부모 전화면 서로 형제로 연결', () => {
+    const map = createSiblingMap([
+        { docId: 'active', name: '재원형제', status: '재원', parent_phone_1: '010-1234-5678' },
+        { docId: 'past', name: '퇴원형제', status: '퇴원', parent_phone_2: '01012345678' },
+        { docId: 'same-name', name: '재원형제', status: '퇴원', parent_phone_1: '010-1234-5678' },
+    ]);
+    assert.deepEqual([...map.active], ['past']);
+    assert.deepEqual([...map.past], ['active', 'same-name']);
+});
+
+test('studentMatchesSearchTerms: 상태와 무관하게 한 글자·중간 이름·학부모 전화 검색', () => {
+    for (const status of ['상담', '등원예정', '재원', '실휴원', '가휴원', '퇴원', '종강']) {
+        const student = { name: '조아라', status, parent_phone_1: '010-1234-5678' };
+        assert.equal(studentMatchesSearchTerms(student, '아'), true);
+        assert.equal(studentMatchesSearchTerms(student, '아라'), true);
+        assert.equal(studentMatchesSearchTerms(student, '0101234'), true);
+        assert.equal(studentMatchesSearchTerms(student, '없는학생'), false);
+    }
+});
+
+test('siblingStatusSuffix: 상담·퇴원·종강 형제만 상태를 구분', () => {
+    assert.equal(siblingStatusSuffix('상담'), ' (상담)');
+    assert.equal(siblingStatusSuffix('퇴원'), ' (퇴원)');
+    assert.equal(siblingStatusSuffix('종강'), ' (종강)');
+    assert.equal(siblingStatusSuffix('재원'), '');
 });
 
 // ─── buildNaesinCsKey ─────────────────────────────────────────────────────────

@@ -522,6 +522,11 @@ export function renderFilterChips() {
     const container = document.getElementById('filter-chips');
     if (!container) return;
 
+    if (state.searchQuery?.trim()) {
+        container.innerHTML = '<span class="filter-chips-empty">검색 중 필터 일시중지</span>';
+        return;
+    }
+
     const categoryLabels = { attendance: '출결', homework: '숙제', test: '테스트', automation: '자동화', admin: '행정' };
     const subFilterLabels = {
         scheduled_visit: '비정규', pre_arrival: '정규', present: '출석', late: '지각', absent: '결석', other: '기타',
@@ -572,23 +577,6 @@ export function renderFilterChips() {
             `<span class="filter-chip">${esc(c.label)}<button class="filter-chip-close" onclick="removeFilterChip('${escAttr(c.onRemove)}')">&times;</button></span>`
         ).join('') +
             `<button class="filter-chip-clear-all" onclick="clearAllFilters()" title="모든 필터 해제">&times;</button>`;
-    }
-
-    // 필터가 걸린 채 검색 중이면 검색 범위 안내 배너 표시 (검색은 의도적으로 현재 필터 안에서 동작)
-    // 반 필터는 검색 중 적용되지 않으므로(list-view.js) 배너 라벨에서 제외.
-    // 소속반 통합 칩도 반 부분은 미적용이지만 소속(단지·학부) 필터는 적용되므로 소속 라벨로 되돌려 표시.
-    const scopeBanner = document.getElementById('search-scope-banner');
-    if (scopeBanner) {
-        const scopeChips = chips.filter(c => c.onRemove !== 'clearClassCode' && c.onRemove !== 'clearBranchClass');
-        if (isBranchClass) {
-            scopeChips.push({ label: `소속: ${state.selectedBranch} ${state.selectedBranchLevel}` });
-        }
-        const show = !!state.searchQuery?.trim() && scopeChips.length > 0;
-        scopeBanner.style.display = show ? '' : 'none';
-        if (show) {
-            document.getElementById('search-scope-text').textContent =
-                `${scopeChips.map(c => c.label).join(' · ')} 내 검색 결과`;
-        }
     }
 }
 
