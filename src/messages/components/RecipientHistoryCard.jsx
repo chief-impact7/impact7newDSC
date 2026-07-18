@@ -110,7 +110,7 @@ export default function RecipientHistoryCard({ students = [] }) {
                   {' '}(전화번호 검색·알림톡 본문은 개인정보 보존기간 7일 내 발송만)
                 </span>
               </span>
-              <IconButton icon={historyOpen ? 'chevronUp' : 'chevronDown'} label={historyOpen ? '접기' : '펼치기'} aria-expanded={historyOpen} onClick={() => setHistoryOpen(open => !open)} />
+              <IconButton icon={historyOpen ? 'caret-up' : 'caret-down'} label={historyOpen ? '접기' : '펼치기'} aria-expanded={historyOpen} onClick={() => setHistoryOpen(open => !open)} />
             </div>
             {historyOpen && <ul className="rh-timeline">
               {items.map((it) => {
