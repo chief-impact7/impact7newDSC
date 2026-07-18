@@ -12,7 +12,7 @@
     "test": "npm run test:node && npm run test:vitest"
   },
   "dependencies": {
-    "@impact7/shared": "github:chief-impact7/impact7-shared#v1.47.1",
+    "@impact7/shared": "github:chief-impact7/impact7-shared#v1.47.2",
     "@impact7/ui": "^0.8.0",
     "echarts": "^6.1.0",
     "echarts-for-react": "^3.0.6",
