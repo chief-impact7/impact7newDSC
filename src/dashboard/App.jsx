@@ -349,7 +349,7 @@ export default function App() {
                             <button type="button" aria-label="다음 주" onClick={() => setBaseDate(addDays(normalizedBaseDate, 7))}>
                                 <Icon name={ICON_NAME.chevron_right} size={20} aria-hidden="true" />
                             </button>
-                            <IconButton icon="calendarDateRange" label="이번 주" onClick={() => setBaseDate(todayStr())} />
+                            <IconButton icon="calendar-dots" label="이번 주" onClick={() => setBaseDate(todayStr())} />
                             <span className="dash-range-label week">{formatWeekRangeLabel(startDate, endDate)}</span>
                         </div>
                     </div>

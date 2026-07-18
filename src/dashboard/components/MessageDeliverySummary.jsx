@@ -318,7 +318,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                             <span className="msg-status-details-actions">
                                 {selectedStatusCount}건
                                 {selectedStatusCount > selectedStatusRows.length && ` · 최근 ${selectedStatusRows.length}건 표시`}
-                                <IconButton icon="chevronUp" label="접기" onClick={() => setSelectedStatus(null)} />
+                                <IconButton icon="caret-up" label="접기" onClick={() => setSelectedStatus(null)} />
                             </span>
                         </div>
                         {selectedStatusRows.length ? (
@@ -483,7 +483,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                         일괄 재발송 ({retryEligible.length})
                                     </button>
                                     <IconButton
-                                        icon="archiveBox"
+                                        icon="archive"
                                         label={manageEligible.length
                                             ? `일괄 보관 (${manageEligible.length}) — 목록에서 숨김 (발송 이력은 보존)`
                                             : '실패 확정 건만 보관할 수 있습니다 — 재시도 대기 건은 자동 재처리가 끝나면 실패 확정으로 바뀝니다'}
@@ -542,7 +542,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                     {/* 재발송은 원장 권한. failed_permanent도 허용(원인이 추후 해소되는 실패 실재).
                                         단 보존기간 경과(번호 purge)·홍보성(동의 재확인 불가)은 서버가 거부하므로 버튼을 막는다. */}
                                     <IconButton
-                                        icon="arrowClockwise"
+                                        icon="arrow-clockwise"
                                         label={f.piiPurged ? '보존기간이 지나 재발송할 수 없습니다'
                                             : (f.kind === 'promo' || f.kind === 'promo_sms') ? '홍보성 메시지는 수동 재발송할 수 없습니다'
                                             : '재발송'}
@@ -553,7 +553,7 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                                     {MANAGE_ELIGIBLE(f) && (
                                         <>
                                             <IconButton
-                                                icon="archiveBox"
+                                                icon="archive"
                                                 label="보관 — 목록에서 숨김 (발송 이력은 보존)"
                                                 onClick={() => singleManage(f, 'archive')}
                                                 disabled={busy}
