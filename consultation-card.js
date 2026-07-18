@@ -25,7 +25,7 @@ import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { esc, renderMarkdown } from './ui-utils.js';
 
 let _deps = {};
-let _activeSubtab = 'input';  // 'input' | 'search'
+let _activeSubtab = 'search';  // 'input' | 'search'
 let _generatingAiFor = null;
 const _aiCollapsed = { summary: false, briefing: false };
 export function initConsultationCardDeps(deps) {
@@ -264,12 +264,12 @@ function renderConsultationHeader() {
   // 다른 탭과 통일: 별도 "상담" 헤더 바 없이 서브탭부터 바로 (탭 바에 이미 '상담' 표시됨)
   return `
     <div class="consultation-subtabs" role="tablist">
-      <button class="consultation-subtab ${_activeSubtab === 'input' ? 'active' : ''}"
-        role="tab" aria-selected="${_activeSubtab === 'input'}"
-        onclick="onConsultationSubtab('input')">입력</button>
       <button class="consultation-subtab ${_activeSubtab === 'search' ? 'active' : ''}"
         role="tab" aria-selected="${_activeSubtab === 'search'}"
         onclick="onConsultationSubtab('search')">조회</button>
+      <button class="consultation-subtab ${_activeSubtab === 'input' ? 'active' : ''}"
+        role="tab" aria-selected="${_activeSubtab === 'input'}"
+        onclick="onConsultationSubtab('input')">입력</button>
     </div>
   `;
 }
