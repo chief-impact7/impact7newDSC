@@ -37,6 +37,16 @@ const RECIPIENT_ROLE_LABEL = {
 // 자동충전 꺼진 상태에서 이 금액 밑이면 경고색 — 잔액 고갈은 전 채널 발송 실패.
 const LOW_BALANCE_WARN = 10000;
 
+// 서버 templateAuditSweep(일 1회) 이상 유형 라벨 — env 미주입·템플릿 수정으로 인한
+// 알림톡 접수 거부(1042) 사고를 화면에서 미리 드러낸다.
+const TEMPLATE_AUDIT_LABEL = {
+    env_unset: '코드 미설정',
+    env_id_missing: '솔라피에 없는 ID',
+    not_approved: '비승인 상태',
+    unmapped_new: '새 승인 템플릿 미연결',
+    modified: '템플릿 수정 감지',
+};
+
 const PERIODS = [
     { key: 'today', label: '오늘' },
     { key: 'week', label: '최근 7일' },
@@ -293,6 +303,19 @@ function MessageDeliverySummary({ data, students, loading, onReload }) {
                 </span>
             </div>
             <div className="dash-card-body">
+                {data.templateAudit?.anomalies?.length > 0 && (
+                    <div
+                        className="msg-template-audit"
+                        role="alert"
+                        title={data.templateAudit.anomalies.map(a => `${TEMPLATE_AUDIT_LABEL[a.type] ?? a.type} · ${a.envKey ?? a.name ?? a.templateId ?? ''} — ${a.detail ?? ''}`).join('\n')}
+                    >
+                        <Icon name={ICON_NAME.error} size={14} className="i7-icon" aria-hidden="true" />
+                        <span>
+                            알림톡 템플릿 점검 {data.templateAudit.anomalies.length}건 —{' '}
+                            {data.templateAudit.anomalies.map(a => `${a.envKey ?? a.name ?? a.templateId ?? ''}(${TEMPLATE_AUDIT_LABEL[a.type] ?? a.type})`).join(' · ')}
+                        </span>
+                    </div>
+                )}
                 <div className="dash-stats">
                     {QUEUE_STATUS.map(s => (
                         <button
