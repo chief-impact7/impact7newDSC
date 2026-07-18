@@ -8,7 +8,7 @@ import {
     LEVEL_SHORT,
 } from '@impact7/shared/student-label';
 import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
-import { formatDateKST, todayKST } from '@impact7/shared/datetime';
+import { formatDateKST, todayKST, toDate } from '@impact7/shared/datetime';
 import { db } from '../../firebase-config.js';
 import { enrollmentCode, branchFromStudent, allClassCodes, normalizeDays } from '../../student-core.js';
 
@@ -187,19 +187,12 @@ async function fetchAbsenceRecordsForDailyLog(date) {
     return [...map.values()];
 }
 
-const dateFromFirestoreValue = (value) => {
-    if (!value) return null;
-    if (value.toDate) return value.toDate();
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? null : date;
-};
-
 // 휴퇴원요청 최종 승인 시각 = 행정부(approved_at)·교수부(teacher_approved_at) 승인 중 더 늦은 시각.
 // 한쪽이 먼저 승인하고 다른 쪽이 늦게 승인하면 approved_at만으로는 최종 승인 직후에도
 // '최근 승인' 판정에서 탈락하므로(민서윤 사례), 두 시각 중 더 늦은 값으로 판정한다.
 export const finalApprovalDate = (request) => {
     const dates = [request.approved_at, request.teacher_approved_at]
-        .map(dateFromFirestoreValue)
+        .map(toDate)
         .filter(Boolean);
     if (!dates.length) return null;
     return new Date(Math.max(...dates.map(date => date.getTime())));

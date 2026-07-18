@@ -1,6 +1,7 @@
 import { studentGradeKey, branchFromStudent, allClassCodes } from '../shared/firestore-helpers.js';
 import { studentSearchTerms } from '@impact7/shared/student-label';
 import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
+import { digitsOf } from '@impact7/shared/phone';
 
 // 서버 recipientPhone.js의 RECIPIENT_FIELDS와 같은 번호 필드 집합.
 const STUDENT_PHONE_KEYS = ['student_phone', 'parent_phone_1', 'parent_phone_2', 'other_phone'];
@@ -11,9 +12,9 @@ export function studentMatchesQuery(s, needle) {
   if (studentSearchTerms(s).some((t) => t.toLowerCase().includes(needle))) return true;
   if (allClassCodes(s).some((c) => c.toLowerCase().includes(needle))) return true;
   // 4자리 이상 숫자면 학생·학부모 번호도 매칭 (짧은 숫자는 반코드·학년과 뒤섞여 소음).
-  const digits = needle.replace(/\D/g, '');
+  const digits = digitsOf(needle);
   if (digits.length < 4) return false;
-  return STUDENT_PHONE_KEYS.some((key) => String(s[key] ?? '').replace(/\D/g, '').includes(digits));
+  return STUDENT_PHONE_KEYS.some((key) => digitsOf(s[key]).includes(digits));
 }
 
 export function staffMatchesQuery(person, needle) {

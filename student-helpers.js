@@ -2,6 +2,7 @@
 // daily-ops.js에서 추출한 학생 관련 유틸리티 함수들
 
 import { todayStr, parseDateKST, getDayName } from './src/shared/firestore-helpers.js';
+import { digitsOf } from '@impact7/shared/phone';
 import { state, LEVEL_SHORT, LEAVE_STATUSES } from './state.js';
 import { applyNaesinFreeDerivation, isNaesinActiveAt } from '@impact7/shared/enrollment-derivation';
 import { currentSchool, normalizeRealLevelGrade } from '@impact7/shared/student-label';
@@ -215,7 +216,7 @@ export function buildSiblingMap() {
     const phoneToIds = {};
     state.allStudents.forEach(s => {
         const phones = [...new Set([s.parent_phone_1, s.parent_phone_2]
-            .map(p => (p || '').replace(/\D/g, '')).filter(p => p.length >= 9))];
+            .map(digitsOf).filter(p => p.length >= 9))];
         phones.forEach(p => {
             if (!phoneToIds[p]) phoneToIds[p] = [];
             phoneToIds[p].push(s.docId);

@@ -19,14 +19,15 @@ export function smsByteLen(text) {
   return n;
 }
 
-export { digitsOf as onlyDigits } from '@impact7/shared/phone';
+import { digitsOf } from '@impact7/shared/phone';
+export { digitsOf as onlyDigits };
 
 // 전화번호 정규화 — 서버 parseRecipients와 동일 규칙(줄바꿈/쉼표 분리 → 숫자만 → 9~11자리).
 // 미리보기 건수·파일 인식·실제 발송이 같은 규칙을 쓰도록 단일 소스로 둔다.
 export function normalizePhones(raw) {
   return String(raw ?? '')
     .split(/[\n,]+/)
-    .map((s) => s.replace(/\D/g, ''))
+    .map(digitsOf)
     .filter((d) => d.length >= 9 && d.length <= 11);
 }
 
