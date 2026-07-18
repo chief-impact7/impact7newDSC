@@ -8,10 +8,11 @@ import GradeFilter from '../../dashboard/components/GradeFilter.jsx';
 import { MESSAGE_KIND_NOTICE, MMS_SIZE_NOTICE, messageMeta, normalizePhones, onlyDigits, readMmsImage } from '../message-format.js';
 import { parsePhonesFromFile, sampleCsv } from '../message-import.js';
 import {
+  ALIMTALK_NAME_VARIABLE,
   BULK_MAX_MESSAGES,
   alimtalkInputVariables,
   applyAlimtalkPreview,
-  buildAlimtalkAudienceRequest,
+  buildAlimtalkAudienceRequests,
   buildAudienceRequests,
   completedTargetKeys,
   DIRECT_MAX_RECIPIENTS,
@@ -196,6 +197,12 @@ export default function BulkSendCard({ students = [] }) {
   const estimatedMessageCount = estimateAudienceMessages(selectedGroups, [...recipientFields]);
   const hasStaffTargets = selectedGroups.staff.length > 0;
   const hasDirectTargets = selectedGroups.direct.length > 0;
+  // 직접 번호는 이름 자동 주입이 안 되므로 #{학생명}도 입력 변수로 요구한다.
+  const alimtalkNameInputNeeded = hasDirectTargets
+    && (selectedAlimtalkTemplate?.variables || []).includes(ALIMTALK_NAME_VARIABLE);
+  const alimtalkManualVariables = alimtalkNameInputNeeded
+    ? [ALIMTALK_NAME_VARIABLE, ...alimtalkVariables]
+    : alimtalkVariables;
   const staffAffiliations = useMemo(
     () => [...new Set(staff.map((person) => person.affiliation).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')),
     [staff],
@@ -218,23 +225,13 @@ export default function BulkSendCard({ students = [] }) {
     }
   }
 
+  // 담긴 대상·받는이 선택은 채널 전환에도 유지한다. 알림톡은 정보성만이라 종류만 고정.
   function selectChannel(nextChannel) {
     if (nextChannel === channel) return;
     setChannel(nextChannel);
     setConfirming(false);
     setMsg('');
-    if (nextChannel === 'alimtalk') {
-      setAudience('student');
-      setKind('info');
-      setMmsImage(null);
-      setDirectRecipients('');
-      setDirectConsentConfirmed(false);
-      setRecipientFields((prev) => {
-        const parentFields = [...prev].filter((field) => field === 'parent_1' || field === 'parent_2');
-        return new Set(parentFields.length ? parentFields : ['parent_1']);
-      });
-      setPicked((prev) => new Map([...prev].filter(([, entry]) => entry.audience === 'student')));
-    }
+    if (nextChannel === 'alimtalk') setKind('info');
     resetReqId();
   }
 
@@ -379,10 +376,9 @@ export default function BulkSendCard({ students = [] }) {
   function onSendClick() {
     if (sending) return;
     if (isAlimtalk) {
-      if (!selectedGroups.student.length) { setMsg('알림톡을 받을 학생을 추가하세요.'); return; }
       if (!selectedAlimtalkTemplate) { setMsg('솔라피 승인 템플릿을 선택하세요.'); return; }
       if (!selectedAlimtalkTemplate.sendable) { setMsg(selectedAlimtalkTemplate.unavailableReason || '발송할 수 없는 템플릿입니다.'); return; }
-      const emptyVariable = alimtalkVariables.find((variable) => !String(alimtalkValues[variable] || '').trim());
+      const emptyVariable = alimtalkManualVariables.find((variable) => !String(alimtalkValues[variable] || '').trim());
       if (emptyVariable) { setMsg(`${emptyVariable} 값을 입력하세요.`); return; }
     }
     if (directPhones.length) { setMsg('입력한 번호를 먼저 누적 대상에 담아주세요.'); return; }
@@ -411,14 +407,14 @@ export default function BulkSendCard({ students = [] }) {
     try {
       // 홍보는 (광고)·080 표기를 발송 직전 자동 보정 — 깜빡해도 법적 표기가 빠지지 않는다.
       const normalizedSchedule = when === 'schedule' ? `${scheduledAt.slice(0, 16).replace('T', ' ')}:00` : '';
-      const requests = isAlimtalk ? [buildAlimtalkAudienceRequest({
-        studentIds: selectedGroups.student,
+      const requests = isAlimtalk ? buildAlimtalkAudienceRequests({
+        groups: selectedGroups,
         recipientFields: [...recipientFields],
         templateId: selectedAlimtalkTemplate.templateId,
         templateVariables: alimtalkValues,
         requestId: reqIdRef.current,
         scheduledAt: normalizedSchedule,
-      })] : buildAudienceRequests({
+      }) : buildAudienceRequests({
         groups: selectedGroups,
         recipientFields: [...recipientFields],
         content: effectiveContent,
@@ -464,8 +460,11 @@ export default function BulkSendCard({ students = [] }) {
   const effectiveContent = kind === 'promo' ? ensurePromoCompliance(baseContent) : baseContent;
   const meta = messageMeta(effectiveContent);
   const firstEntry = rows.find((entry) => entry.on);
+  const alimtalkPreviewName = firstEntry?.audience === 'direct'
+    ? (alimtalkValues[ALIMTALK_NAME_VARIABLE] || ALIMTALK_NAME_VARIABLE)
+    : (firstEntry?.target?.name || ALIMTALK_NAME_VARIABLE);
   const previewContent = isAlimtalk
-    ? applyAlimtalkPreview(selectedAlimtalkTemplate, alimtalkValues, firstEntry?.target?.name || '#{학생명}')
+    ? applyAlimtalkPreview(selectedAlimtalkTemplate, alimtalkValues, alimtalkPreviewName)
     : effectiveContent;
   let previewText = '내용을 입력하면 여기에 표시됩니다.';
   if (isAlimtalk) previewText = previewContent || '템플릿을 선택하면 여기에 표시됩니다.';
@@ -499,8 +498,8 @@ export default function BulkSendCard({ students = [] }) {
             <p className="bulk-col-title">받는 사람</p>
             <div className="mc-seg" role="group" aria-label="수신 대상 종류" style={{ marginBottom: 8 }}>
               <button type="button" className={audience === 'student' ? 'on' : ''} aria-pressed={audience === 'student'} onClick={() => selectAudience('student')}>학생</button>
-              {!isAlimtalk && <button type="button" className={audience === 'staff' ? 'on' : ''} aria-pressed={audience === 'staff'} onClick={() => selectAudience('staff')}>교직원</button>}
-              {!isAlimtalk && <button type="button" className={audience === 'direct' ? 'on' : ''} aria-pressed={audience === 'direct'} onClick={() => selectAudience('direct')}>번호 입력</button>}
+              <button type="button" className={audience === 'staff' ? 'on' : ''} aria-pressed={audience === 'staff'} onClick={() => selectAudience('staff')}>교직원</button>
+              <button type="button" className={audience === 'direct' ? 'on' : ''} aria-pressed={audience === 'direct'} onClick={() => selectAudience('direct')}>번호 입력</button>
             </div>
             {isDirect ? <>
               <div className="mc-content-head">
@@ -569,7 +568,7 @@ export default function BulkSendCard({ students = [] }) {
                   </li>
                 );
               })}
-              {picked.size === 0 && <li className="bulk-empty">{isAlimtalk ? '학생을 추가하면 여기에 표시됩니다.' : '학생·교직원·번호를 추가하면 여기에 함께 표시됩니다.'}</li>}
+              {picked.size === 0 && <li className="bulk-empty">학생·교직원·번호를 추가하면 여기에 함께 표시됩니다.</li>}
               {picked.size > 0 && displayRows.length === 0 && <li className="bulk-empty">"{q.trim()}" 일치하는 누적 대상이 없습니다.</li>}
             </ul>
           </div>
@@ -581,7 +580,7 @@ export default function BulkSendCard({ students = [] }) {
                 <span className="mc-field-label">받는이 (다중 선택)</span>
                 <span className="mc-field-label mc-kind-label">종류</span>
                 <div className="mc-seg">
-                  {['parent_1', 'parent_2'].map((f) => (
+                  {['student', 'parent_1', 'parent_2'].map((f) => (
                     <button key={f} type="button" className={recipientFields.has(f) ? 'on' : ''} aria-pressed={recipientFields.has(f)} onClick={() => toggleRecipient(f)}>
                       {RECIPIENT_LABELS[f]}
                     </button>
@@ -605,10 +604,10 @@ export default function BulkSendCard({ students = [] }) {
               {selectedAlimtalkTemplate && <>
                 <div className="mc-alimtalk-template">{selectedAlimtalkTemplate.content}</div>
                 {!selectedAlimtalkTemplate.sendable && <div className="mc-note">발송 불가: {selectedAlimtalkTemplate.unavailableReason}</div>}
-                {alimtalkVariables.length > 0 && <div className="mc-alimtalk-vars">
-                  {alimtalkVariables.map((variable) => (
+                {alimtalkManualVariables.length > 0 && <div className="mc-alimtalk-vars">
+                  {alimtalkManualVariables.map((variable) => (
                     <label key={variable}>
-                      <span className="mc-field-label">{variable}</span>
+                      <span className="mc-field-label">{variable === ALIMTALK_NAME_VARIABLE ? `${variable} (번호 입력 대상)` : variable}</span>
                       <input value={alimtalkValues[variable] || ''} maxLength={1000} onChange={(e) => {
                         setAlimtalkValues((prev) => ({ ...prev, [variable]: e.target.value }));
                         resetReqId();
