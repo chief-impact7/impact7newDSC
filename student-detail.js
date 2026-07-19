@@ -1067,7 +1067,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
             studentShortLabel(student),
             classes.regular ? `정규 ${classes.regular}` : '',
             classes.other,
-        ].filter(Boolean).map(line => `<div>${esc(line)}</div>`).join('');
+        ].filter(Boolean).map(line => `<div>${esc(line.length > 10 ? `${line.slice(0, 9)}…` : line)}</div>`).join('');
     }
 
     // 특강 모드: 특강 전용 상세 패널 (반 비소속 학생이면 false 반환 → 표준 상세로 계속)
