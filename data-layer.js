@@ -22,6 +22,7 @@ import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 import { deriveStudentNumber, studentNumberIdentityKey } from '@impact7/shared/student-number';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { canonicalizeTeacherEmails, teacherDisplayName } from '@impact7/shared/teacher-label';
+import { deriveTenure, isAttendedStatus } from '@impact7/shared/history';
 import { MESSAGE_RECIPIENT_SETTINGS_FIELD } from './src/messages/recipient-settings.js';
 
 const _promoteEnrollPending = createPromoteEnrollPending(
@@ -321,6 +322,89 @@ export async function loadStudents() {
         console.error('[loadStudents] 로드 실패:', err.message, err);
         if (!state.allStudents.length) state.allStudents = [];
     }
+}
+
+export async function loadStudentTenure(studentId, status) {
+    return (await loadStudentTenures([{ docId: studentId, status }])).get(studentId);
+}
+
+const _historyLogDate = log => log.timestamp?.toDate
+    ? log.timestamp.toDate()
+    : (log.timestamp ? new Date(log.timestamp) : null);
+
+const TENURE_HISTORY_QUERY_LIMIT = 6001;
+
+export async function loadRecentlyAttendedStudentIds(students, cutoffDate, endDate) {
+    const attendedIds = new Set();
+    for (let i = 0; i < students.length; i += 30) {
+        const ids = students.slice(i, i + 30).map(student => student.docId);
+        if (ids.length === 0) continue;
+        const snapshot = await getDocs(query(
+            collection(db, 'daily_records'),
+            where('student_id', 'in', ids),
+            where('date', '>=', cutoffDate),
+            where('date', '<=', endDate)
+        ));
+        for (const docSnap of snapshot.docs) {
+            const record = docSnap.data();
+            if (isAttendedStatus(record.attendance?.status)) attendedIds.add(record.student_id);
+        }
+    }
+    return attendedIds;
+}
+
+export async function loadStudentTenures(students) {
+    const result = new Map();
+    for (let i = 0; i < students.length; i += 30) {
+        const chunk = students.slice(i, i + 30);
+        const ids = chunk.map(student => student.docId);
+        const historySnap = await getDocs(query(
+            collection(db, 'history_logs'),
+            where('doc_id', 'in', ids),
+            limit(TENURE_HISTORY_QUERY_LIMIT)
+        ));
+        if (historySnap.size === TENURE_HISTORY_QUERY_LIMIT) {
+            console.warn('[TENURE] 이력 조회 상한 도달:', ids.length);
+            ids.forEach(id => result.set(id, { start: null, end: null, startEvent: null }));
+            continue;
+        }
+        const logsByStudent = new Map();
+        for (const docSnap of historySnap.docs) {
+            const log = { id: docSnap.id, ...docSnap.data() };
+            if (!logsByStudent.has(log.doc_id)) logsByStudent.set(log.doc_id, []);
+            logsByStudent.get(log.doc_id).push(log);
+        }
+        const baseTenures = new Map(chunk.map(student => [student.docId, deriveTenure(
+            logsByStudent.get(student.docId) || [],
+            _historyLogDate,
+            [],
+            ENROLLABLE_STATUSES.has(student.status)
+        )]));
+        const resolvedTenures = await Promise.all(chunk.map(async student => {
+            const baseTenure = baseTenures.get(student.docId);
+            if (!baseTenure.startEvent) {
+                return [student.docId, baseTenure];
+            }
+            const attendanceSnap = await getDocs(query(
+                collection(db, 'daily_records'),
+                where('student_id', '==', student.docId),
+                where('attendance.status', 'in', ['출석', '지각', '조퇴']),
+                where('date', '>=', toDateStrKST(baseTenure.startEvent)),
+                where('date', '<=', todayStr()),
+                orderBy('date', 'asc'),
+                limit(1)
+            ));
+            const attendanceRecords = attendanceSnap.docs.map(docSnap => docSnap.data());
+            return [student.docId, deriveTenure(
+                logsByStudent.get(student.docId) || [],
+                _historyLogDate,
+                attendanceRecords.map(record => ({ date: record.date, status: record.attendance?.status })),
+                ENROLLABLE_STATUSES.has(student.status)
+            )];
+        }));
+        resolvedTenures.forEach(([studentId, tenure]) => result.set(studentId, tenure));
+    }
+    return result;
 }
 
 export async function promoteEnrollPending() {

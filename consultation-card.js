@@ -248,8 +248,8 @@ function renderHistoryCard(consultations, pinnedIds = [], studentId = '') {
     return `
     <details class="consult-hist-item${isPinned ? ' pinned' : ''}">
       <summary>
-        <button class="pin-toggle${isPinned ? ' active' : ''}" title="${isPinned ? '고정 해제' : '상단 고정'}"
-          onclick="event.preventDefault(); event.stopPropagation(); onTogglePin('${esc(studentId)}','${esc(c.id)}')">📌</button>
+        <button class="pin-toggle${isPinned ? ' active' : ''}" title="${isPinned ? '고정 해제' : '상단 고정'}" aria-label="${isPinned ? '고정 해제' : '상단 고정'}"
+          onclick="event.preventDefault(); event.stopPropagation(); onTogglePin('${esc(studentId)}','${esc(c.id)}')">${msIcon('push-pin', '', 'style="font-size:1em;"')}</button>
         <strong>${esc(formatHistDate(c.date))}</strong>
         <span class="type-badge">${badge}</span>
         <span class="hist-title">${title}</span>

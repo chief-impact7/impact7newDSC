@@ -1160,6 +1160,9 @@ body {
 .absence-send-btn:hover:not(:disabled) { background: #006241; color: #fff; }
 .absence-send-btn:disabled { opacity: .55; cursor: default; }
 .absence-sent-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
     margin-left: 8px;
     font-size: 11px;
     color: #00754A;

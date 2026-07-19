@@ -747,7 +747,7 @@ window.submitWizard = async function () {
             let periodNote = '';
             if (d.classType === '내신' && ex.class_type === '내신' &&
                 (ex.naesin_start !== d.naesinStart || ex.naesin_end !== d.naesinEnd)) {
-                periodNote = `\n\n⚠️ 내신 기간이 [${ex.naesin_start || '?'} ~ ${ex.naesin_end || '?'}] → [${d.naesinStart} ~ ${d.naesinEnd}]로 변경됩니다.\n이 반에 매핑된 학생들의 내신 enrollment.end_date도 자동 sync됩니다 (Cloud Function).`;
+                periodNote = `\n\n주의: 내신 기간이 [${ex.naesin_start || '?'} ~ ${ex.naesin_end || '?'}] → [${d.naesinStart} ~ ${d.naesinEnd}]로 변경됩니다.\n이 반에 매핑된 학생들의 내신 enrollment.end_date도 자동 sync됩니다 (Cloud Function).`;
             }
             const ok = confirm(`"${d.classCode}" 반이 이미 존재합니다. 설정을 덮어쓰시겠습니까?${periodNote}`);
             if (!ok) { btn.disabled = false; btn.textContent = '반 생성'; return; }

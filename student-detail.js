@@ -6,10 +6,9 @@
 import { msIcon } from './ms-icon.js';
 import {
     collection, getDocs, doc, getDoc,
-    query, where, orderBy, limit, deleteField
+    query, where, deleteField
 } from 'firebase/firestore';
 import { db } from './firebase-config.js';
-import { deriveTenure } from '@impact7/shared/history';
 import { deriveLevelPeriod } from '@impact7/shared/enrollment-derivation';
 import { ENROLLABLE_STATUSES, isEnrollableStatus, STATUS_TONE } from '@impact7/shared/enrollment-status';
 import { formatDateKST } from '@impact7/shared/datetime';
@@ -36,7 +35,8 @@ import { auditSet } from './audit.js';
 import {
     getStudentDomains, getStudentTestItems, getClassDomains,
     getTeacherName, getStudentOverrides,
-    saveDailyRecord, saveImmediately, searchStudentConsultations
+    saveDailyRecord, saveImmediately, searchStudentConsultations,
+    loadStudentTenure
 } from './data-layer.js';
 import { isAttendedStatus } from './attendance.js';
 import { renderClassBulkMessageTab } from './class-bulk-message.js';
@@ -111,25 +111,8 @@ async function fillTenure(studentId, student) {
     if (!el) return;
     el.textContent = '…';
     try {
-        const q = query(
-            collection(db, 'history_logs'),
-            where('doc_id', '==', studentId),
-            orderBy('timestamp', 'desc'),
-            limit(200)
-        );
-        const aq = query(collection(db, 'daily_records'), where('student_id', '==', studentId));
-        const [snap, asnap] = await Promise.all([getDocs(q), getDocs(aq)]);
+        const { start, end, startEvent } = await loadStudentTenure(studentId, student.status);
         if (state.selectedStudentId !== studentId) return; // 그 사이 다른 학생 선택됨
-        const logs = [];
-        snap.forEach(d => logs.push({ id: d.id, ...d.data() }));
-        const attendances = [];
-        asnap.forEach(d => { const r = d.data(); attendances.push({ date: r.date, status: r.attendance?.status }); });
-        const { start, end, startEvent } = deriveTenure(
-            logs,
-            (l) => l.timestamp?.toDate ? l.timestamp.toDate() : (l.timestamp ? new Date(l.timestamp) : null),
-            attendances,
-            isEnrollableStatus(student.status)
-        );
         el.textContent = formatTenure(start, end, startEvent, student);
     } catch (e) {
         if (state.selectedStudentId !== studentId) return;

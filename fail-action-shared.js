@@ -16,7 +16,7 @@
 //   cardIcon          : 'assignment_late' | 'quiz'
 //   countSuffix       : '개 영역' | '개'                       (제목 카운트 단위)
 //   extraTaskData     : {} | { source: 'test' }               (task 추가 필드)
-//   savedTagInline    : true(hw) | false(test)   — 행마다 ✓저장됨 태그 + 저장 시 노출
+//   savedTagInline    : true(hw) | false(test)   — 행마다 저장됨 태그 + 저장 시 노출
 //   hidePendingFromForm : false(hw) | true(test) — pending은 폼에서 숨기고 "모두 처리됨"
 //   selectFn/clearFn/saveFieldsFn : onclick에 들어갈 window 전역 함수명
 import { msIcon } from './ms-icon.js';
@@ -65,7 +65,7 @@ export function renderFailActionCard({ studentId, items, d2nd, failAction, mode 
                     ${msIcon('check_circle', '', 'style="color:var(--success);font-size:18px;"')}
                     ${titleLabel}
                 </div>
-                <div class="detail-card-empty" style="color:var(--success);">✅ ${passLabel}</div>
+                <div class="detail-card-empty" style="color:var(--success);">${msIcon('check_circle', '', 'style="font-size:1em;"')} ${passLabel}</div>
             </div>
         `;
     }
@@ -113,7 +113,7 @@ export function renderFailActionCard({ studentId, items, d2nd, failAction, mode 
         const badgeVal = is1stOnly ? (first[key] || '') : (d2nd[key] || '');
 
         const savedTag = config.savedTagInline
-            ? `<div class="hw-fail-saved-tag" id="hw-fail-saved-${escAttr(studentId)}-${escapedKey}" style="display:none;font-size:11px;color:var(--success);margin-top:4px;">✓ 저장됨</div>`
+            ? `<div class="hw-fail-saved-tag" id="hw-fail-saved-${escAttr(studentId)}-${escapedKey}" style="display:none;font-size:11px;color:var(--success);margin-top:4px;">${msIcon('check_circle', '', 'style="font-size:1em;"')} 저장됨</div>`
             : '';
 
         return `

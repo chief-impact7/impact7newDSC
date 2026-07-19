@@ -19,7 +19,7 @@ import {
     getTeacherName, addOverrideInStudents, getStudentOverrides, getStudentDomains, getStudentTestItems,
     _isOlderThan, _isDetailInputFocused, loadWithdrawnStudents
 } from './data-layer.js';
-import { isNewStudent, DEFAULT_ATTENDANCE_LABELS } from './attendance.js';
+import { isNewStudent, ensureNewStudentStatuses, DEFAULT_ATTENDANCE_LABELS } from './attendance.js';
 import { renderClassDetail, renderBranchClassDetail } from './class-detail.js';
 import { renderStudentDetail } from './student-detail.js';
 import {
@@ -453,7 +453,10 @@ export function renderListPanel() {
     const students = getFilteredStudents();
     const container = document.getElementById('list-items');
     const countEl = document.getElementById('list-count');
-    const todayDate = new Date(todayStr());
+    const todayDate = new Date(`${todayStr()}T00:00:00+09:00`);
+    ensureNewStudentStatuses(students, todayDate).then(changed => {
+        if (changed) renderListPanel();
+    });
     // 필터 칩 렌더링
     renderFilterChips();
 
@@ -789,10 +792,10 @@ export function renderListPanel() {
 
         // 휴원 만료 경고 뱃지 (실제 오늘 기준) — status 자동 전환 금지, 담당자 복귀 처리 유도
         const pauseExpiredBadge = isPauseExpired(s)
-            ? `<span class="tag tag-pause-expired" title="휴원 기간이 만료됐습니다. 복귀 처리(상태 변경)가 필요합니다.">⚠ 휴원만료 (~${esc(s.pause_end_date)}, ${pauseExpiredDays(s)}일 경과) · 복귀처리 필요</span>`
+            ? `<span class="tag tag-pause-expired" title="휴원 기간이 만료됐습니다. 복귀 처리(상태 변경)가 필요합니다.">${msIcon('warning', '', 'style="font-size:1em;"')} 휴원만료 (~${esc(s.pause_end_date)}, ${pauseExpiredDays(s)}일 경과) · 복귀처리 필요</span>`
             : '';
 
-        // 신규 학생 뱃지 (enrollment start_date가 14일 이내)
+        // 신규 학생 뱃지 (현재 연속 재원기간의 첫 등원일이 14일 이내)
         const newBadge = isNewStudent(s, todayDate) ? '<span class="tag tag-new">N</span>' : '';
 
         // 휴퇴원요청 승인 대기 태그

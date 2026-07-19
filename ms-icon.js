@@ -40,7 +40,7 @@ const MS_TO_SSOT = {
   delete: 'trash',
   delete_forever: 'trash',
   description: 'file-text',
-  directions_walk: 'arrow-right',
+  directions_walk: 'person-simple-run',
   domain_verification: 'shield-check',
   download: 'download',
   edit: 'pencil',

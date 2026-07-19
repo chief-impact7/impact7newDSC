@@ -22,6 +22,7 @@ import {
     _attToggleClass, _toVisitStatus, _visitBtnStyles, _visitLabel,
     _stripYear, _fmtTs, _isNoShow, _renderRescheduleHistory
 } from './ui-utils.js';
+
 import {
     normalizeDays, branchFromStudent, matchesBranchFilter,
     enrollmentCode, allClassCodes, activeClassCodes, _enrollCodeList,
@@ -177,6 +178,8 @@ import {
     renderFilterChips, removeFilterChip, clearAllFilters, setSubFilter,
     toggleClassDeleteMode, toggleClassDeleteSelect, setClassMgmtMode
 } from './filter-nav.js';
+
+document.getElementById('inactive-action-hint')?.insertAdjacentHTML('beforeend', ` ${msIcon('arrow_forward', '', 'style="font-size:1em;"')}`);
 
 // 코드 분할 청크 로드 실패(주로 새 배포 후 stale-chunk — 구 탭이 옛 청크 해시를 못 찾음)
 // 전역 처리. Vite는 동적 import 청크를 못 가져오면 vite:preloadError를 발화한다.
@@ -463,7 +466,7 @@ window.bulkDeleteSelectedClasses = async function() {
         const reasons = [];
         if (hasRegular) reasons.push('정규 반이 포함되어 있어 학생들의 정규 등록이 끊깁니다.');
         if (inProgress.length > 0) reasons.push(`진행 중인 반 ${inProgress.length}개가 포함되어 있습니다. 해당 학생들이 즉시 정규로 복귀합니다.`);
-        const first = confirm(`⚠️ ${selected.length}개 반 일괄 삭제\n\n${reasons.join('\n')}\n\n${labels}\n\n진짜 삭제하시겠습니까?`);
+        const first = confirm(`주의: ${selected.length}개 반 일괄 삭제\n\n${reasons.join('\n')}\n\n${labels}\n\n진짜 삭제하시겠습니까?`);
         if (!first) return;
         const typed = prompt(`정말 일괄 삭제하려면 "삭제"를 입력하세요`);
         if (typed !== '삭제') {

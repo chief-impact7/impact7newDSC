@@ -16,7 +16,11 @@ import {
     createSiblingMap,
     studentMatchesSearchTerms,
     siblingStatusSuffix,
+    isNewTenureStart,
+    isCurrentNewTenure,
+    isPotentialNewStudent,
 } from './student-core.js';
+import { deriveTenure } from '@impact7/shared/history';
 
 // ─── normalizeDays ────────────────────────────────────────────────────────────
 
@@ -120,6 +124,63 @@ test('summarizeEnrollmentClasses: 정규와 기타 수강을 순서대로 묶고
 
 test('makeDailyRecordId: studentId_date 형식', () => {
     assert.equal(makeDailyRecordId('abc123', '2026-06-09'), 'abc123_2026-06-09');
+});
+
+test('신규생: 반 이동일이 아닌 현재 연속 재원기간의 첫 등원일을 기준으로 한다', () => {
+    const logs = [{ change_type: 'ENROLL', before: '—', after: '신규 등록: 학생 (HS201)', date: '2026-03-06' }];
+    const { start } = deriveTenure(
+        logs,
+        log => new Date(`${log.date}T00:00:00+09:00`),
+        [
+            { date: '2026-03-13', status: '출석' },
+            { date: '2026-07-10', status: '출석' },
+        ],
+        true
+    );
+    assert.equal(start.toISOString(), '2026-03-12T15:00:00.000Z');
+    assert.equal(isNewTenureStart(start, new Date('2026-07-20T00:00:00+09:00'), 14), false);
+});
+
+test('신규생: 휴원은 이어가고 퇴원 후 재등원은 새 재원기간으로 계산한다', () => {
+    const logs = [
+        { change_type: 'ENROLL', before: '—', after: '신규 등록: 학생 (A101)', date: '2024-01-01' },
+        { change_type: 'UPDATE', before: '상태:재원', after: '상태:실휴원', date: '2024-05-01' },
+        { change_type: 'UPDATE', before: '상태:실휴원', after: '상태:재원', date: '2024-06-01' },
+        { change_type: 'WITHDRAW', before: '{"status":"재원"}', after: '{"status":"퇴원"}', date: '2024-10-25' },
+        { change_type: 'UPDATE', before: '상태:퇴원', after: '상태:재원', date: '2026-02-25' },
+    ];
+    const { start } = deriveTenure(
+        logs,
+        log => new Date(`${log.date}T00:00:00+09:00`),
+        [
+            { date: '2024-01-01', status: '출석' },
+            { date: '2024-06-02', status: '출석' },
+            { date: '2026-03-02', status: '출석' },
+        ],
+        true
+    );
+    assert.equal(start.toISOString(), '2026-03-01T15:00:00.000Z');
+});
+
+test('신규생: 현재 재원계열이며 종료되지 않은 재원기간만 N으로 판정한다', () => {
+    const today = new Date('2026-07-20T00:00:00+09:00');
+    const start = new Date('2026-07-13T00:00:00+09:00');
+    assert.equal(isCurrentNewTenure({ start, end: null }, '재원', today, 14), true);
+    assert.equal(isCurrentNewTenure({ start, end: new Date('2026-07-18T00:00:00+09:00') }, '퇴원', today, 14), false);
+    assert.equal(isCurrentNewTenure({ start, end: null }, '상담', today, 14), false);
+});
+
+test('신규생 조회 후보: 과거 enrollment가 남아있어도 최근 enrollment가 있으면 조회한다', () => {
+    assert.equal(isPotentialNewStudent([
+        { level_symbol: 'A', class_number: '101', start_date: '2024-01-01' },
+        { level_symbol: 'B', class_number: '202', start_date: '2026-07-18' },
+    ], new Date('2026-07-20T00:00:00+09:00'), 14), true);
+});
+
+test('신규생 조회 후보: 등록일이 오래됐어도 최근 신규 기간 안에 출석했으면 조회한다', () => {
+    assert.equal(isPotentialNewStudent([
+        { level_symbol: 'A', class_number: '101', start_date: '2026-06-01' },
+    ], new Date('2026-07-20T00:00:00+09:00'), 14, true), true);
 });
 
 test('createSiblingMap: 재원·퇴원 학생도 같은 학부모 전화면 서로 형제로 연결', () => {

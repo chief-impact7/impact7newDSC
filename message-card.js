@@ -17,6 +17,7 @@ import {
   resolveRecipientFields,
 } from './src/messages/recipient-settings.js';
 import { onlyDigits } from './src/messages/message-format.js';
+import { msIcon } from './ms-icon.js';
 
 let _deps = {};
 let _mode = 'notice'; // 'notice'(템플릿 안내) | 'free'(자유 안내) | 'promo'(홍보)
@@ -57,8 +58,8 @@ const QUICK_ACTIONS = [
 ];
 // 로그북 미도착(연락) 배지와 같은 의미(absence_notices.delivery_status).
 const ABSENCE_STATUS_LABEL = {
-  sent: '미등원 알림톡 발송됨 ✓',
-  failed_permanent: '미등원 알림톡 실패 ⚠',
+  sent: '미등원 알림톡 발송됨',
+  failed_permanent: '미등원 알림톡 실패',
 };
 
 // 광고 수신동의 — 번호 주인 단위. 서버 promoConsent.js(promo=보호자, promo_student=학생)와 필드 일치.
@@ -456,7 +457,7 @@ async function loadQuickState(studentId, readonly) {
   if (absence?.exists) {
     const label = ABSENCE_STATUS_LABEL[absence.deliveryStatus] || '미등원 알림톡 처리중…';
     const ok = absence.deliveryStatus === 'sent';
-    slot.innerHTML = `<span style="display:inline-flex;align-items:center;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:10px;background:${ok ? '#e6f4ea' : '#fff3e0'};color:${ok ? '#1e7e34' : '#b26a00'};">${esc(label)}</span>`;
+    slot.innerHTML = `<span style="display:inline-flex;align-items:center;gap:3px;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:10px;background:${ok ? '#e6f4ea' : '#fff3e0'};color:${ok ? '#1e7e34' : '#b26a00'};">${msIcon(ok ? 'check_circle' : 'warning', '', 'style="font-size:1em;"')}${esc(label)}</span>`;
     return;
   }
   const canAbsence = !readonly && cand && beforeArrival;

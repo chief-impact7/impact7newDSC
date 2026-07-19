@@ -293,30 +293,34 @@ function bulkApplyOxToAttended(value) {
     if (skipped > 0) showToast(`미출석 ${skipped}명 제외`);
 }
 
-export function resetBulkModal() {
+export async function resetBulkModal() {
     pruneNonEnrollableSelection();
     const modal = document.getElementById('bulk-confirm-modal');
     modal.style.display = 'none';
 
+    let failedCount = 0;
     if (_bulkModalType === 'attendance') {
-        [...state.selectedStudentIds].forEach(id => applyAttendance(id, '정규', true, true));
+        const results = await Promise.all([...state.selectedStudentIds].map(id => applyAttendance(id, '정규', true, true)));
+        failedCount = results.filter(saved => !saved).length;
     } else if (_bulkModalType === 'ox') {
         bulkApplyOxToAttended('');
     }
     renderSubFilters();
     renderListPanel();
-    showToast(`${state.selectedStudentIds.size}명 초기화 완료`);
+    showToast(failedCount ? `${failedCount}명 저장 실패` : `${state.selectedStudentIds.size}명 초기화 완료`);
     _bulkModalType = null;
 }
 
-export function confirmBulkAction() {
+export async function confirmBulkAction() {
     pruneNonEnrollableSelection();
     if (_bulkModalValue === null) return;
     const modal = document.getElementById('bulk-confirm-modal');
     modal.style.display = 'none';
 
+    let failedCount = 0;
     if (_bulkModalType === 'attendance') {
-        [...state.selectedStudentIds].forEach(id => applyAttendance(id, _bulkModalValue, true, true));
+        const results = await Promise.all([...state.selectedStudentIds].map(id => applyAttendance(id, _bulkModalValue, true, true)));
+        failedCount = results.filter(saved => !saved).length;
         renderSubFilters();
         renderListPanel();
     } else if (_bulkModalType === 'ox') {
@@ -324,7 +328,7 @@ export function confirmBulkAction() {
         renderSubFilters();
         renderListPanel();
     }
-    showToast(`${state.selectedStudentIds.size}명 일괄 처리 완료`);
+    showToast(failedCount ? `${failedCount}명 저장 실패` : `${state.selectedStudentIds.size}명 일괄 처리 완료`);
     _bulkModalType = null;
 }
 

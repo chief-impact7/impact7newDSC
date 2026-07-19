@@ -5,11 +5,12 @@
 import { collection, getDocs, doc, getDoc, query, where, serverTimestamp, deleteField, writeBatch } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { auditUpdate, auditSet, auditDelete, batchUpdate, normalizeImpact7Email } from './audit.js';
-import { getDayName } from './src/shared/firestore-helpers.js';
+import { getDayName, todayStr, toDateStrKST } from './src/shared/firestore-helpers.js';
 import { state, NEW_STUDENT_DAYS } from './state.js';
 import { showSaveIndicator, nowTimeStr } from './ui-utils.js';
 import { branchFromStudent, getStudentClassContextsForDate, isPauseExpired, pauseExpiredDays, findStudent, enrollmentCode } from './student-helpers.js';
-import { saveImmediately, saveDailyRecord, reloadForDate } from './data-layer.js';
+import { isCurrentNewTenure, isPotentialNewStudent } from './student-core.js';
+import { saveImmediately, saveDailyRecord, reloadForDate, loadStudentTenures, loadRecentlyAttendedStudentIds } from './data-layer.js';
 
 // 토글 UI의 "기본" 라벨 집합 — 이 라벨들을 클릭하면 attendance.status는 '미확인'으로 리셋.
 // 오늘 수업 유형/비정규 여부에 따라 첫 버튼 라벨이 동적으로 바뀌지만, 의미는 모두 동일("아직 미확인").
@@ -20,6 +21,10 @@ export const DEFAULT_ATTENDANCE_LABELS = new Set(['정규', '특강', '내신', 
 // 담당자가 직접 복귀 처리(상태 변경)를 하도록 유도한다. 매번 뜨면 거슬리므로
 // 세션 내 학생당 1회만 노출(확인하면 그 학생은 스킵).
 const _pauseExpiredConfirmed = new Set();
+const _newStudentStatus = new Map();
+const _newStudentPending = new Map();
+const _newStudentSaving = new Map();
+const _newStudentGeneration = new Map();
 
 // 만료 휴원 학생이면 confirm을 띄우고, 사용자가 취소하면 false(작업 중단) 반환.
 // 만료가 아니거나 이미 세션 내 확인했으면 true(진행).
@@ -301,12 +306,26 @@ export function applyAttendance(studentId, displayStatus, force = false, silent 
         updates.arrival_time = '';
     }
 
-    saveImmediately(studentId, updates).catch((err) => {
-        // 저장 실패 시 optimistic 캐시·DOM·결석대장 부수효과를 서버 기준으로 재동기화. F-04.
-        // bulk(silent) 경로는 학생마다 전체 reload가 폭발하므로 생략 — 서버 onSnapshot이 교정한다.
-        console.error('출결 저장 실패:', err);
-        if (!silent) reloadForDate();
-    });
+    const saveVersion = (_newStudentGeneration.get(studentId) || 0) + 1;
+    _newStudentGeneration.set(studentId, saveVersion);
+    _newStudentSaving.set(studentId, saveVersion);
+    const savePromise = saveImmediately(studentId, updates)
+        .then(() => {
+            if (_newStudentSaving.get(studentId) === saveVersion) {
+                _newStudentSaving.delete(studentId);
+                _newStudentStatus.delete(studentId);
+                if (!silent) renderListPanel();
+            }
+            return true;
+        })
+        .catch((err) => {
+            if (_newStudentSaving.get(studentId) === saveVersion) _newStudentSaving.delete(studentId);
+            // 저장 실패 시 optimistic 캐시·DOM·결석대장 부수효과를 서버 기준으로 재동기화. F-04.
+            // bulk(silent) 경로는 학생마다 전체 reload가 폭발하므로 생략 — 서버 onSnapshot이 교정한다.
+            console.error('출결 저장 실패:', err);
+            if (!silent) reloadForDate();
+            return false;
+        });
 
     if (!state.dailyRecords[studentId]) {
         state.dailyRecords[studentId] = { student_id: studentId, date: state.selectedDate };
@@ -320,7 +339,7 @@ export function applyAttendance(studentId, displayStatus, force = false, silent 
         autoRemoveAbsenceRecord(studentId, state.selectedDate);
     }
 
-    if (silent) return;
+    if (silent) return savePromise;
 
     const row = document.querySelector(`.list-item[data-id="${CSS.escape(studentId)}"]`);
     if (row) {
@@ -356,6 +375,7 @@ export function applyAttendance(studentId, displayStatus, force = false, silent 
     }
 
     if (state.selectedStudentId === studentId) renderStudentDetail(studentId);
+    return savePromise;
 }
 
 
@@ -372,13 +392,62 @@ export function doesStatusMatchFilter(firestoreStatus, filterSet) {
 }
 
 export function isNewStudent(student, todayDate) {
-    const firstStartDate = (student.enrollments || [])
-        .filter(e => e.start_date && enrollmentCode(e))
-        .map(e => e.start_date)
-        .sort()[0];
-    if (!firstStartDate) return false;
-    const diff = (todayDate - new Date(firstStartDate)) / (1000 * 60 * 60 * 24);
-    return diff >= 0 && diff <= NEW_STUDENT_DAYS;
+    const signature = _newStudentSignature(student, todayDate);
+    const cached = _newStudentStatus.get(student.docId);
+    return cached?.signature === signature && cached.value === true;
+}
+
+function _newStudentSignature(student, todayDate) {
+    const todayAttendance = state.dailyRecords[student.docId]?.attendance?.status || '';
+    return `${todayDate.getTime()}|${student.status}|${todayAttendance}|${(student.enrollments || []).map(e => e.start_date || '').sort().join(',')}`;
+}
+
+export async function ensureNewStudentStatuses(students, todayDate) {
+    const pending = students.filter(student => {
+        const signature = _newStudentSignature(student, todayDate);
+        return _newStudentStatus.get(student.docId)?.signature !== signature
+            && !_newStudentPending.has(student.docId)
+            && !_newStudentSaving.has(student.docId);
+    });
+    if (pending.length === 0) return false;
+    const signatures = new Map(pending.map(student => [student.docId, _newStudentSignature(student, todayDate)]));
+    const generations = new Map(pending.map(student => [student.docId, _newStudentGeneration.get(student.docId) || 0]));
+    let loaded = true;
+    const cutoffDate = new Date(todayDate);
+    cutoffDate.setDate(cutoffDate.getDate() - NEW_STUDENT_DAYS);
+    const promise = loadRecentlyAttendedStudentIds(pending, toDateStrKST(cutoffDate), toDateStrKST(todayDate))
+        .then(async recentlyAttendedIds => {
+            const candidates = pending.filter(student => isPotentialNewStudent(
+                student.enrollments,
+                todayDate,
+                NEW_STUDENT_DAYS,
+                recentlyAttendedIds.has(student.docId)
+            ));
+            return { candidates, tenures: await loadStudentTenures(candidates) };
+        })
+        .then(({ candidates, tenures }) => {
+            const candidateIds = new Set(candidates.map(student => student.docId));
+            for (const student of pending) {
+                if (_newStudentSaving.has(student.docId)
+                    || (_newStudentGeneration.get(student.docId) || 0) !== generations.get(student.docId)
+                    || _newStudentSignature(student, todayDate) !== signatures.get(student.docId)) continue;
+                const tenure = candidateIds.has(student.docId) ? tenures.get(student.docId) : null;
+                _newStudentStatus.set(student.docId, {
+                    signature: signatures.get(student.docId),
+                    value: isCurrentNewTenure(tenure, student.status, todayDate, NEW_STUDENT_DAYS),
+                });
+            }
+        })
+        .catch(err => {
+            loaded = false;
+            console.warn('[NEW STUDENT] 재원시작일 조회 실패:', err.code || err.message);
+        })
+        .finally(() => pending.forEach(student => _newStudentPending.delete(student.docId)));
+    pending.forEach(student => {
+        _newStudentPending.set(student.docId, promise);
+    });
+    await promise;
+    return loaded;
 }
 
 export function isAttendedStatus(status) {

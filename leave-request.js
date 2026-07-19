@@ -78,7 +78,7 @@ function _leaveRequestStatusBadge(r) {
     // 자동승인 폐지 → 장기 미처리 요청은 경고 뱃지로 수동 처리를 유도
     const days = _daysSinceRequested(r);
     if (days != null && days >= LEAVE_REQUEST_STALE_DAYS) {
-        badge += `<span class="absence-status-badge" style="background:#fef3c7;color:#b45309;border:1px solid #fbbf24;margin-left:2px;">⚠ ${days}일 경과</span>`;
+        badge += `<span class="absence-status-badge" style="background:#fef3c7;color:#b45309;border:1px solid #fbbf24;margin-left:2px;">${msIcon('warning', '', 'style="font-size:1em;"')} ${days}일 경과</span>`;
     }
     return badge;
 }
@@ -873,7 +873,7 @@ async function _approveLeave(docId, studentId, { byField, atField, otherByField,
     // 레거시 가드 (최종 승인 시점에만 체크)
     if (!_checkLegacyReturnTarget(r, isFinal)) return;
     const confirmMsg = isFinal
-        ? `⚠️ ${r.student_name} — ${typeLabel}\n\n${otherLabel} 승인이 이미 완료되어, ${label} 승인 시 최종 승인 처리됩니다.\n학생 상태가 변경됩니다. 진행하시겠습니까?`
+        ? `${r.student_name} — ${typeLabel}\n\n주의: ${otherLabel} 승인이 이미 완료되어, ${label} 승인 시 최종 승인 처리됩니다.\n학생 상태가 변경됩니다. 진행하시겠습니까?`
         : `${r.student_name} — ${typeLabel}\n${label} 승인하시겠습니까?`;
     if (!confirm(confirmMsg)) return;
 

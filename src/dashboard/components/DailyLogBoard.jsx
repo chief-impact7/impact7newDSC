@@ -666,8 +666,8 @@ const ABSENCE_STATUS_META = {
     pending: { label: '발송 처리중…', cls: 'pending' },
     processing: { label: '발송 처리중…', cls: 'pending' },
     failed_retryable: { label: '재시도 중…', cls: 'pending' },
-    sent: { label: '알림톡 발송됨 ✓', cls: 'sent' },
-    failed_permanent: { label: '발송 최종 실패 ⚠', cls: 'failed' },
+    sent: { label: '알림톡 발송됨', cls: 'sent', icon: 'check-circle' },
+    failed_permanent: { label: '발송 최종 실패', cls: 'failed', icon: 'warning' },
 };
 
 // 미도착(연락) 그룹 — 연락처(tel 링크)·예정시각과 함께, 사람이 확인 후 누르는 미등원 알림톡 발송
@@ -692,7 +692,10 @@ function ContactList({ rows, arrivalByStudent, statusById, sending, onSend }) {
                                 ? <a href={`tel:${String(phone).replace(/[^0-9+]/g, '')}`}>{formatPhone(phone)}</a>
                                 : '연락처 없음'}
                             {phone && onSend && (meta
-                                ? <span className={`absence-sent-badge ${meta.cls}`}>{meta.label}</span>
+                                ? <span className={`absence-sent-badge ${meta.cls}`}>
+                                    {meta.icon && <Icon name={meta.icon} size={14} aria-hidden="true" />}
+                                    {meta.label}
+                                </span>
                                 : <button
                                     type="button"
                                     className="absence-send-btn"

@@ -43,6 +43,24 @@ export function makeDailyRecordId(studentDocId, date) {
     return `${studentDocId}_${date}`;
 }
 
+export function isNewTenureStart(start, today, days) {
+    if (!(start instanceof Date) || isNaN(start.getTime())) return false;
+    const diff = (today - start) / (1000 * 60 * 60 * 24);
+    return diff >= 0 && diff <= days;
+}
+
+export function isCurrentNewTenure(tenure, status, today, days) {
+    return ENROLLABLE_STATUSES.has(status)
+        && !tenure?.end
+        && isNewTenureStart(tenure?.start, today, days);
+}
+
+export function isPotentialNewStudent(enrollments, today, days, attendedWithinWindow = false) {
+    if (attendedWithinWindow) return true;
+    return (enrollments || []).some(enrollment => enrollment.start_date && enrollmentCode(enrollment)
+        && isNewTenureStart(new Date(`${enrollment.start_date}T00:00:00+09:00`), today, days));
+}
+
 export function studentMatchesSearchTerms(student, query, extraTerms = []) {
     const needle = String(query || '').trim().toLowerCase();
     if (!needle) return false;

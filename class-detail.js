@@ -1106,7 +1106,7 @@ export async function confirmDeleteClass(classCode, mode) {
     const period = getClassPeriodInfo(classCode, mode);
 
     if (mode === 'regular') {
-        const first = confirm(`⚠️ 정규 반 "${classCode}" 삭제\n\n학생 ${count}명의 정규 등록이 모두 끊깁니다.\n진짜 삭제하시겠습니까?`);
+        const first = confirm(`주의: 정규 반 "${classCode}" 삭제\n\n학생 ${count}명의 정규 등록이 모두 끊깁니다.\n진짜 삭제하시겠습니까?`);
         if (!first) return;
         const typed = prompt(`정말 삭제하려면 반 코드를 그대로 입력하세요:\n${classCode}`);
         if (typed !== classCode) {
@@ -1114,7 +1114,7 @@ export async function confirmDeleteClass(classCode, mode) {
             return;
         }
     } else if (period?.inProgress) {
-        const first = confirm(`⚠️ ${label} 반 "${classCode}" 삭제 (현재 진행 중)\n\n기간: ${period.start} ~ ${period.end}\n영향 학생: ${count}명\n\n진행 중인 반을 삭제하면 학생들이 즉시 정규로 복귀합니다.\n진짜 삭제하시겠습니까?`);
+        const first = confirm(`주의: ${label} 반 "${classCode}" 삭제 (현재 진행 중)\n\n기간: ${period.start} ~ ${period.end}\n영향 학생: ${count}명\n\n진행 중인 반을 삭제하면 학생들이 즉시 정규로 복귀합니다.\n진짜 삭제하시겠습니까?`);
         if (!first) return;
         const typed = prompt(`진행 중인 반입니다. 정말 삭제하려면 "삭제"를 입력하세요`);
         if (typed !== '삭제') {
