@@ -5,6 +5,7 @@ import {
     enrollmentCode,
     branchFromStudent,
     allClassCodes,
+    summarizeEnrollmentClasses,
     makeDailyRecordId,
     buildNaesinCsKey,
     NAESIN_OVERRIDE_EXCLUDE,
@@ -101,6 +102,18 @@ test('allClassCodes: 코드 목록 반환, 빈 코드 제외', () => {
         ],
     };
     assert.deepEqual(allClassCodes(s), ['A101', 'B201']);
+});
+
+test('summarizeEnrollmentClasses: 정규와 기타 수강을 순서대로 묶고 중복을 제거', () => {
+    assert.deepEqual(summarizeEnrollmentClasses([
+        { class_type: '특강', level_symbol: '고급', class_number: 'A' },
+        { class_type: '정규', level_symbol: 'A', class_number: '101' },
+        { class_type: '자유학기', level_symbol: 'F', class_number: '201' },
+        { class_type: '정규', level_symbol: 'A', class_number: '101' },
+    ]), {
+        regular: 'A101',
+        other: '특강 고급A · 자유학기 F201',
+    });
 });
 
 // ─── makeDailyRecordId ────────────────────────────────────────────────────────

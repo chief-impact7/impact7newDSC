@@ -5,12 +5,12 @@ import { msIcon } from './ms-icon.js';
 import {
     state, LEAVE_STATUSES, SV_L3_KEYS, DEFAULT_TONE, REGULAR_CLASS_TYPES
 } from './state.js';
-import { getDayName, todayStr, studentShortLabel, PAST_STUDENT_STATUSES, finalApprovalDate } from './src/shared/firestore-helpers.js';
+import { getDayName, todayStr, PAST_STUDENT_STATUSES, finalApprovalDate } from './src/shared/firestore-helpers.js';
 import {
-    branchFromStudent, matchesBranchFilter, enrollmentCode, allClassCodes, _enrollCodeList,
-    deriveNaesinCode, getActiveEnrollments, getStudentStartTime, isOnLeaveAt, isWithdrawnAt,
+    branchFromStudent, matchesBranchFilter, enrollmentCode, allClassCodes,
+    getActiveEnrollments, getStudentStartTime, isOnLeaveAt, isWithdrawnAt,
     isNaesinActiveToday, isFreeSemesterActiveToday, isPauseExpired, pauseExpiredDays, isValidDateStr,
-    resolveNaesinCsKey, displayCodeFromCsKey, findStudent, buildSiblingMap, studentMatchesSearchTerms,
+    findStudent, buildSiblingMap, studentMatchesSearchTerms,
 } from './student-helpers.js';
 import { schoolSearchTerms } from './school-normalizer.js';
 import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
@@ -493,7 +493,7 @@ export function renderListPanel() {
     const naesinIds = new Set(
         (window._getNaesinStudents?.() || []).map(({ student }) => student.docId)
     );
-    // 표시용 내신 집합 (요일 무관, 내신 기간 기준): 카드 배지·부제목 축약·반코드 fallback에 사용.
+    // 표시용 내신 집합 (요일 무관, 내신 기간 기준): 카드 배지에 사용.
     // 같은 학생이 보는 요일에 따라 다르게 표시되지 않도록 운영 집계와 분리한다.
     const naesinPeriodIds = window._getNaesinPeriodStudentIds?.() || naesinIds;
 
@@ -503,19 +503,6 @@ export function renderListPanel() {
         const dayN = getDayName(state.selectedDate);
         const _activeEnrolls = getActiveEnrollments(s, state.selectedDate);
         const _todayEnrolls = _activeEnrolls.filter(e => e.day.includes(dayN));
-        // 내신 기간이라 정규 enrollment가 숨겨진 경우 내신 반코드로 대체
-        const _naesinCodeFallback = (!_todayEnrolls.length && !_activeEnrolls.length && naesinPeriodIds.has(s.docId))
-            ? (() => {
-                const re = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
-                if (!re) return '';
-                // 실제 내신 탭 멤버십은 override(resolveNaesinCsKey) 기준이므로, 카드 부제목도
-                // override 해소 표시코드를 우선 사용해 탭 반코드와 일치시킨다(M-13). 없으면 자동유도.
-                const csKey = resolveNaesinCsKey(s, re);
-                return (csKey && displayCodeFromCsKey(csKey, branchFromStudent(s))) || deriveNaesinCode(s, re) || '';
-            })() : '';
-        const code = _enrollCodeList(_todayEnrolls) || _enrollCodeList(_activeEnrolls) || _naesinCodeFallback;
-        const branch = branchFromStudent(s);
-
         // 타반수업 배지
         const studentOverrides = getStudentOverrides(s.docId, state.selectedDate);
         const overrideBadge = studentOverrides.length > 0
@@ -830,14 +817,10 @@ export function renderListPanel() {
 
         const isNaesinStudent = naesinPeriodIds.has(s.docId);
         const naesinBadge = isNaesinStudent ? '<span class="tag-naesin">내신</span>' : '';
-        // 내신 학생: 부제목을 내신반명 하나로 축약 (배지가 '내신' 표시 + 반명에 학교·학년 포함되어 중복)
-        const descCode = isNaesinStudent ? code.split(', ').filter(c => c !== '내신').join(', ') : code;
-        const descTail = isNaesinStudent ? '' : (studentShortLabel(s) ? ' · ' + esc(studentShortLabel(s)) : '');
         return `<div class="list-item ${isActive}${state.bulkMode ? ' bulk-mode' : ''}${state.selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}" role="button" tabindex="0" data-keyclick onclick="handleListItemClick(event, '${escAttr(s.docId)}')">
             ${canBulkSelect ? `<input type="checkbox" class="list-item-checkbox" aria-label="학생 선택" ${state.selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">` : ''}
             <div class="item-info">
                 <span class="item-title">${esc(s.name)}${newBadge}${naesinBadge}${leaveBadge}${pauseExpiredBadge}${lrPendingTags}${siblingIcon}${hwFailIconHtml}${overrideBadge}${overrideInBadge} ${teacherBadge}</span>
-                <span class="item-desc">${esc(descCode)}${descTail}</span>
             </div>
             ${timeHtml}
             <div class="item-actions">${toggleHtml}</div>

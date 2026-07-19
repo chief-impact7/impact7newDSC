@@ -23,6 +23,22 @@ export { branchFromStudent } from '@impact7/shared/branch';
 export const allClassCodes = (s) =>
     (s.enrollments || []).map(e => enrollmentCode(e)).filter(Boolean);
 
+export function summarizeEnrollmentClasses(enrollments) {
+    const regular = new Set();
+    const other = new Set();
+    for (const enrollment of enrollments || []) {
+        const code = enrollmentCode(enrollment);
+        if (!code) continue;
+        const type = enrollment.class_type || '정규';
+        if (type === '정규') regular.add(code);
+        else other.add(`${type} ${code}`);
+    }
+    return {
+        regular: [...regular].join(' · '),
+        other: [...other].join(' · '),
+    };
+}
+
 export function makeDailyRecordId(studentDocId, date) {
     return `${studentDocId}_${date}`;
 }

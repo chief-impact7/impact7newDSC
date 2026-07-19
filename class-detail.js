@@ -378,6 +378,7 @@ function setClassProfileHeader(classCode, memberCount) {
     document.getElementById('profile-phones').innerHTML = '';
     document.getElementById('profile-stay-stats').innerHTML = '';
     document.getElementById('profile-tags').innerHTML = `<span class="tag">${memberCount}명</span>`;
+    document.getElementById('profile-academic-summary').innerHTML = '';
 }
 
 export function renderClassDetail(classCode) {

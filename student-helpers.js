@@ -9,6 +9,7 @@ import { classSettingsGet } from '@impact7/shared/class-code';
 import { startTime } from '@impact7/shared/expected-arrival';
 import {
     normalizeDays, enrollmentCode, branchFromStudent, allClassCodes,
+    summarizeEnrollmentClasses,
     makeDailyRecordId, buildNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE,
     resolveNaesinCsKey, displayCodeFromCsKey, isWithdrawnAt, isOnLeaveAt,
     isValidDateStr, createSiblingMap, studentMatchesSearchTerms, siblingStatusSuffix,
@@ -16,6 +17,7 @@ import {
 
 export {
     normalizeDays, enrollmentCode, branchFromStudent, allClassCodes,
+    summarizeEnrollmentClasses,
     makeDailyRecordId, buildNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE,
     resolveNaesinCsKey, displayCodeFromCsKey, isWithdrawnAt, isOnLeaveAt,
     isValidDateStr, studentMatchesSearchTerms, siblingStatusSuffix,

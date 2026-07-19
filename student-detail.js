@@ -26,10 +26,11 @@ import {
     enrollmentCode, findStudent,
     branchFromStudent, makeDailyRecordId,
     getActiveEnrollments, getStudentStartTime,
-    allClassCodes, isNaesinActiveToday, deriveClassLabelAt, siblingStatusSuffix
+    allClassCodes, summarizeEnrollmentClasses, isValidDateStr,
+    isNaesinActiveToday, deriveClassLabelAt, siblingStatusSuffix
 } from './student-helpers.js';
 import {
-    currentSchool, studentGrade, todayStr, getDayName
+    currentSchool, studentGrade, studentShortLabel, todayStr, getDayName
 } from './src/shared/firestore-helpers.js';
 import { auditSet } from './audit.js';
 import {
@@ -1063,6 +1064,27 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
         document.getElementById('detail-content').style.display = 'none';
         document.getElementById('detail-panel').classList.remove('mobile-visible');
         return;
+    }
+
+    const profileSummaryEl = document.getElementById('profile-academic-summary');
+    if (profileSummaryEl) {
+        const date = state.selectedDate || todayStr();
+        const rawEnrollments = student.enrollments || [];
+        const isInactiveStudent = _isInactiveDetailStudent(student);
+        const relevantEnrollments = isInactiveStudent
+            ? []
+            : rawEnrollments.filter(e =>
+                !(isValidDateStr(e.start_date) && e.start_date > date) &&
+                !(isValidDateStr(e.end_date) && e.end_date < date)
+            );
+        const derivedEnrollments = isInactiveStudent ? [] : getActiveEnrollments(student, date)
+            .filter(e => e.class_type !== '정규');
+        const classes = summarizeEnrollmentClasses([...relevantEnrollments, ...derivedEnrollments]);
+        profileSummaryEl.innerHTML = [
+            studentShortLabel(student),
+            classes.regular ? `정규 ${classes.regular}` : '',
+            classes.other,
+        ].filter(Boolean).map(line => `<div>${esc(line)}</div>`).join('');
     }
 
     // 특강 모드: 특강 전용 상세 패널 (반 비소속 학생이면 false 반환 → 표준 상세로 계속)

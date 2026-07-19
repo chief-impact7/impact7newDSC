@@ -47,6 +47,7 @@ export function renderTempAttendanceDetail(docId) {
     // 프로필 헤더
     document.getElementById('profile-avatar').textContent = (ta.name || '?')[0];
     document.getElementById('detail-name').textContent = ta.name || '';
+    document.getElementById('profile-academic-summary').innerHTML = '';
     document.getElementById('profile-tags').innerHTML = `
         <span class="tag" style="background:#7c3aed;color:#fff;">진단평가</span>
         <span class="tag tag-pending">비등록</span>

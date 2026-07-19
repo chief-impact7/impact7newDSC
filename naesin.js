@@ -114,7 +114,7 @@ export function getNaesinStudents({ ignoreDayFilter = false } = {}) {
     return result;
 }
 
-// 요일 무관 내신 기간 학생 ID 집합 — 학생 카드 표시(배지·부제목 축약)용. 운영 집계(오늘 등원)와 분리.
+// 요일 무관 내신 기간 학생 ID 집합 — 학생 카드 배지용. 운영 집계(오늘 등원)와 분리.
 export function getNaesinPeriodStudentIds() {
     return new Set(getNaesinStudents({ ignoreDayFilter: true }).map(({ student }) => student.docId));
 }
@@ -829,6 +829,7 @@ function renderNaesinClassDetail(csKey) {
     // 프로필 헤더
     document.getElementById('profile-avatar').textContent = displayCode[0] || '?';
     document.getElementById('detail-name').textContent = displayCode;
+    document.getElementById('profile-academic-summary').innerHTML = '';
     document.getElementById('profile-phones').innerHTML = '';
     const stayStats = document.getElementById('profile-stay-stats');
     if (stayStats) stayStats.innerHTML = '';
