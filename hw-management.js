@@ -369,6 +369,7 @@ export function renderNextHwClassDetail(classCode) {
     // 프로필 영역
     document.getElementById('profile-avatar').textContent = classCode[0] || '?';
     document.getElementById('detail-name').textContent = classCode;
+    document.getElementById('profile-academic-summary').innerHTML = '';
 
     const { filled, total } = getNextHwStatus(classCode);
     const statusTag = filled === total ? 'tag-present' : filled > 0 ? 'tag-late' : 'tag-pending';

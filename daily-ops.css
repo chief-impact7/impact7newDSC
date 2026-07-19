@@ -991,6 +991,26 @@ body {
   font-family: var(--font-heading);
 }
 
+.profile-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.profile-academic-summary {
+  max-width: 140px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--text-sec);
+  text-align: center;
+}
+
+.profile-academic-summary div {
+  overflow-wrap: anywhere;
+}
+
 .detail-title {
   font-family: var(--font-heading);
   font-size: 20px;
