@@ -24,6 +24,7 @@ import { staffLabel } from '@impact7/shared/staff-label';
 import { canonicalizeTeacherEmails, teacherDisplayName } from '@impact7/shared/teacher-label';
 import { deriveTenure, isAttendedStatus } from '@impact7/shared/history';
 import { MESSAGE_RECIPIENT_SETTINGS_FIELD } from './src/messages/recipient-settings.js';
+import { isScheduledWithdrawalDue } from './student-core.js';
 
 const _promoteEnrollPending = createPromoteEnrollPending(
     { db, writeBatch, doc, collection, serverTimestamp },
@@ -495,7 +496,7 @@ export async function promoteWithdrawalDate() {
     const today = todayStr();
     const ACTIVE_FOR_PROMOTE = new Set(['재원', '등원예정']);
     const toWithdraw = state.allStudents.filter(s =>
-        ACTIVE_FOR_PROMOTE.has(s.status) && s.withdrawal_date && s.withdrawal_date <= today
+        ACTIVE_FOR_PROMOTE.has(s.status) && isScheduledWithdrawalDue(s, today)
     );
     if (toWithdraw.length === 0) return;
     const batch = writeBatch(db);

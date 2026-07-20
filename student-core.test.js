@@ -20,6 +20,7 @@ import {
     isCurrentNewTenure,
     isPotentialNewStudent,
     findSeparateTeukangVisit,
+    isScheduledWithdrawalDue,
 } from './student-core.js';
 import { deriveTenure } from '@impact7/shared/history';
 
@@ -281,6 +282,18 @@ test('isWithdrawnAt: withdrawal_date 미래 → false', () => {
 
 test('isWithdrawnAt: withdrawal_date 없고 status 없음 → false', () => {
     assert.equal(isWithdrawnAt({}, '2026-06-09'), false);
+});
+
+test('isScheduledWithdrawalDue: 종료된 예약 표식이 없으면 과거 퇴원일로 재퇴원시키지 않음', () => {
+    assert.equal(isScheduledWithdrawalDue({
+        status: '재원',
+        withdrawal_date: '2026-05-28',
+    }, '2026-07-20'), false);
+    assert.equal(isScheduledWithdrawalDue({
+        status: '재원',
+        withdrawal_date: '2026-07-20',
+        pre_withdrawal_status: '재원',
+    }, '2026-07-20'), true);
 });
 
 // ─── isOnLeaveAt ──────────────────────────────────────────────────────────────

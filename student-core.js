@@ -129,6 +129,12 @@ export function isWithdrawnAt(s, dateStr) {
     return false;
 }
 
+export function isScheduledWithdrawalDue(student, dateStr) {
+    return Boolean(student.pre_withdrawal_status
+        && student.withdrawal_date
+        && student.withdrawal_date <= dateStr);
+}
+
 const LEAVE_STATUSES_CORE = ['가휴원', '실휴원'];
 const NON_LEAVE_ACTIVE = new Set(['재원', '등원예정', '상담']);
 
