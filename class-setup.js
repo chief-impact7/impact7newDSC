@@ -21,7 +21,6 @@ import { schoolSearchTerms } from './school-normalizer.js';
 import { batchSet, batchUpdate, normalizeImpact7Email } from './audit.js';
 import { recordTeacherChange } from './teacher-history.js';
 import { staffLabel } from '@impact7/shared/staff-label';
-import { canonicalizeTeacherEmails, teacherDisplayName } from '@impact7/shared/teacher-label';
 import {
     buildClassTimeFields,
     buildReactivationCleanupFields,
@@ -112,30 +111,22 @@ async function loadStudents() {
     _applyStudentDocs(snap);
 }
 
-// 담임 표시 규약(@impact7/shared teacher-label): 이메일 로컬파트 첫 글자 대문자 ('edward@…' → 'Edward')
-const teacherLabelOf = (email) => teacherDisplayName(staffLabel(email)) || staffLabel(email);
-
 async function loadTeachers() {
-    const snap = await getDocs(collection(db, 'teachers'));
-    // 구(@gw)·신 메일 중복은 사람당 1건(신메일 우선).
-    // homeroom_eligible은 HR 교수부 재직 여부를 함수가 미러한 필드 — false(퇴직·비교수부)만 제외
-    // (필드 미계산 신규 문서는 트리거 반영 전까지 노출 유지).
-    const byEmail = new Map();
-    snap.forEach(d => {
-        if (d.data().homeroom_eligible === false) return;
-        byEmail.set(d.id, { email: d.id, ...d.data() });
-    });
+    // 담당 목록·표시이름의 정본은 HR 인사(staff_directory 미러의 english_name) — 재직 교수만.
+    // 로그인 이메일은 규약(영어이름@impact7.kr)으로 파생. staff_directory의 email 필드는 안 씀.
+    const snap = await getDocs(collection(db, 'staff_directory'));
     teachersList.length = 0;
-    canonicalizeTeacherEmails([...byEmail.keys()]).forEach(email => teachersList.push(byEmail.get(email)));
-    teachersList.sort((a, b) =>
-        teacherLabelOf(a.email).localeCompare(teacherLabelOf(b.email), 'ko')
-    );
+    snap.forEach(d => {
+        const data = d.data();
+        if (data.department !== '교수' || data.assignable !== true) return;
+        const en = typeof data.english_name === 'string' ? data.english_name.trim() : '';
+        if (en) teachersList.push({ email: `${en.toLowerCase()}@impact7.kr`, name: en });
+    });
+    teachersList.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
     // 선생님 드롭다운 채우기
     const sel = document.getElementById('input-teacher');
     sel.innerHTML = '<option value="">선택</option>' +
-        teachersList.map(t =>
-            `<option value="${esc(t.email)}">${esc(teacherLabelOf(t.email))}</option>`
-        ).join('');
+        teachersList.map(t => `<option value="${esc(t.email)}">${esc(t.name)}</option>`).join('');
 }
 
 // ─── Navigation ─────────────────────────────────────────────────────────────
