@@ -26,7 +26,7 @@ import {
     branchFromStudent, makeDailyRecordId,
     getActiveEnrollments, getStudentStartTime,
     allClassCodes, summarizeEnrollmentClasses, isValidDateStr,
-    isNaesinActiveToday, deriveClassLabelAt, siblingStatusSuffix
+    isNaesinActiveToday, deriveClassLabelAt, siblingStatusSuffix, isOnLeaveAt
 } from './student-helpers.js';
 import {
     currentSchool, studentGrade, studentShortLabel, todayStr, getDayName
@@ -682,10 +682,12 @@ function renderReportCard(records) {
                                     r.status === '결석' ? 'att-absent' :
                                     r.status === '지각' ? 'att-late' :
                                     r.status === '보충' ? 'att-makeup' : '';
+                        // 출결 미입력이지만 휴원기간에 걸린 날은 '-' 대신 '휴원' 표기.
+                        const division = r.status || (student && isOnLeaveAt(student, r.date) ? '휴원' : '-');
                         return `<tr>
                             <td>${esc(dateShort)}(${esc(r.dayName)})</td>
                             <td>${esc(r.classLabel || '-')}</td>
-                            <td class="${cls}">${esc(r.status || '-')}</td>
+                            <td class="${cls}">${esc(division)}</td>
                             <td>${esc(r.reason)}</td>
                         </tr>`;
                     }).join('')}
