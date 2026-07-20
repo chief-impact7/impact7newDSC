@@ -820,6 +820,19 @@ body {
   min-width: 0;
   display: flex;
   align-items: center;
+  gap: 10px;
+}
+
+/* 같은 날 정규/특강 두 등원 짝을 시각적으로 분리 */
+.visit-pair {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.visit-pair + .visit-pair {
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
 }
 
 .item-tag {

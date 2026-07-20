@@ -796,9 +796,9 @@ export function renderListPanel() {
             if (state.currentCategory === 'attendance' && sepVisit) {
                 visit2First = (rec?.visit2?.arrival_time || sepVisit.time || '99:99')
                     < (arrivalTime || scheduledTime || '99:99');
-                const pairedAttendance = visit2First
-                    ? visit2TimeBlockHtml + visit2AttendanceToggle + mainTimeBlockHtml + mainAttendanceToggle
-                    : mainTimeBlockHtml + mainAttendanceToggle + visit2TimeBlockHtml + visit2AttendanceToggle;
+                const pair1 = `<div class="visit-pair">${mainTimeBlockHtml}${mainAttendanceToggle}</div>`;
+                const pair2 = `<div class="visit-pair">${visit2TimeBlockHtml}${visit2AttendanceToggle}</div>`;
+                const pairedAttendance = visit2First ? pair2 + pair1 : pair1 + pair2;
                 timeHtml = bonusTimeHtml;
                 toggleHtml = pairedAttendance;
             }
