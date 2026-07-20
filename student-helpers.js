@@ -13,6 +13,7 @@ import {
     makeDailyRecordId, buildNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE,
     resolveNaesinCsKey, displayCodeFromCsKey, isWithdrawnAt, isOnLeaveAt,
     isValidDateStr, createSiblingMap, studentMatchesSearchTerms, siblingStatusSuffix,
+    findSeparateTeukangVisit,
 } from './student-core.js';
 
 export {
@@ -202,6 +203,13 @@ export function isFreeSemesterActiveToday(s, dateStr) {
 
 export function getStudentStartTime(enrollment, dayName) {
     return enrollment ? startTime(enrollment, dayName, state.classSettings) : '';
+}
+
+export function getSeparateTeukangVisit(s, dateStr) {
+    const date = dateStr || todayStr();
+    const dayName = getDayName(date);
+    const dayEnrolls = getActiveEnrollments(s, date).filter(e => normalizeDays(e.day).includes(dayName));
+    return findSeparateTeukangVisit(dayEnrolls, (e) => getStudentStartTime(e, dayName));
 }
 
 // ─── ID & 검색 ─────────────────────────────────────────────────────────────

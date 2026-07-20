@@ -8,8 +8,8 @@ import { auditUpdate, auditSet, auditDelete, batchUpdate, normalizeImpact7Email 
 import { getDayName, todayStr, toDateStrKST } from './src/shared/firestore-helpers.js';
 import { state, NEW_STUDENT_DAYS } from './state.js';
 import { showSaveIndicator, nowTimeStr } from './ui-utils.js';
-import { branchFromStudent, getStudentClassContextsForDate, isPauseExpired, pauseExpiredDays, findStudent, enrollmentCode } from './student-helpers.js';
-import { isCurrentNewTenure, isPotentialNewStudent } from './student-core.js';
+import { branchFromStudent, getStudentClassContextsForDate, isPauseExpired, pauseExpiredDays, findStudent, getSeparateTeukangVisit } from './student-helpers.js';
+import { enrollmentCode, isCurrentNewTenure, isPotentialNewStudent } from './student-core.js';
 import { saveImmediately, saveDailyRecord, reloadForDate, loadStudentTenures, loadRecentlyAttendedStudentIds } from './data-layer.js';
 
 // 토글 UI의 "기본" 라벨 집합 — 이 라벨들을 클릭하면 attendance.status는 '미확인'으로 리셋.
@@ -378,6 +378,30 @@ export function applyAttendance(studentId, displayStatus, force = false, silent 
     return savePromise;
 }
 
+// 분리 등원 특강 보조 출결. 주 출결(attendance/arrival_time)과 독립 —
+// 통계·알림·보고서 소비처는 visit2를 읽지 않는다(스펙 확정).
+export function toggleVisit2Attendance(studentId, displayStatus) {
+    const firestoreStatus = displayStatus === '특강' ? '미확인' : displayStatus;
+    const rec = state.dailyRecords[studentId] || {};
+    const currentStatus = rec.visit2?.status || '미확인';
+    const newStatus = currentStatus === firestoreStatus ? '미확인' : firestoreStatus;
+
+    const sv = getSeparateTeukangVisit(findStudent(studentId), state.selectedDate);
+    const visit2 = {
+        ...(rec.visit2 || {}),
+        status: newStatus,
+        code: (sv ? enrollmentCode(sv.enrollment) : rec.visit2?.code) || '',
+        scheduled_time: (sv ? sv.time : rec.visit2?.scheduled_time) || '',
+    };
+    if (newStatus === '출석' || newStatus === '지각') {
+        if (!visit2.arrival_time) visit2.arrival_time = nowTimeStr();
+    } else if (newStatus === '미확인') {
+        visit2.arrival_time = '';
+    }
+    return saveImmediately(studentId, { visit2 })
+        .then(() => renderListPanel())
+        .catch(err => { console.error('visit2 저장 실패:', err); });
+}
 
 // 학생의 출결 상태가 현재 L2 필터에 매칭되는지 판별
 export function doesStatusMatchFilter(firestoreStatus, filterSet) {

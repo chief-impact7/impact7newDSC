@@ -307,12 +307,16 @@ export function openEnrollmentModal(studentId, enrollIdx) {
     document.getElementById('enroll-end-date').value = enroll.end_date || '';
 
     // 정규는 종료일 입력 불가 — 정규 종료는 status(퇴원/종강)로만. 특강만 종료일 활성.
+    // 특강은 visit_mode 필드도 표시.
+    document.getElementById('enroll-visit-mode').value = enroll.visit_mode || '';
+    const visitModeField = document.getElementById('enroll-visit-mode-field');
     const typeEl = document.getElementById('enroll-class-type');
     const endEl = document.getElementById('enroll-end-date');
     const syncEndDisabled = () => {
         const isRegular = typeEl.value === '정규';
         endEl.disabled = isRegular;
         if (isRegular) endEl.value = '';
+        visitModeField.style.display = isRegular ? 'none' : '';
     };
     typeEl.onchange = syncEndDisabled;
     syncEndDisabled();
@@ -403,6 +407,10 @@ export async function saveEnrollment() {
     // 정규는 end_date를 박지 않는다 — 정규 종료는 status(퇴원/종강)로만. (자유학기·특강은 기간제라 유지)
     if (endDate && classType !== '정규') updated.end_date = endDate;
     else delete updated.end_date;
+
+    const visitMode = document.getElementById('enroll-visit-mode').value;
+    if (classType === '특강' && visitMode) updated.visit_mode = visitMode;
+    else delete updated.visit_mode;
 
     enrollments[enrollIdx] = updated;
     if (['재원', '등원예정'].includes(student.status) && !hasActiveCodedEnrollment(enrollments)) {
