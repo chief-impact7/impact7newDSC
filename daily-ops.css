@@ -149,6 +149,9 @@ body {
 }
 
 .app-bar-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   color: var(--primary);
   text-decoration: none;
   font-size: 13px;
@@ -1854,6 +1857,7 @@ textarea.field-input {
   .app-bar {
     padding: 0 8px;
     gap: 8px;
+    overflow-x: auto;
   }
 
   .app-bar-center {
@@ -1862,6 +1866,19 @@ textarea.field-input {
 
   .app-bar .search-pill {
     max-width: 100%;
+  }
+
+  .app-bar-link-label {
+    display: none;
+  }
+
+  .app-bar-link {
+    width: 44px;
+    height: 44px;
+    justify-content: center;
+    padding-left: 0;
+    border-left: 0;
+    flex-shrink: 0;
   }
 
   .main-content {
