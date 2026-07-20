@@ -845,6 +845,17 @@ export function renderListPanel() {
             }
         }
 
+        // 휴/퇴원 기간 — 출결 버튼이 없는 자리에 대신 노출 (만료 전에도 기간이 보이게)
+        let leavePeriodHtml = '';
+        if (LEAVE_STATUSES.includes(s.status)) {
+            const start = s.pause_start_date ? esc(s.pause_start_date) : '';
+            const end = s.pause_end_date ? esc(s.pause_end_date) : '';
+            const range = start && end ? `${start} ~ ${end}` : end ? `~ ${end}` : start ? `${start} ~` : '기간 미정';
+            leavePeriodHtml = `<span class="leave-period">휴원 ${range}</span>`;
+        } else if (s.status === '퇴원' && s.withdrawal_date) {
+            leavePeriodHtml = `<span class="leave-period">퇴원 ${esc(s.withdrawal_date)}</span>`;
+        }
+
         // 휴원 만료 경고 뱃지 (실제 오늘 기준) — status 자동 전환 금지, 담당자 복귀 처리 유도
         const pauseExpiredBadge = isPauseExpired(s)
             ? `<span class="tag tag-pause-expired" title="휴원 기간이 만료됐습니다. 복귀 처리(상태 변경)가 필요합니다.">${msIcon('warning', '', 'style="font-size:1em;"')} 휴원만료 (~${esc(s.pause_end_date)}, ${pauseExpiredDays(s)}일 경과) · 복귀처리 필요</span>`
@@ -881,7 +892,7 @@ export function renderListPanel() {
                 <span class="item-title">${esc(s.name)}${newBadge}${naesinBadge}${leaveBadge}${pauseExpiredBadge}${lrPendingTags}${siblingIcon}${hwFailIconHtml}${overrideBadge}${overrideInBadge} ${teacherBadge}</span>
             </div>
             ${timeHtml}
-            <div class="item-actions">${toggleHtml}</div>
+            <div class="item-actions">${toggleHtml || leavePeriodHtml}</div>
             ${followUpBtnHtml}
         </div>`;
     };
