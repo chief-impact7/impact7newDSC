@@ -7,15 +7,14 @@ import { createGeminiQueue } from './gemini-queue.js';
 import { parseDateKST, getDayName } from './src/shared/firestore-helpers.js';
 import { esc, decodeHtmlEntities, formatTime12h, formatTime12hNoAmPm, showSaveIndicator } from './ui-utils.js';
 import { enrollmentCode } from './student-helpers.js';
-import { sendDailyReport, sendParentNotice, addConsultation, saveStudentParentMessageRecipientFields } from './data-layer.js';
+import { sendDailyReport, sendParentNotice, addConsultation, saveStudentMessageRecipientSettings } from './data-layer.js';
 import { buildConsultationPayload } from './consultation-payload.js';
-import { defaultRecipientFields, normalizeRecipientFields } from './src/messages/recipient-settings.js';
+import { resolveRecipientFields, buildRecipientSettings, createRecipientSettingsSaveQueue, MESSAGE_RECIPIENT_SETTINGS_FIELD } from './src/messages/recipient-settings.js';
 import { onlyDigits } from './src/messages/message-format.js';
 import { todayKST } from '@impact7/shared/datetime';
 
 let _sendingReport = false;
 let _parentMsgRecipientFields = new Set(['parent_1']);
-let _recipientSaveQueue = Promise.resolve();
 
 // 백엔드 recipientPhone.js의 RECIPIENT_FIELDS와 일치. 번호가 있는 대상만 노출한다.
 const RECIPIENT_OPTIONS = [
@@ -25,22 +24,26 @@ const RECIPIENT_OPTIONS = [
     { field: 'other', label: '기타', key: 'other_phone' },
 ];
 
+// 수업 리포트도 알림톡(ATA)이므로 메시지 탭과 같은 수신 설정(message_recipient_settings.alimtalk)을 쓴다.
+// 한 곳에서 정한 수신자가 리포트·상담·등하원 알림톡 모두에 적용된다.
 function parentMessageRecipientFields(student, availableFields) {
-    const saved = normalizeRecipientFields(student?.parent_message_recipient_fields, availableFields);
-    return saved ?? defaultRecipientFields(availableFields);
+    return resolveRecipientFields(student?.[MESSAGE_RECIPIENT_SETTINGS_FIELD], 'alimtalk', availableFields);
 }
 
+const enqueueRecipientSettingsSave = createRecipientSettingsSaveQueue(
+    (studentId, settings) => saveStudentMessageRecipientSettings(studentId, settings),
+    (err) => {
+        console.error('[parent-message] 수신 대상 저장 실패:', err);
+    },
+);
+
 function saveParentMessageRecipientFields(studentId) {
-    const fields = [..._parentMsgRecipientFields];
     const student = getStudent?.(studentId);
-    if (student) student.parent_message_recipient_fields = fields;
-    _recipientSaveQueue = _recipientSaveQueue
-        .catch(() => {})
-        .then(() => saveStudentParentMessageRecipientFields(studentId, fields))
-        .catch((err) => {
-            console.error('[parent-message] 수신 대상 저장 실패:', err);
-        });
-    return _recipientSaveQueue;
+    const available = RECIPIENT_OPTIONS.filter((o) => onlyDigits(student?.[o.key])).map((o) => o.field);
+    const smsFields = resolveRecipientFields(student?.[MESSAGE_RECIPIENT_SETTINGS_FIELD], 'sms', available);
+    const settings = buildRecipientSettings([..._parentMsgRecipientFields], smsFields);
+    if (student) student[MESSAGE_RECIPIENT_SETTINGS_FIELD] = settings;
+    return enqueueRecipientSettingsSave(studentId, settings);
 }
 
 // 학생 번호 유무에 따라 수신 대상 체크박스를 채운다. 학부모알림작성 전용 선택값만 사용한다.
