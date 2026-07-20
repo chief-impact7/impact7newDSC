@@ -757,6 +757,8 @@ body {
   flex-shrink: 0;
   min-width: 80px;
   max-width: 120px;
+  padding-right: 14px;
+  border-right: 1px solid var(--border);
 }
 
 .item-title {
