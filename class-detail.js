@@ -15,6 +15,11 @@ import { state, DAY_ORDER, DEFAULT_DOMAINS, DEFAULT_TEST_SECTIONS } from './stat
 import { esc, escAttr, showSaveIndicator, showToast } from './ui-utils.js';
 import { matchesBranchFilter, enrollmentCode, getActiveEnrollments, isActiveNaesinBase } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
+import {
+    buildReactivationCleanupFields,
+    buildReactivationHistoryBefore,
+    clearLocalReactivationFields,
+} from './class-setup-enrollment.js';
 import { cancelStudentPendingTasks } from './data-layer.js';
 import { recordTeacherChange } from './teacher-history.js';
 import { renderClassBulkMessageTab, resolveClassMembers } from './class-bulk-message.js';
@@ -1239,6 +1244,7 @@ export async function addStudentToTeukang(classCode, studentId) {
             update.status_changed_at = serverTimestamp();
             update.status_changed_by = actor;
             update.status_previous = prevStatus || null;
+            Object.assign(update, buildReactivationCleanupFields(deleteField()));
 
             const batch = writeBatch(db);
             batchUpdate(batch, studentRef, update);
@@ -1253,7 +1259,7 @@ export async function addStudentToTeukang(classCode, studentId) {
             batchSet(batch, doc(collection(db, 'history_logs')), {
                 doc_id: studentId,
                 change_type: 'STATUS_CHANGE',
-                before: JSON.stringify({ status: prevStatus }),
+                before: JSON.stringify(buildReactivationHistoryBefore(student)),
                 after: JSON.stringify({ status: '재원' }),
                 google_login_id: actor,
                 timestamp: serverTimestamp(),
@@ -1265,7 +1271,10 @@ export async function addStudentToTeukang(classCode, studentId) {
         if (!READ_ONLY) {
             student.enrollments = [...(student.enrollments || []), newEnrollment];
             student.status2 = '특강';
-            if (shouldReactivate) student.status = '재원';
+            if (shouldReactivate) {
+                student.status = '재원';
+                clearLocalReactivationFields(student);
+            }
             if (isFromRemote) {
                 state.allStudents.push(student);
                 state.allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));

@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     buildClassTimeFields,
+    buildReactivationCleanupFields,
+    buildReactivationHistoryBefore,
+    clearLocalReactivationFields,
     hasActiveRegularClass,
     resolveRegularDefaultTime,
     uniquePlanningEnrollments,
@@ -61,6 +64,38 @@ test('기존 정규반 시간은 직접 수정하지 않으면 보존한다', ()
     assert.equal(resolveRegularDefaultTime('16:00', false, '19:10'), '19:10');
     assert.equal(resolveRegularDefaultTime('16:00', true, '19:10'), '16:00');
     assert.equal(resolveRegularDefaultTime('16:00', false, ''), '16:00');
+});
+
+test('퇴원 학생 특강 재활성화 시 이전 휴·퇴원 예약 필드를 모두 제거한다', () => {
+    const deleted = Symbol('deleted');
+
+    assert.deepEqual(buildReactivationCleanupFields(deleted), {
+        pause_start_date: deleted,
+        pause_end_date: deleted,
+        scheduled_leave_status: deleted,
+        withdrawal_date: deleted,
+        pre_withdrawal_status: deleted,
+    });
+
+    const student = {
+        name: '김범준',
+        status: '퇴원',
+        pause_start_date: '2026-05-01',
+        pause_end_date: '2026-05-31',
+        scheduled_leave_status: '가휴원',
+        withdrawal_date: '2026-06-01',
+        pre_withdrawal_status: '가휴원',
+    };
+    assert.deepEqual(buildReactivationHistoryBefore(student), {
+        status: '퇴원',
+        pause_start_date: '2026-05-01',
+        pause_end_date: '2026-05-31',
+        scheduled_leave_status: '가휴원',
+        withdrawal_date: '2026-06-01',
+        pre_withdrawal_status: '가휴원',
+    });
+    clearLocalReactivationFields(student);
+    assert.deepEqual(student, { name: '김범준', status: '퇴원' });
 });
 
 test('shared 시간 해석은 정규 기본시간과 기간 override를 구분한다', () => {
