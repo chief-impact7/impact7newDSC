@@ -837,6 +837,13 @@ body {
   border-left: 1px solid var(--border);
 }
 
+/* 휴/퇴원 학생: 출결 버튼 대신 기간 표시 */
+.leave-period {
+  font-size: 12px;
+  color: var(--text-sec);
+  white-space: nowrap;
+}
+
 .item-tag {
   font-size: 11px;
   padding: 2px 8px;
