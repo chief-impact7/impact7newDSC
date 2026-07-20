@@ -92,7 +92,7 @@ import {
 } from './test-management.js';
 import {
     initAttendanceDeps,
-    cycleTempArrival, cycleVisitAttendance, toggleAttendance,
+    cycleTempArrival, cycleVisitAttendance, toggleAttendance, toggleVisit2Attendance,
     autoCreateAbsenceRecord, autoRemoveAbsenceRecord, syncAbsenceRecords,
     applyAttendance, doesStatusMatchFilter, isNewStudent, isAttendedStatus,
     checkCanEditGrading, _isVisitAttended, handleAttendanceChange,
@@ -784,6 +784,7 @@ window.setBranch = setBranch;
 window.setBranchLevel = setBranchLevel;
 window.setBranchClass = setBranchClass;
 window.toggleAttendance = toggleAttendance;
+window.toggleVisit2Attendance = toggleVisit2Attendance;
 window.cycleVisitAttendance = cycleVisitAttendance;
 window.setClassCode = setClassCode;
 window.renderStudentDetail = renderStudentDetail;

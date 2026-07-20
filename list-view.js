@@ -12,6 +12,7 @@ import {
     isNaesinActiveToday, isFreeSemesterActiveToday, isPauseExpired, pauseExpiredDays, isValidDateStr,
     findStudent, buildSiblingMap, studentMatchesSearchTerms,
 } from './student-helpers.js';
+import { findSeparateTeukangVisit } from './student-core.js';
 import { schoolSearchTerms } from './school-normalizer.js';
 import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 import { esc, escAttr, formatTime12h, oxChip, oxChipBtn } from './ui-utils.js';
@@ -71,9 +72,11 @@ export function hasTeukangEnrollmentToday(student) {
 // 중 가장 이른 시각. 없으면 '99:99' (맨 뒤로).
 export function getEffectiveAttendanceTime(s, date, dayName) {
     const times = [];
-    const todayE = getActiveEnrollments(s, date).find(e => (e.day || []).includes(dayName));
-    const enrollTime = getStudentStartTime(todayE, dayName);
-    if (enrollTime) times.push(enrollTime);
+    for (const e of getActiveEnrollments(s, date)) {
+        if (!(e.day || []).includes(dayName)) continue;
+        const t = getStudentStartTime(e, dayName);
+        if (t) times.push(t);
+    }
     times.push(...collectVisitTimes(s, date));
     return times.length === 0 ? '99:99' : times.sort()[0];
 }
@@ -518,6 +521,16 @@ export function renderListPanel() {
 
         let toggleHtml = '';
         const isLeave = LEAVE_STATUSES.includes(s.status);
+        const sepVisit = isLeave ? null : findSeparateTeukangVisit(_todayEnrolls, (e) => getStudentStartTime(e, dayN));
+        const mainEnrolls = _todayEnrolls.filter(e => e !== sepVisit?.enrollment);
+        // dayN 전달 — 합성 내신/자유학기 enrollment의 schedule 객체에서 요일별 시간 조회 가능해야 함.
+        // 누락 시 fallback이 hw_fail/test_fail 보충 시간(17:30 등)을 가장 이른 시간으로 끌어와 정규 등원시간을 덮음.
+        let scheduledTime = mainEnrolls.map(e => getStudentStartTime(e, dayN)).filter(Boolean).sort()[0] || '';
+        if (!scheduledTime) {
+            // 비정규(오늘 enrollment 없음) — hw_fail/test_fail/extra_visit의 가장 이른 scheduled_time 사용
+            const eff = getEffectiveAttendanceTime(s, state.selectedDate, dayN);
+            if (eff !== '99:99') scheduledTime = eff;
+        }
         // classSettings 검증 인라인 — end_date 없는 구 정규/고아 enrollment 오분류 방지, _todayEnrolls 재사용
         const isTeukangOnly = !isLeave
             && _todayEnrolls.some(e => { const ec = enrollmentCode(e); return e.class_type === '특강' && ec && state.classSettings[ec]?.class_type === '특강'; })
@@ -543,7 +556,7 @@ export function renderListPanel() {
             toggleHtml = `<div class="toggle-group">` +
                 statuses.map(st => {
                     const classes = ['toggle-btn'];
-                    if (st === defaultLabel) classes.push(`default-tone-${DEFAULT_TONE[defaultLabel]}`);
+                    if (st === defaultLabel) classes.push('type-tag', `default-tone-${DEFAULT_TONE[defaultLabel]}`);
                     if (st === currentDisplay) {
                         if (st === '출석') classes.push('active-present');
                         else if (st === '결석') classes.push('active-absent');
@@ -554,6 +567,25 @@ export function renderListPanel() {
                     return `<button class="${classes.join(' ')}" aria-pressed="${st === currentDisplay}" onclick="event.stopPropagation(); toggleAttendance('${escAttr(s.docId)}', '${st}')">${st}</button>`;
                 }).join('') +
                 `</div>`;
+            if (sepVisit) {
+                const v2Status = rec?.visit2?.status || '미확인';
+                const v2Display = v2Status === '미확인' ? '특강' : v2Status;
+                const v2Row = `<div class="toggle-group">` +
+                    ['특강', '출석', '지각', '결석', '조퇴', '기타'].map(st => {
+                        const classes = ['toggle-btn'];
+                        if (st === '특강') classes.push('type-tag', `default-tone-${DEFAULT_TONE['특강']}`);
+                        if (st === v2Display) {
+                            if (st === '출석') classes.push('active-present');
+                            else if (st === '결석') classes.push('active-absent');
+                            else if (st === '지각') classes.push('active-late');
+                            else if (st === '특강') classes.push('active-default');
+                            else classes.push('active-other');
+                        }
+                        return `<button class="${classes.join(' ')}" aria-pressed="${st === v2Display}" onclick="event.stopPropagation(); toggleVisit2Attendance('${escAttr(s.docId)}', '${st}')">${st}</button>`;
+                    }).join('') + `</div>`;
+                // 시간순: 특강이 이르면 특강 줄을 위로
+                toggleHtml = sepVisit.time < (scheduledTime || '99:99') ? v2Row + toggleHtml : toggleHtml + v2Row;
+            }
         } else if (state.currentCategory === 'homework') {
             const rec = state.dailyRecords[s.docId];
             const isHw1st = state.currentSubFilter.has('hw_1st');
@@ -710,23 +742,13 @@ export function renderListPanel() {
         // 등원시간 (휴원 학생은 미표시)
         let timeHtml = '';
         const rec = state.dailyRecords[s.docId];
-        const dayName = getDayName(state.selectedDate);
-        const todayEnroll = getActiveEnrollments(s, state.selectedDate).find(e => e.day.includes(dayName));
         if (!isLeave) {
             const arrivalTime = rec?.arrival_time;
-            // dayName 전달 — 합성 내신/자유학기 enrollment의 schedule 객체에서 요일별 시간 조회 가능해야 함.
-            // 누락 시 fallback이 hw_fail/test_fail 보충 시간(17:30 등)을 가장 이른 시간으로 끌어와 정규 등원시간을 덮음.
-            let scheduledTime = getStudentStartTime(todayEnroll, dayName);
-            if (!scheduledTime) {
-                // 비정규(오늘 enrollment 없음) — hw_fail/test_fail/extra_visit의 가장 이른 scheduled_time 사용
-                const eff = getEffectiveAttendanceTime(s, state.selectedDate, dayName);
-                if (eff !== '99:99') scheduledTime = eff;
-            }
 
             // 비정규 등원 예약 시간 (hw_fail/test_fail/extra_visit/hw_fail_action 통합).
             // 정규/fallback 예정 시간(scheduledTime)과 다른 것만 보충 블록으로 표시.
             const visitBonusTimes = collectVisitTimes(s, state.selectedDate);
-            const uniqueBonusTimes = [...new Set(visitBonusTimes)].filter(t => t !== scheduledTime).sort();
+            const uniqueBonusTimes = [...new Set(visitBonusTimes)].filter(t => t !== scheduledTime && t !== sepVisit?.time).sort();
 
             let timeLabel = '', timeValue = '', timeClass = '';
             if (arrivalTime) {
@@ -737,11 +759,22 @@ export function renderListPanel() {
                 // 비정규인데 모든 visit task의 scheduled_time이 비어있음 — 시간 미입력 표시
                 timeLabel = '예정'; timeValue = '(미정)'; timeClass = 'time-unset';
             }
+            const timeBlocks = [];
+            if (timeValue) timeBlocks.push({ sort: scheduledTime || arrivalTime || '99:99', html: `<div class="item-time-block ${timeClass}">
+                <span class="item-time-label">${timeLabel}</span>
+                <span class="item-time-value">${esc(timeValue)}</span>
+            </div>` });
+            if (sepVisit) {
+                const v2 = rec?.visit2;
+                const v2Arrived = !!v2?.arrival_time;
+                timeBlocks.push({ sort: sepVisit.time, html: `<div class="item-time-block ${v2Arrived ? 'arrived' : ''}">
+                <span class="item-time-label">${v2Arrived ? '등원' : '예정'}</span>
+                <span class="item-time-value">${esc(formatTime12h(v2Arrived ? v2.arrival_time : sepVisit.time))}</span>
+            </div>` });
+            }
+            timeBlocks.sort((a, b) => a.sort.localeCompare(b.sort));
             timeHtml = [
-                timeValue ? `<div class="item-time-block ${timeClass}">
-                    <span class="item-time-label">${timeLabel}</span>
-                    <span class="item-time-value">${esc(timeValue)}</span>
-                </div>` : '',
+                ...timeBlocks.map(b => b.html),
                 ...uniqueBonusTimes.map(t => `<div class="item-time-block" style="color:var(--danger);">
                     <span class="item-time-label" style="color:var(--danger);">보충</span>
                     <span class="item-time-value" style="color:var(--danger);">${esc(formatTime12h(t))}</span>
