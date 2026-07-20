@@ -6,7 +6,7 @@ import { studentGradeKey, studentShortLabel } from '../../shared/firestore-helpe
 import { downloadCsv } from '../../shared/csv.js';
 import {
     filterByStudentIds, groupByDate, groupByStudent, groupByTeacher,
-    filterGroupsByKeyword, toCsvRows, CONSULTATION_COLUMNS,
+    filterGroupsByKeyword, toCsvRows, teacherLabel, CONSULTATION_COLUMNS,
 } from '../lib/consultation-view.js';
 
 // 상담 형태별 배지 색 — 전화/대면/문자를 한눈에 구분.
@@ -128,7 +128,7 @@ export default function ConsultationBoard({
                                             <td className="consult-c-date">{c.date || ''}</td>
                                             <td className="consult-c-name">{c.student_name || ''}</td>
                                             <td className="consult-c-sec">{gradeClassOf(c) || '—'}</td>
-                                            <td className="consult-c-sec">{c.teacher_name || '—'}</td>
+                                            <td className="consult-c-sec">{teacherLabel(c) || '—'}</td>
                                             <td><Tag value={c.target} className={c.target === '학부모' ? 'target-parent' : ''} /></td>
                                             <td><Tag value={c.method} className={METHOD_CLASS[c.method] || ''} /></td>
                                             <td><Tag value={c.consultation_type} /></td>

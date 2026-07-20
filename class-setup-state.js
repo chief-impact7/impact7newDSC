@@ -54,7 +54,7 @@ export function renderSummary() {
     const card = document.getElementById('summary-card');
     if (!card) return;
     const d = wizardData;
-    const teacherName = d.teacher ? staffLabel(d.teacher) : '미지정';
+    const teacherName = d.teacher ? (teachersList.find(t => t.email === d.teacher)?.name || staffLabel(d.teacher)) : '미지정';
     const timeForDay = day => d.classType === '정규' ? d.defaultTime : (d.schedule[day] || '');
     const dayTimeStr = d.days.length
         ? d.days.map(day => `${day} ${timeForDay(day)}`).join(', ')
