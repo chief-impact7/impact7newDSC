@@ -21,7 +21,7 @@ import { createPromoteEnrollPending } from '@impact7/shared/promote-enroll';
 import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 import { deriveStudentNumber, studentNumberIdentityKey } from '@impact7/shared/student-number';
 import { staffLabel } from '@impact7/shared/staff-label';
-import { canonicalizeTeacherEmails, teacherDisplayName } from '@impact7/shared/teacher-label';
+import { teacherDisplayName } from '@impact7/shared/teacher-label';
 import { MESSAGE_RECIPIENT_SETTINGS_FIELD } from './src/messages/recipient-settings.js';
 
 const _promoteEnrollPending = createPromoteEnrollPending(
@@ -129,19 +129,23 @@ export function getClassDomains(classCode) {
 
 export async function loadTeachers() {
     try {
-        const cutoff = Timestamp.fromDate(new Date(Date.now() - 15 * 24 * 60 * 60 * 1000));
-        const q = query(collection(db, 'teachers'), where('last_login', '>=', cutoff));
-        const snap = await getDocs(q);
-        // 구(@gw)·신 메일 중복은 사람당 1건(신메일 우선) — @impact7/shared teacher-label 규약.
-        // homeroom_eligible=false(HR 교수부 퇴직·비교수부)는 담임 후보에서 제외.
-        const byEmail = new Map();
+        // 담당 목록·표시이름의 정본은 HR 인사(staff_directory 미러) — 로그인 여부 무관, 재직 교수만 후보.
+        const snap = await getDocs(collection(db, 'staff_directory'));
+        const byLocal = new Map();
+        const list = [];
         snap.forEach(d => {
-            if (d.data().homeroom_eligible === false) return;
-            byEmail.set(d.id, { email: d.id, ...d.data() });
+            const data = d.data();
+            const email = String(data.email || '').trim().toLowerCase();
+            if (!email) return;
+            const local = staffLabel(email).toLowerCase();
+            const englishName = (typeof data.english_name === 'string' && data.english_name.trim())
+                ? data.english_name.trim() : (teacherDisplayName(local) || local);
+            byLocal.set(local, englishName);
+            if (data.department === '교수' && data.assignable === true) list.push({ email });
         });
-        state.teachersList = canonicalizeTeacherEmails([...byEmail.keys()]).map(email => byEmail.get(email));
-        state.teachersList.sort((a, b) => getTeacherName(a.email).localeCompare(getTeacherName(b.email), 'ko'));
-        console.log(`[loadTeachers] ${state.teachersList.length}명 (15일 내)`);
+        state.staffByLocal = byLocal;
+        state.teachersList = list.sort((a, b) => getTeacherName(a.email).localeCompare(getTeacherName(b.email), 'ko'));
+        console.log(`[loadTeachers] ${state.teachersList.length}명 (HR 재직 교수)`);
     } catch (err) {
         console.error('[loadTeachers] 실패:', err);
     }
@@ -162,8 +166,9 @@ export async function trackTeacherLogin(user) {
 }
 
 export function getTeacherName(email) {
-    // 이메일 로컬파트 = 영어이름 소문자 — 첫 글자만 대문자로 ('edward@…' → 'Edward')
-    return teacherDisplayName(staffLabel(email)) || staffLabel(email);
+    // 표시이름의 정본은 HR 영어이름(staff_directory) — 미로딩·명부밖이면 이메일 로컬파트 파생으로 폴백.
+    const local = staffLabel(email).toLowerCase();
+    return state.staffByLocal?.get(local) || teacherDisplayName(staffLabel(email)) || staffLabel(email);
 }
 
 // ─── Class Next Homework (반별 다음숙제) ────────────────────────────────────
