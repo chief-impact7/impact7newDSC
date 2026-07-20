@@ -14,7 +14,7 @@ import { parseDateKST, toDateStrKST, todayStr, getDayName, PAST_STUDENT_STATUSES
 import { state, DEFAULT_DOMAINS, LEAVE_STATUSES, DEFAULT_TEST_SECTIONS } from './state.js';
 import { showSaveIndicator, showToast } from './ui-utils.js';
 import { openKoreanDatePicker } from './date-picker.js';
-import { normalizeDays, enrollmentCode, branchFromStudent, makeDailyRecordId, getActiveEnrollments, deriveClassLabelAt } from './student-helpers.js';
+import { normalizeDays, enrollmentCode, branchFromStudent, makeDailyRecordId, getActiveEnrollments, deriveClassLabelAt, getSeparateTeukangVisit } from './student-helpers.js';
 import { DEFAULT_HISTORY_LIMIT } from './consultation-filter.js';
 import { createDebouncedWriter } from './save-scheduler.js';
 import { createPromoteEnrollPending } from '@impact7/shared/promote-enroll';
@@ -41,6 +41,18 @@ async function _persistDailyRecord(studentId, targetDate, updates) {
     const base = { student_id: studentId, date: targetDate, ...updates };
     if (student) {
         base.branch = branchFromStudent(student);
+        const cacheMatchesTarget = state.dailyRecordsDate === targetDate;
+        const visit2 = updates.visit2 || (cacheMatchesTarget ? state.dailyRecords[studentId]?.visit2 : null);
+        if (cacheMatchesTarget && !visit2) {
+            const teukangVisit = getSeparateTeukangVisit(student, targetDate);
+            if (teukangVisit) {
+                base.visit2 = {
+                    status: '미확인',
+                    code: enrollmentCode(teukangVisit.enrollment),
+                    scheduled_time: teukangVisit.time,
+                };
+            }
+        }
         // 수업 유형 스냅샷: 당일 저장에만 박는다 — 과거·미래 날짜는 현재 설정 역산이 오산 위험.
         // 반 설정 로드 완료 + 캐시가 그 날짜 반영(dailyRecordsDate) + 라벨 없음일 때만 → 기존 스냅샷 보존,
         // classSettings 공백 상태의 내신/자유 '정규' 오판 고정 방지.

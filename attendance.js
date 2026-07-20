@@ -378,8 +378,7 @@ export function applyAttendance(studentId, displayStatus, force = false, silent 
     return savePromise;
 }
 
-// 분리 등원 특강 보조 출결. 주 출결(attendance/arrival_time)과 독립 —
-// 통계·알림·보고서 소비처는 visit2를 읽지 않는다(스펙 확정).
+// 특강 보조 출결. 주 출결(attendance/arrival_time)과 독립적으로 저장하고 출결현황에 별도 표시한다.
 export function toggleVisit2Attendance(studentId, displayStatus) {
     const firestoreStatus = displayStatus === '특강' ? '미확인' : displayStatus;
     const rec = state.dailyRecords[studentId] || {};
