@@ -65,6 +65,7 @@ export const state = {
     memoTab: 'inbox',
     classSettings: {},
     teachersList: [],
+    staffByLocal: new Map(),
     selectedBranch: null,
     selectedBranchLevel: null,
     selectedClassCode: null,

@@ -21,7 +21,7 @@ import { createPromoteEnrollPending } from '@impact7/shared/promote-enroll';
 import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 import { deriveStudentNumber, studentNumberIdentityKey } from '@impact7/shared/student-number';
 import { staffLabel } from '@impact7/shared/staff-label';
-import { canonicalizeTeacherEmails, teacherDisplayName } from '@impact7/shared/teacher-label';
+import { teacherDisplayName } from '@impact7/shared/teacher-label';
 import { deriveTenure, isAttendedStatus } from '@impact7/shared/history';
 import { MESSAGE_RECIPIENT_SETTINGS_FIELD } from './src/messages/recipient-settings.js';
 import { isScheduledWithdrawalDue } from './student-core.js';
@@ -143,17 +143,25 @@ export function getClassDomains(classCode) {
 
 export async function loadTeachers() {
     try {
-        // homeroom_eligible(HR 교수부 재직 미러, 스윕이 유지)로만 거른다. last_login 최근성 필터는
-        // teachers 쓰기 권한 상실로 로그인 추적이 정체되면 목록을 통째로 비우므로 두지 않는다.
-        const snap = await getDocs(collection(db, 'teachers'));
-        const byEmail = new Map();
+        // 담당 목록·표시이름의 정본은 HR 인사(staff_directory 미러의 english_name).
+        // 로그인 이메일은 규약(영어이름@impact7.kr)으로 파생한다 — staff_directory의 email 필드는
+        // 비어있거나 개인메일이라 쓰지 않는다. staffByLocal(로컬파트→HR 영어이름)로 기존 배정
+        // 이메일(@gw 포함)의 표시이름도 HR에서 해석한다.
+        const snap = await getDocs(collection(db, 'staff_directory'));
+        const byLocal = new Map();
+        const list = [];
         snap.forEach(d => {
-            if (d.data().homeroom_eligible === false) return;
-            byEmail.set(d.id, { email: d.id, ...d.data() });
+            const data = d.data();
+            const en = typeof data.english_name === 'string' ? data.english_name.trim() : '';
+            if (!en) return;
+            byLocal.set(en.toLowerCase(), en);
+            if (data.department === '교수' && data.assignable === true) {
+                list.push({ email: `${en.toLowerCase()}@impact7.kr`, name: en });
+            }
         });
-        state.teachersList = canonicalizeTeacherEmails([...byEmail.keys()]).map(email => byEmail.get(email));
-        state.teachersList.sort((a, b) => getTeacherName(a.email).localeCompare(getTeacherName(b.email), 'ko'));
-        console.log(`[loadTeachers] ${state.teachersList.length}명`);
+        state.staffByLocal = byLocal;
+        state.teachersList = list.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+        console.log(`[loadTeachers] ${state.teachersList.length}명 (HR 재직 교수)`);
     } catch (err) {
         console.error('[loadTeachers] 실패:', err);
     }
@@ -174,8 +182,9 @@ export async function trackTeacherLogin(user) {
 }
 
 export function getTeacherName(email) {
-    // 이메일 로컬파트 = 영어이름 소문자 — 첫 글자만 대문자로 ('edward@…' → 'Edward')
-    return teacherDisplayName(staffLabel(email)) || staffLabel(email);
+    // 표시이름의 정본은 HR 영어이름(staff_directory) — 미로딩·명부밖이면 이메일 로컬파트 파생 폴백.
+    const local = staffLabel(email).toLowerCase();
+    return state.staffByLocal?.get(local) || teacherDisplayName(staffLabel(email)) || staffLabel(email);
 }
 
 // ─── Class Next Homework (반별 다음숙제) ────────────────────────────────────

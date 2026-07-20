@@ -10,7 +10,7 @@ import { msIcon } from './ms-icon.js';
 import { getDayName, studentShortLabel, todayStr } from './src/shared/firestore-helpers.js';
 import { ENROLLABLE_STATUSES, isEnrollableStatus } from '@impact7/shared/enrollment-status';
 import { staffLabel } from '@impact7/shared/staff-label';
-import { isSameTeacher, teacherDisplayName } from '@impact7/shared/teacher-label';
+import { isSameTeacher } from '@impact7/shared/teacher-label';
 import { db } from './firebase-config.js';
 import { doc, getDoc, getDocFromServer, writeBatch } from 'firebase/firestore';
 import { auditUpdate, auditSet, batchUpdate, READ_ONLY } from './audit.js';
@@ -193,7 +193,7 @@ export function renderNaesinList() {
                 : startTime;
 
             const teacherEmail = csGet(classSettings, naesinKey)?.teacher || '';
-            const teacherName = staffLabel(teacherEmail);
+            const teacherName = window.getTeacherName?.(teacherEmail) || staffLabel(teacherEmail);
             const subLine = [naesinCode, teacherName].filter(Boolean).join(' · ');
 
             const isSelected = sid === window.selectedStudentId ? 'active' : '';
@@ -300,7 +300,7 @@ function _setDetailProfileHeader(student, badgeHtml, code, teacherEmail) {
             `<div class="profile-phone"><span class="phone-label">학부모</span>${_esc(student.parent_phone_1 || '')}</div>`;
     }
     if (tagsEl) {
-        const teacherName  = staffLabel(teacherEmail);
+        const teacherName  = window.getTeacherName?.(teacherEmail) || staffLabel(teacherEmail);
         const branch       = window.branchFromStudent?.(student) || '';
         const schoolGrade  = studentShortLabel(student);
         tagsEl.innerHTML =
@@ -841,8 +841,8 @@ function renderNaesinClassDetail(csKey) {
     // 담당
     const teachersList = window.teachersList || [];
     const currentTeacher = cs.teacher || '';
-    const _teacherName = (email) => window.getTeacherName?.(email) || teacherDisplayName(staffLabel(email)) || staffLabel(email);
-    // 폴백도 표시 규약(첫 글자 대문자) 유지, 저장값이 구메일이어도 동일인 매칭 — teacher-label 규약
+    const _teacherName = (email) => window.getTeacherName?.(email) || staffLabel(email);
+    // 표시이름의 정본은 HR(staff_directory) — getTeacherName이 해석. 저장값이 구메일이어도 동일인 매칭.
     // 현재 담임이 목록(homeroom_eligible)에서 빠지면 보존 option 주입 — 빈값 소실 방지(H-1).
     const _preservedTeacherOption = (!currentTeacher || teachersList.some(t => isSameTeacher(t.email, currentTeacher)))
         ? ''
