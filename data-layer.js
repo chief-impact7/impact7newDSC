@@ -143,11 +143,9 @@ export function getClassDomains(classCode) {
 
 export async function loadTeachers() {
     try {
-        const cutoff = Timestamp.fromDate(new Date(Date.now() - 15 * 24 * 60 * 60 * 1000));
-        const q = query(collection(db, 'teachers'), where('last_login', '>=', cutoff));
-        const snap = await getDocs(q);
-        // 구(@gw)·신 메일 중복은 사람당 1건(신메일 우선) — @impact7/shared teacher-label 규약.
-        // homeroom_eligible=false(HR 교수부 퇴직·비교수부)는 담임 후보에서 제외.
+        // homeroom_eligible(HR 교수부 재직 미러, 스윕이 유지)로만 거른다. last_login 최근성 필터는
+        // teachers 쓰기 권한 상실로 로그인 추적이 정체되면 목록을 통째로 비우므로 두지 않는다.
+        const snap = await getDocs(collection(db, 'teachers'));
         const byEmail = new Map();
         snap.forEach(d => {
             if (d.data().homeroom_eligible === false) return;
@@ -155,7 +153,7 @@ export async function loadTeachers() {
         });
         state.teachersList = canonicalizeTeacherEmails([...byEmail.keys()]).map(email => byEmail.get(email));
         state.teachersList.sort((a, b) => getTeacherName(a.email).localeCompare(getTeacherName(b.email), 'ko'));
-        console.log(`[loadTeachers] ${state.teachersList.length}명 (15일 내)`);
+        console.log(`[loadTeachers] ${state.teachersList.length}명`);
     } catch (err) {
         console.error('[loadTeachers] 실패:', err);
     }
