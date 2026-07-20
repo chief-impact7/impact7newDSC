@@ -1397,7 +1397,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
         <div class="detail-card">
             <div class="detail-card-title detail-card-title-row">
                 <span style="display:flex;align-items:center;gap:6px;">
-                    ${msIcon('schedule', '', 'style="color:var(--primary);font-size:18px;"')}
+                    ${msIcon('stethoscope', '', 'style="color:var(--primary);font-size:18px;"')}
                     클리닉
                 </span>
                 ${clinicButtons}
