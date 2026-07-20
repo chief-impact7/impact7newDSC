@@ -1295,7 +1295,12 @@ service cloud.firestore {
     // =========================================================================
     match /exam_sets/{setId} {
       allow read: if isAuthorized();
-      allow create, update, delete: if isExamMember();
+      allow create, delete: if isExamMember();
+      allow update: if isExamMember()
+        && (isExamOwner()
+          || !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'attendanceGeneration', 'attendanceCleanupGenerations'
+          ]));
     }
 
     // =========================================================================

@@ -1,7 +1,7 @@
 import { msIcon } from './ms-icon.js';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
-    collection, getDocs, getDocsFromCache, doc, getDoc, writeBatch, arrayUnion, serverTimestamp
+    collection, getDocs, getDocsFromCache, doc, getDoc, writeBatch, arrayUnion, deleteField, serverTimestamp
 } from 'firebase/firestore';
 import { auth, db } from './firebase-config.js';
 import { ENROLLABLE_STATUSES, isEnrollableStatus } from '@impact7/shared/enrollment-status';
@@ -24,6 +24,8 @@ import { staffLabel } from '@impact7/shared/staff-label';
 import { teacherDisplayName } from '@impact7/shared/teacher-label';
 import {
     buildClassTimeFields,
+    buildReactivationCleanupFields,
+    buildReactivationHistoryBefore,
     hasActiveRegularClass,
     resolveRegularDefaultTime,
 } from './class-setup-enrollment.js';
@@ -843,7 +845,8 @@ window.submitWizard = async function () {
                 timestamp: serverTimestamp(),
             });
         };
-        const _pushStatusChangeLog = (b, docId, beforeStatus, afterStatus, afterText) => {
+        const _pushStatusChangeLog = (b, docId, student, afterStatus, afterText) => {
+            const beforeStatus = student.status || '';
             batchSet(b, doc(collection(db, 'history_logs')), {
                 doc_id: docId,
                 change_type: 'RETURN',
@@ -855,7 +858,7 @@ window.submitWizard = async function () {
             batchSet(b, doc(collection(db, 'history_logs')), {
                 doc_id: docId,
                 change_type: 'STATUS_CHANGE',
-                before: JSON.stringify({ status: beforeStatus || '' }),
+                before: JSON.stringify(buildReactivationHistoryBefore(student)),
                 after: JSON.stringify({ status: afterStatus }),
                 google_login_id: _logActor,
                 timestamp: serverTimestamp(),
@@ -897,10 +900,11 @@ window.submitWizard = async function () {
                     studentUpdate.status_changed_at = serverTimestamp();
                     studentUpdate.status_changed_by = _logActor;
                     studentUpdate.status_previous = student.status || null;
+                    Object.assign(studentUpdate, buildReactivationCleanupFields(deleteField()));
                     _pushStatusChangeLog(
                         batch,
                         student.docId,
-                        student.status || '',
+                        student,
                         '재원',
                         `상태:재원, 반:${d.classCode} (특강 재원전환)`
                     );
