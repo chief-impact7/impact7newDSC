@@ -1,8 +1,12 @@
 // [상담 조회] 순수 뷰 로직 — firebase/DOM 의존 없음 → node:test 가능.
 // 상담 원본 배열을 필터·그룹·표/CSV 행으로 변환한다. 학년/반은 호출측이 students에서
 // 미리 추출한 studentInfoById로 주입(여기서 firebase 헬퍼를 직접 import하지 않음).
+import { teacherDisplayName } from '@impact7/shared/teacher-label';
 
 export const CONSULTATION_COLUMNS = ['날짜', '학생', '학년/반', '강사', '대상', '형태', '유형', '제목', '메모'];
+
+// 상담자명 표시 정규화 — 저장 스냅샷의 대소문자 흔들림(aaron/Aaron)을 HR 영어이름 규약(첫글자만 대문자)으로 통일.
+export const teacherLabel = (c) => teacherDisplayName(c.teacher_name) || '';
 
 // allowedIds가 null이면 전체 통과(필터 미적용). Set이면 student_id 교집합.
 export function filterByStudentIds(list, allowedIds) {
@@ -41,7 +45,7 @@ export function groupByStudent(list) {
 export function groupByTeacher(list) {
   const map = new Map();
   for (const c of list) {
-    const k = c.teacher_name || '(미상)';
+    const k = teacherLabel(c) || '(미상)';
     if (!map.has(k)) map.set(k, { key: k, items: [] });
     map.get(k).items.push(c);
   }
@@ -66,7 +70,7 @@ export function toRow(c, studentInfoById = {}) {
     c.date || '',
     c.student_name || '',
     gradeClass,
-    c.teacher_name || '',
+    teacherLabel(c),
     c.target || '',
     c.method || '',
     c.consultation_type || '',
