@@ -320,36 +320,19 @@ const _reg = { class_type: '정규', level_symbol: 'HA', class_number: '103' };
 const _tk = (over = {}) => ({ class_type: '특강', class_number: 'T1', ...over });
 const _times = (map) => (e) => map[e.class_type === '특강' ? 'tk' : 'reg'] ?? '';
 
-test('findSeparateTeukangVisit: 간격 3시간 이상 → 분리', () => {
+test('findSeparateTeukangVisit: 정규계열+특강은 시간 간격과 무관하게 분리', () => {
     const r = findSeparateTeukangVisit([_reg, _tk()], _times({ reg: '19:10', tk: '12:30' }));
     assert.equal(r.time, '12:30');
     assert.equal(r.enrollment.class_type, '특강');
-});
-
-test('findSeparateTeukangVisit: 간격 3시간 미만 → 통합(null)', () => {
-    assert.equal(findSeparateTeukangVisit([_reg, _tk()], _times({ reg: '19:10', tk: '17:30' })), null);
-});
-
-test('findSeparateTeukangVisit: 경계 — 정확히 180분이면 분리, 179분이면 통합', () => {
-    assert.ok(findSeparateTeukangVisit([_reg, _tk()], _times({ reg: '19:10', tk: '16:10' })));
-    assert.equal(findSeparateTeukangVisit([_reg, _tk()], _times({ reg: '19:10', tk: '16:11' })), null);
-});
-
-test('findSeparateTeukangVisit: visit_mode=separate → 간격 무관 분리', () => {
-    const r = findSeparateTeukangVisit([_reg, _tk({ visit_mode: 'separate' })], _times({ reg: '19:10', tk: '18:00' }));
-    assert.equal(r.time, '18:00');
-});
-
-test('findSeparateTeukangVisit: visit_mode=combined → 간격 무관 통합', () => {
-    assert.equal(findSeparateTeukangVisit([_reg, _tk({ visit_mode: 'combined' })], _times({ reg: '19:10', tk: '12:30' })), null);
+    assert.ok(findSeparateTeukangVisit([_reg, _tk()], _times({ reg: '19:10', tk: '17:30' })));
 });
 
 test('findSeparateTeukangVisit: 특강만 있는 날(주=특강) → null', () => {
     assert.equal(findSeparateTeukangVisit([_tk()], _times({ tk: '12:30' })), null);
 });
 
-test('findSeparateTeukangVisit: 시간 없는 특강은 auto 판정 불가 → null', () => {
-    assert.equal(findSeparateTeukangVisit([_reg, _tk()], _times({ reg: '19:10', tk: '' })), null);
+test('findSeparateTeukangVisit: 시간이 없어도 특강 출결은 분리', () => {
+    assert.ok(findSeparateTeukangVisit([_reg, _tk()], _times({ reg: '19:10', tk: '' })));
 });
 
 test('findSeparateTeukangVisit: 내신도 주 수업으로 취급', () => {
@@ -358,12 +341,16 @@ test('findSeparateTeukangVisit: 내신도 주 수업으로 취급', () => {
     assert.equal(r.time, '12:30');
 });
 
-test('findSeparateTeukangVisit: 주 수업 2개 중 가까운 것 기준 — 근접 정규 있으면 통합', () => {
-    const reg2 = { class_type: '정규', level_symbol: 'HA', class_number: '201' };
-    // 특강 16:00: 정규 14:00과 120분(근접) → 통합. 배열 첫 정규가 19:00이어도 통합이어야 함.
-    const getTime = (e) => {
-        if (e.class_type === '특강') return '16:00';
-        return e.class_number === '201' ? '14:00' : '19:00';
-    };
-    assert.equal(findSeparateTeukangVisit([_reg, reg2, _tk()], getTime), null);
+test('findSeparateTeukangVisit: 알 수 없는 수업유형은 정규계열로 취급하지 않음', () => {
+    const unknown = { class_type: '클리닉', class_number: 'C1' };
+    assert.equal(findSeparateTeukangVisit([unknown, _tk()], _times({ tk: '12:30' })), null);
+});
+
+test('findSeparateTeukangVisit: 특강이 여러 개면 가장 이른 시간을 특강계열 대표로 사용', () => {
+    const late = _tk({ class_number: 'T2' });
+    const early = _tk({ class_number: 'T1' });
+    const getTime = e => e === early ? '12:30' : e === late ? '17:00' : '19:10';
+    const result = findSeparateTeukangVisit([_reg, late, early], getTime);
+    assert.equal(result.enrollment, early);
+    assert.equal(result.time, '12:30');
 });

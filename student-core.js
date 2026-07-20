@@ -150,31 +150,12 @@ export function isOnLeaveAt(s, dateStr) {
 }
 
 // ─── 분리 등원 특강 판정 ─────────────────────────────────────────────────────
-// 같은 날 주 수업(정규/내신/자유)과 특강이 모두 있을 때, 특강이 "별도 등원"인지 판정.
-// visit_mode(수동 override) 우선, 없으면 시작 시간 간격 ≥ 180분으로 자동 판정.
-export const SEPARATE_VISIT_GAP_MIN = 180;
-
-function timeToMinutes(t) {
-    const m = /^(\d{1,2}):(\d{2})/.exec(t || '');
-    return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
-}
-
+// 정규계열과 특강은 수업료가 다르므로 같은 날이면 시간 간격과 무관하게 출결을 분리한다.
 export function findSeparateTeukangVisit(dayEnrollments, getTime) {
-    const mainTimes = dayEnrollments
-        .filter(e => (e.class_type || '정규') !== '특강')
-        .map(e => timeToMinutes(getTime(e)))
-        .filter(m => m !== null);
-    if (mainTimes.length === 0) return null;
-    for (const e of dayEnrollments) {
-        if ((e.class_type || '정규') !== '특강') continue;
-        if (e.visit_mode === 'combined') continue;
-        const time = getTime(e);
-        if (!time) continue;
-        if (e.visit_mode === 'separate') return { enrollment: e, time };
-        const tMin = timeToMinutes(time);
-        if (tMin === null) continue;
-        const nearestGap = Math.min(...mainTimes.map(m => Math.abs(tMin - m)));
-        if (nearestGap >= SEPARATE_VISIT_GAP_MIN) return { enrollment: e, time };
-    }
-    return null;
+    if (!dayEnrollments.some(e => ['정규', '내신', '자유학기'].includes(e.class_type || '정규'))) return null;
+    const teukang = dayEnrollments
+        .filter(e => e.class_type === '특강')
+        .map(enrollment => ({ enrollment, time: getTime(enrollment) || '' }))
+        .sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+    return teukang[0] || null;
 }

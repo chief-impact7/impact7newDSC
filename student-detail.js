@@ -647,7 +647,7 @@ function renderReportCard(records) {
 
     // ── 출석 집계 ──
     const student = state.allStudents.find(s => s.docId === state.selectedStudentId);
-    const attendanceRows = records.map(rec => {
+    const attendanceRows = records.flatMap(rec => {
         const date = rec.date || '';
         const dayName = date ? getDayName(date) : '';
         const status = rec.attendance?.status || '';
@@ -655,14 +655,23 @@ function renderReportCard(records) {
         // 저장 시점 스냅샷(class_label) 우선 — 내신반 삭제·기간 변경 후에도 과거 표시가
         // 보존된다. 스냅샷 없는 옛 기록만 현재 설정으로 역산(fallback).
         const classLabel = rec.class_label || (student && date ? deriveClassLabelAt(student, date) : '');
-        return { date, dayName, status, reason, classLabel };
+        const classTypes = classLabel.split('/');
+        const hasTeukang = rec.visit2
+            || (classTypes.includes('특강') && classTypes.length > 1);
+        if (!hasTeukang) return [{ date, dayName, status, reason, classLabel }];
+        const mainClassLabel = classTypes.filter(label => label !== '특강').join('/') || classLabel;
+        return [
+            { date, dayName, status, reason, classLabel: mainClassLabel },
+            { date, dayName, status: rec.visit2?.status || '', reason: rec.visit2?.reason || '', classLabel: '특강' },
+        ];
     }).filter(r => r.date);
+    const attendanceDayCount = new Set(attendanceRows.map(r => r.date)).size;
 
     const attendanceHtml = `
         <div class="detail-card">
             <div class="detail-card-title">
                 ${msIcon('event_available', '', 'style="color:var(--primary);font-size:18px;"')}
-                출석 (${attendanceRows.length}일)
+                출석 (${attendanceDayCount}일)
             </div>
             <table class="report-attendance-table">
                 <thead><tr><th>날짜</th><th>유형</th><th>구분</th><th>비고</th></tr></thead>
