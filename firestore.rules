@@ -463,7 +463,7 @@ service cloud.firestore {
 
       allow create: if isAuthorized()
         && request.resource.data.keys().hasOnly([
-          'text', 'created_by', 'created_at', 'updated_by', 'updated_at'
+          'text', 'parent_id', 'created_by', 'created_at', 'updated_by', 'updated_at'
         ])
         && request.resource.data.text is string
         && request.resource.data.text != '';
