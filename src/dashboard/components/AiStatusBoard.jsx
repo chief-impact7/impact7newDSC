@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Icon, IconButton } from '@impact7/ui';
+import { Badge, Icon, IconButton } from '@impact7/ui';
 import { ICON_NAME } from '../icon-map.js';
 import { allClassCodes } from '../../../student-core.js';
 import { studentShortLabel, toDateStrKST, allowedStudentIds } from '../../shared/firestore-helpers.js';
@@ -11,6 +11,7 @@ import {
 } from '../lib/ai-status-view.js';
 
 const classLabel = (student) => [...new Set(allClassCodes(student))].join(', ');
+const GROUP_TONES = { risk: 'danger', caution: 'warning', good: 'active', none: 'neutral' };
 
 function FlagList({ title, items }) {
     if (!Array.isArray(items) || !items.length) return null;
@@ -29,6 +30,7 @@ function AiRow({ student, summary, nowMs }) {
     return (
         <details className="ai-row">
             <summary className="ai-row-line">
+                <Icon name={ICON_NAME.chevron_right} size={18} className="ai-row-chevron" aria-hidden="true" />
                 <strong>{student.name}</strong>
                 <span className="ai-sec">{studentShortLabel(student)}</span>
                 <span className="ai-sec">{classLabel(student)}</span>
@@ -105,6 +107,7 @@ export default function AiStatusBoard({
                 <span className="consult-count">
                     {groups.map(g => `${g.label} ${g.items.length}`).join(' · ')}
                 </span>
+                <IconButton icon={ICON_NAME.refresh} label="새로고침" onClick={reload} disabled={loading} />
             </div>
 
             {!total ? (
@@ -118,7 +121,7 @@ export default function AiStatusBoard({
                         open={Boolean(search) || g.key === 'risk' || g.key === 'caution'}>
                         <summary className="consult-group-head">
                             <Icon name={ICON_NAME.chevron_right} size={20} className="consult-group-chevron" aria-hidden="true" />
-                            <span className={`ai-tone-badge ai-tone-${g.key}`}>{g.label}</span>
+                            <Badge tone={GROUP_TONES[g.key]}>{g.label}</Badge>
                             <span className="consult-group-count">{g.items.length}명</span>
                         </summary>
                         {g.key === 'none' ? (
