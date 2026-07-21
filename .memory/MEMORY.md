@@ -33,6 +33,7 @@
 - [feedback_reexport_local_binding.md](feedback_reexport_local_binding.md) — `export {...} from`은 로컬 바인딩 없음, 같은 파일 사용 시 ReferenceError (유지민 상세패널 사고, dist bare-심볼 스캔 진단법)
 
 - [codegraph 활용 가이드](reference_codegraph_guide.md) — 인덱스 현황, 도메인별 탐색 쿼리, 주요 모듈 위치
+- [reference_worktree_env_missing.md](reference_worktree_env_missing.md) — 워크트리엔 .env 없음: dev 빈 화면(콘솔 무에러)·vitest auth/invalid-api-key 원인. 본 클론에서 cp. quality-guard 실제 경로는 IMPACT7/impact7DB
 - [feedback_scheduled_leave_restore.md](feedback_scheduled_leave_restore.md) — 예약 휴원 복원 시 scheduled_leave_status 필수 (김서은 발효 불발 사고) + 휴원·퇴원 전수 감사는 check-leave-period-consistency.mjs 재사용
 - [feedback_prod_data_live_edit_conflict.md](feedback_prod_data_live_edit_conflict.md) — 프로덕션 데이터 삭제/수정 전 최근 history_logs로 강사 실시간 편성 확인. 자유학기/내신은 강사가 운영 중일 확률↑, 사용자 추정만으로 삭제 금지 (FT108 삭제→aaron 17분 뒤 재생성 충돌, 2026-07-07)
 - [project_temp_att_level_missing.md](project_temp_att_level_missing.md) — temp_attendance "저장 실패"는 payload 아닌 필수필드(school/level/grade/branch) 공백 의심. 신청서는 newtest/cloudrun(admin write, rules 우회). dscLevelFromApplication 학교명 fallback + validateApplicationGrade 제출차단
