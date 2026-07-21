@@ -24,7 +24,7 @@
 | 스타일링 | CSS (`:root` 변수 기반) |
 | 디자인 시스템 | Google Material Design 3 |
 | Backend/DB | Firebase (Auth, Firestore) |
-| Auth | Google Sign-In (popup), `@gw.impact7.kr` / `@impact7.kr` 도메인만 허용 |
+| Auth | Google Sign-In (popup), `@impact7.kr` 도메인만 허용 |
 ---
 
 ## 3. 파일 구조

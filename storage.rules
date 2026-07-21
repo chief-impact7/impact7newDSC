@@ -5,8 +5,7 @@ service firebase.storage {
     function isAuthorized() {
       return request.auth != null
         && request.auth.token.email_verified == true
-        && (request.auth.token.email.matches('.*@gw\\.impact7\\.kr$')
-            || request.auth.token.email.matches('.*@impact7\\.kr$'));
+        && request.auth.token.email.matches('.*@impact7\\.kr$');
     }
 
     // === impact7exam ===
@@ -49,6 +48,15 @@ service firebase.storage {
       allow create, update: if isAuthorized()
         && request.resource.size < 15 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
+      allow delete: if isAuthorized();
+    }
+
+    // === impact7board ===
+    // 칸반 카드 첨부파일(자료 공유). 20MB 이하.
+    match /board_attachments/{cardId}/{fileName} {
+      allow read: if isAuthorized();
+      allow create, update: if isAuthorized()
+        && request.resource.size < 20 * 1024 * 1024;
       allow delete: if isAuthorized();
     }
   }

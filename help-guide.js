@@ -19,7 +19,7 @@ const TABS = [
         </h3>
         <ol class="help-guide-steps">
           <li>우측 상단의 <strong>G</strong> 아바타를 클릭합니다.</li>
-          <li>Google 계정으로 로그인합니다. (<strong>@impact7.kr</strong> 또는 <strong>@gw.impact7.kr</strong> 계정만 가능)</li>
+          <li>Google 계정으로 로그인합니다. (<strong>@impact7.kr</strong> 계정만 가능)</li>
           <li>로그인에 성공하면 아바타가 프로필 사진으로 바뀌고, 학생 데이터가 로드됩니다.</li>
         </ol>
       </section>

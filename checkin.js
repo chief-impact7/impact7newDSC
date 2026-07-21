@@ -214,7 +214,7 @@ onAuthStateChanged(auth, async (user) => {
     }
     await dataAuthReady();
     const email = user.email || '';
-    const allowed = user.emailVerified && (email.endsWith('@impact7.kr') || email.endsWith('@gw.impact7.kr'));
+    const allowed = user.emailVerified && email.endsWith('@impact7.kr');
     if (!allowed) {
         await logout();
         showScreen('login');

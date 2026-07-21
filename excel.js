@@ -131,9 +131,9 @@ const SECTIONS = [
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         const email = user.email || '';
-        const allowed = email.endsWith('@impact7.kr') || email.endsWith('@gw.impact7.kr');
+        const allowed = email.endsWith('@impact7.kr');
         if (!user.emailVerified || !allowed) {
-            alert('허용되지 않은 계정입니다.\n학원 계정(@impact7.kr 또는 @gw.impact7.kr)으로 다시 로그인해주세요.');
+            alert('허용되지 않은 계정입니다.\n학원 계정(@impact7.kr)으로 다시 로그인해주세요.');
             await logout();
             return;
         }

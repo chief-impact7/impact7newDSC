@@ -603,9 +603,9 @@ onAuthStateChanged(auth, async (user) => {
         // dataApp(Firestore) auth 미러링 완료 보장 — 미완이면 첫 쿼리가 unauthenticated로 거부됨
         await dataAuthReady();
         const email = user.email || '';
-        const allowed = email.endsWith('@impact7.kr') || email.endsWith('@gw.impact7.kr');
+        const allowed = email.endsWith('@impact7.kr');
         if (!user.emailVerified || !allowed) {
-            alert('허용되지 않은 계정입니다.\n학원 계정(@impact7.kr 또는 @gw.impact7.kr)으로 다시 로그인해주세요.');
+            alert('허용되지 않은 계정입니다.\n학원 계정(@impact7.kr)으로 다시 로그인해주세요.');
             await logout();
             return;
         }
