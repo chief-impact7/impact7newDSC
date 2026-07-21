@@ -39,7 +39,7 @@ import {
     initDiagnosticDeps, setupTempAutofillListeners,
     renderTempAttendanceDetail, deleteTempAttendance, cancelTempAttendance,
     openTempAttendanceModal, openTempAttendanceForEdit, saveTempAttendance,
-    openContactAsTemp
+    openDiagnosticScheduleModal, saveDiagnosticSchedule
 } from './diagnostic.js';
 import {
     initLeaveRequestDeps,
@@ -241,7 +241,8 @@ window.cancelTempAttendance = cancelTempAttendance;
 window.openTempAttendanceModal = openTempAttendanceModal;
 window.openTempAttendanceForEdit = openTempAttendanceForEdit;
 window.saveTempAttendance = saveTempAttendance;
-window.openContactAsTemp = openContactAsTemp;
+window.openDiagnosticScheduleModal = openDiagnosticScheduleModal;
+window.saveDiagnosticSchedule = saveDiagnosticSchedule;
 
 // leave-request.js 의존성 주입 + window 노출
 initLeaveRequestDeps({ renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, _isOlderThan, _toDate, loadWithdrawnStudents, renderFilterChips });
@@ -888,7 +889,7 @@ window.confirmDiagnosticCancel = confirmDiagnosticCancel;
 
 // _makeContactDocId, _tryTempContactAutofill, openTempAttendanceModal,
 // _upsertStudentFromTemp, saveTempAttendance, openTempAttendanceForEdit,
-// renderTempEditHistory, openContactAsTemp → imported from diagnostic.js
+// renderTempEditHistory → imported from diagnostic.js
 // openBulkMemo, saveBulkMemo, openBulkNotify, saveBulkNotify → imported from bulk-mode.js
 window.openBulkMemo = openBulkMemo;
 window.saveBulkMemo = saveBulkMemo;

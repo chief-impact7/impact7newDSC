@@ -8,7 +8,7 @@ import { state, TEMP_FIELD_LABELS } from './state.js';
 import { esc, formatTime12h, showSaveIndicator, stripEmailDomain, _fmtTs } from './ui-utils.js';
 import { auditDelete, auditUpdate, auditSet, auditAdd } from './audit.js';
 import { todayStr } from './src/shared/firestore-helpers.js';
-import { SCHOOL_FIELD, schoolLevelGradeLabel } from '@impact7/shared/student-label';
+import { SCHOOL_FIELD, currentSchool, schoolLevelGradeLabel } from '@impact7/shared/student-label';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { normalizeStudentMemos } from './role-memo.js';
 
@@ -249,7 +249,7 @@ export function openTempAttendanceModal() {
     document.getElementById('temp-att-student-phone').value = '';
     document.getElementById('temp-att-parent-phone').value = '';
     document.getElementById('temp-att-memo').value = '';
-    // 진단평가일/시간은 newtest 자동등록으로 대체 — 수동 첫데이터는 미예약이 기본
+    // 진단평가일/시간은 newtest 자동등록 또는 상세패널 '진단평가 예약' 모달이 담당 — 첫데이터는 미예약이 기본
     document.getElementById('temp-att-date').value = '';
     document.getElementById('temp-att-time').value = '';
     document.getElementById('temp-attendance-modal').style.display = '';
@@ -369,16 +369,16 @@ export async function saveTempAttendance() {
     }
 }
 
-async function _doCreateTempAttendance(data) {
+async function _doCreateTempAttendance(data, { modalId = 'temp-attendance-modal', upsertStudent = true } = {}) {
     data.created_at = serverTimestamp();
     data.created_by = state.currentUser?.email || '';
 
     // 날짜 없는 첫데이터는 방문 예약이 아니다 — temp_attendance에 쓰면
     // 날짜 기반 쿼리(loadTempAttendances)에 영원히 안 잡히는 고아 문서가 된다
-    const writes = [_upsertStudentFromTemp(data)];
+    const writes = upsertStudent ? [_upsertStudentFromTemp(data)] : [];
     if (data.temp_date) writes.push(auditAdd(collection(db, 'temp_attendance'), data));
     await Promise.all(writes);
-    document.getElementById('temp-attendance-modal').style.display = 'none';
+    document.getElementById(modalId).style.display = 'none';
 
     if (data.temp_date === state.selectedDate) {
         await loadTempAttendances(state.selectedDate);
@@ -440,7 +440,7 @@ async function _doUpdateTempAttendance(docId, existing, data) {
     showSaveIndicator('saved');
 }
 
-// phone은 raw 입력(010-1234-5678 vs 01012345678)이라 클라이언트 정규화 비교 필요
+// 전화번호는 raw 입력(010-1234-5678 vs 01012345678)이라 클라이언트 정규화 비교 필요
 async function _findUpcomingTempByContact(name, phone) {
     if (!name || !phone) return [];
     const target = _normalizePhone(phone);
@@ -449,7 +449,8 @@ async function _findUpcomingTempByContact(name, phone) {
     const today = todayStr();
     return snap.docs
         .map(d => ({ docId: d.id, ...d.data() }))
-        .filter(t => _normalizePhone(t.parent_phone_1) === target && (t.temp_date || '') >= today);
+        .filter(t => [t.parent_phone_1, t.student_phone].some(value => _normalizePhone(value) === target)
+            && (t.temp_date || '') >= today);
 }
 
 function _hideDuplicatePrompt() {
@@ -559,21 +560,69 @@ export function renderTempEditHistory(history) {
     `;
 }
 
-// 비원생 클릭 → 진단평가 모달 열기 + 자동채움
-export async function openContactAsTemp(contactId) {
+let _diagnosticScheduleStudentId = null;
+
+export async function openDiagnosticScheduleModal(studentId) {
     try {
-        const snap = await getDoc(doc(db, 'students', contactId));
+        const snap = await getDoc(doc(db, 'students', studentId));
         if (!snap.exists()) return;
-        const c = snap.data();
-        openTempAttendanceModal();
-        document.getElementById('temp-att-name').value = c.name || '';
-        document.getElementById('temp-att-branch').value = c.branch || '';
-        document.getElementById('temp-att-school').value = c.school || '';
-        document.getElementById('temp-att-level').value = c.level || '';
-        document.getElementById('temp-att-grade').value = c.grade || '';
-        document.getElementById('temp-att-student-phone').value = c.student_phone || '';
-        document.getElementById('temp-att-parent-phone').value = c.parent_phone_1 || '';
-    } catch (e) { /* 네트워크 오류 시 무시 */ }
+        _diagnosticScheduleStudentId = studentId;
+        document.getElementById('diagnostic-schedule-student').textContent = snap.data().name || '';
+        document.getElementById('diagnostic-schedule-date').value = '';
+        document.getElementById('diagnostic-schedule-time').value = '';
+        document.getElementById('diagnostic-schedule-modal').style.display = '';
+        document.getElementById('diagnostic-schedule-date').focus();
+    } catch (err) {
+        console.error('진단평가 예약 열기 실패:', err);
+        alert('학생 정보를 불러오지 못했습니다.');
+    }
+}
+
+export async function saveDiagnosticSchedule() {
+    const dateEl = document.getElementById('diagnostic-schedule-date');
+    const tempDate = dateEl.value;
+    if (!tempDate) { alert('날짜를 선택하세요.'); dateEl.focus(); return; }
+    if (!_diagnosticScheduleStudentId) return;
+
+    const saveBtn = document.getElementById('diagnostic-schedule-save-btn');
+    saveBtn.disabled = true;
+    try {
+        const snap = await getDoc(doc(db, 'students', _diagnosticScheduleStudentId));
+        if (!snap.exists()) { alert('학생 정보를 찾을 수 없습니다.'); return; }
+        const student = snap.data();
+        const data = {
+            name: student.name || '',
+            branch: student.branch || '',
+            school: currentSchool(student),
+            level: student.level || '',
+            grade: String(student.grade || ''),
+            student_phone: student.student_phone || '',
+            parent_phone_1: student.parent_phone_1 || '',
+            memo: '',
+            temp_date: tempDate,
+            temp_time: document.getElementById('diagnostic-schedule-time').value,
+        };
+        const missing = ['name', 'branch', 'school', 'level', 'grade'].filter(key => !data[key]);
+        if (missing.length) {
+            alert(`학생 정보가 부족해 예약할 수 없습니다: ${missing.join(', ')}`);
+            return;
+        }
+
+        const duplicates = await _findUpcomingTempByContact(data.name, data.parent_phone_1 || data.student_phone);
+        duplicates.sort((a, b) => (a.temp_date || '').localeCompare(b.temp_date || ''));
+        if (duplicates.length) {
+            const existing = duplicates[0];
+            const time = existing.temp_time ? ` ${formatTime12h(existing.temp_time)}` : '';
+            if (!confirm(`${existing.temp_date}${time}에 이미 예약되어 있습니다.\n중복 등록하시겠습니까?`)) return;
+        }
+
+        await _doCreateTempAttendance(data, { modalId: 'diagnostic-schedule-modal', upsertStudent: false });
+    } catch (err) {
+        console.error('진단평가 예약 저장 실패:', err);
+        alert(`저장에 실패했습니다.\n${err.message || err}`);
+    } finally {
+        saveBtn.disabled = false;
+    }
 }
 
 // 이름·학부모전화 입력 후 students 자동채움 이벤트
