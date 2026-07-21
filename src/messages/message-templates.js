@@ -7,6 +7,27 @@ const COLL = 'message_templates';
 const LEGACY_KEY = 'dsc-message-templates';
 const MIGRATED_KEY = 'dsc-message-templates-migrated';
 
+// 모듈 레벨 캐시(stale-while-revalidate) — 탭 전환·재마운트마다 Firestore 왕복을 기다리지
+// 않도록, 마지막으로 받은 목록을 즉시 보여주고 새로고침은 백그라운드에서 구독자에게 통지한다.
+let cache = null;
+const subscribers = new Set();
+
+function setCache(list) {
+  cache = list;
+  for (const fn of subscribers) fn(list);
+}
+
+// 네트워크를 기다리지 않는 동기 조회 — 캐시가 아직 없으면 빈 배열(첫 로딩 화면과 동일 취급).
+export function getCachedTemplates() {
+  return cache ?? [];
+}
+
+// loadTemplates()가 갱신될 때마다(마운트·refresh·저장·삭제) 호출된다. 구독 해제 함수를 반환.
+export function subscribeTemplates(fn) {
+  subscribers.add(fn);
+  return () => subscribers.delete(fn);
+}
+
 // 제목이 곧 문서 id — 금지문자('/')는 전각 치환, 예약 id('.', '..', '__x__')는 접두사로 회피.
 // 같은 제목=덮어쓰기 규약 유지(표시는 data.title 기준이라 id 변형은 보이지 않음).
 function idOf(title) {
@@ -30,6 +51,7 @@ export async function loadTemplates() {
     return { title: x.title ?? d.id, content: x.content ?? '', updatedAtMs: x.updated_at?.toMillis?.() ?? 0 };
   });
   list.sort((a, b) => b.updatedAtMs - a.updatedAtMs);
+  setCache(list);
   return list;
 }
 

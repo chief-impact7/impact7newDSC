@@ -1,12 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconButton } from '@impact7/ui';
-import { loadTemplates, saveTemplate, deleteTemplate, migrateLegacyTemplates } from '../message-templates.js';
+import { loadTemplates, saveTemplate, deleteTemplate, migrateLegacyTemplates, getCachedTemplates, subscribeTemplates } from '../message-templates.js';
 import { ICON_NAME } from '../../dashboard/icon-map.js';
 
 // 자주 쓰는 문구 불러오기/저장 — 전 직원 공유(Firestore). content를 받아 저장하고,
 // 선택 시 onPick(content)로 본문에 채운다. 첫 마운트에 개인 단말(localStorage) 템플릿을 1회 이관.
 export default function TemplateBar({ content, onPick }) {
-  const [list, setList] = useState([]);
+  const [list, setList] = useState(getCachedTemplates);
   const [sel, setSel] = useState('');
   const [titleInput, setTitleInput] = useState('');
   const [saveOpen, setSaveOpen] = useState(false);
@@ -37,18 +37,36 @@ export default function TemplateBar({ content, onPick }) {
     };
   }, [manageOpen]);
 
+  // position:fixed로 뷰포트에 띄운 패널이라 화면 아래로 넘치면 body 스크롤로도 닿을 수 없다
+  // (닿으려는 스크롤 자체가 위 핸들러에서 패널을 닫아버림). 열리자마자, 그리고 백그라운드
+  // 새로고침으로 목록 개수(= 실제 높이)가 바뀔 때마다 실측 높이로 위로 당겨 붙인다.
+  useLayoutEffect(() => {
+    if (!manageOpen || !managePos) return;
+    const rect = managePanelRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const overflow = rect.bottom - (window.innerHeight - 8);
+    if (overflow > 0) {
+      setManagePos((pos) => {
+        const top = Math.max(8, pos.top - overflow);
+        return top === pos.top ? pos : { ...pos, top };
+      });
+    }
+  }, [manageOpen, managePos, list.length]);
+
+  // stale-while-revalidate: 캐시를 즉시 보여주고(위 useState) 구독으로 이후 모든 갱신
+  // (마운트 새로고침·refresh()·저장·삭제)을 반영한다. 목록 표시가 네트워크 왕복을 기다리지 않는다.
   useEffect(() => {
-    let alive = true;
+    const unsubscribe = subscribeTemplates(setList);
     (async () => {
       await migrateLegacyTemplates();
-      const l = await loadTemplates().catch(() => []);
-      if (alive) setList(l);
+      await loadTemplates().catch(() => {});
     })();
-    return () => { alive = false; };
+    return unsubscribe;
   }, []);
 
-  async function refresh() {
-    setList(await loadTemplates().catch(() => list));
+  // await하지 않는다 — 호출부는 즉시 반환되고, 결과는 구독을 통해 list에 반영된다.
+  function refresh() {
+    loadTemplates().catch(() => {});
   }
 
   function pick(title) {
@@ -60,7 +78,7 @@ export default function TemplateBar({ content, onPick }) {
     if (busy || !titleInput.trim() || !content.trim()) return;
     setBusy(true); setErr('');
     try {
-      setList(await saveTemplate(titleInput, content));
+      await saveTemplate(titleInput, content);
       setSel(titleInput.trim()); setTitleInput(''); setSaveOpen(false);
     } catch (e) {
       setErr('저장 실패: ' + (e?.message || e));
@@ -73,7 +91,7 @@ export default function TemplateBar({ content, onPick }) {
     if (!confirm(`템플릿 "${title}"을(를) 삭제할까요?\n모든 직원에게서 삭제됩니다.`)) return;
     setBusy(true); setErr('');
     try {
-      setList(await deleteTemplate(title));
+      await deleteTemplate(title);
       if (sel === title) setSel('');
     } catch (e) {
       setErr('삭제 실패: ' + (e?.message || e));
@@ -99,11 +117,11 @@ export default function TemplateBar({ content, onPick }) {
       </select>
       <span ref={manageAnchorRef}>
         <IconButton icon={ICON_NAME.quiz} label="템플릿 관리" aria-expanded={manageOpen}
-          onClick={async () => {
+          onClick={() => {
             if (!manageOpen) {
-              await refresh();
               const rect = manageAnchorRef.current?.getBoundingClientRect();
               if (rect) setManagePos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+              refresh();
             }
             setManageOpen(!manageOpen);
           }} />
