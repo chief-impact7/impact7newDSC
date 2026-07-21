@@ -454,6 +454,22 @@ service cloud.firestore {
         && resource.data.get('created_by', '') == request.auth.token.email;
     }
 
+    // [Board] 카드 댓글 — board_cards 서브컬렉션(impact7board CardModal). 수정 개념 없음(update 불허).
+    // 삭제는 신뢰 직원 전제로 서명 사용자 전체 허용 — 본인 댓글 삭제 + 카드 영구 삭제 시
+    // writeBatch 일괄 정리(카드 작성자가 타인 댓글도 지움) 둘 다 이 규칙 하나로 커버.
+    match /board_cards/{cardId}/comments/{commentId} {
+      allow read: if isAuthorized();
+
+      allow create: if isAuthorized()
+        && request.resource.data.keys().hasOnly([
+          'text', 'created_by', 'created_at', 'updated_by', 'updated_at'
+        ])
+        && request.resource.data.text is string
+        && request.resource.data.text != '';
+
+      allow delete: if isAuthorized();
+    }
+
     // [Board] HR 직원현황의 안전 명부 미러 — 이름·이메일·부서·재직 여부만 서버가 동기화한다.
     match /staff_directory/{staffId} {
       allow read: if isAuthorized();
@@ -827,13 +843,22 @@ service cloud.firestore {
     match /teachers/{email} {
       allow read: if isAuthorized();
 
-      allow create, update: if isAuthorized()
+      allow create: if isAuthorized()
         && request.resource.data.keys().hasOnly([
           'email', 'display_name', 'photo_url', 'last_login',
           'updated_by', 'updated_at'
         ])
         && request.resource.data.email is string
         && withinFieldLimit(10);
+
+      // update는 바뀐 키만 검사 — 스윕이 심은 homeroom_eligible·board_assignable가
+      // 병합 결과에 있어도 통과하되, 클라이언트가 그 필드를 변경·자기부여하지 못하게 막는다.
+      allow update: if isAuthorized()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'email', 'display_name', 'photo_url', 'last_login',
+          'updated_by', 'updated_at'
+        ])
+        && request.resource.data.email is string;
 
       allow delete: if false;
     }
