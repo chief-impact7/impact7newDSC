@@ -22,6 +22,18 @@ export default defineConfig({
                 checkin: resolve(__dirname, 'checkin.html'),
                 messages: resolve(__dirname, 'messages.html'),
             },
+            output: {
+                manualChunks(id) {
+                    if (!id.includes('node_modules') || id.endsWith('.css')) return;
+                    if (id.includes('@firebase/firestore') || id.includes('firebase/firestore') || id.includes('@firebase/webchannel-wrapper') || id.includes('/re2js/')) return 'firebase-firestore';
+                    if (id.includes('@firebase/functions') || id.includes('firebase/functions')) return 'firebase-functions';
+                    if (id.includes('@firebase/storage') || id.includes('firebase/storage')) return 'firebase-storage';
+                    if (id.includes('@firebase/auth') || id.includes('@firebase/app') || id.includes('firebase/app') || id.includes('firebase/auth') || id.includes('@firebase/component') || id.includes('@firebase/util') || id.includes('@firebase/logger') || id.includes('/idb/')) return 'firebase-auth';
+                    if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) return 'react';
+                    if (id.includes('/@impact7/ui/')) return 'impact7-ui';
+                    if (id.includes('/@impact7/shared/')) return 'impact7-shared';
+                },
+            },
         },
     },
     server: {
