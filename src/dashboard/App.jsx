@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
-import { Icon, IconButton } from '@impact7/ui';
 import { ICON_NAME } from './icon-map.js';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, dataAuthReady } from '../../firebase-config.js';
@@ -8,13 +7,16 @@ import { useStudents, useDashboardData, useConsultations, useAiStatusData } from
 import { branchFromStudent, enrollmentCode, todayStr, fetchSemesterSettings, getSemestersForDate, studentGradeKey } from '../shared/firestore-helpers.js';
 import { openKoreanDatePicker } from '../../date-picker.js';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
-import DailyLogBoard from './components/DailyLogBoard.jsx';
 import GradeFilter from './components/GradeFilter.jsx';
 // 일별 뷰(기본)는 echarts를 안 쓴다. 차트를 쓰는 기간 뷰와 상담 뷰는 lazy 로드해
 // 일별 첫 페인트에서 echarts(~수백KB)를 빼 초기 로딩을 가볍게 한다.
 const PeriodLogBoard = lazy(() => import('./components/PeriodLogBoard.jsx'));
 const ConsultationBoard = lazy(() => import('./components/ConsultationBoard.jsx'));
 const AiStatusBoard = lazy(() => import('./components/AiStatusBoard.jsx'));
+const DailyLogBoard = lazy(() => import('./components/DailyLogBoard.jsx'));
+// ErrorBoundary는 lazy 금지 — 청크 로드 전에 터진 오류를 잡지 못한다.
+const Icon = lazy(() => import('@impact7/ui').then(module => ({ default: module.Icon })));
+const IconButton = lazy(() => import('@impact7/ui').then(module => ({ default: module.IconButton })));
 
 const pad2 = (value) => String(value).padStart(2, '0');
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})/;
@@ -86,6 +88,24 @@ function SkeletonCard() {
     );
 }
 
+function LoadingShell() {
+    return (
+        <div className="dash-app">
+            <header className="dash-header">
+                <div className="dash-header-left">
+                    <h1 className="dash-title">Impact7 DSC</h1>
+                    <span className="dash-view-toggle" role="group" aria-label="화면 전환">
+                        <button type="button" className="active" disabled>로그북</button>
+                        <button type="button" disabled>상담</button>
+                        <button type="button" disabled>AI</button>
+                    </span>
+                </div>
+            </header>
+            <div className="dash-grid"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>
+        </div>
+    );
+}
+
 export default function App() {
     const [user, setUser] = useState(null);
     const [authLoading, setAuthLoading] = useState(true);
@@ -126,6 +146,7 @@ export default function App() {
                 setUser(null);
             }
             setAuthLoading(false);
+            globalThis.performance?.mark?.('auth-resolved');
         });
         return unsub;
     }, []);
@@ -237,7 +258,7 @@ export default function App() {
 
     // ─── 로그인 화면 ───
     if (authLoading) {
-        return <div className="dash-loading">로딩 중...</div>;
+        return <LoadingShell />;
     }
 
     if (!user) {
@@ -259,28 +280,31 @@ export default function App() {
 
     if (error || dashError) {
         return (
-            <div role="alert" style={{
-                padding: '20px',
-                margin: '20px',
-                background: '#fce8e6',
-                color: '#c5221f',
-                borderRadius: '8px',
-                textAlign: 'center'
-            }}>
-                <p style={{ fontWeight: 500 }}>데이터 로드 실패</p>
-                <p style={{ fontSize: '14px', marginTop: '8px' }}>{(error || dashError)?.message || '알 수 없는 오류가 발생했습니다'}</p>
-                <IconButton
-                    icon={ICON_NAME.refresh}
-                    label="새로고침"
-                    onClick={() => window.location.reload()}
-                    style={{ marginTop: '12px' }}
-                />
-            </div>
+            <Suspense fallback={<LoadingShell />}>
+                <div role="alert" style={{
+                    padding: '20px',
+                    margin: '20px',
+                    background: '#fce8e6',
+                    color: '#c5221f',
+                    borderRadius: '8px',
+                    textAlign: 'center'
+                }}>
+                    <p style={{ fontWeight: 500 }}>데이터 로드 실패</p>
+                    <p style={{ fontSize: '14px', marginTop: '8px' }}>{(error || dashError)?.message || '알 수 없는 오류가 발생했습니다'}</p>
+                    <IconButton
+                        icon={ICON_NAME.refresh}
+                        label="새로고침"
+                        onClick={() => window.location.reload()}
+                        style={{ marginTop: '12px' }}
+                    />
+                </div>
+            </Suspense>
         );
     }
 
     return (
-        <div className="dash-app">
+        <Suspense fallback={<LoadingShell />}>
+            <div className="dash-app">
             {/* 상단 바 */}
             <header className="dash-header">
                 <div className="dash-header-left">
@@ -478,6 +502,7 @@ export default function App() {
                     )}
                 </div>
             )}
-        </div>
+            </div>
+        </Suspense>
     );
 }

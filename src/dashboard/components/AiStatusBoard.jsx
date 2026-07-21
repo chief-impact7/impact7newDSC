@@ -118,7 +118,7 @@ export default function AiStatusBoard({
             ) : (
                 groups.map(g => (
                     <details key={g.key} className="ai-group"
-                        open={Boolean(search) || g.key === 'risk' || g.key === 'caution'}>
+                        open={Boolean(search)}>
                         <summary className="consult-group-head">
                             <Icon name={ICON_NAME.chevron_right} size={20} className="consult-group-chevron" aria-hidden="true" />
                             <Badge tone={GROUP_TONES[g.key]}>{g.label}</Badge>

@@ -96,7 +96,8 @@ export async function fetchStudentsFromCache(includeEnded = false) {
     }
 }
 
-const queryDocs = async (q) => (await getDocs(q)).docs.map(d => ({ id: d.id, ...d.data() }));
+const queryDocsWith = async (fetchDocs, q) => (await fetchDocs(q)).docs.map(d => ({ id: d.id, ...d.data() }));
+const queryDocs = (q) => queryDocsWith(getDocs, q);
 
 // 기간별 daily_checks (startDate ~ endDate 포함)
 export async function fetchDailyChecksRange(startDate, endDate) {
@@ -129,8 +130,8 @@ export function fetchClassSettingsMap() {
     return fetchClassSettingsMapWith(getDocs);
 }
 
-async function fetchDailyRecordsForDate(date) {
-    return queryDocs(query(
+async function fetchDailyRecordsForDate(date, fetchDocs = getDocs) {
+    return queryDocsWith(fetchDocs, query(
         collection(db, 'daily_records'),
         where('date', '==', date)
     ));
@@ -144,14 +145,14 @@ export async function fetchDailyRecordsRange(startDate, endDate) {
     ));
 }
 
-async function fetchTempAttendancesForDate(date) {
-    return queryDocs(query(
+async function fetchTempAttendancesForDate(date, fetchDocs = getDocs) {
+    return queryDocsWith(fetchDocs, query(
         collection(db, 'temp_attendance'),
         where('temp_date', '==', date)
     ));
 }
 
-async function fetchScheduledTaskRows(collectionName, date) {
+async function fetchScheduledTaskRows(collectionName, date, fetchDocs = getDocs) {
     const scheduledQ = query(
         collection(db, collectionName),
         where('scheduled_date', '==', date)
@@ -161,8 +162,8 @@ async function fetchScheduledTaskRows(collectionName, date) {
         where('source_date', '==', date)
     );
     const [scheduledSnap, sourceSnap] = await Promise.all([
-        getDocs(scheduledQ),
-        getDocs(sourceQ),
+        fetchDocs(scheduledQ),
+        fetchDocs(sourceQ),
     ]);
     const map = new Map();
     const add = (docSnap) => map.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
@@ -171,7 +172,7 @@ async function fetchScheduledTaskRows(collectionName, date) {
     return [...map.values()];
 }
 
-async function fetchAbsenceRecordsForDailyLog(date) {
+async function fetchAbsenceRecordsForDailyLog(date, fetchDocs = getDocs) {
     const absenceQ = query(
         collection(db, 'absence_records'),
         where('absence_date', '==', date)
@@ -181,8 +182,8 @@ async function fetchAbsenceRecordsForDailyLog(date) {
         where('makeup_date', '==', date)
     );
     const [absenceSnap, makeupSnap] = await Promise.all([
-        getDocs(absenceQ),
-        getDocs(makeupQ),
+        fetchDocs(absenceQ),
+        fetchDocs(makeupQ),
     ]);
     const map = new Map();
     const add = (docSnap) => map.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
@@ -209,7 +210,7 @@ export const finalApprovalDate = (request) => {
     return new Date(Math.max(...dates.map(date => date.getTime())));
 };
 
-async function fetchApprovedLeaveRequestsForDate(date) {
+async function fetchApprovedLeaveRequestsForDate(date, fetchDocs = getDocs) {
     // 전체 approved 스캔 대신 두 승인 시각 각각의 하루 범위만 조회한다(승인 누적과 무관한 비용). F-10.
     // finalApprovalDate = max(approved_at, teacher_approved_at)이므로 두 쿼리 합집합 후 최종일을 재검증.
     const startDate = parseDateKST(date);
@@ -217,7 +218,7 @@ async function fetchApprovedLeaveRequestsForDate(date) {
     const dayStart = Timestamp.fromDate(startDate);
     const dayEnd = Timestamp.fromDate(new Date(startDate.getTime() + 24 * 60 * 60 * 1000)); // KST는 DST 없음
 
-    const byField = (field) => getDocs(query(
+    const byField = (field) => fetchDocs(query(
         collection(db, 'leave_requests'),
         where('status', '==', 'approved'),
         where(field, '>=', dayStart),
@@ -239,7 +240,8 @@ async function fetchApprovedLeaveRequestsForDate(date) {
     return [...byId.values()];
 }
 
-export async function fetchDashboardDailyLogData(date) {
+async function fetchDashboardDailyLogDataWith(date, fetchDocs, tolerateOptionalErrors) {
+    const fetchOptional = (q) => tolerateOptionalErrors ? fetchDocs(q).catch(() => null) : fetchDocs(q);
     const [
         dailyRecords,
         tempAttendances,
@@ -251,15 +253,15 @@ export async function fetchDashboardDailyLogData(date) {
         attendanceEventsSnap,
         absenceNoticesSnap,
     ] = await Promise.all([
-        fetchDailyRecordsForDate(date),
-        fetchTempAttendancesForDate(date),
-        fetchScheduledTaskRows('hw_fail_tasks', date),
-        fetchScheduledTaskRows('test_fail_tasks', date),
-        fetchAbsenceRecordsForDailyLog(date),
-        fetchApprovedLeaveRequestsForDate(date),
-        fetchClassSettingsMap(),
-        getDocs(query(collection(db, 'attendance_events'), where('date_kst', '==', date))).catch(() => null),
-        getDocs(query(collection(db, 'absence_notices'), where('date', '==', date))).catch(() => null),
+        fetchDailyRecordsForDate(date, fetchDocs),
+        fetchTempAttendancesForDate(date, fetchDocs),
+        fetchScheduledTaskRows('hw_fail_tasks', date, fetchDocs),
+        fetchScheduledTaskRows('test_fail_tasks', date, fetchDocs),
+        fetchAbsenceRecordsForDailyLog(date, fetchDocs),
+        fetchApprovedLeaveRequestsForDate(date, fetchDocs),
+        fetchClassSettingsMapWith(fetchDocs),
+        fetchOptional(query(collection(db, 'attendance_events'), where('date_kst', '==', date))),
+        fetchOptional(query(collection(db, 'absence_notices'), where('date', '==', date))),
     ]);
     const attendanceEvents = (attendanceEventsSnap?.docs ?? []).map(d => {
         const data = d.data();
@@ -290,6 +292,21 @@ export async function fetchDashboardDailyLogData(date) {
         attendanceEvents,
         absenceNoticeStatus,
     };
+}
+
+export function fetchDashboardDailyLogData(date) {
+    return fetchDashboardDailyLogDataWith(date, getDocs, true);
+}
+
+export async function fetchDashboardDailyLogDataFromCache(date) {
+    try {
+        const data = await fetchDashboardDailyLogDataWith(date, getDocsFromCache, false);
+        // 오늘 daily_records가 캐시에 없으면(콜드 캐시) 선표시하지 않는다 —
+        // classSettings만 있는 상태로 그리면 '결석 0' 오탐 화면이 먼저 뜬다.
+        return data.dailyRecords.length && Object.keys(data.classSettings).length ? data : null;
+    } catch {
+        return null;
+    }
 }
 
 // 참고: 발송 현황은 message_queue 직접 read를 쓰지 않는다 — 평문 번호 노출 차단을 위해

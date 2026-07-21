@@ -8,6 +8,7 @@ import {
     fetchDailyRecordsRange,
     fetchPostponedTasksRange,
     fetchDashboardDailyLogData,
+    fetchDashboardDailyLogDataFromCache,
     fetchConsultationsForRange,
     fetchStudentStatusSummaries,
     fetchClassSettingsMap,
@@ -56,7 +57,13 @@ export function useStudents(user, includeEnded = false) {
         }).catch(() => {});
         // 2) 서버 최신으로 갱신.
         fetchStudents(includeEnded)
-            .then(list => { if (!cancelled) { setStudents(list); setError(null); } })
+            .then(list => {
+                if (!cancelled) {
+                    setStudents(list);
+                    setError(null);
+                    globalThis.performance?.mark?.('students-loaded');
+                }
+            })
             .catch(err => {
                 if (cancelled) return;
                 console.error('[useStudents]', err);
@@ -91,13 +98,28 @@ export function useDashboardData(user, startDate, endDate, enabled, dailyView) {
         const reqId = ++reqIdRef.current;   // 빠른 기간 변경 시 이전 요청 응답이 최신을 덮지 않도록. F-09
         setLoading(true);
         setError(null);
+        const applyData = (data) => {
+            setChecks(data.checks);
+            setDailyRecords(data.dailyRecords);
+            setPostponed(data.postponed);
+            setDailyLog(data.dailyLog);
+            setLoadedKey(`${startDate}:${endDate}:${dailyView}`);
+        };
         // daily 뷰(DailyLogBoard)만 dailyLog 단일 요청 — custom 같은 날짜 기간은 PeriodLogBoard가
         // checks·postponed를 쓰므로 범위 조회를 유지한다.
         let request;
         if (dailyView) {
-            request = fetchDashboardDailyLogData(startDate).then(dailyLog => ({
-                checks: [], dailyRecords: dailyLog.dailyRecords, postponed: [], dailyLog,
-            }));
+            let serverDone = false;
+            fetchDashboardDailyLogDataFromCache(startDate).then(dailyLog => {
+                if (serverDone || reqId !== reqIdRef.current || !dailyLog) return;
+                applyData({ checks: [], dailyRecords: dailyLog.dailyRecords, postponed: [], dailyLog });
+                setLoading(false);
+            });
+            request = fetchDashboardDailyLogData(startDate).then(dailyLog => {
+                serverDone = true;
+                globalThis.performance?.mark?.('dailylog-loaded');
+                return { checks: [], dailyRecords: dailyLog.dailyRecords, postponed: [], dailyLog };
+            });
         } else {
             request = Promise.all([
                 fetchDailyChecksRange(startDate, endDate),
@@ -110,11 +132,7 @@ export function useDashboardData(user, startDate, endDate, enabled, dailyView) {
         request
             .then(data => {
                 if (reqId !== reqIdRef.current) return;
-                setChecks(data.checks);
-                setDailyRecords(data.dailyRecords);
-                setPostponed(data.postponed);
-                setDailyLog(data.dailyLog);
-                setLoadedKey(`${startDate}:${endDate}:${dailyView}`);
+                applyData(data);
             })
             .catch(err => {
                 if (reqId !== reqIdRef.current) return;
