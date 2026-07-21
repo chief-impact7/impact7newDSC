@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { IconButton } from '@impact7/ui';
 import { loadTemplates, saveTemplate, deleteTemplate, migrateLegacyTemplates } from '../message-templates.js';
 import { ICON_NAME } from '../../dashboard/icon-map.js';
@@ -11,8 +11,31 @@ export default function TemplateBar({ content, onPick }) {
   const [titleInput, setTitleInput] = useState('');
   const [saveOpen, setSaveOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
+  const [managePos, setManagePos] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const manageAnchorRef = useRef(null);
+  const managePanelRef = useRef(null);
+
+  // 카드 컨테이너(.bulk-split)의 overflow:hidden(모서리 둥글리기용)에 잘리지 않도록
+  // 패널을 position:fixed로 뷰포트 좌표에 직접 배치한다. 열릴 때만 좌표를 계산하고,
+  // 스크롤로 앵커가 움직이면 좌표가 어긋나므로 그때는 닫는다. 단, 패널 자신의
+  // overflow-y:auto 스크롤(템플릿 목록이 길 때)은 닫지 않는다 — 목록 스크롤 = 닫힘이면
+  // 애초에 이 스크롤을 위해 고친 기능이 무의미해진다.
+  useEffect(() => {
+    if (!manageOpen) return;
+    function onScroll(e) {
+      if (managePanelRef.current?.contains(e.target)) return;
+      setManageOpen(false);
+    }
+    function onResize() { setManageOpen(false); }
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [manageOpen]);
 
   useEffect(() => {
     let alive = true;
@@ -69,13 +92,22 @@ export default function TemplateBar({ content, onPick }) {
   }
 
   return (
-    <div className="mc-tpl" style={{ position: 'relative' }}>
+    <div className="mc-tpl">
       <select aria-label="템플릿 선택" value={sel} onChange={(e) => pick(e.target.value)} onFocus={refresh}>
         <option value="">템플릿 불러오기…</option>
         {list.map((t) => <option key={t.title} value={t.title}>{t.title}</option>)}
       </select>
-      <IconButton icon={ICON_NAME.quiz} label="템플릿 관리" aria-expanded={manageOpen}
-        onClick={async () => { if (!manageOpen) await refresh(); setManageOpen(!manageOpen); }} />
+      <span ref={manageAnchorRef}>
+        <IconButton icon={ICON_NAME.quiz} label="템플릿 관리" aria-expanded={manageOpen}
+          onClick={async () => {
+            if (!manageOpen) {
+              await refresh();
+              const rect = manageAnchorRef.current?.getBoundingClientRect();
+              if (rect) setManagePos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+            }
+            setManageOpen(!manageOpen);
+          }} />
+      </span>
       {saveOpen ? (
         <>
           <input aria-label="템플릿 이름" className="mc-tpl-title" value={titleInput} onChange={(e) => setTitleInput(e.target.value)}
@@ -87,8 +119,9 @@ export default function TemplateBar({ content, onPick }) {
         <button type="button" className="mc-tpl-save" onClick={() => setSaveOpen(true)} disabled={!content.trim()}>현재 내용 저장</button>
       )}
       {err && <span role="status" aria-live="polite" style={{ fontSize: 12, color: '#c5221f' }}>{err}</span>}
-      {manageOpen && (
-        <div className="mc-tpl-manage" role="group" aria-label="템플릿 관리"
+      {manageOpen && managePos && (
+        <div className="mc-tpl-manage" role="group" aria-label="템플릿 관리" ref={managePanelRef}
+          style={{ top: managePos.top, right: managePos.right }}
           onKeyDown={(e) => { if (e.key === 'Escape') setManageOpen(false); }}>
           <div className="mc-tpl-manage-head">
             템플릿 관리 <span style={{ color: '#999', fontWeight: 400 }}>{list.length}개 · 전 직원 공유</span>
