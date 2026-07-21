@@ -4,7 +4,7 @@
 공유 컴포넌트 라이브러리. 두 목적: ① 한 번 만들어 여러 앱 재사용 ② 신규를 React로 수렴.
 
 ## 위치·배포
-- 로컬: `/Users/jongsooyi/projects/impact7-ui`, github: `chief-impact7/impact7-ui` (public — 2026-07-05 전환: private라서 CI npm ci가 ssh publickey로 실패, 통합 호스팅·DB 함수 배포가 하루 멈췄던 원인)
+- 로컬: `/Users/jongsooyi/IMPACT7/impact7-ui`, github: `chief-impact7/impact7-ui` (public — 2026-07-05 전환: private라서 CI npm ci가 ssh publickey로 실패, 통합 호스팅·DB 함수 배포가 하루 멈췄던 원인)
 - 설치: `github:chief-impact7/impact7-ui#v0.1.0` (shared와 동일 태그 방식)
 - **github 태그 설치 시 `prepare`(=build:tokens + vite build)가 dist 자동 생성** (dist는 gitignore).
   exam에서 설치→resolve→빌드 동작 검증 완료(2026-06-28).

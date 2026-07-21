@@ -128,7 +128,7 @@ Expected: PASS (consultation-filter 7건 + consultation-payload 3건 = 10건)
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/jongsooyi/projects/impact7newDSC
+cd /Users/jongsooyi/IMPACT7/impact7newDSC
 git add consultation-payload.js consultation-payload.test.js package.json
 git commit -m "feat(consultation): add buildConsultationPayload pure fn (target/method/class_name)"
 ```
@@ -216,7 +216,7 @@ Expected: 에러 없음
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/jongsooyi/projects/impact7newDSC
+cd /Users/jongsooyi/IMPACT7/impact7newDSC
 git add consultation-card.js
 git commit -m "feat(consultation): add header + input/search subtab dispatcher"
 ```
@@ -354,7 +354,7 @@ Expected: 에러 없음
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/jongsooyi/projects/impact7newDSC
+cd /Users/jongsooyi/IMPACT7/impact7newDSC
 git add consultation-card.js
 git commit -m "feat(consultation): input subtab with 대상/형태/반명 fields + briefing"
 ```
@@ -424,7 +424,7 @@ Expected: 구문 OK + 10건 PASS
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/jongsooyi/projects/impact7newDSC
+cd /Users/jongsooyi/IMPACT7/impact7newDSC
 git add consultation-card.js
 git commit -m "feat(consultation): search subtab (요약+검색+이력 배지 형태·대상)"
 ```
@@ -495,7 +495,7 @@ Expected: 성공, CSS 번들에 `.consultation-` 포함
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/jongsooyi/projects/impact7newDSC
+cd /Users/jongsooyi/IMPACT7/impact7newDSC
 git add daily-ops.css
 git commit -m "style(consultation): starbucks-tone tab/subtab/form/badge styles"
 ```
@@ -529,7 +529,7 @@ Expected: 10건 PASS + 빌드 성공
 - [ ] **Step 4: PR 생성**
 
 ```bash
-cd /Users/jongsooyi/projects/impact7newDSC
+cd /Users/jongsooyi/IMPACT7/impact7newDSC
 git push -u origin feat/consultation-tab-redesign
 ```
 

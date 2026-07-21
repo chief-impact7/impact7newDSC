@@ -36,7 +36,7 @@
 ### Task 1: consultation_pins rules 블록 추가 + 4앱 동기화 + 배포
 
 **Files:**
-- Modify: `/Users/jongsooyi/projects/impact7DB/firestore.rules` (1056행 `consultation_trends` 블록 뒤)
+- Modify: `/Users/jongsooyi/IMPACT7/impact7DB/firestore.rules` (1056행 `consultation_trends` 블록 뒤)
 
 - [ ] **Step 1: rules 블록 추가**
 
@@ -56,7 +56,7 @@
 
 - [ ] **Step 2: rules 문법 검증**
 
-Run: `cd /Users/jongsooyi/projects/impact7DB && npx firebase deploy --only firestore:rules --dry-run` (또는 해당 repo의 표준 검증 명령)
+Run: `cd /Users/jongsooyi/IMPACT7/impact7DB && npx firebase deploy --only firestore:rules --dry-run` (또는 해당 repo의 표준 검증 명령)
 Expected: 컴파일 에러 없음. (실패 시 중괄호/세미콜론 확인)
 
 - [ ] **Step 3: 4앱 동기화**
@@ -66,7 +66,7 @@ impact7DB의 `/firestore-rules-sync` 스킬을 실행해 동일 rules를 DB/DSC/
 
 - [ ] **Step 4: 배포**
 
-Run: `cd /Users/jongsooyi/projects/impact7DB && npx firebase deploy --only firestore:rules`
+Run: `cd /Users/jongsooyi/IMPACT7/impact7DB && npx firebase deploy --only firestore:rules`
 Expected: `Deploy complete`. (4앱 각각 배포가 필요하면 동기화 스킬 안내에 따른다.)
 
 - [ ] **Step 5: 권한 수동 검증**
@@ -79,7 +79,7 @@ Firestore 콘솔/emulator에서:
 - [ ] **Step 6: 커밋**
 
 ```bash
-cd /Users/jongsooyi/projects/impact7DB
+cd /Users/jongsooyi/IMPACT7/impact7DB
 git add firestore.rules
 git commit -m "feat(rules): add consultation_pins collection (상담 고정용, 본인만 쓰기)"
 ```
@@ -88,7 +88,7 @@ git commit -m "feat(rules): add consultation_pins collection (상담 고정용, 
 
 ## Phase 2 — impact7newDSC: 4기능 구현 (feat 브랜치 + PR)
 
-> 시작 전: `cd /Users/jongsooyi/projects/impact7newDSC && git checkout master && git pull --ff-only && git checkout -b feat/consultation-input-features`
+> 시작 전: `cd /Users/jongsooyi/IMPACT7/impact7newDSC && git checkout master && git pull --ff-only && git checkout -b feat/consultation-input-features`
 
 ### Task 2: 순수 함수 (날짜 범위·제목 fallback·프롬프트·정렬) + 테스트
 
@@ -149,7 +149,7 @@ test('sortConsultationsForHistory: 원본 불변', () => {
 
 - [ ] **Step 2: 테스트 실패 확인**
 
-Run: `cd /Users/jongsooyi/projects/impact7newDSC && npm test`
+Run: `cd /Users/jongsooyi/IMPACT7/impact7newDSC && npm test`
 Expected: FAIL — `defaultSearchRange is not a function` 등.
 
 - [ ] **Step 3: 함수 구현**

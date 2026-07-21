@@ -17,7 +17,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # 디자인 토큰 SSoT 검증 (impact7DB/.agents/design-tokens.json 기준 — 4앱 토큰값 동기화 강제)
-TOKEN_CHECK=/Users/jongsooyi/projects/impact7DB/.agents/hooks/check-design-tokens.mjs
+TOKEN_CHECK=/Users/jongsooyi/IMPACT7/impact7DB/.agents/hooks/check-design-tokens.mjs
 if [ -f "$TOKEN_CHECK" ]; then
     node "$TOKEN_CHECK" --app dsc
     if [ $? -ne 0 ]; then
@@ -28,7 +28,7 @@ if [ -f "$TOKEN_CHECK" ]; then
 fi
 
 # 공유 DOM 유틸(a11y-dom.js) 동기화 검증
-DOM_CHECK=/Users/jongsooyi/projects/impact7DB/.agents/hooks/check-shared-dom.mjs
+DOM_CHECK=/Users/jongsooyi/IMPACT7/impact7DB/.agents/hooks/check-shared-dom.mjs
 if [ -f "$DOM_CHECK" ]; then
     node "$DOM_CHECK" --app dsc
     if [ $? -ne 0 ]; then
