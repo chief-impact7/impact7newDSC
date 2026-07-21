@@ -41,7 +41,7 @@ function AiRow({ student, summary, nowMs }) {
                     {isStale(summary.generated_at, nowMs) && <span className="ai-stale-badge">오래됨</span>}
                 </span>
             </summary>
-            <div className="ai-row-body">
+            <div className="ai-row-body dash-detail-content">
                 <div className="markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(summary.summary_markdown) }} />
                 <FlagList title="위험 신호" items={summary.risk_flags} />
                 <FlagList title="권장 조치" items={summary.action_items} />
