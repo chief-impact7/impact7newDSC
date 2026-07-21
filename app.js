@@ -135,7 +135,7 @@ import {
     expandMemo, toggleMemoPin, markMemoRead,
     openMemoModal, toggleMemoStudentField, searchMemoStudent, selectMemoStudent, sendMemo,
     renderUnifiedMemoCard, normalizeStudentMemos,
-    addStudentMemo, deleteStudentMemo, toggleStudentMemoPin
+    addStudentMemo, deleteStudentMemo, toggleStudentMemoPin, toggleStudentMemoImportant
 } from './role-memo.js';
 import {
     initRescheduleModalDeps,
@@ -873,6 +873,7 @@ window.toggleMemoPin = toggleMemoPin;
 window.addStudentMemo = addStudentMemo;
 window.deleteStudentMemo = deleteStudentMemo;
 window.toggleStudentMemoPin = toggleStudentMemoPin;
+window.toggleStudentMemoImportant = toggleStudentMemoImportant;
 
 // 휴퇴원요청서 window 할당 → 위쪽 initLeaveRequestDeps 블록으로 이동 완료
 

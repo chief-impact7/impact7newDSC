@@ -17,7 +17,7 @@ import { auditUpdate, auditSet, batchUpdate, READ_ONLY } from './audit.js';
 import { NAESIN_OVERRIDE_EXCLUDE, isOnLeaveAt, isWithdrawnAt, isActiveNaesinBase, resolveNaesinCsKey, isValidDateStr, csGet } from './student-helpers.js';
 import { deriveActiveNaesinEnrollment } from '@impact7/shared/enrollment-derivation';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
-import { renderUnifiedMemoCard } from './role-memo.js';
+import { renderImportantMemoProfileIcon, renderUnifiedMemoCard } from './role-memo.js';
 import { renderClassDeleteCard, applyClassDetailTabMode, renderClassDetailTabbed, renderClassDomainCard, renderClassTestSectionsCard } from './class-detail.js';
 import { cancelStudentPendingTasks } from './data-layer.js';
 import { recordTeacherChange } from './teacher-history.js';
@@ -304,6 +304,7 @@ function _setDetailProfileHeader(student, badgeHtml, code, teacherEmail) {
         const branch       = window.branchFromStudent?.(student) || '';
         const schoolGrade  = studentShortLabel(student);
         tagsEl.innerHTML =
+            renderImportantMemoProfileIcon(student) +
             badgeHtml +
             (code ? `<span class="tag-class">${_esc(code)}</span>` : '') +
             (schoolGrade ? `<span class="tag">${_esc(schoolGrade)}</span>` : '') +

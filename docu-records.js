@@ -74,3 +74,29 @@ export function importantRecordTooltip(record, maxLength = 160) {
   const summary = content.length > maxLength ? `${content.slice(0, maxLength)}…` : content;
   return `중요 메모 (${type}${date})\n${summary}`;
 }
+
+export function latestImportantMemo(memos) {
+  const list = Array.isArray(memos) ? memos : [];
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    if (list[i]?.important === true) return list[i];
+  }
+  return null;
+}
+
+export function visibleStudentMemos(memos, selectedDate) {
+  const list = Array.isArray(memos) ? memos : [];
+  return list.flatMap((memo, index) => {
+    if (!memo || typeof memo !== 'object') return [];
+    if (memo.pinned || memo.important) return [{ ...memo, _idx: index, _source: 'persistent' }];
+    if (memo.date === selectedDate) return [{ ...memo, _idx: index, _source: 'today' }];
+    return [];
+  });
+}
+
+export function importantMemoTooltip(memo, maxLength = 160) {
+  if (!memo) return '';
+  const date = memo.date || memo.created_at;
+  const content = String(memo.text || '').replace(/\s+/g, ' ').trim() || '내용 없음';
+  const summary = content.length > maxLength ? `${content.slice(0, maxLength)}…` : content;
+  return `중요 메모${date ? ` · ${date}` : ''}\n${summary}`;
+}
