@@ -1,6 +1,7 @@
 // AI 종합상태 뷰의 순수 로직 — 컴포넌트·Firestore 비의존 (node --test 대상).
 // firestore-helpers.js는 firebase-config를 당기므로 여기서 import 금지.
 import { enrollmentCode } from '../../../student-core.js';
+import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { teacherDisplayName } from '@impact7/shared/teacher-label';
 
@@ -59,6 +60,7 @@ export function buildGroups(students, summariesById, { allowedIds = null, teache
         if (teacherClassCodes && !(s.enrollments || []).some(e => teacherClassCodes.has(enrollmentCode(e)))) continue;
         if (kw && !String(s.name || '').includes(kw)) continue;
         const summary = summariesById?.[s.id] || null;
+        if (!summary && !ENROLLABLE_STATUSES.has(s.status)) continue;
         byStatus[summary ? summaryStatusKey(summary) : 'none'].push({ student: s, summary });
     }
     for (const list of Object.values(byStatus)) {

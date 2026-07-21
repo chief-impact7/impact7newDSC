@@ -9,9 +9,9 @@ const DAY = 24 * 60 * 60 * 1000;
 const now = new Date('2026-07-21T12:00:00+09:00').getTime();
 
 const students = [
-    { id: 's1', name: '김가', enrollments: [{ level_symbol: 'A', class_number: '101' }] },
-    { id: 's2', name: '이나', enrollments: [{ level_symbol: 'B', class_number: '203' }] },
-    { id: 's3', name: '박다', enrollments: [{ level_symbol: 'A', class_number: '101' }] },
+    { id: 's1', name: '김가', status: '재원', enrollments: [{ level_symbol: 'A', class_number: '101' }] },
+    { id: 's2', name: '이나', status: '재원', enrollments: [{ level_symbol: 'B', class_number: '203' }] },
+    { id: 's3', name: '박다', status: '재원', enrollments: [{ level_symbol: 'A', class_number: '101' }] },
 ];
 const summaries = {
     s1: { status: 'risk', absence_count: 4, hw_fail_count: 3, test_fail_count: 0 },
@@ -73,6 +73,27 @@ test('buildGroups: allowedIds·담당 반코드·검색 필터', () => {
 
     groups = buildGroups(students, summaries, { search: '김' });
     assert.deepEqual(groups.flatMap(g => g.items).map(i => i.student.id), ['s1']);
+});
+
+test('buildGroups: summary가 없으면 생성 대상 상태만 미생성 그룹에 포함', () => {
+    const statusStudents = [
+        { id: 'active', name: '재원 학생', status: '재원' },
+        { id: 'scheduled', name: '예정 학생', status: '등원예정' },
+        { id: 'leave', name: '휴원 학생', status: '실휴원' },
+        { id: 'temporary-leave', name: '가휴원 학생', status: '가휴원' },
+        { id: 'consult', name: '상담 학생', status: '상담' },
+        { id: 'special', name: '특강 학생', status: '특강' },
+        { id: 'consult-summary', name: '분석된 상담 학생', status: '상담' },
+    ];
+    const statusSummaries = { 'consult-summary': { status: 'good' } };
+
+    const groups = Object.fromEntries(buildGroups(statusStudents, statusSummaries).map(group => [group.key, group.items]));
+    const allItems = Object.values(groups).flat();
+
+    assert.deepEqual(groups.none.map(item => item.student.id).sort(), ['active', 'leave', 'scheduled', 'temporary-leave']);
+    assert.deepEqual(groups.good.map(item => item.student.id), ['consult-summary']);
+    assert.equal(allItems.some(item => item.student.id === 'consult'), false);
+    assert.equal(allItems.some(item => item.student.id === 'special'), false);
 });
 
 test('countParts: 0 카운트 제외', () => {
