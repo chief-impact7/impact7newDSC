@@ -6,7 +6,7 @@
 `temp_attendance` 모든 update가 rules(firestore.rules:579~601, create/update 공통 `is string && size()>0`)에서 거부된 것.
 
 ## 근본 원인
-- 온라인 신청서는 **Cloud Run 서비스 `/Users/jongsooyi/projects/newtest/cloudrun/src/index.js`** (`source:"diagnostic_apply"`)가
+- 온라인 신청서는 **Cloud Run 서비스 `/Users/jongsooyi/IMPACT7/newtest/cloudrun/src/index.js`** (`source:"diagnostic_apply"`)가
   admin SDK로 temp_attendance를 생성한다 → **rules 우회**라 빈 level로도 생성됨.
 - `dscLevelFromGrade(grade)`는 grade에 초/중/고 단서 없으면("6학년") ""를 반환 → level 빔.
 - 표시(`schoolLevelGradeLabel`)는 빈 level을 base 0(=초등)으로 가정해 grade 숫자만으로 "목원초6"을 만들어
