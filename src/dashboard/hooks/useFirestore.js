@@ -9,6 +9,9 @@ import {
     fetchPostponedTasksRange,
     fetchDashboardDailyLogData,
     fetchConsultationsForRange,
+    fetchStudentStatusSummaries,
+    fetchClassSettingsMap,
+    fetchStaffNameMap,
 } from '../../shared/firestore-helpers.js';
 import { kstDayRangeParams } from '../message-period.js';
 
@@ -174,4 +177,38 @@ export function useMessageDelivery(user) {
     useEffect(() => { reload(kstDayRangeParams()); }, [reload]);
 
     return { data, loading, reload, error };
+}
+
+// AI 종합상태 뷰 데이터. 월 단위 갱신이라 세션당 1회만 fetch — 모듈 캐시로 뷰 재진입 시 재사용.
+let _aiStatusCache = null;
+
+export function useAiStatusData(user, enabled) {
+    const [data, setData] = useState(_aiStatusCache);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const reqIdRef = useRef(0);
+
+    const load = useCallback((force) => {
+        if (!user || (!force && (_aiStatusCache || !enabled))) return;
+        const reqId = ++reqIdRef.current;
+        setLoading(true);
+        setError(null);
+        Promise.all([fetchStudentStatusSummaries(), fetchClassSettingsMap(), fetchStaffNameMap()])
+            .then(([summaries, classSettings, staffByLocal]) => {
+                if (reqId !== reqIdRef.current) return;
+                _aiStatusCache = { summaries, classSettings, staffByLocal };
+                setData(_aiStatusCache);
+            })
+            .catch(err => {
+                if (reqId !== reqIdRef.current) return;
+                console.error('[useAiStatusData]', err);
+                setError(err);
+            })
+            .finally(() => { if (reqId === reqIdRef.current) setLoading(false); });
+    }, [user, enabled]);
+
+    useEffect(() => { load(false); }, [load]);
+
+    const reload = useCallback(() => { _aiStatusCache = null; load(true); }, [load]);
+    return { data, loading, error, reload };
 }

@@ -4,7 +4,7 @@ import { ICON_NAME } from './icon-map.js';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, dataAuthReady } from '../../firebase-config.js';
 import { signInWithGoogle, logout } from '../../auth.js';
-import { useStudents, useDashboardData, useConsultations } from './hooks/useFirestore.js';
+import { useStudents, useDashboardData, useConsultations, useAiStatusData } from './hooks/useFirestore.js';
 import { branchFromStudent, enrollmentCode, todayStr, fetchSemesterSettings, getSemestersForDate, studentGradeKey } from '../shared/firestore-helpers.js';
 import { openKoreanDatePicker } from '../../date-picker.js';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
@@ -14,6 +14,7 @@ import GradeFilter from './components/GradeFilter.jsx';
 // 일별 첫 페인트에서 echarts(~수백KB)를 빼 초기 로딩을 가볍게 한다.
 const PeriodLogBoard = lazy(() => import('./components/PeriodLogBoard.jsx'));
 const ConsultationBoard = lazy(() => import('./components/ConsultationBoard.jsx'));
+const AiStatusBoard = lazy(() => import('./components/AiStatusBoard.jsx'));
 
 const pad2 = (value) => String(value).padStart(2, '0');
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})/;
@@ -97,7 +98,7 @@ export default function App() {
     const [gradeFilter, setGradeFilter] = useState(new Set());
     const [semesterSettings, setSemesterSettings] = useState({});
     const [loginError, setLoginError] = useState('');
-    const [view, setView] = useState('logbook'); // 'logbook' | 'consult'
+    const [view, setView] = useState('logbook'); // 'logbook' | 'consult' | 'ai'
 
     // 학기 설정 로드 (1회)
     useEffect(() => {
@@ -147,6 +148,7 @@ export default function App() {
     const { students, loading: studentsLoading, error } = useStudents(user);
     const { checks, dailyRecords, postponed, dailyLog, loading: dataLoading, error: dashError } = useDashboardData(user, startDate, endDate);
     const { consultations, loading: consultLoading } = useConsultations(user, startDate, endDate, view === 'consult');
+    const aiStatus = useAiStatusData(user, view === 'ai');
 
     // 선택 날짜 기준 학기 감지
     const currentSemesters = useMemo(() =>
@@ -287,6 +289,7 @@ export default function App() {
                     <span className="dash-view-toggle" role="group" aria-label="화면 전환">
                         <button type="button" className={view === 'logbook' ? 'active' : ''} aria-pressed={view === 'logbook'} onClick={() => setView('logbook')}>로그북</button>
                         <button type="button" className={view === 'consult' ? 'active' : ''} aria-pressed={view === 'consult'} onClick={() => setView('consult')}>상담</button>
+                        <button type="button" className={view === 'ai' ? 'active' : ''} aria-pressed={view === 'ai'} onClick={() => setView('ai')}>AI</button>
                     </span>
                     <a href="./messages.html" className="dash-link" target="_blank" rel="noopener">메시지</a>
                 </div>
@@ -311,60 +314,64 @@ export default function App() {
 
             {/* 필터 바 */}
             <div className="dash-filters">
-                <div className="dash-filter-group">
-                    <label>기간</label>
-                    <select aria-label="기간" value={rangeType} onChange={e => setRangeType(e.target.value)}>
-                        <option value="day">일별</option>
-                        <option value="week">주별</option>
-                        <option value="custom">직접 선택</option>
-                    </select>
-                </div>
-
-                {rangeType === 'day' && (
-                    <div className="dash-filter-group">
-                        <label>날짜</label>
-                        <div className="dash-date-nav">
-                            <button type="button" aria-label="이전 날" onClick={() => setBaseDate(addDays(normalizedBaseDate, -1))}>
-                                <Icon name={ICON_NAME.chevron_left} size={20} aria-hidden="true" />
-                            </button>
-                            <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, normalizedBaseDate, setBaseDate)}>{normalizedBaseDate}</button>
-                            <button type="button" aria-label="다음 날" onClick={() => setBaseDate(addDays(normalizedBaseDate, 1))}>
-                                <Icon name={ICON_NAME.chevron_right} size={20} aria-hidden="true" />
-                            </button>
-                            <button type="button" aria-label="오늘" onClick={() => setBaseDate(todayStr())} title="오늘">
-                                <Icon name={ICON_NAME.today} size={20} aria-hidden="true" />
-                            </button>
+                {view !== 'ai' && (
+                    <>
+                        <div className="dash-filter-group">
+                            <label>기간</label>
+                            <select aria-label="기간" value={rangeType} onChange={e => setRangeType(e.target.value)}>
+                                <option value="day">일별</option>
+                                <option value="week">주별</option>
+                                <option value="custom">직접 선택</option>
+                            </select>
                         </div>
-                    </div>
-                )}
 
-                {rangeType === 'week' && (
-                    <div className="dash-filter-group">
-                        <label>기준일</label>
-                        <div className="dash-date-nav">
-                            <button type="button" aria-label="이전 주" onClick={() => setBaseDate(addDays(normalizedBaseDate, -7))}>
-                                <Icon name={ICON_NAME.chevron_left} size={20} aria-hidden="true" />
-                            </button>
-                            <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, normalizedBaseDate, setBaseDate)}>{normalizedBaseDate}</button>
-                            <button type="button" aria-label="다음 주" onClick={() => setBaseDate(addDays(normalizedBaseDate, 7))}>
-                                <Icon name={ICON_NAME.chevron_right} size={20} aria-hidden="true" />
-                            </button>
-                            <IconButton icon="calendar-dots" label="이번 주" onClick={() => setBaseDate(todayStr())} />
-                            <span className="dash-range-label week">{formatWeekRangeLabel(startDate, endDate)}</span>
-                        </div>
-                    </div>
-                )}
-
-                {rangeType === 'custom' && (
-                    <div className="dash-filter-group">
-                        <label>기간</label>
-                        <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, customStart, setCustomStart)}>{customStart || '시작일'}</button>
-                        <span>~</span>
-                        <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, customEnd, setCustomEnd)}>{customEnd || '종료일'}</button>
-                        {dateRangeSwapped && (
-                            <span className="dash-date-warning">시작일과 종료일이 바뀌어 자동 보정됩니다</span>
+                        {rangeType === 'day' && (
+                            <div className="dash-filter-group">
+                                <label>날짜</label>
+                                <div className="dash-date-nav">
+                                    <button type="button" aria-label="이전 날" onClick={() => setBaseDate(addDays(normalizedBaseDate, -1))}>
+                                        <Icon name={ICON_NAME.chevron_left} size={20} aria-hidden="true" />
+                                    </button>
+                                    <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, normalizedBaseDate, setBaseDate)}>{normalizedBaseDate}</button>
+                                    <button type="button" aria-label="다음 날" onClick={() => setBaseDate(addDays(normalizedBaseDate, 1))}>
+                                        <Icon name={ICON_NAME.chevron_right} size={20} aria-hidden="true" />
+                                    </button>
+                                    <button type="button" aria-label="오늘" onClick={() => setBaseDate(todayStr())} title="오늘">
+                                        <Icon name={ICON_NAME.today} size={20} aria-hidden="true" />
+                                    </button>
+                                </div>
+                            </div>
                         )}
-                    </div>
+
+                        {rangeType === 'week' && (
+                            <div className="dash-filter-group">
+                                <label>기준일</label>
+                                <div className="dash-date-nav">
+                                    <button type="button" aria-label="이전 주" onClick={() => setBaseDate(addDays(normalizedBaseDate, -7))}>
+                                        <Icon name={ICON_NAME.chevron_left} size={20} aria-hidden="true" />
+                                    </button>
+                                    <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, normalizedBaseDate, setBaseDate)}>{normalizedBaseDate}</button>
+                                    <button type="button" aria-label="다음 주" onClick={() => setBaseDate(addDays(normalizedBaseDate, 7))}>
+                                        <Icon name={ICON_NAME.chevron_right} size={20} aria-hidden="true" />
+                                    </button>
+                                    <IconButton icon="calendar-dots" label="이번 주" onClick={() => setBaseDate(todayStr())} />
+                                    <span className="dash-range-label week">{formatWeekRangeLabel(startDate, endDate)}</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {rangeType === 'custom' && (
+                            <div className="dash-filter-group">
+                                <label>기간</label>
+                                <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, customStart, setCustomStart)}>{customStart || '시작일'}</button>
+                                <span>~</span>
+                                <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, customEnd, setCustomEnd)}>{customEnd || '종료일'}</button>
+                                {dateRangeSwapped && (
+                                    <span className="dash-date-warning">시작일과 종료일이 바뀌어 자동 보정됩니다</span>
+                                )}
+                            </div>
+                        )}
+                    </>
                 )}
 
                 <div className="dash-filter-group">
@@ -392,7 +399,22 @@ export default function App() {
                 {loading && <span className="dash-loading-indicator">로딩 중...</span>}
             </div>
 
-            {view === 'consult' ? (
+            {view === 'ai' ? (
+                <ErrorBoundary>
+                    <Suspense fallback={<div className="dash-grid"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>}>
+                        <AiStatusBoard
+                            students={students}
+                            data={aiStatus.data}
+                            loading={aiStatus.loading}
+                            error={aiStatus.error}
+                            reload={aiStatus.reload}
+                            branchFilter={branchFilter}
+                            classFilter={classFilter}
+                            gradeFilter={gradeFilter}
+                        />
+                    </Suspense>
+                </ErrorBoundary>
+            ) : view === 'consult' ? (
                 consultLoading ? (
                     <div className="dash-grid"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>
                 ) : (
