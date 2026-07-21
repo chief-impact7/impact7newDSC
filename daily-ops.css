@@ -3972,6 +3972,49 @@ textarea.field-input {
 .student-memo-btn.delete:hover {
     color: var(--danger);
 }
+.student-memo-btn.important.active,
+.profile-important-memo {
+    color: #b06000;
+}
+.student-memo-btn.important.active {
+    background: #fef7e0;
+}
+.profile-important-memo {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px;
+    position: relative;
+}
+.profile-important-memo .i7-icon {
+    font-size: 18px;
+}
+.profile-important-memo::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 6px);
+    left: 0;
+    width: max-content;
+    max-width: 280px;
+    padding: 7px 9px;
+    border-radius: 6px;
+    background: #292929;
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-2px);
+    transition: opacity 120ms ease, transform 120ms ease;
+}
+.profile-important-memo:hover::after,
+.profile-important-memo:focus::after,
+.profile-important-memo:focus-visible::after {
+    opacity: 1;
+    transform: translateY(0);
+}
 .student-memo-add {
     display: flex;
     gap: 6px;

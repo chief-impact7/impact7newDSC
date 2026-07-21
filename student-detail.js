@@ -48,8 +48,8 @@ import {
     renderAbsenceRecordCard, _getExpandedAbsenceIndices, _restoreExpandedAbsenceIndices
 } from './absence-records.js';
 import { renderReturnConsultCard } from './leave-request.js';
-import { normalizeStudentMemos } from './role-memo.js';
-import { hasRecentRecord, splitRecordsByType } from './docu-records.js';
+import { normalizeStudentMemos, renderImportantMemoProfileIcon } from './role-memo.js';
+import { hasRecentRecord, splitRecordsByType, visibleStudentMemos } from './docu-records.js';
 import { loadClassHistoryCard } from './class-history.js';
 // 비활성 학생(퇴원·종강·상담 등) 식별용 — 출결현황 탭 라벨을 "수업이력"으로 동적 전환.
 const _isInactiveDetailStudent = (s) => !ENROLLABLE_STATUSES.has(s?.status || '');
@@ -487,10 +487,9 @@ function _refreshDocuBadge(studentId) {
     // 대기중(승인 진행 중) 휴/퇴원 요청서는 기간과 무관하게 뱃지 대상
     const lrs = (state.leaveRequests || []).filter(lr => lr.student_id === studentId);
     const hasPendingLR = lrs.some(lr => lr.status === 'requested');
-    // 메모는 동기 판정. 단 화면 메모 카드에 실제 표시되는 메모(고정 또는 선택일 메모)만 대상 —
-    // 지난 비고정 메모는 카드에 안 보이므로 뱃지 오탐을 막는다.
+    // 메모는 동기 판정. 화면 메모 카드에 실제 표시되는 메모만 대상.
     const visibleMemos = student
-        ? normalizeStudentMemos(student).filter(m => m.pinned || m.date === state.selectedDate)
+        ? visibleStudentMemos(normalizeStudentMemos(student), state.selectedDate)
         : [];
     const memosRecent = hasRecentRecord(visibleMemos, now);
     import('./docu-data.js')
@@ -1176,8 +1175,10 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     const auxBadgeHtml = tagText
         ? `<span class="tag tag-status ${tagClass}" ${isWithdrawn ? 'style="background:#dc2626;color:#fff;"' : ''}>${esc(tagText)}</span>`
         : '';
+    const importantMemoHtml = renderImportantMemoProfileIcon(student);
 
     document.getElementById('profile-tags').innerHTML = `
+        ${importantMemoHtml}
         ${masterStatusHtml}
         ${auxBadgeHtml}
         ${siblingHtml}

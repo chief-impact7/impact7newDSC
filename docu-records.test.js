@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   splitRecordsByType, toFileMeta, isRecentRecord, hasRecentRecord,
   importantRecordsByStudent, importantRecordTooltip,
+  latestImportantMemo, visibleStudentMemos, importantMemoTooltip,
 } from './docu-records.js';
 
 const sample = [
@@ -90,4 +91,33 @@ test('importantRecordTooltip: 내용 공백 정리와 길이 제한', () => {
     type: 'reflection', occurred_at: '2026-06-15', content: '첫 줄\n  둘째 줄이 길다',
   }, 8);
   assert.equal(tooltip, '중요 메모 (반성문 · 2026-06-15)\n첫 줄 둘째 줄…');
+});
+
+test('latestImportantMemo: 가장 나중에 작성된 중요 메모를 선택', () => {
+  const memo = latestImportantMemo([
+    { text: '이전', important: true },
+    { text: '일반', important: false },
+    { text: '최신', important: true },
+  ]);
+  assert.equal(memo.text, '최신');
+  assert.equal(latestImportantMemo(null), null);
+});
+
+test('visibleStudentMemos: 고정·중요 메모는 날짜와 관계없이 중복 없이 표시', () => {
+  const memos = visibleStudentMemos([
+    { text: '고정', pinned: true, date: '2026-07-20' },
+    { text: '중요', important: true, date: '2026-07-21' },
+    { text: '둘 다', pinned: true, important: true, date: '2026-07-22' },
+    { text: '오늘', date: '2026-07-22' },
+    { text: '과거', date: '2026-07-19' },
+  ], '2026-07-22');
+  assert.deepEqual(memos.map(memo => memo.text), ['고정', '중요', '둘 다', '오늘']);
+  assert.deepEqual(memos.map(memo => memo._idx), [0, 1, 2, 3]);
+});
+
+test('importantMemoTooltip: 날짜와 메모 내용을 표시', () => {
+  const tooltip = importantMemoTooltip({
+    date: '2026-07-22', text: '학부모\n  상담 필요',
+  });
+  assert.equal(tooltip, '중요 메모 · 2026-07-22\n학부모 상담 필요');
 });

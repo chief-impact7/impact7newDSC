@@ -13,6 +13,7 @@ import { findStudent, enrollmentCode } from './student-helpers.js';
 import { schoolSearchTerms } from './school-normalizer.js';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { formatTimeKST } from '@impact7/shared/datetime';
+import { latestImportantMemo, visibleStudentMemos, importantMemoTooltip } from './docu-records.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderStudentDetail;
@@ -455,8 +456,17 @@ export function normalizeStudentMemos(student) {
         if (!student.memo.trim()) return [];
         return [{ text: student.memo.trim(), pinned: true, created_at: '', created_by: '' }];
     }
-    if (Array.isArray(student.memo)) return student.memo;
+    if (Array.isArray(student.memo)) {
+        return student.memo.map(m => m && typeof m === 'object' ? { ...m } : m);
+    }
     return [];
+}
+
+export function renderImportantMemoProfileIcon(student) {
+    const memo = latestImportantMemo(normalizeStudentMemos(student));
+    if (!memo) return '';
+    const tooltip = importantMemoTooltip(memo);
+    return `<span class="profile-important-memo" role="img" tabindex="0" aria-label="${escAttr(tooltip)}" data-tooltip="${escAttr(tooltip)}">${msIcon('warning')}</span>`;
 }
 
 export function renderUnifiedMemoCard(studentId) {
@@ -465,18 +475,7 @@ export function renderUnifiedMemoCard(studentId) {
     const rec = state.dailyRecords[studentId] || {};
     const memos = normalizeStudentMemos(student);
 
-    // 고정 메모 + 오늘 메모를 합쳐서 표시
-    const displayItems = [];
-
-    // 1) 고정 메모 (pinned, 항상 표시)
-    memos.forEach((m, idx) => {
-        if (m.pinned) displayItems.push({ ...m, _idx: idx, _source: 'pin' });
-    });
-
-    // 2) 오늘 비고정 메모 (date === state.selectedDate)
-    memos.forEach((m, idx) => {
-        if (!m.pinned && m.date === state.selectedDate) displayItems.push({ ...m, _idx: idx, _source: 'today' });
-    });
+    const displayItems = visibleStudentMemos(memos, state.selectedDate);
 
     // 3) 기존 daily_records.note (레거시, 있으면 표시)
     if (rec.note) {
@@ -495,8 +494,9 @@ export function renderUnifiedMemoCard(studentId) {
         listHtml = displayItems.map(m => {
             const pinnedCls = m.pinned ? ' pinned' : '';
             const pinIcon = m.pinned ? 'keep' : 'keep_off';
+            const important = m.important === true;
             const byStr = staffLabel(m.created_by);
-            const dateLabel = m._source === 'pin' && m.date && m.date !== state.selectedDate ? m.date : '';
+            const dateLabel = m._source === 'persistent' && m.date && m.date !== state.selectedDate ? m.date : '';
             const meta = [byStr, dateLabel || m.created_at || ''].filter(Boolean).join(' · ');
 
             if (m._source === 'daily' || m._source === 'naesin') {
@@ -515,6 +515,7 @@ export function renderUnifiedMemoCard(studentId) {
                 <div class="student-memo-bottom">
                     <span class="student-memo-meta">${esc(meta)}</span>
                     <span class="student-memo-actions">
+                        ${msIcon('warning', `student-memo-btn important${important ? ' active' : ''}`, `role="button" tabindex="0" data-keyclick aria-label="${important ? '중요 해제' : '중요 표시'}" aria-pressed="${important}" title="${important ? '중요 해제' : '중요 표시'}" onclick="toggleStudentMemoImportant('${escAttr(studentId)}',${m._idx})"`)}
                         ${msIcon(pinIcon, 'student-memo-btn', `role="button" tabindex="0" data-keyclick aria-label="${m.pinned ? '고정 해제' : '고정'}" title="${m.pinned ? '고정 해제' : '고정'}" onclick="toggleStudentMemoPin('${escAttr(studentId)}',${m._idx})"`)}
                         ${msIcon('close', 'student-memo-btn delete', `role="button" tabindex="0" data-keyclick aria-label="메모 삭제" title="삭제" onclick="deleteStudentMemo('${escAttr(studentId)}',${m._idx})"`)}
                     </span>
@@ -590,5 +591,14 @@ export async function toggleStudentMemoPin(studentId, idx) {
     const memos = normalizeStudentMemos(student);
     if (idx < 0 || idx >= memos.length) return;
     memos[idx].pinned = !memos[idx].pinned;
+    await saveStudentMemoArray(studentId, memos);
+}
+
+export async function toggleStudentMemoImportant(studentId, idx) {
+    const student = findStudent(studentId);
+    if (!student) return;
+    const memos = normalizeStudentMemos(student);
+    if (idx < 0 || idx >= memos.length) return;
+    memos[idx].important = memos[idx].important !== true;
     await saveStudentMemoArray(studentId, memos);
 }
