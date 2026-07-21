@@ -18,7 +18,7 @@ export default function App() {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (u) {
         const email = u.email || '';
-        const allowed = email.endsWith('@gw.impact7.kr') || email.endsWith('@impact7.kr');
+        const allowed = email.endsWith('@impact7.kr');
         if (!u.emailVerified || !allowed) {
           alert('허용되지 않은 계정입니다.');
           logout().catch(() => {});

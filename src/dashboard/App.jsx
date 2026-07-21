@@ -130,9 +130,9 @@ export default function App() {
         const unsub = onAuthStateChanged(auth, async (u) => {
             if (u) {
                 const email = u.email || '';
-                const allowed = email.endsWith('@gw.impact7.kr') || email.endsWith('@impact7.kr');
+                const allowed = email.endsWith('@impact7.kr');
                 if (!u.emailVerified || !allowed) {
-                    alert('허용되지 않은 계정입니다.\n학원 계정(@gw.impact7.kr 또는 @impact7.kr)으로 다시 로그인해주세요.');
+                    alert('허용되지 않은 계정입니다.\n학원 계정(@impact7.kr)으로 다시 로그인해주세요.');
                     logout().catch(err => console.error('[dashboard logout]', err));
                     setUser(null);
                 } else {

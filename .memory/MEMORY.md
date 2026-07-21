@@ -48,3 +48,4 @@
 - [project_a11y_shared_snippet_2026-06-28.md](project_a11y_shared_snippet_2026-06-28.md) — a11y 공통 스니펫(focus-visible·reduced-motion·터치영역·키보드·aria) DSC 전 영역 확장(6a20b4f, 선행 429935a). a11y.css = 에코시스템 공유 SSoT 후보
 - [project_fail_action_latent_bugs.md](project_fail_action_latent_bugs.md) — fail-action(숙제·테스트 미통과 후속대책)에서 정식 code-review가 찾은 기존 잠복 버그 4건 — 미수정 후속 후보
 - [project_impact7_ui_library.md](project_impact7_ui_library.md) — @impact7/ui 에코시스템 공유 React 컴포넌트 라이브러리(chief-impact7/impact7-ui, public — 2026-07-05 전환). 점진 수렴 전략: React 앱 직접 import, 바닐라/Svelte는 mount 어댑터
+- [reference_auth_domain_policy.md](reference_auth_domain_policy.md) — 인증 도메인은 @impact7.kr 단일(gw는 초기 도메인, 전 계정 이관 완료). firestore.rules가 정본. storage.rules·로그인 게이트에 gw 잔재(정리 후보), 단 데이터 teacher 필드의 gw 주소 파싱은 유지
