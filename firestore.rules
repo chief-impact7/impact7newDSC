@@ -419,7 +419,8 @@ service cloud.firestore {
           'due_time', 'location', 'priority', 'pinned', 'recurrence',
           'checklist', 'links', 'attachments', 'parent_id', 'related', 'archived',
           'updated_by', 'updated_at', 'completed_by', 'completed_at',
-          'round', 'enrolled', 'exec_status'
+          'round', 'enrolled', 'exec_status',
+          'last_comment_at', 'last_comment_by', 'comment_count'
         ]);
       }
 
@@ -468,6 +469,19 @@ service cloud.firestore {
         && request.resource.data.text != '';
 
       allow delete: if isAuthorized();
+    }
+
+    // [Board] 댓글 읽음 상태 — 사용자당 문서 1개(board_comment_reads/{email}), reads 맵에 cardId→읽은 시각.
+    // 본인 문서만 읽고 쓴다(email == 토큰 이메일). 삭제 개념 없음.
+    match /board_comment_reads/{email} {
+      allow read: if isAuthorized() && email == request.auth.token.email;
+
+      allow create, update: if isAuthorized()
+        && email == request.auth.token.email
+        && request.resource.data.keys().hasOnly([
+          'reads', 'created_by', 'created_at', 'updated_by', 'updated_at'
+        ])
+        && request.resource.data.reads is map;
     }
 
     // [Board] HR 직원현황의 안전 명부 미러 — 이름·이메일·부서·재직 여부만 서버가 동기화한다.
