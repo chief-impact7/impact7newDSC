@@ -1183,13 +1183,13 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
         ${siblingHtml}
     `;
 
-    // 비활성 학생일 때만 진단평가 입력 액션 바 노출 (자동채움된 모달 열기).
+    // 비활성 학생일 때만 진단평가 입력 액션 바 노출.
     const inactiveBar = document.getElementById('inactive-action-bar');
     const diagBtn = document.getElementById('diagnostic-btn');
     if (inactiveBar && diagBtn) {
         if (_isInactiveDetailStudent(student)) {
             inactiveBar.style.display = '';
-            diagBtn.onclick = () => window.openContactAsTemp(studentId);
+            diagBtn.onclick = () => window.openDiagnosticScheduleModal(studentId);
         } else {
             inactiveBar.style.display = 'none';
             diagBtn.onclick = null;
@@ -1467,7 +1467,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
                 ${esc(student.status || '비원생')} 학생
             </div>
             <div style="font-size:13px;color:var(--text-sec);">
-                진단평가 입력은 상단 진단평가 버튼에서 진행할 수 있습니다.
+                진단평가 예약은 상단 진단평가 버튼에서 진행할 수 있습니다.
             </div>
         </div>`;
 
