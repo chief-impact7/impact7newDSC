@@ -2,7 +2,7 @@
 import { msIcon } from './ms-icon.js';
 import {
   listStudentRecords, newRecordRef, createRecord, updateRecord, uploadRecordFile,
-  deleteRecordFiles, deleteRecord,
+  updateRecordImportant, deleteRecordFiles, deleteRecord,
 } from './docu-data.js';
 import { splitRecordsByType } from './docu-records.js';
 import { renderLeaveRequestCard } from './leave-request.js';
@@ -17,7 +17,7 @@ let _deps = {};
 let _currentStudentId = null;
 let _saving = false;
 let _editingId = null; // 인라인 편집 중인 기록 id
-let _editBuffer = null; // 편집 중 미저장 입력(content·occurred_at) 스냅샷 — 재렌더 유실 방지
+let _editBuffer = null; // 편집 중 미저장 입력(content·occurred_at·important) 스냅샷 — 재렌더 유실 방지
 
 export function initDocuCardDeps(deps) {
   _deps = deps; // { toast, readonly }
@@ -31,10 +31,14 @@ function fileListHtml(files) {
 
 function recordItemHtml(rec) {
   if (!_deps.readonly && _editingId === rec.id) return recordEditHtml(rec);
-  const actions = _deps.readonly ? '' : `<div class="docu-record-actions">
+  const important = rec.important === true;
+  const importantControl = _deps.readonly
+    ? (important ? `<span class="docu-important-indicator" title="중요 메모">${msIcon('keep')}</span>` : '')
+    : `<button class="icon-btn docu-important-btn${important ? ' active' : ''}" title="${important ? '중요 해제' : '중요 표시'}" aria-label="${important ? '중요 해제' : '중요 표시'}" aria-pressed="${important}" onclick="window.__docuToggleImportant('${esc(rec.id)}', ${!important})">${msIcon('keep')}</button>`;
+  const actions = `<div class="docu-record-actions">${importantControl}${_deps.readonly ? '' : `
       <button class="icon-btn docu-edit-btn" title="수정" aria-label="수정" onclick="window.__docuEdit('${esc(rec.id)}')">${msIcon('edit')}</button>
       <button class="icon-btn docu-del-btn" title="삭제" aria-label="삭제" onclick="window.__docuDelete('${esc(rec.id)}')">${msIcon('delete')}</button>
-    </div>`;
+    `}</div>`;
   return `<div class="docu-record-item" data-id="${esc(rec.id)}">
     <div class="docu-record-head">
       <span class="docu-record-date">${msIcon('event')}${esc(rec.occurred_at || '—')}</span>
@@ -52,16 +56,18 @@ function recordEditHtml(rec) {
   const useBuf = _editBuffer && _editingId === rec.id;
   const content = useBuf ? _editBuffer.content : (rec.content || '');
   const occurredAt = useBuf ? _editBuffer.occurred_at : (rec.occurred_at || '');
+  const important = useBuf ? _editBuffer.important : rec.important === true;
   const dateChip = occurredAt
     ? `<span class="docu-chip docu-chip-date">${msIcon('event')}${esc(occurredAt)}</span>`
     : '';
-  return `<div class="docu-record-item docu-editing" data-id="${id}">
+  return `<div class="docu-record-item docu-editing" data-id="${id}" data-original-important="${rec.important === true}">
     <textarea class="field-input docu-content docu-edit-content" maxlength="${MAX_CONTENT_LEN}" rows="2">${esc(content)}</textarea>
     <div class="docu-input-toolbar">
       <input type="date" class="docu-edit-date docu-visually-hidden" value="${esc(occurredAt)}" onchange="window.__docuEditChange('${id}')">
       <button type="button" class="icon-btn docu-icon-btn" title="날짜 선택" aria-label="날짜 선택" onclick="window.__docuEditPickDate('${id}')">${msIcon('calendar_month')}</button>
       <input type="file" class="docu-edit-file docu-visually-hidden" accept="image/*" multiple onchange="window.__docuEditChange('${id}')">
       <button type="button" class="icon-btn docu-icon-btn" title="이미지 첨부" aria-label="이미지 첨부" onclick="window.__docuEditPickFile('${id}')">${msIcon('image')}</button>
+      <button type="button" class="icon-btn docu-icon-btn docu-important-toggle${important ? ' active' : ''}" data-important="${important}" title="${important ? '중요 해제' : '중요 표시'}" aria-label="${important ? '중요 해제' : '중요 표시'}" aria-pressed="${important}" onclick="window.__docuToggleDraftImportant(this)">${msIcon('keep')}</button>
       <div class="docu-chips docu-edit-chips">${dateChip}</div>
       <button class="btn btn-primary btn-sm docu-edit-save" onclick="window.__docuEditSave('${id}')">저장</button>
       <button class="btn btn-secondary btn-sm" onclick="window.__docuEditCancel()">취소</button>
@@ -83,6 +89,9 @@ function sectionHtml(title, type, records, { icon = 'description', contentPlaceh
         <input type="file" class="docu-file-input docu-visually-hidden" accept="image/*" multiple onchange="window.__docuInputChange('${type}')">
         <button type="button" class="icon-btn docu-icon-btn" title="이미지 첨부" aria-label="이미지 첨부" onclick="window.__docuPickFile('${type}')">
           ${msIcon('image')}
+        </button>
+        <button type="button" class="icon-btn docu-icon-btn docu-important-toggle" data-important="false" title="중요 표시" aria-label="중요 표시" aria-pressed="false" onclick="window.__docuToggleDraftImportant(this)">
+          ${msIcon('keep')}
         </button>
         <div class="docu-chips" data-chips="${type}"></div>
         <button class="btn btn-primary btn-sm docu-save-btn" onclick="window.__docuSave('${type}')">저장</button>
@@ -122,6 +131,7 @@ export async function renderDocuTab(studentId) {
       _editBuffer = {
         content: box.querySelector('.docu-edit-content')?.value ?? '',
         occurred_at: box.querySelector('.docu-edit-date')?.value ?? '',
+        important: box.querySelector('.docu-important-toggle')?.dataset.important === 'true',
       };
     }
   }
@@ -203,6 +213,32 @@ window.__docuEditPickFile = function (id) {
 
 window.__docuEditChange = function (id) { renderEditChips(id); };
 
+window.__docuToggleDraftImportant = function (button) {
+  if (!button) return;
+  const important = button.dataset.important !== 'true';
+  button.dataset.important = String(important);
+  button.classList.toggle('active', important);
+  button.setAttribute('aria-pressed', String(important));
+  button.setAttribute('aria-label', important ? '중요 해제' : '중요 표시');
+  button.title = important ? '중요 해제' : '중요 표시';
+};
+
+window.__docuToggleImportant = async function (recordId, important) {
+  if (_deps.readonly || !_currentStudentId || _saving) return;
+  const studentId = _currentStudentId;
+  _saving = true;
+  try {
+    await updateRecordImportant(recordId, important);
+    _deps.toast?.(important ? '중요 메모로 표시했습니다' : '중요 표시를 해제했습니다', 'success');
+    if (_currentStudentId === studentId) renderDocuTab(studentId);
+  } catch (err) {
+    console.error('[docu] 중요 표시 변경 실패:', err);
+    _deps.toast?.('중요 표시 변경 실패', 'error');
+  } finally {
+    _saving = false;
+  }
+};
+
 window.__docuEditSave = async function (recordId) {
   if (_deps.readonly || !_currentStudentId || _saving) return; // 더블클릭 가드
   const studentId = _currentStudentId;
@@ -211,6 +247,7 @@ window.__docuEditSave = async function (recordId) {
   // 날짜 미입력 시 오늘을 기본값으로(입력폼과 동일 규칙).
   const occurred_at = box.querySelector('.docu-edit-date')?.value || todayStr();
   const content = box.querySelector('.docu-edit-content')?.value || '';
+  const important = box.querySelector('.docu-important-toggle')?.dataset.important === 'true';
   const fileInput = box.querySelector('.docu-edit-file');
   const newFiles = fileInput ? [...fileInput.files] : [];
   const saveBtn = box.querySelector('.docu-edit-save');
@@ -228,6 +265,7 @@ window.__docuEditSave = async function (recordId) {
   if (saveBtn) saveBtn.disabled = true;
   try {
     const patch = { occurred_at, content };
+    if (important || box.dataset.originalImportant === 'true') patch.important = important;
     let uploadedMetas = [];
     // 추가 첨부가 있으면 기존 files에 병합(파일 개별 삭제는 범위 밖).
     if (newFiles.length) {
@@ -275,6 +313,7 @@ window.__docuSave = async function (type) {
   // 날짜 미입력 시 저장일(오늘)을 기본값으로.
   const occurred_at = box.querySelector('.docu-date-input')?.value || todayStr();
   const content = box.querySelector('.docu-content')?.value || '';
+  const important = box.querySelector('.docu-important-toggle')?.dataset.important === 'true';
   const fileInput = box.querySelector('.docu-file-input');
   const files = fileInput ? [...fileInput.files] : [];
   const saveBtn = box.querySelector('.docu-save-btn');
@@ -308,7 +347,7 @@ window.__docuSave = async function (type) {
     // 문서는 마지막에 1회만 기록 — 실패 시 방금 올린 파일을 보상 삭제(고아 객체 방지). F-05.
     phase = 'doc';
     try {
-      await createRecord(recordRef, studentId, type, { occurred_at, content, files: metas });
+      await createRecord(recordRef, studentId, type, { occurred_at, content, files: metas, important });
     } catch (docErr) {
       await deleteRecordFiles(metas);
       throw docErr;

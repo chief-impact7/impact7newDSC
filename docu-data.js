@@ -21,23 +21,30 @@ export function newRecordRef() {
 }
 
 // 파일 업로드 성공 후 마지막에 1회만 문서 기록(고아 객체·빈 문서 방지). 반환: 문서 id.
-export async function createRecord(recordRef, studentId, type, { occurred_at, content, files = [] }) {
-  await auditSet(recordRef, {
+export async function createRecord(recordRef, studentId, type, { occurred_at, content, files = [], important = false }) {
+  const data = {
     student_id: studentId,
     type,
     occurred_at: occurred_at || '',
     content: content || '',
     files,
     created_at: serverTimestamp(),
-  });
+  };
+  if (important) data.important = true;
+  await auditSet(recordRef, data);
   return recordRef.id;
 }
 
 // 내용·일시(+선택적 files 병합)만 수정. audit이 updated_* 채움, READ_ONLY는 auditUpdate가 stub.
-export async function updateRecord(recordId, { occurred_at, content, files }) {
+export async function updateRecord(recordId, { occurred_at, content, files, important }) {
   const data = { occurred_at: occurred_at || '', content: content || '' };
   if (files !== undefined) data.files = files;
+  if (important !== undefined) data.important = important === true;
   await auditUpdate(doc(db, COL, recordId), data);
+}
+
+export async function updateRecordImportant(recordId, important) {
+  await auditUpdate(doc(db, COL, recordId), { important: important === true });
 }
 
 export async function uploadRecordFile(studentId, recordId, file, index = 0) {

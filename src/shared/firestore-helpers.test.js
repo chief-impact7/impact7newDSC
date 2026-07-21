@@ -84,17 +84,21 @@ describe('fetchDashboardDailyLogDataFromCache', () => {
       if (collectionName === 'daily_records') {
         return { size: 1, docs: [{ id: 'r1', data: () => ({ student_id: 's1', date: '2026-07-21' }) }], forEach() {} };
       }
+      if (collectionName === 'student_records') {
+        return { size: 1, docs: [{ id: 'm1', data: () => ({ student_id: 's1', important: true, content: '확인 필요' }) }], forEach() {} };
+      }
       return { size: 0, docs: [], forEach() {} };
     });
 
     const result = await fetchDashboardDailyLogDataFromCache('2026-07-21');
 
-    expect(getDocsFromCache).toHaveBeenCalledTimes(13);
+    expect(getDocsFromCache).toHaveBeenCalledTimes(14);
     expect(result).toEqual({
       dailyRecords: [{ id: 'r1', student_id: 's1', date: '2026-07-21' }],
       tempAttendances: [], hwFailTasks: [], testFailTasks: [],
       absenceRecords: [], leaveRequests: [], classSettings: { A101: { teacher: 'aaron@impact7.kr' } }, attendanceEvents: [],
       absenceNoticeStatus: {},
+      importantRecords: [{ id: 'm1', student_id: 's1', important: true, content: '확인 필요' }],
     });
   });
 

@@ -25,6 +25,7 @@ import { teacherDisplayName } from '@impact7/shared/teacher-label';
 import { deriveTenure, isAttendedStatus } from '@impact7/shared/history';
 import { MESSAGE_RECIPIENT_SETTINGS_FIELD } from './src/messages/recipient-settings.js';
 import { isScheduledWithdrawalDue } from './student-core.js';
+import { importantRecordsByStudent } from './docu-records.js';
 
 const _promoteEnrollPending = createPromoteEnrollPending(
     { db, writeBatch, doc, collection, serverTimestamp },
@@ -781,6 +782,13 @@ export function unsubscribeAll() {
 export function loadLeaveRequests() {
     const q = query(collection(db, 'leave_requests'), where('status', 'in', ['requested', 'approved', 'cancelled']));
     return _listenCollection('leave_requests', q, null, (data) => { state.leaveRequests = data; });
+}
+
+export function loadImportantStudentRecords() {
+    const q = query(collection(db, 'student_records'), where('important', '==', true));
+    return _listenCollection('important_student_records', q, null, (data) => {
+        state.importantRecordsByStudent = importantRecordsByStudent(data);
+    });
 }
 
 // ─── 1개월 경과 자동 처리 ────────────────────────────────────────────────────

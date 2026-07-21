@@ -31,7 +31,7 @@ import {
 import {
     currentSchool, studentGrade, studentShortLabel, todayStr, getDayName
 } from './src/shared/firestore-helpers.js';
-import { auditSet } from './audit.js';
+import { auditSet, READ_ONLY } from './audit.js';
 import {
     getStudentDomains, getStudentTestItems, getClassDomains,
     getTeacherName, getStudentOverrides,
@@ -423,7 +423,7 @@ export function switchDetailTab(tab) {
                     return [...emails].map(e => getTeacherName(e)).filter(Boolean);
                 },
                 toast: (msg) => showToast(msg),
-                readonly: window.READ_ONLY === true,
+                readonly: READ_ONLY,
             });
             _renderConsultationFn = renderConsultationTab;
             renderConsultationTab(state.selectedStudentId);
@@ -443,7 +443,7 @@ export function switchDetailTab(tab) {
             initMessageCardDeps({
                 getStudent: (id) => findStudent(id),
                 toast: (msg, type) => showToast(msg, type),
-                readonly: window.READ_ONLY === true,
+                readonly: READ_ONLY,
             });
             _renderMessageFn = renderMessageTab;
             renderMessageTab(state.selectedStudentId);
@@ -457,7 +457,7 @@ export function switchDetailTab(tab) {
         import('./docu-card.js').then(({ renderDocuTab, initDocuCardDeps }) => {
             initDocuCardDeps({
                 toast: (msg, type) => showToast(msg, type),
-                readonly: window.READ_ONLY === true,
+                readonly: READ_ONLY,
                 refreshBadge: (id) => _refreshDocuBadge(id),
             });
             _renderDocuFn = renderDocuTab;
@@ -1538,7 +1538,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
             const statusMount = document.getElementById('student-status-mount');
             if (statusMount) {
                 import('./student-status-card.js').then(({ renderStudentStatusCard, initStudentStatusCardDeps }) => {
-                    initStudentStatusCardDeps({ readonly: window.READ_ONLY === true });
+                    initStudentStatusCardDeps({ readonly: READ_ONLY });
                     // stale 방지: 그 사이 다른 학생으로 바뀌었으면 스킵
                     if (statusMount.dataset.studentId === studentId) {
                         renderStudentStatusCard(studentId, statusMount);

@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { splitRecordsByType, toFileMeta, isRecentRecord, hasRecentRecord } from './docu-records.js';
+import {
+  splitRecordsByType, toFileMeta, isRecentRecord, hasRecentRecord,
+  importantRecordsByStudent, importantRecordTooltip,
+} from './docu-records.js';
 
 const sample = [
   { id: 'a', type: 'reflection', occurred_at: '2026-06-10', content: '', files: [] },
@@ -69,4 +72,22 @@ test('hasRecentRecord: 최근 기록이 하나라도 있으면 true', () => {
   assert.equal(hasRecentRecord([{ occurred_at: '2026-01-01' }], NOW), false);
   assert.equal(hasRecentRecord([], NOW), false);
   assert.equal(hasRecentRecord(null, NOW), false);
+});
+
+test('importantRecordsByStudent: 학생별 최신 중요 기록만 선택', () => {
+  const byStudent = importantRecordsByStudent([
+    { student_id: 's1', important: true, occurred_at: '2026-06-10', content: '이전' },
+    { student_id: 's1', important: false, occurred_at: '2026-06-20', content: '일반' },
+    { student_id: 's1', important: true, occurred_at: '2026-06-15', content: '최신' },
+    { student_id: 's2', important: true, occurred_at: '2026-06-12', content: '다른 학생' },
+  ]);
+  assert.equal(byStudent.size, 2);
+  assert.equal(byStudent.get('s1').content, '최신');
+});
+
+test('importantRecordTooltip: 내용 공백 정리와 길이 제한', () => {
+  const tooltip = importantRecordTooltip({
+    type: 'reflection', occurred_at: '2026-06-15', content: '첫 줄\n  둘째 줄이 길다',
+  }, 8);
+  assert.equal(tooltip, '중요 메모 (반성문 · 2026-06-15)\n첫 줄 둘째 줄…');
 });

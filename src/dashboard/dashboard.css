@@ -1045,6 +1045,14 @@ body {
     white-space: nowrap;
 }
 
+.daily-log-important {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 4px;
+    color: #b06000;
+    vertical-align: middle;
+}
+
 .daily-log-sub {
     display: block;
     color: var(--daily-muted);
