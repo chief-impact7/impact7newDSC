@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { Icon } from '@impact7/ui';
-import { ICON_NAME } from '../icon-map.js';
+import { ICON_SVG } from '../icon-map.js';
 import { NEXT_HW_FIELDS } from '../constants.js';
 
 const INITIAL_ROWS = 5;
@@ -45,7 +45,7 @@ export default function ScheduleSummary({ checks }) {
         <div className="dash-card schedule">
             <div className="dash-card-header">
                 <span>
-                    <Icon name={ICON_NAME.event_note} size={20} className="i7-icon" />
+                    <Icon svg={ICON_SVG.event_note} size={20} className="i7-icon" />
                     다음 숙제/일정
                 </span>
                 <span className="dash-card-header-meta">
@@ -93,7 +93,7 @@ export default function ScheduleSummary({ checks }) {
                                         className="dash-expand-btn"
                                         onClick={() => toggleClass(cls)}
                                     >
-                                        <Icon name={isExpanded ? ICON_NAME.expand_less : ICON_NAME.expand_more} size={18} />
+                                        <Icon svg={isExpanded ? ICON_SVG.expand_less : ICON_SVG.expand_more} size={18} />
                                         {isExpanded ? '접기' : `더 보기 (${recs.length - INITIAL_ROWS}건)`}
                                     </button>
                                 )}

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Icon } from '@impact7/ui';
-import { ICON_NAME } from '../icon-map.js';
+import { ICON_SVG } from '../icon-map.js';
 import ReactECharts from '../echarts.jsx';
 import { HW_FIELDS } from '../constants.js';
 
@@ -78,7 +78,7 @@ function HomeworkSummary({ checks }) {
         <div className="dash-card homework">
             <div className="dash-card-header">
                 <span>
-                    <Icon name={ICON_NAME.menu_book} size={20} className="i7-icon" />
+                    <Icon svg={ICON_SVG.menu_book} size={20} className="i7-icon" />
                     숙제 현황
                 </span>
                 <span className="dash-card-header-meta" style={{ fontWeight: 700, color: rateColor }}>
@@ -153,7 +153,7 @@ function HomeworkSummary({ checks }) {
                                     className="dash-expand-btn"
                                     onClick={() => setShowIncomplete(v => !v)}
                                 >
-                                    <Icon name={showIncomplete ? ICON_NAME.expand_less : ICON_NAME.expand_more} size={18} />
+                                    <Icon svg={showIncomplete ? ICON_SVG.expand_less : ICON_SVG.expand_more} size={18} />
                                     미완료 학생 ({incompleteStudents.length}명)
                                 </button>
                                 {showIncomplete && (

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Icon } from '@impact7/ui';
-import { ICON_NAME } from '../icon-map.js';
+import { ICON_SVG } from '../icon-map.js';
 import ReactECharts from '../echarts.jsx';
 import { HW_FIELDS, TEST_FIELDS } from '../constants.js';
 
@@ -154,7 +154,7 @@ function Metric({ icon, label, value, note }) {
     return (
         <div className="period-metric">
             <div className="period-metric-label">
-                <Icon name={ICON_NAME[icon]} size={18} className="i7-icon" aria-hidden="true" />
+                <Icon svg={ICON_SVG[icon]} size={18} className="i7-icon" aria-hidden="true" />
                 {label}
             </div>
             <div className="period-metric-value">{value}</div>
@@ -483,7 +483,7 @@ export default function PeriodLogBoard({ checks, dailyRecords = [], students = [
         <div className="period-log-board">
             <div className="period-board-head">
                 <div>
-                    <Icon name={ICON_NAME.monitoring} size={24} className="i7-icon" aria-hidden="true" />
+                    <Icon svg={ICON_SVG.monitoring} size={24} className="i7-icon" aria-hidden="true" />
                     기간 로그북
                 </div>
                 <span>{rangeText}</span>
