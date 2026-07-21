@@ -2,6 +2,11 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { auth, functions, dataAuthReady } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
+import { msIcon } from './ms-icon.js';
+
+document.querySelectorAll('[data-checkin-icon]').forEach((el) => {
+    el.innerHTML = msIcon(el.dataset.checkinIcon);
+});
 
 const NUM_LENGTH = 6;
 // 같은 학생·같은 상태를 단시간에 다시 누르는 것을 막는 클라이언트 가드(서버 멱등이 최종 방어).

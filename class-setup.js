@@ -1,7 +1,7 @@
 import { msIcon } from './ms-icon.js';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
-    collection, getDocs, getDocsFromCache, doc, getDoc, writeBatch, arrayUnion, serverTimestamp
+    collection, getDocs, getDocsFromCache, doc, getDoc, writeBatch, arrayUnion, deleteField, serverTimestamp
 } from 'firebase/firestore';
 import { auth, db } from './firebase-config.js';
 import { ENROLLABLE_STATUSES, isEnrollableStatus } from '@impact7/shared/enrollment-status';
@@ -22,9 +22,10 @@ import { schoolSearchTerms } from './school-normalizer.js';
 import { batchSet, batchUpdate, normalizeImpact7Email } from './audit.js';
 import { recordTeacherChange } from './teacher-history.js';
 import { staffLabel } from '@impact7/shared/staff-label';
-import { teacherDisplayName } from '@impact7/shared/teacher-label';
 import {
     buildClassTimeFields,
+    buildReactivationCleanupFields,
+    buildReactivationHistoryBefore,
     hasActiveRegularClass,
     resolveRegularDefaultTime,
 } from './class-setup-enrollment.js';
@@ -111,21 +112,16 @@ async function loadStudents() {
     _applyStudentDocs(snap);
 }
 
-// 담임 표시 규약(@impact7/shared teacher-label): 이메일 로컬파트 첫 글자 대문자 ('edward@…' → 'Edward')
-const teacherLabelOf = (email) => teacherDisplayName(staffLabel(email)) || staffLabel(email);
-
 async function loadTeachers() {
-    // 담당 목록·표시이름의 정본은 HR 인사(staff_directory 미러) — 재직 교수만 후보.
+    // 담당 목록·표시이름의 정본은 HR 인사(staff_directory 미러의 english_name) — 재직 교수만.
+    // 로그인 이메일은 규약(영어이름@impact7.kr)으로 파생. staff_directory의 email 필드는 안 씀.
     const snap = await getDocs(collection(db, 'staff_directory'));
     teachersList.length = 0;
     snap.forEach(d => {
         const data = d.data();
         if (data.department !== '교수' || data.assignable !== true) return;
-        const email = String(data.email || '').trim().toLowerCase();
-        if (!email) return;
-        const name = (typeof data.english_name === 'string' && data.english_name.trim())
-            ? data.english_name.trim() : teacherLabelOf(email);
-        teachersList.push({ email, name });
+        const en = typeof data.english_name === 'string' ? data.english_name.trim() : '';
+        if (en) teachersList.push({ email: `${en.toLowerCase()}@impact7.kr`, name: en });
     });
     teachersList.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
     // 선생님 드롭다운 채우기
@@ -745,7 +741,7 @@ window.submitWizard = async function () {
             let periodNote = '';
             if (d.classType === '내신' && ex.class_type === '내신' &&
                 (ex.naesin_start !== d.naesinStart || ex.naesin_end !== d.naesinEnd)) {
-                periodNote = `\n\n⚠️ 내신 기간이 [${ex.naesin_start || '?'} ~ ${ex.naesin_end || '?'}] → [${d.naesinStart} ~ ${d.naesinEnd}]로 변경됩니다.\n이 반에 매핑된 학생들의 내신 enrollment.end_date도 자동 sync됩니다 (Cloud Function).`;
+                periodNote = `\n\n주의: 내신 기간이 [${ex.naesin_start || '?'} ~ ${ex.naesin_end || '?'}] → [${d.naesinStart} ~ ${d.naesinEnd}]로 변경됩니다.\n이 반에 매핑된 학생들의 내신 enrollment.end_date도 자동 sync됩니다 (Cloud Function).`;
             }
             const ok = confirm(`"${d.classCode}" 반이 이미 존재합니다. 설정을 덮어쓰시겠습니까?${periodNote}`);
             if (!ok) { btn.disabled = false; btn.textContent = '반 생성'; return; }
@@ -844,7 +840,8 @@ window.submitWizard = async function () {
                 timestamp: serverTimestamp(),
             });
         };
-        const _pushStatusChangeLog = (b, docId, beforeStatus, afterStatus, afterText) => {
+        const _pushStatusChangeLog = (b, docId, student, afterStatus, afterText) => {
+            const beforeStatus = student.status || '';
             batchSet(b, doc(collection(db, 'history_logs')), {
                 doc_id: docId,
                 change_type: 'RETURN',
@@ -856,7 +853,7 @@ window.submitWizard = async function () {
             batchSet(b, doc(collection(db, 'history_logs')), {
                 doc_id: docId,
                 change_type: 'STATUS_CHANGE',
-                before: JSON.stringify({ status: beforeStatus || '' }),
+                before: JSON.stringify(buildReactivationHistoryBefore(student)),
                 after: JSON.stringify({ status: afterStatus }),
                 google_login_id: _logActor,
                 timestamp: serverTimestamp(),
@@ -898,10 +895,11 @@ window.submitWizard = async function () {
                     studentUpdate.status_changed_at = serverTimestamp();
                     studentUpdate.status_changed_by = _logActor;
                     studentUpdate.status_previous = student.status || null;
+                    Object.assign(studentUpdate, buildReactivationCleanupFields(deleteField()));
                     _pushStatusChangeLog(
                         batch,
                         student.docId,
-                        student.status || '',
+                        student,
                         '재원',
                         `상태:재원, 반:${d.classCode} (특강 재원전환)`
                     );

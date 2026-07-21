@@ -54,12 +54,12 @@ Functions 변경 없으면 이 Phase는 스킵.
 4개 프로젝트의 firestore.rules를 diff로 비교:
 
 ```bash
-diff /Users/jongsooyi/projects/impact7DB/firestore.rules \
-     /Users/jongsooyi/projects/impact7newDSC/firestore.rules
-diff /Users/jongsooyi/projects/impact7newDSC/firestore.rules \
-     /Users/jongsooyi/projects/impact7HR/firestore.rules
-diff /Users/jongsooyi/projects/impact7newDSC/firestore.rules \
-     /Users/jongsooyi/projects/impact7exam/firestore.rules
+diff /Users/jongsooyi/IMPACT7/impact7DB/firestore.rules \
+     /Users/jongsooyi/IMPACT7/impact7newDSC/firestore.rules
+diff /Users/jongsooyi/IMPACT7/impact7newDSC/firestore.rules \
+     /Users/jongsooyi/IMPACT7/impact7HR/firestore.rules
+diff /Users/jongsooyi/IMPACT7/impact7newDSC/firestore.rules \
+     /Users/jongsooyi/IMPACT7/impact7exam/firestore.rules
 ```
 
 결과 판정:

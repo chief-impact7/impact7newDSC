@@ -32,3 +32,26 @@ export function buildClassTimeFields(classType, days, schedule, defaultTime) {
 export function resolveRegularDefaultTime(inputTime, edited, existingTime) {
     return edited ? inputTime : (existingTime || inputTime);
 }
+
+const REACTIVATION_CLEANUP_FIELDS = [
+    'pause_start_date',
+    'pause_end_date',
+    'scheduled_leave_status',
+    'withdrawal_date',
+    'pre_withdrawal_status',
+];
+
+export function buildReactivationCleanupFields(deleteValue) {
+    return Object.fromEntries(REACTIVATION_CLEANUP_FIELDS.map(field => [field, deleteValue]));
+}
+
+export function clearLocalReactivationFields(student) {
+    for (const field of REACTIVATION_CLEANUP_FIELDS) delete student[field];
+}
+
+export function buildReactivationHistoryBefore(student) {
+    return Object.fromEntries([
+        ['status', student.status || ''],
+        ...REACTIVATION_CLEANUP_FIELDS.map(field => [field, student[field] || '']),
+    ]);
+}

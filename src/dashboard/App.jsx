@@ -1,19 +1,22 @@
 import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
-import { Icon, IconButton } from '@impact7/ui';
 import { ICON_SVG } from './icon-map.js';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, dataAuthReady } from '../../firebase-config.js';
 import { signInWithGoogle, logout } from '../../auth.js';
-import { useStudents, useDashboardData, useConsultations } from './hooks/useFirestore.js';
+import { useStudents, useDashboardData, useConsultations, useAiStatusData } from './hooks/useFirestore.js';
 import { branchFromStudent, enrollmentCode, todayStr, fetchSemesterSettings, getSemestersForDate, studentGradeKey } from '../shared/firestore-helpers.js';
 import { openKoreanDatePicker } from '../../date-picker.js';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
-import DailyLogBoard from './components/DailyLogBoard.jsx';
 import GradeFilter from './components/GradeFilter.jsx';
 // 일별 뷰(기본)는 echarts를 안 쓴다. 차트를 쓰는 기간 뷰와 상담 뷰는 lazy 로드해
 // 일별 첫 페인트에서 echarts(~수백KB)를 빼 초기 로딩을 가볍게 한다.
 const PeriodLogBoard = lazy(() => import('./components/PeriodLogBoard.jsx'));
 const ConsultationBoard = lazy(() => import('./components/ConsultationBoard.jsx'));
+const AiStatusBoard = lazy(() => import('./components/AiStatusBoard.jsx'));
+const DailyLogBoard = lazy(() => import('./components/DailyLogBoard.jsx'));
+// ErrorBoundary는 lazy 금지 — 청크 로드 전에 터진 오류를 잡지 못한다.
+const Icon = lazy(() => import('@impact7/ui').then(module => ({ default: module.Icon })));
+const IconButton = lazy(() => import('@impact7/ui').then(module => ({ default: module.IconButton })));
 
 const pad2 = (value) => String(value).padStart(2, '0');
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})/;
@@ -85,6 +88,24 @@ function SkeletonCard() {
     );
 }
 
+function LoadingShell() {
+    return (
+        <div className="dash-app">
+            <header className="dash-header">
+                <div className="dash-header-left">
+                    <h1 className="dash-title">Impact7 DSC</h1>
+                    <span className="dash-view-toggle" role="group" aria-label="화면 전환">
+                        <button type="button" className="active" disabled>로그북</button>
+                        <button type="button" disabled>상담</button>
+                        <button type="button" disabled>AI</button>
+                    </span>
+                </div>
+            </header>
+            <div className="dash-grid"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>
+        </div>
+    );
+}
+
 export default function App() {
     const [user, setUser] = useState(null);
     const [authLoading, setAuthLoading] = useState(true);
@@ -97,7 +118,7 @@ export default function App() {
     const [gradeFilter, setGradeFilter] = useState(new Set());
     const [semesterSettings, setSemesterSettings] = useState({});
     const [loginError, setLoginError] = useState('');
-    const [view, setView] = useState('logbook'); // 'logbook' | 'consult'
+    const [view, setView] = useState('logbook'); // 'logbook' | 'consult' | 'ai'
 
     // 학기 설정 로드 (1회)
     useEffect(() => {
@@ -125,6 +146,7 @@ export default function App() {
                 setUser(null);
             }
             setAuthLoading(false);
+            globalThis.performance?.mark?.('auth-resolved');
         });
         return unsub;
     }, []);
@@ -145,8 +167,9 @@ export default function App() {
 
     // 데이터 로드
     const { students, loading: studentsLoading, error } = useStudents(user);
-    const { checks, dailyRecords, postponed, dailyLog, loading: dataLoading, error: dashError } = useDashboardData(user, startDate, endDate);
+    const { checks, dailyRecords, postponed, dailyLog, loading: dataLoading, error: dashError } = useDashboardData(user, startDate, endDate, view === 'logbook', rangeType === 'day');
     const { consultations, loading: consultLoading } = useConsultations(user, startDate, endDate, view === 'consult');
+    const aiStatus = useAiStatusData(user, view === 'ai');
 
     // 선택 날짜 기준 학기 감지
     const currentSemesters = useMemo(() =>
@@ -235,7 +258,7 @@ export default function App() {
 
     // ─── 로그인 화면 ───
     if (authLoading) {
-        return <div className="dash-loading">로딩 중...</div>;
+        return <LoadingShell />;
     }
 
     if (!user) {
@@ -257,28 +280,31 @@ export default function App() {
 
     if (error || dashError) {
         return (
-            <div role="alert" style={{
-                padding: '20px',
-                margin: '20px',
-                background: '#fce8e6',
-                color: '#c5221f',
-                borderRadius: '8px',
-                textAlign: 'center'
-            }}>
-                <p style={{ fontWeight: 500 }}>데이터 로드 실패</p>
-                <p style={{ fontSize: '14px', marginTop: '8px' }}>{(error || dashError)?.message || '알 수 없는 오류가 발생했습니다'}</p>
-                <IconButton
-                    svg={ICON_SVG.refresh}
-                    label="새로고침"
-                    onClick={() => window.location.reload()}
-                    style={{ marginTop: '12px' }}
-                />
-            </div>
+            <Suspense fallback={<LoadingShell />}>
+                <div role="alert" style={{
+                    padding: '20px',
+                    margin: '20px',
+                    background: '#fce8e6',
+                    color: '#c5221f',
+                    borderRadius: '8px',
+                    textAlign: 'center'
+                }}>
+                    <p style={{ fontWeight: 500 }}>데이터 로드 실패</p>
+                    <p style={{ fontSize: '14px', marginTop: '8px' }}>{(error || dashError)?.message || '알 수 없는 오류가 발생했습니다'}</p>
+                    <IconButton
+                        svg={ICON_SVG.refresh}
+                        label="새로고침"
+                        onClick={() => window.location.reload()}
+                        style={{ marginTop: '12px' }}
+                    />
+                </div>
+            </Suspense>
         );
     }
 
     return (
-        <div className="dash-app">
+        <Suspense fallback={<LoadingShell />}>
+            <div className="dash-app">
             {/* 상단 바 */}
             <header className="dash-header">
                 <div className="dash-header-left">
@@ -287,6 +313,7 @@ export default function App() {
                     <span className="dash-view-toggle" role="group" aria-label="화면 전환">
                         <button type="button" className={view === 'logbook' ? 'active' : ''} aria-pressed={view === 'logbook'} onClick={() => setView('logbook')}>로그북</button>
                         <button type="button" className={view === 'consult' ? 'active' : ''} aria-pressed={view === 'consult'} onClick={() => setView('consult')}>상담</button>
+                        <button type="button" className={view === 'ai' ? 'active' : ''} aria-pressed={view === 'ai'} onClick={() => setView('ai')}>AI</button>
                     </span>
                     <a href="./messages.html" className="dash-link" target="_blank" rel="noopener">메시지</a>
                 </div>
@@ -311,60 +338,64 @@ export default function App() {
 
             {/* 필터 바 */}
             <div className="dash-filters">
-                <div className="dash-filter-group">
-                    <label>기간</label>
-                    <select aria-label="기간" value={rangeType} onChange={e => setRangeType(e.target.value)}>
-                        <option value="day">일별</option>
-                        <option value="week">주별</option>
-                        <option value="custom">직접 선택</option>
-                    </select>
-                </div>
-
-                {rangeType === 'day' && (
-                    <div className="dash-filter-group">
-                        <label>날짜</label>
-                        <div className="dash-date-nav">
-                            <button type="button" aria-label="이전 날" onClick={() => setBaseDate(addDays(normalizedBaseDate, -1))}>
-                                <Icon svg={ICON_SVG.chevron_left} size={20} aria-hidden="true" />
-                            </button>
-                            <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, normalizedBaseDate, setBaseDate)}>{normalizedBaseDate}</button>
-                            <button type="button" aria-label="다음 날" onClick={() => setBaseDate(addDays(normalizedBaseDate, 1))}>
-                                <Icon svg={ICON_SVG.chevron_right} size={20} aria-hidden="true" />
-                            </button>
-                            <button type="button" aria-label="오늘" onClick={() => setBaseDate(todayStr())} title="오늘">
-                                <Icon svg={ICON_SVG.today} size={20} aria-hidden="true" />
-                            </button>
+                {view !== 'ai' && (
+                    <>
+                        <div className="dash-filter-group">
+                            <label>기간</label>
+                            <select aria-label="기간" value={rangeType} onChange={e => setRangeType(e.target.value)}>
+                                <option value="day">일별</option>
+                                <option value="week">주별</option>
+                                <option value="custom">직접 선택</option>
+                            </select>
                         </div>
-                    </div>
-                )}
 
-                {rangeType === 'week' && (
-                    <div className="dash-filter-group">
-                        <label>기준일</label>
-                        <div className="dash-date-nav">
-                            <button type="button" aria-label="이전 주" onClick={() => setBaseDate(addDays(normalizedBaseDate, -7))}>
-                                <Icon svg={ICON_SVG.chevron_left} size={20} aria-hidden="true" />
-                            </button>
-                            <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, normalizedBaseDate, setBaseDate)}>{normalizedBaseDate}</button>
-                            <button type="button" aria-label="다음 주" onClick={() => setBaseDate(addDays(normalizedBaseDate, 7))}>
-                                <Icon svg={ICON_SVG.chevron_right} size={20} aria-hidden="true" />
-                            </button>
-                            <IconButton svg={ICON_SVG['calendar-dots']} label="이번 주" onClick={() => setBaseDate(todayStr())} />
-                            <span className="dash-range-label week">{formatWeekRangeLabel(startDate, endDate)}</span>
-                        </div>
-                    </div>
-                )}
-
-                {rangeType === 'custom' && (
-                    <div className="dash-filter-group">
-                        <label>기간</label>
-                        <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, customStart, setCustomStart)}>{customStart || '시작일'}</button>
-                        <span>~</span>
-                        <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, customEnd, setCustomEnd)}>{customEnd || '종료일'}</button>
-                        {dateRangeSwapped && (
-                            <span className="dash-date-warning">시작일과 종료일이 바뀌어 자동 보정됩니다</span>
+                        {rangeType === 'day' && (
+                            <div className="dash-filter-group">
+                                <label>날짜</label>
+                                <div className="dash-date-nav">
+                                    <button type="button" aria-label="이전 날" onClick={() => setBaseDate(addDays(normalizedBaseDate, -1))}>
+                                        <Icon svg={ICON_SVG.chevron_left} size={20} aria-hidden="true" />
+                                    </button>
+                                    <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, normalizedBaseDate, setBaseDate)}>{normalizedBaseDate}</button>
+                                    <button type="button" aria-label="다음 날" onClick={() => setBaseDate(addDays(normalizedBaseDate, 1))}>
+                                        <Icon svg={ICON_SVG.chevron_right} size={20} aria-hidden="true" />
+                                    </button>
+                                    <button type="button" aria-label="오늘" onClick={() => setBaseDate(todayStr())} title="오늘">
+                                        <Icon svg={ICON_SVG.today} size={20} aria-hidden="true" />
+                                    </button>
+                                </div>
+                            </div>
                         )}
-                    </div>
+
+                        {rangeType === 'week' && (
+                            <div className="dash-filter-group">
+                                <label>기준일</label>
+                                <div className="dash-date-nav">
+                                    <button type="button" aria-label="이전 주" onClick={() => setBaseDate(addDays(normalizedBaseDate, -7))}>
+                                        <Icon svg={ICON_SVG.chevron_left} size={20} aria-hidden="true" />
+                                    </button>
+                                    <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, normalizedBaseDate, setBaseDate)}>{normalizedBaseDate}</button>
+                                    <button type="button" aria-label="다음 주" onClick={() => setBaseDate(addDays(normalizedBaseDate, 7))}>
+                                        <Icon svg={ICON_SVG.chevron_right} size={20} aria-hidden="true" />
+                                    </button>
+                                    <IconButton svg={ICON_SVG['calendar-dots']} label="이번 주" onClick={() => setBaseDate(todayStr())} />
+                                    <span className="dash-range-label week">{formatWeekRangeLabel(startDate, endDate)}</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {rangeType === 'custom' && (
+                            <div className="dash-filter-group">
+                                <label>기간</label>
+                                <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, customStart, setCustomStart)}>{customStart || '시작일'}</button>
+                                <span>~</span>
+                                <button type="button" className="dash-date-btn" onClick={e => openKoreanDatePicker(e.currentTarget, customEnd, setCustomEnd)}>{customEnd || '종료일'}</button>
+                                {dateRangeSwapped && (
+                                    <span className="dash-date-warning">시작일과 종료일이 바뀌어 자동 보정됩니다</span>
+                                )}
+                            </div>
+                        )}
+                    </>
                 )}
 
                 <div className="dash-filter-group">
@@ -392,7 +423,22 @@ export default function App() {
                 {loading && <span className="dash-loading-indicator">로딩 중...</span>}
             </div>
 
-            {view === 'consult' ? (
+            {view === 'ai' ? (
+                <ErrorBoundary>
+                    <Suspense fallback={<div className="dash-grid"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>}>
+                        <AiStatusBoard
+                            students={students}
+                            data={aiStatus.data}
+                            loading={aiStatus.loading}
+                            error={aiStatus.error}
+                            reload={aiStatus.reload}
+                            branchFilter={branchFilter}
+                            classFilter={classFilter}
+                            gradeFilter={gradeFilter}
+                        />
+                    </Suspense>
+                </ErrorBoundary>
+            ) : view === 'consult' ? (
                 consultLoading ? (
                     <div className="dash-grid"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>
                 ) : (
@@ -456,6 +502,7 @@ export default function App() {
                     )}
                 </div>
             )}
-        </div>
+            </div>
+        </Suspense>
     );
 }

@@ -2,7 +2,6 @@
 // daily-ops.js에서 추출한 학생 관련 유틸리티 함수들
 
 import { todayStr, parseDateKST, getDayName } from './src/shared/firestore-helpers.js';
-import { digitsOf } from '@impact7/shared/phone';
 import { state, LEVEL_SHORT, LEAVE_STATUSES } from './state.js';
 import { applyNaesinFreeDerivation, isNaesinActiveAt } from '@impact7/shared/enrollment-derivation';
 import { currentSchool, normalizeRealLevelGrade } from '@impact7/shared/student-label';
@@ -10,16 +9,19 @@ import { classSettingsGet } from '@impact7/shared/class-code';
 import { startTime } from '@impact7/shared/expected-arrival';
 import {
     normalizeDays, enrollmentCode, branchFromStudent, allClassCodes,
+    summarizeEnrollmentClasses,
     makeDailyRecordId, buildNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE,
     resolveNaesinCsKey, displayCodeFromCsKey, isWithdrawnAt, isOnLeaveAt,
-    isValidDateStr,
+    isValidDateStr, createSiblingMap, studentMatchesSearchTerms, siblingStatusSuffix,
+    findSeparateTeukangVisit,
 } from './student-core.js';
 
 export {
     normalizeDays, enrollmentCode, branchFromStudent, allClassCodes,
+    summarizeEnrollmentClasses,
     makeDailyRecordId, buildNaesinCsKey, NAESIN_OVERRIDE_EXCLUDE,
     resolveNaesinCsKey, displayCodeFromCsKey, isWithdrawnAt, isOnLeaveAt,
-    isValidDateStr,
+    isValidDateStr, studentMatchesSearchTerms, siblingStatusSuffix,
 };
 
 // 휴원 기간 만료 판정 (실제 오늘 KST 기준).
@@ -203,6 +205,13 @@ export function getStudentStartTime(enrollment, dayName) {
     return enrollment ? startTime(enrollment, dayName, state.classSettings) : '';
 }
 
+export function getSeparateTeukangVisit(s, dateStr) {
+    const date = dateStr || todayStr();
+    const dayName = getDayName(date);
+    const dayEnrolls = getActiveEnrollments(s, date).filter(e => normalizeDays(e.day).includes(dayName));
+    return findSeparateTeukangVisit(dayEnrolls, (e) => getStudentStartTime(e, dayName));
+}
+
 // ─── ID & 검색 ─────────────────────────────────────────────────────────────
 export function findStudent(studentId) {
     return state.allStudents.find(s => s.docId === studentId)
@@ -211,32 +220,5 @@ export function findStudent(studentId) {
 
 // ─── 형제 맵 빌드 ──────────────────────────────────────────────────────────
 export function buildSiblingMap() {
-    state.siblingMap = {};
-    const idToStudent = new Map(state.allStudents.map(s => [s.docId, s]));
-    const phoneToIds = {};
-    state.allStudents.forEach(s => {
-        const phones = [...new Set([s.parent_phone_1, s.parent_phone_2]
-            .map(digitsOf).filter(p => p.length >= 9))];
-        phones.forEach(p => {
-            if (!phoneToIds[p]) phoneToIds[p] = [];
-            phoneToIds[p].push(s.docId);
-        });
-    });
-    Object.values(phoneToIds).forEach(ids => {
-        const uniqueIds = [...new Set(ids)];
-        if (uniqueIds.length < 2) return;
-        uniqueIds.forEach(id => {
-            const student = idToStudent.get(id);
-            if (!student) return;
-            const siblings = uniqueIds.filter(sid => {
-                if (sid === id) return false;
-                const other = idToStudent.get(sid);
-                return other && other.name !== student.name;
-            });
-            if (siblings.length > 0) {
-                if (!state.siblingMap[id]) state.siblingMap[id] = new Set();
-                siblings.forEach(sid => state.siblingMap[id].add(sid));
-            }
-        });
-    });
+    state.siblingMap = createSiblingMap([...state.allStudents, ...state.withdrawnStudents]);
 }

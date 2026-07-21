@@ -149,6 +149,9 @@ body {
 }
 
 .app-bar-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   color: var(--primary);
   text-decoration: none;
   font-size: 13px;
@@ -297,39 +300,6 @@ body {
 .not-today-banner-btn:hover {
   background: var(--warning);
   color: #fff;
-}
-
-/* 검색 범위 안내 배너 (필터 활성 + 검색 중) */
-.search-scope-banner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 16px;
-  background: var(--surface-container);
-  border-bottom: 1px solid var(--border);
-  color: var(--text-sec);
-  font-size: 12px;
-}
-
-.search-scope-banner .i7-icon {
-  font-size: 16px;
-}
-
-.search-scope-btn {
-  margin-left: auto;
-  padding: 3px 10px;
-  border: 1px solid var(--primary);
-  border-radius: 12px;
-  background: #fff;
-  color: var(--primary);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.search-scope-btn:hover {
-  background: var(--primary-light);
 }
 
 .user-email {
@@ -787,6 +757,8 @@ body {
   flex-shrink: 0;
   min-width: 80px;
   max-width: 120px;
+  padding-right: 14px;
+  border-right: 1px solid var(--border);
 }
 
 .item-title {
@@ -850,6 +822,26 @@ body {
   min-width: 0;
   display: flex;
   align-items: center;
+  gap: 10px;
+}
+
+/* 같은 날 정규/특강 두 등원 짝을 시각적으로 분리 */
+.visit-pair {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.visit-pair + .visit-pair {
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+
+/* 휴/퇴원 학생: 출결 버튼 대신 기간 표시 */
+.leave-period {
+  font-size: 12px;
+  color: var(--text-sec);
+  white-space: nowrap;
 }
 
 .item-tag {
@@ -915,6 +907,15 @@ body {
   background: #5f6368;
   color: white;
   border-color: #5f6368;
+}
+
+/* 수업종류(첫 버튼)는 출결 pill과 형태로 구분 — 사각 태그 + 작은 크기.
+   클릭(미확인 리셋) 동작은 유지하므로 button 그대로, 시각만 분리. */
+.toggle-btn.type-tag {
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 /* 첫 버튼(정규/특강/내신/자유/비정규) — 라벨별 색상 톤.
@@ -1022,6 +1023,26 @@ body {
   justify-content: center;
   flex-shrink: 0;
   font-family: var(--font-heading);
+}
+
+.profile-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.profile-academic-summary {
+  max-width: 140px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--text-sec);
+  text-align: center;
+}
+
+.profile-academic-summary div {
+  overflow-wrap: anywhere;
 }
 
 .detail-title {
@@ -1867,6 +1888,7 @@ textarea.field-input {
   .app-bar {
     padding: 0 8px;
     gap: 8px;
+    overflow-x: auto;
   }
 
   .app-bar-center {
@@ -1875,6 +1897,19 @@ textarea.field-input {
 
   .app-bar .search-pill {
     max-width: 100%;
+  }
+
+  .app-bar-link-label {
+    display: none;
+  }
+
+  .app-bar-link {
+    width: 44px;
+    height: 44px;
+    justify-content: center;
+    padding-left: 0;
+    border-left: 0;
+    flex-shrink: 0;
   }
 
   .main-content {
@@ -3782,7 +3817,7 @@ textarea.field-input {
 }
 
 /* ─── 결석대장 뱃지/스타일 ─── */
-.absence-status-badge { font-size:10px; font-weight:600; border-radius:4px; padding:2px 6px; color:#fff; }
+.absence-status-badge { display:inline-flex; align-items:center; gap:2px; font-size:10px; font-weight:600; border-radius:4px; padding:2px 6px; color:#fff; }
 .absence-status-badge.unconsulted { background:#f59e0b; }
 .absence-status-badge.undecided { background:#6b7280; }
 .absence-status-badge.makeup { background:#2563eb; }
@@ -4120,6 +4155,9 @@ textarea.field-input {
   border-bottom: 1px solid var(--border);
 }
 .inactive-action-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 12px;
   color: var(--text-sec);
   flex: 1;

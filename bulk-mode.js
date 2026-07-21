@@ -7,6 +7,7 @@ import { state } from './state.js';
 import { esc, escAttr, showSaveIndicator, showToast, oxDisplayClass } from './ui-utils.js';
 import { branchFromStudent } from './student-helpers.js';
 import { getStudentDomains, getStudentTestItems, saveImmediately } from './data-layer.js';
+import { isEnrollableStatus } from '@impact7/shared/enrollment-status';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderSubFilters, renderListPanel, renderStudentDetail,
@@ -58,6 +59,7 @@ export function exitBulkMode() {
 }
 
 export function updateBulkBar() {
+    pruneNonEnrollableSelection();
     const count = state.selectedStudentIds.size;
     const countEl = document.getElementById('bulk-selected-count');
     if (countEl) countEl.textContent = `${count}명 선택`;
@@ -132,11 +134,13 @@ export function renderBulkSummary() {
 }
 
 export function openBulkAttendanceFromSummary() {
+    pruneNonEnrollableSelection();
     if (state.selectedStudentIds.size < 2) return;
     openBulkModal('attendance');
 }
 
 export function openBulkOXFromSummary(type) {
+    pruneNonEnrollableSelection();
     if (state.selectedStudentIds.size < 2) return;
     const field = type === 'test'
         ? (state.currentSubFilter.has('test_2nd') ? 'test_domains_2nd' : 'test_domains_1st')
@@ -194,7 +198,7 @@ export function toggleSelectAll(checked) {
         cb.checked = checked;
         const item = cb.closest('.list-item');
         const id = item?.dataset.id;
-        if (id) {
+        if (id && isBulkEligible(id)) {
             if (checked) { state.selectedStudentIds.add(id); item.classList.add('bulk-selected'); }
             else { state.selectedStudentIds.delete(id); item.classList.remove('bulk-selected'); }
         }
@@ -203,6 +207,10 @@ export function toggleSelectAll(checked) {
 }
 
 export function toggleStudentCheckbox(docId, checked) {
+    if (!isBulkEligible(docId)) {
+        state.selectedStudentIds.delete(docId);
+        return;
+    }
     if (checked) state.selectedStudentIds.add(docId);
     else state.selectedStudentIds.delete(docId);
     const item = document.querySelector(`.list-item[data-id="${docId}"]`);
@@ -220,7 +228,18 @@ let _bulkModalField = null;  // hw_domains_1st etc.
 let _bulkModalDomain = null; // 'Gr' etc.
 let _bulkModalValue = null;  // 선택된 값
 
+function isBulkEligible(docId) {
+    return isEnrollableStatus(state.allStudents.find(s => s.docId === docId)?.status);
+}
+
+function pruneNonEnrollableSelection() {
+    for (const id of state.selectedStudentIds) {
+        if (!isBulkEligible(id)) state.selectedStudentIds.delete(id);
+    }
+}
+
 export function openBulkModal(type, field, domain) {
+    pruneNonEnrollableSelection();
     _bulkModalType = type;
     _bulkModalField = field;
     _bulkModalDomain = domain;
@@ -267,34 +286,41 @@ export function selectBulkValue(btn, value) {
 }
 
 function bulkApplyOxToAttended(value) {
+    pruneNonEnrollableSelection();
     const attendedIds = [...state.selectedStudentIds].filter(id => isAttendedStatus(state.dailyRecords[id]?.attendance?.status));
     attendedIds.forEach(id => applyHwDomainOX(id, _bulkModalField, _bulkModalDomain, value));
     const skipped = state.selectedStudentIds.size - attendedIds.length;
     if (skipped > 0) showToast(`미출석 ${skipped}명 제외`);
 }
 
-export function resetBulkModal() {
+export async function resetBulkModal() {
+    pruneNonEnrollableSelection();
     const modal = document.getElementById('bulk-confirm-modal');
     modal.style.display = 'none';
 
+    let failedCount = 0;
     if (_bulkModalType === 'attendance') {
-        [...state.selectedStudentIds].forEach(id => applyAttendance(id, '정규', true, true));
+        const results = await Promise.all([...state.selectedStudentIds].map(id => applyAttendance(id, '정규', true, true)));
+        failedCount = results.filter(saved => !saved).length;
     } else if (_bulkModalType === 'ox') {
         bulkApplyOxToAttended('');
     }
     renderSubFilters();
     renderListPanel();
-    showToast(`${state.selectedStudentIds.size}명 초기화 완료`);
+    showToast(failedCount ? `${failedCount}명 저장 실패` : `${state.selectedStudentIds.size}명 초기화 완료`);
     _bulkModalType = null;
 }
 
-export function confirmBulkAction() {
+export async function confirmBulkAction() {
+    pruneNonEnrollableSelection();
     if (_bulkModalValue === null) return;
     const modal = document.getElementById('bulk-confirm-modal');
     modal.style.display = 'none';
 
+    let failedCount = 0;
     if (_bulkModalType === 'attendance') {
-        [...state.selectedStudentIds].forEach(id => applyAttendance(id, _bulkModalValue, true, true));
+        const results = await Promise.all([...state.selectedStudentIds].map(id => applyAttendance(id, _bulkModalValue, true, true)));
+        failedCount = results.filter(saved => !saved).length;
         renderSubFilters();
         renderListPanel();
     } else if (_bulkModalType === 'ox') {
@@ -302,7 +328,7 @@ export function confirmBulkAction() {
         renderSubFilters();
         renderListPanel();
     }
-    showToast(`${state.selectedStudentIds.size}명 일괄 처리 완료`);
+    showToast(failedCount ? `${failedCount}명 저장 실패` : `${state.selectedStudentIds.size}명 일괄 처리 완료`);
     _bulkModalType = null;
 }
 

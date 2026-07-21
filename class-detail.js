@@ -15,6 +15,11 @@ import { state, DAY_ORDER, DEFAULT_DOMAINS, DEFAULT_TEST_SECTIONS } from './stat
 import { esc, escAttr, showSaveIndicator, showToast } from './ui-utils.js';
 import { matchesBranchFilter, enrollmentCode, getActiveEnrollments, isActiveNaesinBase } from './student-helpers.js';
 import { renderAddStudentCard, createStudentSearcher } from './class-student-search.js';
+import {
+    buildReactivationCleanupFields,
+    buildReactivationHistoryBefore,
+    clearLocalReactivationFields,
+} from './class-setup-enrollment.js';
 import { cancelStudentPendingTasks } from './data-layer.js';
 import { recordTeacherChange } from './teacher-history.js';
 import { renderClassBulkMessageTab, resolveClassMembers } from './class-bulk-message.js';
@@ -378,6 +383,7 @@ function setClassProfileHeader(classCode, memberCount) {
     document.getElementById('profile-phones').innerHTML = '';
     document.getElementById('profile-stay-stats').innerHTML = '';
     document.getElementById('profile-tags').innerHTML = `<span class="tag">${memberCount}명</span>`;
+    document.getElementById('profile-academic-summary').innerHTML = '';
 }
 
 export function renderClassDetail(classCode) {
@@ -1105,7 +1111,7 @@ export async function confirmDeleteClass(classCode, mode) {
     const period = getClassPeriodInfo(classCode, mode);
 
     if (mode === 'regular') {
-        const first = confirm(`⚠️ 정규 반 "${classCode}" 삭제\n\n학생 ${count}명의 정규 등록이 모두 끊깁니다.\n진짜 삭제하시겠습니까?`);
+        const first = confirm(`주의: 정규 반 "${classCode}" 삭제\n\n학생 ${count}명의 정규 등록이 모두 끊깁니다.\n진짜 삭제하시겠습니까?`);
         if (!first) return;
         const typed = prompt(`정말 삭제하려면 반 코드를 그대로 입력하세요:\n${classCode}`);
         if (typed !== classCode) {
@@ -1113,7 +1119,7 @@ export async function confirmDeleteClass(classCode, mode) {
             return;
         }
     } else if (period?.inProgress) {
-        const first = confirm(`⚠️ ${label} 반 "${classCode}" 삭제 (현재 진행 중)\n\n기간: ${period.start} ~ ${period.end}\n영향 학생: ${count}명\n\n진행 중인 반을 삭제하면 학생들이 즉시 정규로 복귀합니다.\n진짜 삭제하시겠습니까?`);
+        const first = confirm(`주의: ${label} 반 "${classCode}" 삭제 (현재 진행 중)\n\n기간: ${period.start} ~ ${period.end}\n영향 학생: ${count}명\n\n진행 중인 반을 삭제하면 학생들이 즉시 정규로 복귀합니다.\n진짜 삭제하시겠습니까?`);
         if (!first) return;
         const typed = prompt(`진행 중인 반입니다. 정말 삭제하려면 "삭제"를 입력하세요`);
         if (typed !== '삭제') {
@@ -1238,6 +1244,7 @@ export async function addStudentToTeukang(classCode, studentId) {
             update.status_changed_at = serverTimestamp();
             update.status_changed_by = actor;
             update.status_previous = prevStatus || null;
+            Object.assign(update, buildReactivationCleanupFields(deleteField()));
 
             const batch = writeBatch(db);
             batchUpdate(batch, studentRef, update);
@@ -1252,7 +1259,7 @@ export async function addStudentToTeukang(classCode, studentId) {
             batchSet(batch, doc(collection(db, 'history_logs')), {
                 doc_id: studentId,
                 change_type: 'STATUS_CHANGE',
-                before: JSON.stringify({ status: prevStatus }),
+                before: JSON.stringify(buildReactivationHistoryBefore(student)),
                 after: JSON.stringify({ status: '재원' }),
                 google_login_id: actor,
                 timestamp: serverTimestamp(),
@@ -1264,7 +1271,10 @@ export async function addStudentToTeukang(classCode, studentId) {
         if (!READ_ONLY) {
             student.enrollments = [...(student.enrollments || []), newEnrollment];
             student.status2 = '특강';
-            if (shouldReactivate) student.status = '재원';
+            if (shouldReactivate) {
+                student.status = '재원';
+                clearLocalReactivationFields(student);
+            }
             if (isFromRemote) {
                 state.allStudents.push(student);
                 state.allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));

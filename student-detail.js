@@ -6,10 +6,9 @@
 import { msIcon } from './ms-icon.js';
 import {
     collection, getDocs, doc, getDoc,
-    query, where, orderBy, limit, deleteField
+    query, where, deleteField
 } from 'firebase/firestore';
 import { db } from './firebase-config.js';
-import { deriveTenure } from '@impact7/shared/history';
 import { deriveLevelPeriod } from '@impact7/shared/enrollment-derivation';
 import { ENROLLABLE_STATUSES, isEnrollableStatus, STATUS_TONE } from '@impact7/shared/enrollment-status';
 import { formatDateKST, toDate } from '@impact7/shared/datetime';
@@ -26,16 +25,18 @@ import {
     enrollmentCode, findStudent,
     branchFromStudent, makeDailyRecordId,
     getActiveEnrollments, getStudentStartTime,
-    allClassCodes, isNaesinActiveToday, deriveClassLabelAt
+    allClassCodes, summarizeEnrollmentClasses, isValidDateStr,
+    isNaesinActiveToday, deriveClassLabelAt, siblingStatusSuffix, isOnLeaveAt
 } from './student-helpers.js';
 import {
-    currentSchool, studentGrade, todayStr, getDayName
+    currentSchool, studentGrade, studentShortLabel, todayStr, getDayName
 } from './src/shared/firestore-helpers.js';
 import { auditSet } from './audit.js';
 import {
     getStudentDomains, getStudentTestItems, getClassDomains,
     getTeacherName, getStudentOverrides,
-    saveDailyRecord, saveImmediately, searchStudentConsultations
+    saveDailyRecord, saveImmediately, searchStudentConsultations,
+    loadStudentTenure
 } from './data-layer.js';
 import { isAttendedStatus } from './attendance.js';
 import { renderClassBulkMessageTab } from './class-bulk-message.js';
@@ -110,25 +111,8 @@ async function fillTenure(studentId, student) {
     if (!el) return;
     el.textContent = '…';
     try {
-        const q = query(
-            collection(db, 'history_logs'),
-            where('doc_id', '==', studentId),
-            orderBy('timestamp', 'desc'),
-            limit(200)
-        );
-        const aq = query(collection(db, 'daily_records'), where('student_id', '==', studentId));
-        const [snap, asnap] = await Promise.all([getDocs(q), getDocs(aq)]);
+        const { start, end, startEvent } = await loadStudentTenure(studentId, student.status);
         if (state.selectedStudentId !== studentId) return; // 그 사이 다른 학생 선택됨
-        const logs = [];
-        snap.forEach(d => logs.push({ id: d.id, ...d.data() }));
-        const attendances = [];
-        asnap.forEach(d => { const r = d.data(); attendances.push({ date: r.date, status: r.attendance?.status }); });
-        const { start, end, startEvent } = deriveTenure(
-            logs,
-            (l) => toDate(l.timestamp),
-            attendances,
-            isEnrollableStatus(student.status)
-        );
         el.textContent = formatTenure(start, end, startEvent, student);
     } catch (e) {
         if (state.selectedStudentId !== studentId) return;
@@ -663,7 +647,7 @@ function renderReportCard(records) {
 
     // ── 출석 집계 ──
     const student = state.allStudents.find(s => s.docId === state.selectedStudentId);
-    const attendanceRows = records.map(rec => {
+    const attendanceRows = records.flatMap(rec => {
         const date = rec.date || '';
         const dayName = date ? getDayName(date) : '';
         const status = rec.attendance?.status || '';
@@ -671,14 +655,23 @@ function renderReportCard(records) {
         // 저장 시점 스냅샷(class_label) 우선 — 내신반 삭제·기간 변경 후에도 과거 표시가
         // 보존된다. 스냅샷 없는 옛 기록만 현재 설정으로 역산(fallback).
         const classLabel = rec.class_label || (student && date ? deriveClassLabelAt(student, date) : '');
-        return { date, dayName, status, reason, classLabel };
+        const classTypes = classLabel.split('/');
+        const hasTeukang = rec.visit2
+            || (classTypes.includes('특강') && classTypes.length > 1);
+        if (!hasTeukang) return [{ date, dayName, status, reason, classLabel }];
+        const mainClassLabel = classTypes.filter(label => label !== '특강').join('/') || classLabel;
+        return [
+            { date, dayName, status, reason, classLabel: mainClassLabel },
+            { date, dayName, status: rec.visit2?.status || '', reason: rec.visit2?.reason || '', classLabel: '특강' },
+        ];
     }).filter(r => r.date);
+    const attendanceDayCount = new Set(attendanceRows.map(r => r.date)).size;
 
     const attendanceHtml = `
         <div class="detail-card">
             <div class="detail-card-title">
                 ${msIcon('event_available', '', 'style="color:var(--primary);font-size:18px;"')}
-                출석 (${attendanceRows.length}일)
+                출석 (${attendanceDayCount}일)
             </div>
             <table class="report-attendance-table">
                 <thead><tr><th>날짜</th><th>유형</th><th>구분</th><th>비고</th></tr></thead>
@@ -689,10 +682,12 @@ function renderReportCard(records) {
                                     r.status === '결석' ? 'att-absent' :
                                     r.status === '지각' ? 'att-late' :
                                     r.status === '보충' ? 'att-makeup' : '';
+                        // 출결 미입력이지만 휴원기간에 걸린 날은 '-' 대신 '휴원' 표기.
+                        const division = r.status || (student && isOnLeaveAt(student, r.date) ? '휴원' : '-');
                         return `<tr>
                             <td>${esc(dateShort)}(${esc(r.dayName)})</td>
                             <td>${esc(r.classLabel || '-')}</td>
-                            <td class="${cls}">${esc(r.status || '-')}</td>
+                            <td class="${cls}">${esc(division)}</td>
                             <td>${esc(r.reason)}</td>
                         </tr>`;
                     }).join('')}
@@ -1065,15 +1060,37 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
         return;
     }
 
+    const profileSummaryEl = document.getElementById('profile-academic-summary');
+    if (profileSummaryEl) {
+        const date = state.selectedDate || todayStr();
+        const rawEnrollments = student.enrollments || [];
+        const isInactiveStudent = _isInactiveDetailStudent(student);
+        const relevantEnrollments = isInactiveStudent
+            ? []
+            : rawEnrollments.filter(e =>
+                !(isValidDateStr(e.start_date) && e.start_date > date) &&
+                !(isValidDateStr(e.end_date) && e.end_date < date)
+            );
+        const derivedEnrollments = isInactiveStudent ? [] : getActiveEnrollments(student, date)
+            .filter(e => e.class_type !== '정규');
+        const classes = summarizeEnrollmentClasses([...relevantEnrollments, ...derivedEnrollments]);
+        profileSummaryEl.innerHTML = [
+            studentShortLabel(student),
+            classes.regular ? `정규 ${classes.regular}` : '',
+            classes.other,
+        ].filter(Boolean).map(line => `<div>${esc(line.length > 10 ? `${line.slice(0, 9)}…` : line)}</div>`).join('');
+    }
+
     // 특강 모드: 특강 전용 상세 패널 (반 비소속 학생이면 false 반환 → 표준 상세로 계속)
-    if (state._classMgmtMode === 'teukang' && state.selectedClassCode) {
+    const searching = !!state.searchQuery?.trim();
+    if (!searching && state._classMgmtMode === 'teukang' && state.selectedClassCode) {
         if (window.renderTeukangDetail?.(studentId)) return;
     }
 
     // 내신 모드: naesin.js로 위임 (간소화된 상세 패널)
     // 특강 모드에서 폴백된 학생은 잔존 naesin 서브필터에 걸리지 않고 표준 상세로 가야 함
-    if ((state.currentCategory === 'attendance' && state.currentSubFilter.has('naesin') && state._classMgmtMode !== 'teukang') ||
-        (state._classMgmtMode === 'naesin' && state.selectedClassCode && _isNaesinClassCode(state.selectedClassCode))) {
+    if (!searching && ((state.currentCategory === 'attendance' && state.currentSubFilter.has('naesin') && state._classMgmtMode !== 'teukang') ||
+        (state._classMgmtMode === 'naesin' && state.selectedClassCode && _isNaesinClassCode(state.selectedClassCode)))) {
         if (window.renderNaesinDetail) {
             window.renderNaesinDetail(studentId);
             return;
@@ -1105,6 +1122,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     // 숨긴다 — 내신 종료 후 정규 복귀 시 자동 재표시. (1차 판정, 아래 분기에서 재사용)
     const isNaesinActive = isNaesinActiveToday(student, state.selectedDate);
 
+    const isInactive = _isInactiveDetailStudent(student);
     const isWithdrawn = student.status === '퇴원';
     // 퇴원 학생: leave_request 한 번만 조회 (프로필 태그 + 퇴원 정보 카드에서 공유)
     const wdLeaveReq = isWithdrawn ? state.leaveRequests.find(lr => lr.student_id === studentId && lr.status === 'approved' &&
@@ -1144,14 +1162,12 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
         tagText = showTime ? `${displayStatus} ${formatTime12h(arrivalTime)}` : displayStatus;
     }
 
-    const siblings = state.siblingMap[studentId]?.size > 0
-        ? [...state.siblingMap[studentId]]
-            .map(sid => ({ id: sid, name: state.allStudents.find(x => x.docId === sid)?.name }))
-            .filter(s => s.name)
-        : [];
+    const siblings = [...(state.siblingMap[studentId] || [])]
+        .map(sid => findStudent(sid))
+        .filter(s => s?.name);
     const siblingHtml = siblings.length
         ? `<span class="tag tag-sibling">${msIcon('group', '', 'style="font-size:13px;"')} ${
-            siblings.map(s => `<span style="cursor:pointer;text-decoration:underline;" role="link" tabindex="0" data-keyclick onclick="event.stopPropagation();selectStudent('${escAttr(s.id)}')">${esc(s.name)}</span>`).join(', ')
+            siblings.map(s => `<span style="cursor:pointer;text-decoration:underline;" role="link" tabindex="0" data-keyclick onclick="event.stopPropagation();selectStudent('${escAttr(s.docId)}')">${esc(s.name)}${esc(siblingStatusSuffix(s.status))}</span>`).join(', ')
           }</span>`
         : '';
 
@@ -1167,13 +1183,13 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
         ${siblingHtml}
     `;
 
-    // 비활성 학생일 때만 진단평가 입력 액션 바 노출 (자동채움된 모달 열기).
+    // 비활성 학생일 때만 진단평가 입력 액션 바 노출.
     const inactiveBar = document.getElementById('inactive-action-bar');
     const diagBtn = document.getElementById('diagnostic-btn');
     if (inactiveBar && diagBtn) {
         if (_isInactiveDetailStudent(student)) {
             inactiveBar.style.display = '';
-            diagBtn.onclick = () => window.openContactAsTemp(studentId);
+            diagBtn.onclick = () => window.openDiagnosticScheduleModal(studentId);
         } else {
             inactiveBar.style.display = 'none';
             diagBtn.onclick = null;
@@ -1209,7 +1225,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     const levelPeriodHtml = lp.start
         ? `${lpLevel ? `<span class="stay-level-tag">${esc(lpLevel)}</span> ` : ''}${lp.start} &middot; ${lp.label}`
         : '—';
-    const arrivalTimeHtml = (isLeaveStudent || isWithdrawn) ? '' : semesterEnrollments.length > 0 ? `
+    const arrivalTimeHtml = (isLeaveStudent || isInactive) ? '' : semesterEnrollments.length > 0 ? `
         <div class="detail-card">
             <div class="detail-card-title">
                 ${msIcon('schedule', '', 'style="color:var(--primary);font-size:18px;"')}
@@ -1392,7 +1408,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
         <div class="detail-card">
             <div class="detail-card-title detail-card-title-row">
                 <span style="display:flex;align-items:center;gap:6px;">
-                    ${msIcon('schedule', '', 'style="color:var(--primary);font-size:18px;"')}
+                    ${msIcon('stethoscope', '', 'style="color:var(--primary);font-size:18px;"')}
                     클리닉
                 </span>
                 ${clinicButtons}
@@ -1407,7 +1423,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
         const wdReason = wdLeaveReq?.reason || '';
         const wdReqBy = wdLeaveReq ? getTeacherName(wdLeaveReq.requested_by) : '';
         const wdAppBy = wdLeaveReq ? getTeacherName(wdLeaveReq.approved_by) : '';
-        const enrollInfo = enrollments.map((e, idx) => {
+        const enrollInfo = enrollments.map(e => {
             const code = enrollmentCode(e);
             const days = (e.day || []).join('·');
             const ct = e.class_type || '정규';
@@ -1419,7 +1435,6 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
                 <span style="font-size:12px;color:var(--text-sec);">${esc(days)}</span>
                 ${time ? `<span style="font-size:12px;">${esc(formatTime12h(time))}</span>` : ''}
                 ${period ? `<span style="font-size:11px;color:var(--text-sec);">${esc(period)}</span>` : ''}
-                ${msIcon('edit', '', `style="font-size:14px;color:var(--text-sec);cursor:pointer;margin-left:auto;" role="button" tabindex="0" data-keyclick aria-label="수강 정보 편집" onclick="openEnrollmentModal('${escAttr(studentId)}', ${idx})"`)}
             </div>`;
         }).join('');
         withdrawnHtml = `
@@ -1442,11 +1457,21 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
                     수강 이력
                 </div>
                 ${enrollInfo}
-            </div>` : ''}
-            ${renderAbsenceRecordCard(studentId)}`;
+            </div>` : ''}`;
     }
 
-    const cardsHtml = isWithdrawn ? withdrawnHtml : `
+    const inactiveHtml = isWithdrawn ? withdrawnHtml : `
+        <div class="detail-card">
+            <div class="detail-card-title">
+                ${msIcon('person_off', '', 'style="color:var(--text-sec);font-size:18px;"')}
+                ${esc(student.status || '비원생')} 학생
+            </div>
+            <div style="font-size:13px;color:var(--text-sec);">
+                진단평가 예약은 상단 진단평가 버튼에서 진행할 수 있습니다.
+            </div>
+        </div>`;
+
+    const cardsHtml = isInactive ? inactiveHtml : `
         <!-- AI 종합 상태 카드 (비동기 마운트) -->
         <div id="student-status-mount" data-student-id="${escAttr(studentId)}"></div>
 
@@ -1493,14 +1518,14 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     // detail-cards는 naesin/class/diagnostic 등과 공유되므로 마커로 점유 출처를 확인해
     // 다른 화면이 컨테이너를 점유한 사이의 stale skip을 방지한다.
     const cardsUnchanged = incremental && !studentChanged && _lastCardsHtml === cardsHtml &&
-        !isWithdrawn && !!cardsContainer.querySelector(`#student-status-mount[data-student-id="${CSS.escape(studentId)}"]`);
+        !isInactive && !!cardsContainer.querySelector(`#student-status-mount[data-student-id="${CSS.escape(studentId)}"]`);
 
     if (!cardsUnchanged) {
         cardsContainer.innerHTML = cardsHtml;
         _lastCardsHtml = cardsHtml;
 
         // 체크리스트 완료 캐시 backfill — 실제 카드 갱신 시에만(M-15). 값이 바뀐 경우에만 write.
-        if (!isWithdrawn) {
+        if (!isInactive) {
             syncChecklistCache(studentId, getStudentChecklistStatus(studentId))
                 .catch(err => console.warn('[checklist-cache] 동기화 실패:', err));
         }
@@ -1509,7 +1534,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
         if (document.getElementById('detail-header-tenure')) fillTenure(studentId, student);
 
         // AI 종합 상태 카드 — 비동기 마운트 (퇴원 뷰 제외)
-        if (!isWithdrawn) {
+        if (!isInactive) {
             const statusMount = document.getElementById('student-status-mount');
             if (statusMount) {
                 import('./student-status-card.js').then(({ renderStudentStatusCard, initStudentStatusCardDeps }) => {

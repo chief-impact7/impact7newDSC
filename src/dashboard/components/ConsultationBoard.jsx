@@ -133,7 +133,7 @@ export default function ConsultationBoard({
                                             <td><Tag value={c.method} className={METHOD_CLASS[c.method] || ''} /></td>
                                             <td><Tag value={c.consultation_type} /></td>
                                             <td className="consult-c-title">{c.title || '—'}</td>
-                                            <td className="consult-c-memo">{c.text || ''}</td>
+                                            <td className="consult-c-memo dash-detail-content">{c.text || ''}</td>
                                         </tr>
                                     ))}
                                 </tbody>

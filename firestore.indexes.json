@@ -67,6 +67,15 @@
       ]
     },
     {
+      "collectionGroup": "daily_records",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "attendance.status", "order": "ASCENDING" },
+        { "fieldPath": "student_id", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "message_queue",
       "queryScope": "COLLECTION",
       "fields": [

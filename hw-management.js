@@ -48,7 +48,7 @@ const HW_CONFIG = {
     cardIcon: 'assignment_late',
     countSuffix: '개 영역',
     extraTaskData: {},
-    savedTagInline: true,       // hw는 행마다 ✓저장됨 태그를 인라인 노출
+    savedTagInline: true,       // hw는 행마다 저장됨 태그를 인라인 노출
     hidePendingFromForm: false, // hw는 pending도 폼에 인라인 표시(테스트와 달리 숨기지 않음)
     selectFn: 'selectHwFailType',
     clearFn: 'clearHwFailType',
@@ -102,7 +102,9 @@ export function renderPendingTasksCard(studentId, tasks) {
         const cancelFunc = isTest ? 'cancelTestFailTask' : 'cancelHwFailTask';
         const collection = isTest ? 'test_fail_tasks' : 'hw_fail_tasks';
         const sourceLabel = isTest ? '테스트' : '숙제';
-        const typeIcon = t.type === '등원' ? '🚶' : '📝';
+        const typeIcon = t.type === '등원'
+            ? msIcon('person-simple-run', '', 'style="font-size:14px;"')
+            : msIcon('note-pencil', '', 'style="font-size:14px;"');
         const noShow = _isNoShow(t);
         const isRescheduled = Array.isArray(t.reschedule_history) && t.reschedule_history.length > 0;
         const rowClass = [
@@ -369,6 +371,7 @@ export function renderNextHwClassDetail(classCode) {
     // 프로필 영역
     document.getElementById('profile-avatar').textContent = classCode[0] || '?';
     document.getElementById('detail-name').textContent = classCode;
+    document.getElementById('profile-academic-summary').innerHTML = '';
 
     const { filled, total } = getNextHwStatus(classCode);
     const statusTag = filled === total ? 'tag-present' : filled > 0 ? 'tag-late' : 'tag-pending';

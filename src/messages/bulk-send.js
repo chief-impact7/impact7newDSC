@@ -26,6 +26,60 @@ export function invalidVariablesForGroups(groups, content) {
   return variables.filter((variable) => content.includes(variable));
 }
 
+export const ALIMTALK_NAME_VARIABLE = '#{학생명}';
+
+export function alimtalkInputVariables(template) {
+  return [...new Set((template?.variables || []).filter((variable) => variable && variable !== ALIMTALK_NAME_VARIABLE))];
+}
+
+export function applyAlimtalkPreview(template, values = {}, recipientName = '') {
+  let content = String(template?.content || '').replaceAll(ALIMTALK_NAME_VARIABLE, recipientName);
+  for (const variable of alimtalkInputVariables(template)) {
+    content = content.replaceAll(variable, String(values[variable] || variable));
+  }
+  return content;
+}
+
+// #{학생명}은 학생·교직원엔 서버가 자동 주입하므로 제외하고, 이름을 모르는 직접 번호에만 전달한다.
+export function buildAlimtalkAudienceRequests({ groups, recipientFields, templateId, templateVariables, requestId, scheduledAt }) {
+  const schedule = scheduledAt ? { scheduledAt } : {};
+  const autoVariables = Object.fromEntries(
+    Object.entries(templateVariables).filter(([key]) => key !== ALIMTALK_NAME_VARIABLE),
+  );
+  const base = { channel: 'alimtalk', templateId };
+  const requests = [];
+  if (groups.student.length) {
+    requests.push({
+      audience: 'student',
+      call: 'bulk',
+      payload: {
+        ...base,
+        studentIds: groups.student,
+        recipientFields,
+        recipientField: recipientFields[0],
+        templateVariables: autoVariables,
+        requestId: `${requestId}-student`,
+        ...schedule,
+      },
+    });
+  }
+  if (groups.staff.length) {
+    requests.push({
+      audience: 'staff',
+      call: 'bulk',
+      payload: { ...base, staffIds: groups.staff, templateVariables: autoVariables, requestId: `${requestId}-staff`, ...schedule },
+    });
+  }
+  if (groups.direct.length) {
+    requests.push({
+      audience: 'direct',
+      call: 'direct',
+      payload: { ...base, recipients: groups.direct.join('\n'), templateVariables, requestId: `${requestId}-direct`, ...schedule },
+    });
+  }
+  return requests;
+}
+
 export function completedTargetKeys(requests, results, groups) {
   const keys = [];
   results.forEach((result, index) => {

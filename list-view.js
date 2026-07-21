@@ -5,20 +5,22 @@ import { msIcon } from './ms-icon.js';
 import {
     state, LEAVE_STATUSES, SV_L3_KEYS, DEFAULT_TONE, REGULAR_CLASS_TYPES
 } from './state.js';
-import { getDayName, todayStr, studentShortLabel, PAST_STUDENT_STATUSES, finalApprovalDate } from './src/shared/firestore-helpers.js';
+import { getDayName, todayStr, PAST_STUDENT_STATUSES, finalApprovalDate } from './src/shared/firestore-helpers.js';
 import {
-    branchFromStudent, matchesBranchFilter, enrollmentCode, allClassCodes, _enrollCodeList,
-    deriveNaesinCode, getActiveEnrollments, getStudentStartTime, isOnLeaveAt, isWithdrawnAt,
+    branchFromStudent, matchesBranchFilter, enrollmentCode, allClassCodes,
+    getActiveEnrollments, getStudentStartTime, isOnLeaveAt, isWithdrawnAt,
     isNaesinActiveToday, isFreeSemesterActiveToday, isPauseExpired, pauseExpiredDays, isValidDateStr,
-    resolveNaesinCsKey, displayCodeFromCsKey,
+    findStudent, buildSiblingMap, studentMatchesSearchTerms,
 } from './student-helpers.js';
+import { findSeparateTeukangVisit } from './student-core.js';
 import { schoolSearchTerms } from './school-normalizer.js';
+import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 import { esc, escAttr, formatTime12h, oxChip, oxChipBtn } from './ui-utils.js';
 import {
     getTeacherName, addOverrideInStudents, getStudentOverrides, getStudentDomains, getStudentTestItems,
-    _isOlderThan, _isDetailInputFocused
+    _isOlderThan, _isDetailInputFocused, loadWithdrawnStudents
 } from './data-layer.js';
-import { isNewStudent, DEFAULT_ATTENDANCE_LABELS } from './attendance.js';
+import { isNewStudent, ensureNewStudentStatuses, DEFAULT_ATTENDANCE_LABELS } from './attendance.js';
 import { renderClassDetail, renderBranchClassDetail } from './class-detail.js';
 import { renderStudentDetail } from './student-detail.js';
 import {
@@ -29,7 +31,6 @@ import {
 import { renderAbsenceLedgerList } from './absence-records.js';
 import { renderLeaveRequestList, renderReturnUpcomingList } from './leave-request.js';
 import { renderNextHwClassList } from './hw-management.js';
-import { _searchContactsDSC, _renderPastContacts } from './past-search.js';
 import { exitBulkMode, updateBulkBar } from './bulk-mode.js';
 import {
     getRegularClassStudents, getTeukangClassStudents, getFreeSemesterClassStudents,
@@ -71,9 +72,11 @@ export function hasTeukangEnrollmentToday(student) {
 // 중 가장 이른 시각. 없으면 '99:99' (맨 뒤로).
 export function getEffectiveAttendanceTime(s, date, dayName) {
     const times = [];
-    const todayE = getActiveEnrollments(s, date).find(e => (e.day || []).includes(dayName));
-    const enrollTime = getStudentStartTime(todayE, dayName);
-    if (enrollTime) times.push(enrollTime);
+    for (const e of getActiveEnrollments(s, date)) {
+        if (!(e.day || []).includes(dayName)) continue;
+        const t = getStudentStartTime(e, dayName);
+        if (t) times.push(t);
+    }
     times.push(...collectVisitTimes(s, date));
     return times.length === 0 ? '99:99' : times.sort()[0];
 }
@@ -115,18 +118,27 @@ export function isVisitStudent(docId) {
 // name·학교는 항상 매칭; enroll(반코드)·phone(학생/학부모)·teacher(담당교사)는 옵션.
 // 전부 OR 논리라 절 평가 순서는 결과에 영향 없다.
 function studentMatchesQuery(s, q, { enroll = false, phone = false, teacher = false } = {}) {
-    if (s.name?.toLowerCase().includes(q)) return true;
-    if (schoolSearchTerms(s).some(t => t.toLowerCase().includes(q))) return true;
-    if (phone && (s.student_phone?.includes(q) || s.parent_phone_1?.includes(q))) return true;
-    if (enroll && (s.enrollments || []).some(e => enrollmentCode(e).toLowerCase().includes(q))) return true;
-    if (teacher && (s.enrollments || []).some(e => {
+    const extraTerms = [...schoolSearchTerms(s)];
+    if (enroll) extraTerms.push(...(s.enrollments || []).map(enrollmentCode));
+    if (teacher) extraTerms.push(...(s.enrollments || []).map(e => {
         const t = state.classSettings[enrollmentCode(e)]?.teacher;
-        return t && getTeacherName(t).toLowerCase().includes(q);
-    })) return true;
-    return false;
+        return t ? getTeacherName(t) : '';
+    }));
+    const searchableStudent = phone ? s : { name: s.name };
+    return studentMatchesSearchTerms(searchableStudent, q, extraTerms);
 }
 
 export function getFilteredStudents() {
+    if (state.searchQuery?.trim()) {
+        const q = state.searchQuery.trim().toLowerCase();
+        const studentsById = new Map(
+            [...state.withdrawnStudents, ...state.allStudents].map(s => [s.docId, s])
+        );
+        return [...studentsById.values()].filter(s =>
+            studentMatchesQuery(s, q, { enroll: true, phone: true, teacher: true })
+        );
+    }
+
     // 반 설정/소속 L4: 정규 모드 + 반 선택 — 그 반에 등록된 모든 정규/자유학기 학생 (요일 무관)
     // + 오늘 그 반으로 들어온 타반수업 학생도 포함 (a101 김여원이 a103에서 수업하면 a103 화면에서도 보이도록)
     if (state._classMgmtMode === 'regular' && state.selectedClassCode) {
@@ -195,43 +207,25 @@ export function getFilteredStudents() {
 
     const dayName = getDayName(state.selectedDate);
 
-    // 검색어가 있으면 요일 무관 (퇴원/종강생은 비원생 검색에서 표시)
-    let students;
-    if (state.searchQuery) {
-        // 검색은 status 기반 — impact7DB 검색과 동일 방식 (drift 금지).
-        // enrollment 만료 여부로 거르지 않는다: 재원인데 enrollment만 만료된 학생
-        // (단기 수강 종료 등)이 검색에서 유령이 되는 것 방지 (김민찬4, 2026-06-11).
-        // 퇴원/종강·상담생은 비원생 섹션(_renderPastContacts)에서 별도 표시.
-        students = state.allStudents.filter(s =>
-            !PAST_STUDENT_STATUSES.has(s.status) &&
-            s.status !== '상담'
-        );
-    } else {
-        students = state.allStudents.filter(s => {
-            if (PAST_STUDENT_STATUSES.has(s.status)) {
-                return getActiveEnrollments(s, state.selectedDate).some(e =>
-                    e.class_type === '특강' && e.day.includes(dayName)
-                );
-            }
-            // attendance 카테고리에선 휴원 학생도 통과(목록 하단 휴원 섹션으로 분리),
-            // 그 외 카테고리에선 제외
-            if (isOnLeaveAt(s, state.selectedDate) && state.currentCategory !== 'attendance') return false;
-            return getActiveEnrollments(s, state.selectedDate).some(e => e.day.includes(dayName));
-        });
-        // 세션 내 퇴원처리된 학생도 특강 수강 중이면 포함
-        // (퇴원처리 시 state.allStudents→withdrawnStudents로 이동하므로 별도 체크 필요)
-        const studentIds = new Set(students.map(s => s.docId));
-        for (const s of state.withdrawnStudents) {
-            if (!studentIds.has(s.docId) && getActiveEnrollments(s, state.selectedDate).some(e =>
+    let students = state.allStudents.filter(s => {
+        if (PAST_STUDENT_STATUSES.has(s.status)) {
+            return getActiveEnrollments(s, state.selectedDate).some(e =>
                 e.class_type === '특강' && e.day.includes(dayName)
-            )) {
-                students.push(s);
-                studentIds.add(s.docId);
-            }
+            );
         }
-        // 타반수업 override-in 학생 추가 (반 필터 활성 시 해당 반 타반수업 학생만)
-        addOverrideInStudents(students, state.selectedClassCode || null);
+        if (isOnLeaveAt(s, state.selectedDate) && state.currentCategory !== 'attendance') return false;
+        return getActiveEnrollments(s, state.selectedDate).some(e => e.day.includes(dayName));
+    });
+    const studentIds = new Set(students.map(s => s.docId));
+    for (const s of state.withdrawnStudents) {
+        if (!studentIds.has(s.docId) && getActiveEnrollments(s, state.selectedDate).some(e =>
+            e.class_type === '특강' && e.day.includes(dayName)
+        )) {
+            students.push(s);
+            studentIds.add(s.docId);
+        }
     }
+    addOverrideInStudents(students, state.selectedClassCode || null);
 
     // 소속 글로벌 필터
     students = students.filter(s => matchesBranchFilter(s));
@@ -382,14 +376,40 @@ export function getFilteredStudents() {
 }
 
 export function renderListPanel() {
+    const searching = !!state.searchQuery?.trim();
+    const searchTerm = state.searchQuery?.trim() || '';
+    const loadingPastStudents = searching && !state._withdrawnFullyLoaded;
+
+    if (loadingPastStudents) {
+        loadWithdrawnStudents().then(loaded => {
+            if (state.searchQuery?.trim() !== searchTerm) return;
+            if (!loaded) {
+                const countEl = document.getElementById('list-count');
+                const container = document.getElementById('list-items');
+                const matchCount = getFilteredStudents().length;
+                if (countEl) countEl.textContent = `${matchCount}명 · 비원생 검색 실패`;
+                if (container && matchCount === 0) {
+                    container.innerHTML = `<div class="empty-state">
+                        ${msIcon('person_search')}
+                        <p>비원생 검색을 불러오지 못했습니다</p>
+                    </div>`;
+                }
+                return;
+            }
+            buildSiblingMap();
+            renderListPanel();
+            if (state.selectedStudentId) renderStudentDetail(state.selectedStudentId);
+        });
+    }
+
     // 내신 서브필터 활성 시 내신 리스트로 전환
-    if (state.currentCategory === 'attendance' && state.currentSubFilter.has('naesin')) {
+    if (!searching && state.currentCategory === 'attendance' && state.currentSubFilter.has('naesin')) {
         if (window.renderNaesinList) window.renderNaesinList();
         return;
     }
 
     // 비정규 L2 또는 L3(sv_*) 서브필터 활성 시 통합 리스트로 전환
-    if (state.currentCategory === 'attendance' && (
+    if (!searching && state.currentCategory === 'attendance' && (
         state.currentSubFilter.has('scheduled_visit') ||
         SV_L3_KEYS.some(k => state.currentSubFilter.has(k))
     )) {
@@ -398,37 +418,37 @@ export function renderListPanel() {
     }
 
     // 등원예정 L3 선택 시 등원예정만 표시
-    if (state.currentCategory === 'attendance' && state.currentSubFilter.has('enroll_pending')) {
+    if (!searching && state.currentCategory === 'attendance' && state.currentSubFilter.has('enroll_pending')) {
         renderEnrollPendingOnly();
         return;
     }
 
     // 하원점검 서브필터 활성 시 하원 체크 리스트로 전환
-    if (state.currentCategory === 'attendance' && state.currentSubFilter.has('departure_check')) {
+    if (!searching && state.currentCategory === 'attendance' && state.currentSubFilter.has('departure_check')) {
         renderDepartureCheckList();
         return;
     }
 
     // 결석대장 서브필터 활성 시 결석대장 리스트로 전환
-    if (state.currentCategory === 'admin' && state.currentSubFilter.has('absence_ledger')) {
+    if (!searching && state.currentCategory === 'admin' && state.currentSubFilter.has('absence_ledger')) {
         renderAbsenceLedgerList();
         return;
     }
 
     // 휴퇴원요청서 서브필터 활성 시 요청서 리스트로 전환
-    if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) {
+    if (!searching && state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) {
         renderLeaveRequestList();
         return;
     }
 
     // 복귀예정 서브필터 활성 시 복귀예정 리스트로 전환
-    if (state.currentCategory === 'admin' && state.currentSubFilter.has('return_upcoming')) {
+    if (!searching && state.currentCategory === 'admin' && state.currentSubFilter.has('return_upcoming')) {
         renderReturnUpcomingList();
         return;
     }
 
     // hw_next 서브필터 활성 시 반별 리스트로 전환
-    if (state.currentCategory === 'homework' && state.currentSubFilter.has('hw_next')) {
+    if (!searching && state.currentCategory === 'homework' && state.currentSubFilter.has('hw_next')) {
         renderNextHwClassList();
         return;
     }
@@ -436,29 +456,16 @@ export function renderListPanel() {
     const students = getFilteredStudents();
     const container = document.getElementById('list-items');
     const countEl = document.getElementById('list-count');
-    const todayDate = new Date(todayStr());
+    const todayDate = new Date(`${todayStr()}T00:00:00+09:00`);
+    ensureNewStudentStatuses(students, todayDate).then(changed => {
+        if (changed) renderListPanel();
+    });
     // 필터 칩 렌더링
     renderFilterChips();
 
-    // 비원생 섹션 = 상담생(allStudents, 동기) + 퇴원/종강(Firestore, 비동기)
-    let consultMatchCount = 0;
-    if (state.searchQuery && state.searchQuery.trim().length >= 2) {
-        const q = state.searchQuery.trim().toLowerCase();
-        const consultStudents = state.allStudents
-            .filter(s => s.status === '상담' && studentMatchesQuery(s, q, { phone: true }))
-            .map(s => ({ ...s, id: s.docId }));
-        consultMatchCount = consultStudents.length;
-        const searchId = ++state._contactSearchId;
-        _searchContactsDSC(state.searchQuery.trim()).then(results => {
-            if (searchId !== state._contactSearchId) return;
-            const nonStudents = [...consultStudents, ...results];
-            if (nonStudents.length > 0) _renderPastContacts(nonStudents, container);
-        });
-    }
-
     // 벌크 모드: 현재 목록에 없는 학생 선택 해제, 0명이면 벌크모드 종료
     if (state.bulkMode) {
-        const visibleIds = new Set(students.map(s => s.docId));
+        const visibleIds = new Set(students.filter(s => ENROLLABLE_STATUSES.has(s.status)).map(s => s.docId));
         for (const id of [...state.selectedStudentIds]) {
             if (!visibleIds.has(id)) state.selectedStudentIds.delete(id);
         }
@@ -470,14 +477,16 @@ export function renderListPanel() {
     }
 
     // 정규(pre_arrival) L2 활성 시 등원예정 인원도 카운트에 포함
-    const enrollPendingCount = (state.currentCategory === 'attendance' && state.currentSubFilter.has('pre_arrival'))
+    const enrollPendingCount = (!searching && state.currentCategory === 'attendance' && state.currentSubFilter.has('pre_arrival'))
         ? getEnrollPendingVisits().length : 0;
-    countEl.textContent = `${students.length + enrollPendingCount}명`;
+    countEl.textContent = loadingPastStudents
+        ? `${students.length}명 · 전체 검색 중`
+        : `${students.length + enrollPendingCount}명`;
 
-    if (students.length === 0 && consultMatchCount === 0 && enrollPendingCount === 0) {
+    if (students.length === 0 && enrollPendingCount === 0) {
         container.innerHTML = `<div class="empty-state">
             ${msIcon('person_search')}
-            <p>해당하는 학생이 없습니다</p>
+            <p>${loadingPastStudents ? '전체 학생을 검색하고 있습니다' : '해당하는 학생이 없습니다'}</p>
         </div>`;
         return;
     }
@@ -490,28 +499,16 @@ export function renderListPanel() {
     const naesinIds = new Set(
         (window._getNaesinStudents?.() || []).map(({ student }) => student.docId)
     );
-    // 표시용 내신 집합 (요일 무관, 내신 기간 기준): 카드 배지·부제목 축약·반코드 fallback에 사용.
+    // 표시용 내신 집합 (요일 무관, 내신 기간 기준): 카드 배지에 사용.
     // 같은 학생이 보는 요일에 따라 다르게 표시되지 않도록 운영 집계와 분리한다.
     const naesinPeriodIds = window._getNaesinPeriodStudentIds?.() || naesinIds;
 
     const renderItemHtml = (s) => {
         const isActive = s.docId === state.selectedStudentId ? 'active' : '';
+        const canBulkSelect = ENROLLABLE_STATUSES.has(s.status);
         const dayN = getDayName(state.selectedDate);
         const _activeEnrolls = getActiveEnrollments(s, state.selectedDate);
         const _todayEnrolls = _activeEnrolls.filter(e => e.day.includes(dayN));
-        // 내신 기간이라 정규 enrollment가 숨겨진 경우 내신 반코드로 대체
-        const _naesinCodeFallback = (!_todayEnrolls.length && !_activeEnrolls.length && naesinPeriodIds.has(s.docId))
-            ? (() => {
-                const re = (s.enrollments || []).find(e => (e.class_type === '정규' || e.class_type === '자유학기') && e.class_number);
-                if (!re) return '';
-                // 실제 내신 탭 멤버십은 override(resolveNaesinCsKey) 기준이므로, 카드 부제목도
-                // override 해소 표시코드를 우선 사용해 탭 반코드와 일치시킨다(M-13). 없으면 자동유도.
-                const csKey = resolveNaesinCsKey(s, re);
-                return (csKey && displayCodeFromCsKey(csKey, branchFromStudent(s))) || deriveNaesinCode(s, re) || '';
-            })() : '';
-        const code = _enrollCodeList(_todayEnrolls) || _enrollCodeList(_activeEnrolls) || _naesinCodeFallback;
-        const branch = branchFromStudent(s);
-
         // 타반수업 배지
         const studentOverrides = getStudentOverrides(s.docId, state.selectedDate);
         const overrideBadge = studentOverrides.length > 0
@@ -523,13 +520,26 @@ export function renderListPanel() {
             : '';
 
         let toggleHtml = '';
+        let mainAttendanceToggle = '';
+        let visit2AttendanceToggle = '';
+        let visit2First = false;
         const isLeave = LEAVE_STATUSES.includes(s.status);
+        const sepVisit = isLeave ? null : findSeparateTeukangVisit(_todayEnrolls, (e) => getStudentStartTime(e, dayN));
+        const mainEnrolls = _todayEnrolls.filter(e => REGULAR_CLASS_TYPES.includes(e.class_type || '정규'));
+        // dayN 전달 — 합성 내신/자유학기 enrollment의 schedule 객체에서 요일별 시간 조회 가능해야 함.
+        // 누락 시 fallback이 hw_fail/test_fail 보충 시간(17:30 등)을 가장 이른 시간으로 끌어와 정규 등원시간을 덮음.
+        let scheduledTime = mainEnrolls.map(e => getStudentStartTime(e, dayN)).filter(Boolean).sort()[0] || '';
+        if (!scheduledTime && mainEnrolls.length === 0) {
+            // 비정규(오늘 enrollment 없음) — hw_fail/test_fail/extra_visit의 가장 이른 scheduled_time 사용
+            const eff = getEffectiveAttendanceTime(s, state.selectedDate, dayN);
+            if (eff !== '99:99') scheduledTime = eff;
+        }
         // classSettings 검증 인라인 — end_date 없는 구 정규/고아 enrollment 오분류 방지, _todayEnrolls 재사용
         const isTeukangOnly = !isLeave
             && _todayEnrolls.some(e => { const ec = enrollmentCode(e); return e.class_type === '특강' && ec && state.classSettings[ec]?.class_type === '특강'; })
             && !_todayEnrolls.some(e => { if (!REGULAR_CLASS_TYPES.includes(e.class_type || '정규')) return false; const ec = enrollmentCode(e); return !ec || state.classSettings[ec] !== undefined; });
 
-        if (isLeave || (PAST_STUDENT_STATUSES.has(s.status) && !isTeukangOnly)) {
+        if (!canBulkSelect || isLeave) {
             toggleHtml = '';
         } else if (state.currentCategory === 'attendance') {
             const rec = state.dailyRecords[s.docId];
@@ -546,10 +556,10 @@ export function renderListPanel() {
             const statuses = [defaultLabel, '출석', '지각', '결석', '조퇴', '기타'];
             // 저장된 기본 라벨(정규/특강/내신/자유/비정규)과 '미확인'은 현재 컨텍스트의 defaultLabel로 표시
             const currentDisplay = (attStatus === '미확인' || DEFAULT_ATTENDANCE_LABELS.has(attStatus)) ? defaultLabel : attStatus;
-            toggleHtml = `<div class="toggle-group">` +
+            mainAttendanceToggle = `<div class="toggle-group">` +
                 statuses.map(st => {
                     const classes = ['toggle-btn'];
-                    if (st === defaultLabel) classes.push(`default-tone-${DEFAULT_TONE[defaultLabel]}`);
+                    if (st === defaultLabel) classes.push('type-tag', `default-tone-${DEFAULT_TONE[defaultLabel]}`);
                     if (st === currentDisplay) {
                         if (st === '출석') classes.push('active-present');
                         else if (st === '결석') classes.push('active-absent');
@@ -560,6 +570,24 @@ export function renderListPanel() {
                     return `<button class="${classes.join(' ')}" aria-pressed="${st === currentDisplay}" onclick="event.stopPropagation(); toggleAttendance('${escAttr(s.docId)}', '${st}')">${st}</button>`;
                 }).join('') +
                 `</div>`;
+            toggleHtml = mainAttendanceToggle;
+            if (sepVisit) {
+                const v2Status = rec?.visit2?.status || '미확인';
+                const v2Display = v2Status === '미확인' ? '특강' : v2Status;
+                visit2AttendanceToggle = `<div class="toggle-group">` +
+                    ['특강', '출석', '지각', '결석', '조퇴', '기타'].map(st => {
+                        const classes = ['toggle-btn'];
+                        if (st === '특강') classes.push('type-tag', `default-tone-${DEFAULT_TONE['특강']}`);
+                        if (st === v2Display) {
+                            if (st === '출석') classes.push('active-present');
+                            else if (st === '결석') classes.push('active-absent');
+                            else if (st === '지각') classes.push('active-late');
+                            else if (st === '특강') classes.push('active-default');
+                            else classes.push('active-other');
+                        }
+                        return `<button class="${classes.join(' ')}" aria-pressed="${st === v2Display}" onclick="event.stopPropagation(); toggleVisit2Attendance('${escAttr(s.docId)}', '${st}')">${st}</button>`;
+                    }).join('') + `</div>`;
+            }
         } else if (state.currentCategory === 'homework') {
             const rec = state.dailyRecords[s.docId];
             const isHw1st = state.currentSubFilter.has('hw_1st');
@@ -715,24 +743,16 @@ export function renderListPanel() {
 
         // 등원시간 (휴원 학생은 미표시)
         let timeHtml = '';
+        let mainTimeBlockHtml = '';
+        let visit2TimeBlockHtml = '';
         const rec = state.dailyRecords[s.docId];
-        const dayName = getDayName(state.selectedDate);
-        const todayEnroll = getActiveEnrollments(s, state.selectedDate).find(e => e.day.includes(dayName));
         if (!isLeave) {
             const arrivalTime = rec?.arrival_time;
-            // dayName 전달 — 합성 내신/자유학기 enrollment의 schedule 객체에서 요일별 시간 조회 가능해야 함.
-            // 누락 시 fallback이 hw_fail/test_fail 보충 시간(17:30 등)을 가장 이른 시간으로 끌어와 정규 등원시간을 덮음.
-            let scheduledTime = getStudentStartTime(todayEnroll, dayName);
-            if (!scheduledTime) {
-                // 비정규(오늘 enrollment 없음) — hw_fail/test_fail/extra_visit의 가장 이른 scheduled_time 사용
-                const eff = getEffectiveAttendanceTime(s, state.selectedDate, dayName);
-                if (eff !== '99:99') scheduledTime = eff;
-            }
 
             // 비정규 등원 예약 시간 (hw_fail/test_fail/extra_visit/hw_fail_action 통합).
             // 정규/fallback 예정 시간(scheduledTime)과 다른 것만 보충 블록으로 표시.
             const visitBonusTimes = collectVisitTimes(s, state.selectedDate);
-            const uniqueBonusTimes = [...new Set(visitBonusTimes)].filter(t => t !== scheduledTime).sort();
+            const uniqueBonusTimes = [...new Set(visitBonusTimes)].filter(t => t !== scheduledTime && t !== sepVisit?.time).sort();
 
             let timeLabel = '', timeValue = '', timeClass = '';
             if (arrivalTime) {
@@ -742,17 +762,46 @@ export function renderListPanel() {
             } else if (_todayEnrolls.length === 0 && isVisitStudent(s.docId)) {
                 // 비정규인데 모든 visit task의 scheduled_time이 비어있음 — 시간 미입력 표시
                 timeLabel = '예정'; timeValue = '(미정)'; timeClass = 'time-unset';
+            } else if (sepVisit) {
+                timeLabel = '예정'; timeValue = '(미정)'; timeClass = 'time-unset';
             }
+            const timeBlocks = [];
+            if (timeValue) {
+                mainTimeBlockHtml = `<div class="item-time-block ${timeClass}">
+                <span class="item-time-label">${timeLabel}</span>
+                <span class="item-time-value">${esc(timeValue)}</span>
+            </div>`;
+                timeBlocks.push({ sort: scheduledTime || arrivalTime || '99:99', html: mainTimeBlockHtml });
+            }
+            if (sepVisit) {
+                const v2 = rec?.visit2;
+                const v2Arrived = !!v2?.arrival_time;
+                const v2Time = v2Arrived ? v2.arrival_time : sepVisit.time;
+                visit2TimeBlockHtml = `<div class="item-time-block ${v2Arrived ? 'arrived' : (v2Time ? '' : 'time-unset')}">
+                    <span class="item-time-label">${v2Arrived ? '등원' : '예정'}</span>
+                    <span class="item-time-value">${v2Time ? esc(formatTime12h(v2Time)) : '(미정)'}</span>
+                </div>`;
+                timeBlocks.push({ sort: v2Time || '99:99', html: visit2TimeBlockHtml });
+            }
+            timeBlocks.sort((a, b) => a.sort.localeCompare(b.sort));
+            const bonusTimeHtml = uniqueBonusTimes.map(t => `<div class="item-time-block" style="color:var(--danger);">
+                <span class="item-time-label" style="color:var(--danger);">보충</span>
+                <span class="item-time-value" style="color:var(--danger);">${esc(formatTime12h(t))}</span>
+            </div>`).join('');
             timeHtml = [
-                timeValue ? `<div class="item-time-block ${timeClass}">
-                    <span class="item-time-label">${timeLabel}</span>
-                    <span class="item-time-value">${esc(timeValue)}</span>
-                </div>` : '',
-                ...uniqueBonusTimes.map(t => `<div class="item-time-block" style="color:var(--danger);">
-                    <span class="item-time-label" style="color:var(--danger);">보충</span>
-                    <span class="item-time-value" style="color:var(--danger);">${esc(formatTime12h(t))}</span>
-                </div>`)
+                ...timeBlocks.map(b => b.html),
+                bonusTimeHtml
             ].join('');
+
+            if (state.currentCategory === 'attendance' && sepVisit) {
+                visit2First = (rec?.visit2?.arrival_time || sepVisit.time || '99:99')
+                    < (arrivalTime || scheduledTime || '99:99');
+                const pair1 = `<div class="visit-pair">${mainTimeBlockHtml}${mainAttendanceToggle}</div>`;
+                const pair2 = `<div class="visit-pair">${visit2TimeBlockHtml}${visit2AttendanceToggle}</div>`;
+                const pairedAttendance = visit2First ? pair2 + pair1 : pair1 + pair2;
+                timeHtml = bonusTimeHtml;
+                toggleHtml = pairedAttendance;
+            }
         }
 
         // hw_fail_tasks 기반 아이콘 (대체숙제/등원예약) - pending 상태만
@@ -766,9 +815,13 @@ export function renderListPanel() {
             : '';
 
         // 형제 아이콘
-        const hasSibling = state.siblingMap[s.docId]?.size > 0;
-        const siblingNames = hasSibling ? [...state.siblingMap[s.docId]].map(sid => state.allStudents.find(x => x.docId === sid)?.name).filter(Boolean).join(', ') : '';
-        const siblingIcon = hasSibling ? `<span class="item-icon item-icon-sibling" title="형제: ${esc(siblingNames)}">${msIcon('group')}</span>` : '';
+        const activeSiblingNames = [...(state.siblingMap[s.docId] || [])]
+            .map(sid => findStudent(sid))
+            .filter(sibling => ENROLLABLE_STATUSES.has(sibling?.status))
+            .map(sibling => sibling.name);
+        const siblingIcon = activeSiblingNames.length
+            ? `<span class="item-icon item-icon-sibling" title="형제: ${esc(activeSiblingNames.join(', '))}">${msIcon('group')}</span>`
+            : '';
 
         // 담당 뱃지 (첫 번째 반코드 기준)
         const todayCodes = getActiveEnrollments(s, state.selectedDate).filter(e => e.day.includes(dayN)).map(e => enrollmentCode(e));
@@ -792,12 +845,23 @@ export function renderListPanel() {
             }
         }
 
+        // 휴/퇴원 기간 — 출결 버튼이 없는 자리에 대신 노출 (만료 전에도 기간이 보이게)
+        let leavePeriodHtml = '';
+        if (LEAVE_STATUSES.includes(s.status)) {
+            const start = s.pause_start_date ? esc(s.pause_start_date) : '';
+            const end = s.pause_end_date ? esc(s.pause_end_date) : '';
+            const range = start && end ? `${start} ~ ${end}` : end ? `~ ${end}` : start ? `${start} ~` : '기간 미정';
+            leavePeriodHtml = `<span class="leave-period">휴원 ${range}</span>`;
+        } else if (s.status === '퇴원' && s.withdrawal_date) {
+            leavePeriodHtml = `<span class="leave-period">퇴원 ${esc(s.withdrawal_date)}</span>`;
+        }
+
         // 휴원 만료 경고 뱃지 (실제 오늘 기준) — status 자동 전환 금지, 담당자 복귀 처리 유도
         const pauseExpiredBadge = isPauseExpired(s)
-            ? `<span class="tag tag-pause-expired" title="휴원 기간이 만료됐습니다. 복귀 처리(상태 변경)가 필요합니다.">⚠ 휴원만료 (~${esc(s.pause_end_date)}, ${pauseExpiredDays(s)}일 경과) · 복귀처리 필요</span>`
+            ? `<span class="tag tag-pause-expired" title="휴원 기간이 만료됐습니다. 복귀 처리(상태 변경)가 필요합니다.">${msIcon('warning', '', 'style="font-size:1em;"')} 휴원만료 (~${esc(s.pause_end_date)}, ${pauseExpiredDays(s)}일 경과) · 복귀처리 필요</span>`
             : '';
 
-        // 신규 학생 뱃지 (enrollment start_date가 14일 이내)
+        // 신규 학생 뱃지 (현재 연속 재원기간의 첫 등원일이 14일 이내)
         const newBadge = isNewStudent(s, todayDate) ? '<span class="tag tag-new">N</span>' : '';
 
         // 휴퇴원요청 승인 대기 태그
@@ -810,7 +874,7 @@ export function renderListPanel() {
 
         // 후속대책 버튼: 1차 서브필터에서 미통과(X/△) 영역이 있으면 표시
         let followUpBtnHtml = '';
-        if (!isLeave && (isHw1stFilter || isTest1stFilter)) {
+        if (canBulkSelect && !isLeave && (isHw1stFilter || isTest1stFilter)) {
             const rec = state.dailyRecords[s.docId] || {};
             const field = isHw1stFilter ? 'hw_domains_1st' : 'test_domains_1st';
             const category = isHw1stFilter ? 'homework' : 'test';
@@ -822,17 +886,13 @@ export function renderListPanel() {
 
         const isNaesinStudent = naesinPeriodIds.has(s.docId);
         const naesinBadge = isNaesinStudent ? '<span class="tag-naesin">내신</span>' : '';
-        // 내신 학생: 부제목을 내신반명 하나로 축약 (배지가 '내신' 표시 + 반명에 학교·학년 포함되어 중복)
-        const descCode = isNaesinStudent ? code.split(', ').filter(c => c !== '내신').join(', ') : code;
-        const descTail = isNaesinStudent ? '' : (studentShortLabel(s) ? ' · ' + esc(studentShortLabel(s)) : '');
         return `<div class="list-item ${isActive}${state.bulkMode ? ' bulk-mode' : ''}${state.selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}" role="button" tabindex="0" data-keyclick onclick="handleListItemClick(event, '${escAttr(s.docId)}')">
-            <input type="checkbox" class="list-item-checkbox" aria-label="학생 선택" ${state.selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">
+            ${canBulkSelect ? `<input type="checkbox" class="list-item-checkbox" aria-label="학생 선택" ${state.selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">` : ''}
             <div class="item-info">
                 <span class="item-title">${esc(s.name)}${newBadge}${naesinBadge}${leaveBadge}${pauseExpiredBadge}${lrPendingTags}${siblingIcon}${hwFailIconHtml}${overrideBadge}${overrideInBadge} ${teacherBadge}</span>
-                <span class="item-desc">${esc(descCode)}${descTail}</span>
             </div>
             ${timeHtml}
-            <div class="item-actions">${toggleHtml}</div>
+            <div class="item-actions">${toggleHtml || leavePeriodHtml}</div>
             ${followUpBtnHtml}
         </div>`;
     };
@@ -885,7 +945,7 @@ export function renderListPanel() {
     };
 
     // 정규(pre_arrival) L2 선택 시 등원예정 섹션 상단 삽입
-    const enrollPendingHtml = (state.currentCategory === 'attendance' && state.currentSubFilter.has('pre_arrival'))
+    const enrollPendingHtml = (!searching && state.currentCategory === 'attendance' && state.currentSubFilter.has('pre_arrival'))
         ? renderEnrollPendingSection() : '';
 
     // 그룹 뷰 or 일반 렌더링
@@ -920,8 +980,6 @@ export function renderListPanel() {
         otherHtml += otherDayStudents.map(renderItemHtml).join('');
         container.insertAdjacentHTML('beforeend', otherHtml);
     }
-
-    // 비원생은 _searchContactsDSC에서 비동기로 렌더링 (위에서 호출됨)
 
     // 반 상세 표시: 반(+소속)만 선택되고, 콘텐츠 서브필터 없을 때
     // 내신/특강/자유학기 반 설정 모드에서는 항상 반 상세 표시

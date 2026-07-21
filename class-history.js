@@ -11,6 +11,7 @@
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { esc } from './ui-utils.js';
+import { msIcon } from './ms-icon.js';
 import { classifyHistory, HISTORY_BADGE, shortAuthor } from '@impact7/shared/history';
 import { deriveClassPeriodHistory } from '@impact7/shared/enrollment-derivation';
 import { state } from './state.js';
@@ -40,7 +41,7 @@ export async function loadClassHistoryCard(studentId) {
         const indexUrl = e.message?.match(/https:\/\/console\.firebase\.google\.com\/[^\s]+/)?.[0];
         const safeIndexUrl = indexUrl && /^https:\/\/console\.firebase\.google\.com\//.test(indexUrl) ? indexUrl : null;
         const hint = safeIndexUrl
-            ? `<br><a href="${esc(safeIndexUrl)}" target="_blank" rel="noopener" style="color:var(--primary);font-size:0.85em;">→ Firebase Console 에서 인덱스 생성</a>`
+            ? `<br><a href="${esc(safeIndexUrl)}" target="_blank" rel="noopener" style="color:var(--primary);font-size:0.85em;">${msIcon('arrow_forward', '', 'style="font-size:1em;"')} Firebase Console 에서 인덱스 생성</a>`
             : '';
         contentEl.innerHTML = `<div class="detail-card-empty" style="padding:32px;text-align:center;color:var(--danger);">이력 로드 실패: ${esc(e.message)}${hint}</div>`;
     }

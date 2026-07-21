@@ -10,11 +10,11 @@ import {
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from './firebase-config.js';
 import { auditUpdate, auditSet, auditAdd, auditDelete, batchUpdate, batchSet, READ_ONLY } from './audit.js';
-import { parseDateKST, toDateStrKST, todayStr, getDayName } from './src/shared/firestore-helpers.js';
+import { parseDateKST, toDateStrKST, todayStr, getDayName, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { state, DEFAULT_DOMAINS, LEAVE_STATUSES, DEFAULT_TEST_SECTIONS } from './state.js';
 import { showSaveIndicator, showToast } from './ui-utils.js';
 import { openKoreanDatePicker } from './date-picker.js';
-import { normalizeDays, enrollmentCode, branchFromStudent, makeDailyRecordId, getActiveEnrollments, deriveClassLabelAt } from './student-helpers.js';
+import { normalizeDays, enrollmentCode, branchFromStudent, makeDailyRecordId, getActiveEnrollments, deriveClassLabelAt, getSeparateTeukangVisit } from './student-helpers.js';
 import { DEFAULT_HISTORY_LIMIT } from './consultation-filter.js';
 import { createDebouncedWriter } from './save-scheduler.js';
 import { createPromoteEnrollPending } from '@impact7/shared/promote-enroll';
@@ -22,7 +22,9 @@ import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 import { deriveStudentNumber, studentNumberIdentityKey } from '@impact7/shared/student-number';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { teacherDisplayName } from '@impact7/shared/teacher-label';
+import { deriveTenure, isAttendedStatus } from '@impact7/shared/history';
 import { MESSAGE_RECIPIENT_SETTINGS_FIELD } from './src/messages/recipient-settings.js';
+import { isScheduledWithdrawalDue } from './student-core.js';
 
 const _promoteEnrollPending = createPromoteEnrollPending(
     { db, writeBatch, doc, collection, serverTimestamp },
@@ -40,6 +42,18 @@ async function _persistDailyRecord(studentId, targetDate, updates) {
     const base = { student_id: studentId, date: targetDate, ...updates };
     if (student) {
         base.branch = branchFromStudent(student);
+        const cacheMatchesTarget = state.dailyRecordsDate === targetDate;
+        const visit2 = updates.visit2 || (cacheMatchesTarget ? state.dailyRecords[studentId]?.visit2 : null);
+        if (cacheMatchesTarget && !visit2) {
+            const teukangVisit = getSeparateTeukangVisit(student, targetDate);
+            if (teukangVisit) {
+                base.visit2 = {
+                    status: '미확인',
+                    code: enrollmentCode(teukangVisit.enrollment),
+                    scheduled_time: teukangVisit.time,
+                };
+            }
+        }
         // 수업 유형 스냅샷: 당일 저장에만 박는다 — 과거·미래 날짜는 현재 설정 역산이 오산 위험.
         // 반 설정 로드 완료 + 캐시가 그 날짜 반영(dailyRecordsDate) + 라벨 없음일 때만 → 기존 스냅샷 보존,
         // classSettings 공백 상태의 내신/자유 '정규' 오판 고정 방지.
@@ -129,22 +143,24 @@ export function getClassDomains(classCode) {
 
 export async function loadTeachers() {
     try {
-        // 담당 목록·표시이름의 정본은 HR 인사(staff_directory 미러) — 로그인 여부 무관, 재직 교수만 후보.
+        // 담당 목록·표시이름의 정본은 HR 인사(staff_directory 미러의 english_name).
+        // 로그인 이메일은 규약(영어이름@impact7.kr)으로 파생한다 — staff_directory의 email 필드는
+        // 비어있거나 개인메일이라 쓰지 않는다. staffByLocal(로컬파트→HR 영어이름)로 기존 배정
+        // 이메일(@gw 포함)의 표시이름도 HR에서 해석한다.
         const snap = await getDocs(collection(db, 'staff_directory'));
         const byLocal = new Map();
         const list = [];
         snap.forEach(d => {
             const data = d.data();
-            const email = String(data.email || '').trim().toLowerCase();
-            if (!email) return;
-            const local = staffLabel(email).toLowerCase();
-            const englishName = (typeof data.english_name === 'string' && data.english_name.trim())
-                ? data.english_name.trim() : (teacherDisplayName(local) || local);
-            byLocal.set(local, englishName);
-            if (data.department === '교수' && data.assignable === true) list.push({ email });
+            const en = typeof data.english_name === 'string' ? data.english_name.trim() : '';
+            if (!en) return;
+            byLocal.set(en.toLowerCase(), en);
+            if (data.department === '교수' && data.assignable === true) {
+                list.push({ email: `${en.toLowerCase()}@impact7.kr`, name: en });
+            }
         });
         state.staffByLocal = byLocal;
-        state.teachersList = list.sort((a, b) => getTeacherName(a.email).localeCompare(getTeacherName(b.email), 'ko'));
+        state.teachersList = list.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
         console.log(`[loadTeachers] ${state.teachersList.length}명 (HR 재직 교수)`);
     } catch (err) {
         console.error('[loadTeachers] 실패:', err);
@@ -166,7 +182,7 @@ export async function trackTeacherLogin(user) {
 }
 
 export function getTeacherName(email) {
-    // 표시이름의 정본은 HR 영어이름(staff_directory) — 미로딩·명부밖이면 이메일 로컬파트 파생으로 폴백.
+    // 표시이름의 정본은 HR 영어이름(staff_directory) — 미로딩·명부밖이면 이메일 로컬파트 파생 폴백.
     const local = staffLabel(email).toLowerCase();
     return state.staffByLocal?.get(local) || teacherDisplayName(staffLabel(email)) || staffLabel(email);
 }
@@ -328,6 +344,89 @@ export async function loadStudents() {
     }
 }
 
+export async function loadStudentTenure(studentId, status) {
+    return (await loadStudentTenures([{ docId: studentId, status }])).get(studentId);
+}
+
+const _historyLogDate = log => log.timestamp?.toDate
+    ? log.timestamp.toDate()
+    : (log.timestamp ? new Date(log.timestamp) : null);
+
+const TENURE_HISTORY_QUERY_LIMIT = 6001;
+
+export async function loadRecentlyAttendedStudentIds(students, cutoffDate, endDate) {
+    const attendedIds = new Set();
+    for (let i = 0; i < students.length; i += 30) {
+        const ids = students.slice(i, i + 30).map(student => student.docId);
+        if (ids.length === 0) continue;
+        const snapshot = await getDocs(query(
+            collection(db, 'daily_records'),
+            where('student_id', 'in', ids),
+            where('date', '>=', cutoffDate),
+            where('date', '<=', endDate)
+        ));
+        for (const docSnap of snapshot.docs) {
+            const record = docSnap.data();
+            if (isAttendedStatus(record.attendance?.status)) attendedIds.add(record.student_id);
+        }
+    }
+    return attendedIds;
+}
+
+export async function loadStudentTenures(students) {
+    const result = new Map();
+    for (let i = 0; i < students.length; i += 30) {
+        const chunk = students.slice(i, i + 30);
+        const ids = chunk.map(student => student.docId);
+        const historySnap = await getDocs(query(
+            collection(db, 'history_logs'),
+            where('doc_id', 'in', ids),
+            limit(TENURE_HISTORY_QUERY_LIMIT)
+        ));
+        if (historySnap.size === TENURE_HISTORY_QUERY_LIMIT) {
+            console.warn('[TENURE] 이력 조회 상한 도달:', ids.length);
+            ids.forEach(id => result.set(id, { start: null, end: null, startEvent: null }));
+            continue;
+        }
+        const logsByStudent = new Map();
+        for (const docSnap of historySnap.docs) {
+            const log = { id: docSnap.id, ...docSnap.data() };
+            if (!logsByStudent.has(log.doc_id)) logsByStudent.set(log.doc_id, []);
+            logsByStudent.get(log.doc_id).push(log);
+        }
+        const baseTenures = new Map(chunk.map(student => [student.docId, deriveTenure(
+            logsByStudent.get(student.docId) || [],
+            _historyLogDate,
+            [],
+            ENROLLABLE_STATUSES.has(student.status)
+        )]));
+        const resolvedTenures = await Promise.all(chunk.map(async student => {
+            const baseTenure = baseTenures.get(student.docId);
+            if (!baseTenure.startEvent) {
+                return [student.docId, baseTenure];
+            }
+            const attendanceSnap = await getDocs(query(
+                collection(db, 'daily_records'),
+                where('student_id', '==', student.docId),
+                where('attendance.status', 'in', ['출석', '지각', '조퇴']),
+                where('date', '>=', toDateStrKST(baseTenure.startEvent)),
+                where('date', '<=', todayStr()),
+                orderBy('date', 'asc'),
+                limit(1)
+            ));
+            const attendanceRecords = attendanceSnap.docs.map(docSnap => docSnap.data());
+            return [student.docId, deriveTenure(
+                logsByStudent.get(student.docId) || [],
+                _historyLogDate,
+                attendanceRecords.map(record => ({ date: record.date, status: record.attendance?.status })),
+                ENROLLABLE_STATUSES.has(student.status)
+            )];
+        }));
+        resolvedTenures.forEach(([studentId, tenure]) => result.set(studentId, tenure));
+    }
+    return result;
+}
+
 export async function promoteEnrollPending() {
     if (READ_ONLY) return;
     const today = todayStr();
@@ -404,7 +503,7 @@ export async function promoteWithdrawalDate() {
     const today = todayStr();
     const ACTIVE_FOR_PROMOTE = new Set(['재원', '등원예정']);
     const toWithdraw = state.allStudents.filter(s =>
-        ACTIVE_FOR_PROMOTE.has(s.status) && s.withdrawal_date && s.withdrawal_date <= today
+        ACTIVE_FOR_PROMOTE.has(s.status) && isScheduledWithdrawalDue(s, today)
     );
     if (toWithdraw.length === 0) return;
     const batch = writeBatch(db);
@@ -848,7 +947,7 @@ export async function autoCloseOldRecords() {
     }
 }
 
-// 퇴원생 전체 로드 (1.5만+건 — 시스템 전반이 비원생 포함 전제라 전체 적재 필요).
+// 비원생 전체 로드 (1.5만+건 — 시스템 전반이 비원생 포함 전제라 전체 적재 필요).
 // 첫 조작(학생 클릭) 응답성을 지키기 위해:
 //  1) IndexedDB 캐시를 먼저 통째로 적용 — 재방문 시 네트워크 전에 기능 가용
 //  2) 서버 갱신은 청크 분할(2,500건 + 사이마다 yield)로 메인스레드 블로킹 분산
@@ -857,41 +956,47 @@ const WITHDRAWN_CHUNK = 2500;
 let _withdrawnLoading = null;
 export function loadWithdrawnStudents() {
     if (_withdrawnLoading) return _withdrawnLoading;
+    state._withdrawnFullyLoaded = false;
     _withdrawnLoading = (async () => {
-        const baseQ = query(collection(db, 'students'), where('status', '==', '퇴원'));
         try {
             try {
-                const cached = await getDocsFromCache(baseQ);
-                if (cached.size > 0) {
+                const cachedDocs = [];
+                for (const status of PAST_STUDENT_STATUSES) {
+                    const cached = await getDocsFromCache(query(collection(db, 'students'), where('status', '==', status)));
+                    cachedDocs.push(...cached.docs);
+                }
+                if (cachedDocs.length > 0) {
                     // 1.5만 건 d.data() 역직렬화도 한 방이면 메인스레드를 수백 ms 막는다 — 분할
                     const arr = [];
-                    for (let i = 0; i < cached.docs.length; i += WITHDRAWN_CHUNK) {
-                        cached.docs.slice(i, i + WITHDRAWN_CHUNK).forEach(d => arr.push({ docId: d.id, ...d.data() }));
-                        if (i + WITHDRAWN_CHUNK < cached.docs.length) await new Promise(r => setTimeout(r, 50));
+                    for (let i = 0; i < cachedDocs.length; i += WITHDRAWN_CHUNK) {
+                        cachedDocs.slice(i, i + WITHDRAWN_CHUNK).forEach(d => arr.push({ docId: d.id, ...d.data() }));
+                        if (i + WITHDRAWN_CHUNK < cachedDocs.length) await new Promise(r => setTimeout(r, 50));
                     }
                     state.withdrawnStudents = arr;
-                    state._withdrawnFullyLoaded = true;
                 }
             } catch { /* 캐시 없음 — 서버 로드로 계속 */ }
 
             const fresh = [];
-            let cursor = null;
-            for (;;) {
-                const parts = [where('status', '==', '퇴원'), orderBy(documentId()), limit(WITHDRAWN_CHUNK)];
-                if (cursor) parts.push(startAfter(cursor));
-                const snap = await getDocs(query(collection(db, 'students'), ...parts));
-                snap.forEach(d => fresh.push({ docId: d.id, ...d.data() }));
-                if (snap.size < WITHDRAWN_CHUNK) break;
-                cursor = snap.docs[snap.docs.length - 1];
-                await new Promise(r => setTimeout(r, 50));
+            for (const status of PAST_STUDENT_STATUSES) {
+                let cursor = null;
+                for (;;) {
+                    const parts = [where('status', '==', status), orderBy(documentId()), limit(WITHDRAWN_CHUNK)];
+                    if (cursor) parts.push(startAfter(cursor));
+                    const snap = await getDocs(query(collection(db, 'students'), ...parts));
+                    snap.forEach(d => fresh.push({ docId: d.id, ...d.data() }));
+                    if (snap.size < WITHDRAWN_CHUNK) break;
+                    cursor = snap.docs[snap.docs.length - 1];
+                    await new Promise(r => setTimeout(r, 50));
+                }
             }
             state.withdrawnStudents = fresh;
             state._withdrawnFullyLoaded = true;
         } catch (err) {
-            console.error('퇴원 학생 로드 실패:', err.message);
+            console.error('비원생 로드 실패:', err.message);
         } finally {
             _withdrawnLoading = null;
         }
+        return state._withdrawnFullyLoaded;
     })();
     return _withdrawnLoading;
 }
@@ -1067,6 +1172,7 @@ export const getAttendanceNotificationGaps = callFn('getAttendanceNotificationGa
 // 정보성 대용량 발송(메시지 센터 ②블록, 직원 권한).
 export const createBulkMessage = callFn('createBulkMessage');
 export const getBulkStaffRecipients = callFn('getBulkStaffRecipients');
+export const getSolapiAlimtalkTemplates = callFn('getSolapiAlimtalkTemplates');
 
 // 일일 학습 리포트 발송(직원 권한). 자유 본문은 LMS/SMS로 발송.
 export const sendDailyReport = callFn('sendDailyReport');
@@ -1077,12 +1183,6 @@ export const getRecipientMessageHistory = callFn('getRecipientMessageHistory');
 export async function saveStudentMessageRecipientSettings(studentId, settings) {
   await auditUpdate(doc(db, 'students', studentId), {
     [MESSAGE_RECIPIENT_SETTINGS_FIELD]: settings,
-  });
-}
-
-export async function saveStudentParentMessageRecipientFields(studentId, fields) {
-  await auditUpdate(doc(db, 'students', studentId), {
-    parent_message_recipient_fields: fields,
   });
 }
 

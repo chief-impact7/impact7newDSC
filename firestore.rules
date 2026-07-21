@@ -484,6 +484,7 @@ service cloud.firestore {
         && request.resource.data.reads is map;
     }
 
+
     // [Board] HR 직원현황의 안전 명부 미러 — 이름·이메일·부서·재직 여부만 서버가 동기화한다.
     match /staff_directory/{staffId} {
       allow read: if isAuthorized();

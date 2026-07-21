@@ -8,7 +8,12 @@ import {
     fetchDailyRecordsRange,
     fetchPostponedTasksRange,
     fetchDashboardDailyLogData,
+    fetchDashboardDailyLogDataFromCache,
     fetchConsultationsForRange,
+    fetchStudentStatusSummaries,
+    fetchClassSettingsMap,
+    fetchStaffNameMap,
+    fetchAiStatusDataFromCache,
 } from '../../shared/firestore-helpers.js';
 import { kstDayRangeParams } from '../message-period.js';
 
@@ -52,7 +57,13 @@ export function useStudents(user, includeEnded = false) {
         }).catch(() => {});
         // 2) 서버 최신으로 갱신.
         fetchStudents(includeEnded)
-            .then(list => { if (!cancelled) { setStudents(list); setError(null); } })
+            .then(list => {
+                if (!cancelled) {
+                    setStudents(list);
+                    setError(null);
+                    globalThis.performance?.mark?.('students-loaded');
+                }
+            })
             .catch(err => {
                 if (cancelled) return;
                 console.error('[useStudents]', err);
@@ -66,36 +77,62 @@ export function useStudents(user, includeEnded = false) {
 }
 
 // 기간별 daily_checks + postponed_tasks 로드
-export function useDashboardData(user, startDate, endDate) {
+export function useDashboardData(user, startDate, endDate, enabled, dailyView) {
     const [checks, setChecks] = useState([]);
     const [dailyRecords, setDailyRecords] = useState([]);
     const [postponed, setPostponed] = useState([]);
     const [dailyLog, setDailyLog] = useState(emptyDailyLogData);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [loadedKey, setLoadedKey] = useState('');
     const reqIdRef = useRef(0);
+    const requestKey = enabled && user && startDate && endDate ? `${startDate}:${endDate}:${dailyView}` : '';
 
     const reload = useCallback(() => {
-        if (!user || !startDate || !endDate) return;
+        if (!enabled || !user || !startDate || !endDate) {
+            ++reqIdRef.current;
+            setLoading(false);
+            setError(null);
+            return;
+        }
         const reqId = ++reqIdRef.current;   // 빠른 기간 변경 시 이전 요청 응답이 최신을 덮지 않도록. F-09
         setLoading(true);
         setError(null);
-        // 일별 뷰에선 fetchDashboardDailyLogData가 같은 날 daily_records를 이미 읽으므로
-        // range 조회를 생략하고 그 결과를 재사용한다(동일 데이터 2회 read 제거).
-        const isDaily = startDate === endDate;
-        Promise.all([
-            fetchDailyChecksRange(startDate, endDate),
-            isDaily ? Promise.resolve(null) : fetchDailyRecordsRange(startDate, endDate),
-            fetchPostponedTasksRange(startDate, endDate),
-            isDaily ? fetchDashboardDailyLogData(startDate) : Promise.resolve(null),
-        ])
-            .then(([c, records, p, log]) => {
+        const applyData = (data) => {
+            setChecks(data.checks);
+            setDailyRecords(data.dailyRecords);
+            setPostponed(data.postponed);
+            setDailyLog(data.dailyLog);
+            setLoadedKey(`${startDate}:${endDate}:${dailyView}`);
+        };
+        // daily 뷰(DailyLogBoard)만 dailyLog 단일 요청 — custom 같은 날짜 기간은 PeriodLogBoard가
+        // checks·postponed를 쓰므로 범위 조회를 유지한다.
+        let request;
+        if (dailyView) {
+            let serverDone = false;
+            fetchDashboardDailyLogDataFromCache(startDate).then(dailyLog => {
+                if (serverDone || reqId !== reqIdRef.current || !dailyLog) return;
+                applyData({ checks: [], dailyRecords: dailyLog.dailyRecords, postponed: [], dailyLog });
+                setLoading(false);
+            });
+            request = fetchDashboardDailyLogData(startDate).then(dailyLog => {
+                serverDone = true;
+                globalThis.performance?.mark?.('dailylog-loaded');
+                return { checks: [], dailyRecords: dailyLog.dailyRecords, postponed: [], dailyLog };
+            });
+        } else {
+            request = Promise.all([
+                fetchDailyChecksRange(startDate, endDate),
+                fetchDailyRecordsRange(startDate, endDate),
+                fetchPostponedTasksRange(startDate, endDate),
+            ]).then(([checks, dailyRecords, postponed]) => ({
+                checks, dailyRecords, postponed, dailyLog: emptyDailyLogData(),
+            }));
+        }
+        request
+            .then(data => {
                 if (reqId !== reqIdRef.current) return;
-                setChecks(c);
-                setDailyRecords(records ?? log?.dailyRecords ?? []);
-                setPostponed(p);
-                if (log) setDailyLog(log);
-                else setDailyLog(emptyDailyLogData());
+                applyData(data);
             })
             .catch(err => {
                 if (reqId !== reqIdRef.current) return;
@@ -105,11 +142,15 @@ export function useDashboardData(user, startDate, endDate) {
             .finally(() => {
                 if (reqId === reqIdRef.current) setLoading(false);
             });
-    }, [user, startDate, endDate]);
+    }, [enabled, user, startDate, endDate, dailyView]);
 
     useEffect(() => { reload(); }, [reload]);
 
-    return { checks, dailyRecords, postponed, dailyLog, loading, reload, error };
+    return {
+        checks, dailyRecords, postponed, dailyLog,
+        loading: loading || (Boolean(requestKey) && loadedKey !== requestKey),
+        reload, error: enabled ? error : null,
+    };
 }
 
 // 기간 상담 조회 훅. enabled=false(상담 뷰 비활성)면 fetch하지 않는다(불필요 읽기 방지).
@@ -174,4 +215,46 @@ export function useMessageDelivery(user) {
     useEffect(() => { reload(kstDayRangeParams()); }, [reload]);
 
     return { data, loading, reload, error };
+}
+
+// AI 종합상태 뷰 데이터. 월 단위 갱신이라 세션당 1회만 fetch — 모듈 캐시로 뷰 재진입 시 재사용.
+let _aiStatusCache = null;
+
+export function useAiStatusData(user, enabled) {
+    const [data, setData] = useState(_aiStatusCache);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const reqIdRef = useRef(0);
+
+    const load = useCallback((force) => {
+        if (!user || (!force && (_aiStatusCache || !enabled))) return;
+        const reqId = ++reqIdRef.current;
+        setLoading(true);
+        setError(null);
+        // 디스크 캐시 선표시. 서버 응답이 먼저 도착했으면 캐시로 덮어쓰지 않는다.
+        let serverDone = false;
+        fetchAiStatusDataFromCache().then(cached => {
+            if (serverDone || reqId !== reqIdRef.current || !cached) return;
+            _aiStatusCache = cached;
+            setData(cached);
+        });
+        Promise.all([fetchStudentStatusSummaries(), fetchClassSettingsMap(), fetchStaffNameMap()])
+            .then(([summaries, classSettings, staffByLocal]) => {
+                serverDone = true;
+                if (reqId !== reqIdRef.current) return;
+                _aiStatusCache = { summaries, classSettings, staffByLocal };
+                setData(_aiStatusCache);
+            })
+            .catch(err => {
+                if (reqId !== reqIdRef.current) return;
+                console.error('[useAiStatusData]', err);
+                setError(err);
+            })
+            .finally(() => { if (reqId === reqIdRef.current) setLoading(false); });
+    }, [user, enabled]);
+
+    useEffect(() => { load(false); }, [load]);
+
+    const reload = useCallback(() => { _aiStatusCache = null; load(true); }, [load]);
+    return { data, loading, error, reload };
 }

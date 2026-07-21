@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Impact7 출결 체크인</title>
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
     <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="a11y.css">
     <style>
@@ -132,7 +135,7 @@
                 <button class="key" data-key="9">9</button>
                 <button class="key action" data-key="clear">지움</button>
                 <button class="key" data-key="0">0</button>
-                <button class="key action" data-key="back">←</button>
+                <button class="key action" data-key="back" aria-label="한 자리 지우기"><span data-checkin-icon="arrow_back"></span></button>
             </div>
             <div id="keypad-hint" class="hint"></div>
         </div>
@@ -142,7 +145,7 @@
             <h1 class="title">본인 이름을 선택하세요</h1>
             <p class="subtitle">아래에서 본인을 찾아 누르세요.</p>
             <div id="candidate-list" class="candidate-list"></div>
-            <button id="candidates-back" class="back-link">← 번호 다시 입력</button>
+            <button id="candidates-back" class="back-link"><span data-checkin-icon="arrow_back"></span> 번호 다시 입력</button>
         </div>
 
         <!-- 출결 상태 선택 -->
@@ -155,13 +158,13 @@
                 <button class="status-btn status-absent" data-status="결석">결석</button>
             </div>
             <div id="status-hint" class="hint"></div>
-            <button id="status-back" class="back-link">← 처음으로</button>
+            <button id="status-back" class="back-link"><span data-checkin-icon="arrow_back"></span> 처음으로</button>
         </div>
 
         <!-- 완료 -->
         <div id="screen-done" class="card" hidden>
             <div class="done">
-                <div class="check">✓</div>
+                <div class="check"><span data-checkin-icon="check_circle"></span></div>
                 <div id="done-title" class="done-title">처리됐어요</div>
                 <div id="done-sub" class="done-sub"></div>
             </div>

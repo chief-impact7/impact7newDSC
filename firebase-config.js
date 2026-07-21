@@ -84,5 +84,5 @@ if (import.meta.env.DEV && import.meta.env.VITE_USE_EMULATOR === 'true') {
     connectAuthEmulator(dataAuth, 'http://localhost:9099', { disableWarnings: true });
     connectFunctionsEmulator(functions, 'localhost', 5001);
     connectStorageEmulator(storage, 'localhost', 9199);
-    console.warn('%c🔧 EMULATOR MODE — Firestore/Auth localhost:8080/9099 사용', 'background:#dbeafe;color:#1e3a8a;font-size:13px;font-weight:700;padding:4px 8px;border-radius:4px;');
+    console.warn('%cEMULATOR MODE — Firestore/Auth localhost:8080/9099 사용', 'background:#dbeafe;color:#1e3a8a;font-size:13px;font-weight:700;padding:4px 8px;border-radius:4px;');
 }

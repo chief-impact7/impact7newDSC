@@ -7,6 +7,7 @@ import { state } from './state.js';
 import { studentShortLabel, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
 import { esc, escAttr } from './ui-utils.js';
 import { digitsOf } from '@impact7/shared/phone';
+import { msIcon } from './ms-icon.js';
 
 // students에서 퇴원/종강 학생을 prefix 쿼리로 가져온다.
 // (현재 활성 학생은 allStudents에 이미 들어있으므로 dedupe로 제외)
@@ -58,13 +59,13 @@ export function _renderPastContacts(pastContactResults, container) {
     const renderPastItem = (c) => {
         const phone = c.parent_phone_1 || c.student_phone || '';
         const last4 = digitsOf(phone).slice(-4);
-        const sub = [studentShortLabel(c), last4 ? `☎${last4}` : ''].filter(Boolean).join(' · ');
+        const sub = [esc(studentShortLabel(c)), last4 ? `${msIcon('phone', '', 'style="font-size:1em;"')} ${esc(last4)}` : ''].filter(Boolean).join(' · ');
         // 비원생 클릭 시 학생 상세 뷰로 진입. 진단평가 입력은 상세 헤더의 person_add 버튼에서 처리.
         const tag = PAST_STUDENT_STATUSES.has(c.status) ? '비원생' : (c.status || '비원생');
         return `<div class="list-item contact-item" style="cursor:pointer" onclick="window.selectStudent('${escAttr(c.id)}')">
             <div class="item-info">
                 <span class="item-title">${esc(c.name || '—')} <span class="tag-past">${esc(tag)}</span></span>
-                <span class="item-desc">${esc(sub || '—')}</span>
+                <span class="item-desc">${sub || '—'}</span>
             </div>
         </div>`;
     };

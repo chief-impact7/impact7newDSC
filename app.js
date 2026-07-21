@@ -22,6 +22,7 @@ import {
     _attToggleClass, _toVisitStatus, _visitBtnStyles, _visitLabel,
     _stripYear, _fmtTs, _isNoShow, _renderRescheduleHistory
 } from './ui-utils.js';
+
 import {
     normalizeDays, branchFromStudent, matchesBranchFilter,
     enrollmentCode, allClassCodes, activeClassCodes, _enrollCodeList,
@@ -38,9 +39,8 @@ import {
     initDiagnosticDeps, setupTempAutofillListeners,
     renderTempAttendanceDetail, deleteTempAttendance, cancelTempAttendance,
     openTempAttendanceModal, openTempAttendanceForEdit, saveTempAttendance,
-    openContactAsTemp
+    openDiagnosticScheduleModal, saveDiagnosticSchedule
 } from './diagnostic.js';
-import { _searchContactsDSC, _renderPastContacts } from './past-search.js';
 import {
     initLeaveRequestDeps,
     renderLeaveRequestList, selectLeaveRequest,
@@ -92,7 +92,7 @@ import {
 } from './test-management.js';
 import {
     initAttendanceDeps,
-    cycleTempArrival, cycleVisitAttendance, toggleAttendance,
+    cycleTempArrival, cycleVisitAttendance, toggleAttendance, toggleVisit2Attendance,
     autoCreateAbsenceRecord, autoRemoveAbsenceRecord, syncAbsenceRecords,
     applyAttendance, doesStatusMatchFilter, isNewStudent, isAttendedStatus,
     checkCanEditGrading, _isVisitAttended, handleAttendanceChange,
@@ -179,6 +179,8 @@ import {
     toggleClassDeleteMode, toggleClassDeleteSelect, setClassMgmtMode
 } from './filter-nav.js';
 
+document.getElementById('inactive-action-hint')?.insertAdjacentHTML('beforeend', ` ${msIcon('arrow_forward', '', 'style="font-size:1em;"')}`);
+
 // 코드 분할 청크 로드 실패(주로 새 배포 후 stale-chunk — 구 탭이 옛 청크 해시를 못 찾음)
 // 전역 처리. Vite는 동적 import 청크를 못 가져오면 vite:preloadError를 발화한다.
 // 한 번만 자동 새로고침해 새 청크를 받고(10초 가드로 무한 새로고침 방지), 재발 시 안내한다.
@@ -239,7 +241,8 @@ window.cancelTempAttendance = cancelTempAttendance;
 window.openTempAttendanceModal = openTempAttendanceModal;
 window.openTempAttendanceForEdit = openTempAttendanceForEdit;
 window.saveTempAttendance = saveTempAttendance;
-window.openContactAsTemp = openContactAsTemp;
+window.openDiagnosticScheduleModal = openDiagnosticScheduleModal;
+window.saveDiagnosticSchedule = saveDiagnosticSchedule;
 
 // leave-request.js 의존성 주입 + window 노출
 initLeaveRequestDeps({ renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, _isOlderThan, _toDate, loadWithdrawnStudents, renderFilterChips });
@@ -464,7 +467,7 @@ window.bulkDeleteSelectedClasses = async function() {
         const reasons = [];
         if (hasRegular) reasons.push('정규 반이 포함되어 있어 학생들의 정규 등록이 끊깁니다.');
         if (inProgress.length > 0) reasons.push(`진행 중인 반 ${inProgress.length}개가 포함되어 있습니다. 해당 학생들이 즉시 정규로 복귀합니다.`);
-        const first = confirm(`⚠️ ${selected.length}개 반 일괄 삭제\n\n${reasons.join('\n')}\n\n${labels}\n\n진짜 삭제하시겠습니까?`);
+        const first = confirm(`주의: ${selected.length}개 반 일괄 삭제\n\n${reasons.join('\n')}\n\n${labels}\n\n진짜 삭제하시겠습니까?`);
         if (!first) return;
         const typed = prompt(`정말 일괄 삭제하려면 "삭제"를 입력하세요`);
         if (typed !== '삭제') {
@@ -658,6 +661,9 @@ onAuthStateChanged(auth, async (user) => {
                 renderListPanel();
                 await new Promise(r => (window.requestIdleCallback || ((f) => setTimeout(f, 3000)))(r));
                 await loadWithdrawnStudents();
+                buildSiblingMap();
+                renderListPanel();
+                if (state.selectedStudentId) renderStudentDetail(state.selectedStudentId);
             } catch (err) {
                 console.error('[init-deferred] 후속 로드 중 오류:', err);
             }
@@ -779,6 +785,7 @@ window.setBranch = setBranch;
 window.setBranchLevel = setBranchLevel;
 window.setBranchClass = setBranchClass;
 window.toggleAttendance = toggleAttendance;
+window.toggleVisit2Attendance = toggleVisit2Attendance;
 window.cycleVisitAttendance = cycleVisitAttendance;
 window.setClassCode = setClassCode;
 window.renderStudentDetail = renderStudentDetail;
@@ -790,7 +797,7 @@ window.refreshData = async () => {
     await backfillStudentNumbers();
     await promoteWithdrawalDate();
     await promoteScheduledLeave();
-    // 퇴원생(1.5만+건)은 전체 로드된 적 있을 때만 갱신 (검색의 부분 push는 제외)
+    // 비원생(1.5만+건)은 전체 로드된 적 있을 때만 갱신 (검색의 부분 push는 제외)
     if (state._withdrawnFullyLoaded) await loadWithdrawnStudents();
     await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadRoleMemos(), loadClassSettings(true), loadClassNextHw(state.selectedDate), loadTeachers()]);
     await syncAbsenceRecords();
@@ -880,11 +887,9 @@ window.toggleDiagnosticReschedule = toggleDiagnosticReschedule;
 window.saveDiagnosticReschedule = saveDiagnosticReschedule;
 window.confirmDiagnosticCancel = confirmDiagnosticCancel;
 
-// _searchContactsDSC, _renderPastContacts → imported from past-search.js
-
 // _makeContactDocId, _tryTempContactAutofill, openTempAttendanceModal,
 // _upsertStudentFromTemp, saveTempAttendance, openTempAttendanceForEdit,
-// renderTempEditHistory, openContactAsTemp → imported from diagnostic.js
+// renderTempEditHistory → imported from diagnostic.js
 // openBulkMemo, saveBulkMemo, openBulkNotify, saveBulkNotify → imported from bulk-mode.js
 window.openBulkMemo = openBulkMemo;
 window.saveBulkMemo = saveBulkMemo;
@@ -992,4 +997,3 @@ window.migrateNaesinEnrollments = async function(save = false) {
     console.log(`[migrate] 완료: 성공 ${ok}명, 실패 ${fail}명`);
     if (ok > 0) renderListPanel();
 };
-

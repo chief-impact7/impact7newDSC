@@ -10,10 +10,10 @@ description: "Firestore Security Rules를 4개 프로젝트(impact7DB·impact7ne
 
 ## 프로젝트 경로
 
-- `/Users/jongsooyi/projects/impact7DB/firestore.rules`
-- `/Users/jongsooyi/projects/impact7newDSC/firestore.rules`
-- `/Users/jongsooyi/projects/impact7HR/firestore.rules`
-- `/Users/jongsooyi/projects/impact7exam/firestore.rules`
+- `/Users/jongsooyi/IMPACT7/impact7DB/firestore.rules`
+- `/Users/jongsooyi/IMPACT7/impact7newDSC/firestore.rules`
+- `/Users/jongsooyi/IMPACT7/impact7HR/firestore.rules`
+- `/Users/jongsooyi/IMPACT7/impact7exam/firestore.rules`
 
 ## 실행 절차
 

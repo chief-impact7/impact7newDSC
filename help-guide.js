@@ -30,7 +30,7 @@ const TABS = [
           날짜 이동
         </h3>
         <p class="help-guide-desc">
-          우측 상단 날짜 영역에서 <strong>&larr; &rarr;</strong> 버튼으로 이전/다음날로 이동합니다.
+          우측 상단 날짜 영역에서 <strong>${msIcon('arrow_back', '', 'style="font-size:1em;"')} ${msIcon('arrow_forward', '', 'style="font-size:1em;"')}</strong> 버튼으로 이전/다음날로 이동합니다.
           날짜를 직접 클릭하면 캘린더가 열려 원하는 날짜를 선택할 수 있습니다.
         </p>
       </section>
@@ -189,7 +189,7 @@ const TABS = [
           일일현황표 다운로드
         </h3>
         <ol class="help-guide-steps">
-          <li>목록 상단의 <strong>다운로드(⬇)</strong> 아이콘을 클릭합니다.</li>
+          <li>목록 상단의 <strong>${msIcon('download', '', 'style="font-size:1em;"')} 다운로드</strong> 아이콘을 클릭합니다.</li>
           <li>구글 드라이브에서 저장할 <strong>폴더</strong>를 선택합니다.</li>
           <li>선택한 폴더에 구글시트가 자동 생성되고 새 탭으로 열립니다.</li>
         </ol>
@@ -331,7 +331,7 @@ const TABS = [
         <ul class="help-guide-list">
           <li><strong>1주일 이내</strong>(빨간 D-day 뱃지)와 <strong>2주일 이내</strong>(주황 뱃지)로 그룹이 나뉩니다.</li>
           <li><strong>D-n</strong> 뱃지로 복귀까지 남은 일수를 한눈에 확인합니다.</li>
-          <li>📞 아이콘 &mdash; <strong>복귀유도상담</strong> 완료 여부를 토글합니다. (녹색 체크 = 완료)</li>
+          <li>${msIcon('phone', '', 'style="font-size:1em;"')} 아이콘 &mdash; <strong>복귀유도상담</strong> 완료 여부를 토글합니다. (${msIcon('check_circle', '', 'style="font-size:1em;"')} 녹색 체크 = 완료)</li>
           <li>학생을 클릭하면 상세 패널에서 <strong>복귀상담 카드</strong>가 나타납니다.</li>
           <li>복귀상담 카드에서 상담 체크박스와 <strong>상담 메모</strong>를 기록할 수 있습니다.</li>
           <li>사이드바 카운트 뱃지: <strong>1주 이내 수 / 전체 수</strong>로 표시됩니다.</li>
@@ -382,7 +382,7 @@ const TABS = [
       },
       {
         q: '일일현황표는 어떻게 다운로드하나요?',
-        a: '목록 상단의 <strong>다운로드(⬇)</strong> 아이콘을 클릭합니다. 구글 드라이브 폴더를 선택하면 해당 위치에 구글시트가 생성되고 자동으로 열립니다. <strong>드라이브 권한</strong>이 필요하므로, 처음 사용 시 로그아웃 후 재로그인이 필요할 수 있습니다.',
+        a: `목록 상단의 <strong>${msIcon('download', '', 'style="font-size:1em;"')} 다운로드</strong> 아이콘을 클릭합니다. 구글 드라이브 폴더를 선택하면 해당 위치에 구글시트가 생성되고 자동으로 열립니다. <strong>드라이브 권한</strong>이 필요하므로, 처음 사용 시 로그아웃 후 재로그인이 필요할 수 있습니다.`,
       },
     ];
 

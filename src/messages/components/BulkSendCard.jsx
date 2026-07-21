@@ -8,7 +8,11 @@ import GradeFilter from '../../dashboard/components/GradeFilter.jsx';
 import { MESSAGE_KIND_NOTICE, MMS_SIZE_NOTICE, messageMeta, normalizePhones, onlyDigits, readMmsImage } from '../message-format.js';
 import { parsePhonesFromFile, sampleCsv } from '../message-import.js';
 import {
+  ALIMTALK_NAME_VARIABLE,
   BULK_MAX_MESSAGES,
+  alimtalkInputVariables,
+  applyAlimtalkPreview,
+  buildAlimtalkAudienceRequests,
   buildAudienceRequests,
   completedTargetKeys,
   DIRECT_MAX_RECIPIENTS,
@@ -19,7 +23,7 @@ import {
 import { getMessageExtras, saveMessageExtras, composeWithExtras, DEFAULT_CHANNEL_INVITE } from '../sms-extras.js';
 import TemplateBar from './TemplateBar.jsx';
 import { ICON_SVG } from '../../dashboard/icon-map.js';
-import { createBulkMessage, createPromoCampaign, getBulkStaffRecipients, sendDirectMessage } from '../../../data-layer.js';
+import { createBulkMessage, createPromoCampaign, getBulkStaffRecipients, getSolapiAlimtalkTemplates, sendDirectMessage } from '../../../data-layer.js';
 // 광고 규제 표기(정보통신망법 §50)는 공용 모듈 — 발송 시 자동 보정, 버튼은 미리보기 확인용.
 import { OPT_OUT_LINE, ensurePromoCompliance } from '../../../promo-compliance.js';
 
@@ -84,6 +88,7 @@ function responseSummary(audience, response, fallbackCount) {
 }
 
 export default function BulkSendCard({ students = [] }) {
+  const [channel, setChannel] = useState('sms');
   const [audience, setAudience] = useState('student');
   const [staff, setStaff] = useState([]);
   const [staffLoaded, setStaffLoaded] = useState(false);
@@ -117,11 +122,17 @@ export default function BulkSendCard({ students = [] }) {
   const [footerDraft, setFooterDraft] = useState('');
   const [inviteDraft, setInviteDraft] = useState('');
   const [setupBusy, setSetupBusy] = useState(false);
+  const [alimtalkTemplates, setAlimtalkTemplates] = useState([]);
+  const [alimtalkLoading, setAlimtalkLoading] = useState(false);
+  const [alimtalkError, setAlimtalkError] = useState('');
+  const [alimtalkTemplateId, setAlimtalkTemplateId] = useState('');
+  const [alimtalkValues, setAlimtalkValues] = useState({});
   const reqIdRef = useRef(newReqId());
   const fileRef = useRef(null);
   const imageRef = useRef(null);
   const isStaff = audience === 'staff';
   const isDirect = audience === 'direct';
+  const isAlimtalk = channel === 'alimtalk';
   const resetReqId = () => { reqIdRef.current = newReqId(); setConfirming(false); };
 
   useEffect(() => {
@@ -153,6 +164,11 @@ export default function BulkSendCard({ students = [] }) {
     return () => { alive = false; };
   }, [isStaff, staffLoaded]);
 
+  useEffect(() => {
+    if (!isAlimtalk || alimtalkTemplates.length) return;
+    loadAlimtalkTemplates();
+  }, [isAlimtalk, alimtalkTemplates.length]);
+
   const matches = useMemo(() => {
     if (isDirect) return [];
     if (isStaff) return filterStaff(staff, { status: staffStatus, affiliation: staffAffiliation, department: staffDepartment, q });
@@ -171,11 +187,22 @@ export default function BulkSendCard({ students = [] }) {
     return [...filtered].sort((a, b) => AUDIENCE_DISPLAY_ORDER[a.audience] - AUDIENCE_DISPLAY_ORDER[b.audience]);
   }, [rows, q]);
   const selectedGroups = useMemo(() => groupSelectedTargets(rows), [rows]);
+  const selectedAlimtalkTemplate = useMemo(
+    () => alimtalkTemplates.find((template) => template.templateId === alimtalkTemplateId) || null,
+    [alimtalkTemplates, alimtalkTemplateId],
+  );
+  const alimtalkVariables = useMemo(() => alimtalkInputVariables(selectedAlimtalkTemplate), [selectedAlimtalkTemplate]);
   const selectedCount = selectedGroups.student.length + selectedGroups.staff.length + selectedGroups.direct.length;
   const directPhones = useMemo(() => [...new Set(normalizePhones(directRecipients))], [directRecipients]);
   const estimatedMessageCount = estimateAudienceMessages(selectedGroups, [...recipientFields]);
   const hasStaffTargets = selectedGroups.staff.length > 0;
   const hasDirectTargets = selectedGroups.direct.length > 0;
+  // 직접 번호는 이름 자동 주입이 안 되므로 #{학생명}도 입력 변수로 요구한다.
+  const alimtalkNameInputNeeded = hasDirectTargets
+    && (selectedAlimtalkTemplate?.variables || []).includes(ALIMTALK_NAME_VARIABLE);
+  const alimtalkManualVariables = alimtalkNameInputNeeded
+    ? [ALIMTALK_NAME_VARIABLE, ...alimtalkVariables]
+    : alimtalkVariables;
   const staffAffiliations = useMemo(
     () => [...new Set(staff.map((person) => person.affiliation).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')),
     [staff],
@@ -184,6 +211,35 @@ export default function BulkSendCard({ students = [] }) {
     () => [...new Set(staff.map((person) => person.department).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')),
     [staff],
   );
+
+  async function loadAlimtalkTemplates() {
+    setAlimtalkLoading(true);
+    setAlimtalkError('');
+    try {
+      const result = await getSolapiAlimtalkTemplates();
+      setAlimtalkTemplates(result.templates || []);
+    } catch (error) {
+      setAlimtalkError(error?.message || String(error));
+    } finally {
+      setAlimtalkLoading(false);
+    }
+  }
+
+  // 담긴 대상·받는이 선택은 채널 전환에도 유지한다. 알림톡은 정보성만이라 종류만 고정.
+  function selectChannel(nextChannel) {
+    if (nextChannel === channel) return;
+    setChannel(nextChannel);
+    setConfirming(false);
+    setMsg('');
+    if (nextChannel === 'alimtalk') setKind('info');
+    resetReqId();
+  }
+
+  function selectAlimtalkTemplate(templateId) {
+    setAlimtalkTemplateId(templateId);
+    setAlimtalkValues({});
+    resetReqId();
+  }
 
   function commitSearch() {
     if (isStaff && kind === 'promo') { setMsg('교직원은 정보성 문자에서만 추가할 수 있습니다.'); return; }
@@ -319,12 +375,18 @@ export default function BulkSendCard({ students = [] }) {
 
   function onSendClick() {
     if (sending) return;
+    if (isAlimtalk) {
+      if (!selectedAlimtalkTemplate) { setMsg('솔라피 승인 템플릿을 선택하세요.'); return; }
+      if (!selectedAlimtalkTemplate.sendable) { setMsg(selectedAlimtalkTemplate.unavailableReason || '발송할 수 없는 템플릿입니다.'); return; }
+      const emptyVariable = alimtalkManualVariables.find((variable) => !String(alimtalkValues[variable] || '').trim());
+      if (emptyVariable) { setMsg(`${emptyVariable} 값을 입력하세요.`); return; }
+    }
     if (directPhones.length) { setMsg('입력한 번호를 먼저 누적 대상에 담아주세요.'); return; }
     if (!selectedCount) { setMsg('대상이 없습니다. 학생·교직원·번호를 추가하세요.'); return; }
-    if (!content.trim()) { setMsg('내용을 입력하세요.'); return; }
+    if (!isAlimtalk && !content.trim()) { setMsg('내용을 입력하세요.'); return; }
     if (kind === 'promo' && hasStaffTargets) { setMsg('교직원은 홍보성 문자 대상에 포함할 수 없습니다.'); return; }
     if (kind === 'promo' && hasDirectTargets && !directConsentConfirmed) { setMsg('직접 입력 번호의 광고 수신동의를 확인하세요.'); return; }
-    const invalidVariables = invalidVariablesForGroups(selectedGroups, effectiveContent);
+    const invalidVariables = isAlimtalk ? [] : invalidVariablesForGroups(selectedGroups, effectiveContent);
     if (invalidVariables.length) { setMsg(`선택한 대상과 함께 보낼 수 없는 변수입니다: ${invalidVariables.join('·')}`); return; }
     if (when === 'schedule' && !scheduledAt) { setMsg('예약 시각을 입력하세요.'); return; }
     if (selectedGroups.direct.length > DIRECT_MAX_RECIPIENTS) {
@@ -344,14 +406,22 @@ export default function BulkSendCard({ students = [] }) {
     setSending(true); setMsg('');
     try {
       // 홍보는 (광고)·080 표기를 발송 직전 자동 보정 — 깜빡해도 법적 표기가 빠지지 않는다.
-      const requests = buildAudienceRequests({
+      const normalizedSchedule = when === 'schedule' ? `${scheduledAt.slice(0, 16).replace('T', ' ')}:00` : '';
+      const requests = isAlimtalk ? buildAlimtalkAudienceRequests({
+        groups: selectedGroups,
+        recipientFields: [...recipientFields],
+        templateId: selectedAlimtalkTemplate.templateId,
+        templateVariables: alimtalkValues,
+        requestId: reqIdRef.current,
+        scheduledAt: normalizedSchedule,
+      }) : buildAudienceRequests({
         groups: selectedGroups,
         recipientFields: [...recipientFields],
         content: effectiveContent,
         kind,
         consentConfirmed: directConsentConfirmed,
         requestId: reqIdRef.current,
-        scheduledAt: when === 'schedule' ? `${scheduledAt.slice(0, 16).replace('T', ' ')}:00` : '',
+        scheduledAt: normalizedSchedule,
         mmsImage: mmsImage ? { name: mmsImage.name, dataBase64: mmsImage.dataBase64 } : null,
       });
       const results = await Promise.allSettled(requests.map(async (request) => {
@@ -378,7 +448,7 @@ export default function BulkSendCard({ students = [] }) {
         return;
       }
       setMsg('발송 접수 — ' + completed.join(' / '));
-      clearAll(); setDirectRecipients(''); setContent(''); setMmsImage(null);
+      clearAll(); setDirectRecipients(''); setContent(''); setMmsImage(null); setAlimtalkValues({});
     } catch (e) {
       setMsg('발송 실패: ' + (e?.message || e));
     } finally { setSending(false); }
@@ -389,14 +459,27 @@ export default function BulkSendCard({ students = [] }) {
     : content;
   const effectiveContent = kind === 'promo' ? ensurePromoCompliance(baseContent) : baseContent;
   const meta = messageMeta(effectiveContent);
-  const messageType = mmsImage ? 'MMS' : meta.type;
   const firstEntry = rows.find((entry) => entry.on);
+  const alimtalkPreviewName = firstEntry?.audience === 'direct'
+    ? (alimtalkValues[ALIMTALK_NAME_VARIABLE] || ALIMTALK_NAME_VARIABLE)
+    : (firstEntry?.target?.name || ALIMTALK_NAME_VARIABLE);
+  const previewContent = isAlimtalk
+    ? applyAlimtalkPreview(selectedAlimtalkTemplate, alimtalkValues, alimtalkPreviewName)
+    : effectiveContent;
+  let previewText = '내용을 입력하면 여기에 표시됩니다.';
+  if (isAlimtalk) previewText = previewContent || '템플릿을 선택하면 여기에 표시됩니다.';
+  else if (previewContent) previewText = applyVars(previewContent, firstEntry);
+  let messageType = meta.type;
+  if (mmsImage) messageType = 'MMS';
+  if (isAlimtalk) messageType = '알림톡';
+  let messageCategory = kind === 'promo' ? '홍보성' : '정보성';
+  if (isAlimtalk) messageCategory = '승인 템플릿';
   const recipientParts = [];
   if (selectedGroups.student.length || !selectedCount) recipientParts.push(`학생 ${[...recipientFields].map((field) => RECIPIENT_LABELS[field]).join('·')}`);
   if (hasStaffTargets) recipientParts.push('교직원 본인');
   if (hasDirectTargets) recipientParts.push('입력 번호');
   const recipientText = recipientParts.join(' / ');
-  const attachedLines = kind === 'info'
+  const attachedLines = !isAlimtalk && kind === 'info'
     ? [withInvite ? invite : '', withFooter ? footer : ''].filter((line) => line && !content.includes(line))
     : [];
   let vars = hasStaffTargets ? ['%이름'] : VARS;
@@ -405,7 +488,11 @@ export default function BulkSendCard({ students = [] }) {
   return (
     <section className="mc-section">
       <div className="mc-card">
-        <h2 className="mc-section-title"><Icon svg={ICON_SVG.bulk_message} size={20} aria-hidden="true" /> 문자메시지</h2>
+        <h2 className="mc-section-title"><Icon svg={ICON_SVG.bulk_message} size={20} aria-hidden="true" /> 단체 메시지</h2>
+        <div className="mc-seg mc-channel-seg" role="group" aria-label="발송 채널">
+          <button type="button" disabled={sending} className={!isAlimtalk ? 'on' : ''} aria-pressed={!isAlimtalk} onClick={() => selectChannel('sms')}>문자</button>
+          <button type="button" disabled={sending} className={isAlimtalk ? 'on' : ''} aria-pressed={isAlimtalk} onClick={() => selectChannel('alimtalk')}>알림톡</button>
+        </div>
         <fieldset className="bulk-split bulk-send-fieldset" disabled={sending}>
           <div className="bulk-left">
             <p className="bulk-col-title">받는 사람</p>
@@ -488,6 +575,57 @@ export default function BulkSendCard({ students = [] }) {
 
           <div className="bulk-mid">
             <p className="bulk-col-title">메시지</p>
+            {isAlimtalk ? <>
+              <div className="mc-routing-grid">
+                <span className="mc-field-label">받는이 {audience === 'student' ? '(다중 선택)' : '(고정)'}</span>
+                <span className="mc-field-label mc-kind-label">종류</span>
+                {audience === 'student' ? <div className="mc-seg">
+                  {['student', 'parent_1', 'parent_2'].map((f) => (
+                    <button key={f} type="button" className={recipientFields.has(f) ? 'on' : ''} aria-pressed={recipientFields.has(f)} onClick={() => toggleRecipient(f)}>
+                      {RECIPIENT_LABELS[f]}
+                    </button>
+                  ))}
+                </div> : <div className="mc-seg">
+                  <button type="button" className="on" aria-disabled="true" style={{ cursor: 'default' }}>{isStaff ? '교직원 본인' : '입력 번호'}</button>
+                </div>}
+                <div className="mc-seg"><button type="button" className="on" aria-disabled="true">정보성</button></div>
+              </div>
+              <label className="mc-field-label" htmlFor="alimtalk-template">솔라피 승인 템플릿</label>
+              <div className="mc-tpl mc-alimtalk-select">
+                <select id="alimtalk-template" value={alimtalkTemplateId} onChange={(e) => selectAlimtalkTemplate(e.target.value)} disabled={alimtalkLoading}>
+                  <option value="">{alimtalkLoading ? '템플릿 불러오는 중…' : '템플릿 선택'}</option>
+                  {alimtalkTemplates.map((template) => (
+                    <option key={template.templateId} value={template.templateId}>
+                      {template.name}{template.sendable ? '' : ` — ${template.unavailableReason}`}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="mc-var-btn" disabled={alimtalkLoading} onClick={loadAlimtalkTemplates}>새로고침</button>
+              </div>
+              {alimtalkError && <div className="mc-note" role="alert">템플릿 조회 실패: {alimtalkError}</div>}
+              {selectedAlimtalkTemplate && <>
+                <div className="mc-alimtalk-template">{selectedAlimtalkTemplate.content}</div>
+                {!selectedAlimtalkTemplate.sendable && <div className="mc-note">발송 불가: {selectedAlimtalkTemplate.unavailableReason}</div>}
+                {alimtalkManualVariables.length > 0 && <div className="mc-alimtalk-vars">
+                  {alimtalkManualVariables.map((variable) => (
+                    <label key={variable}>
+                      <span className="mc-field-label">{variable === ALIMTALK_NAME_VARIABLE ? `${variable} (번호 입력 대상)` : variable}</span>
+                      <input value={alimtalkValues[variable] || ''} maxLength={1000} onChange={(e) => {
+                        setAlimtalkValues((prev) => ({ ...prev, [variable]: e.target.value }));
+                        resetReqId();
+                      }} />
+                    </label>
+                  ))}
+                </div>}
+                {selectedAlimtalkTemplate.buttons.length > 0 && <div className="mc-alimtalk-buttons">
+                  {selectedAlimtalkTemplate.buttons.map((button, index) => <span key={`${button.name}-${index}`}>{button.name}</span>)}
+                </div>}
+              </>}
+              <div className="mc-meta">
+                <span className="mc-pill lms">알림톡</span>
+                <span>대상 {selectedCount}명 · 예상 {estimatedMessageCount}건</span>
+              </div>
+            </> : <>
             <div className="mc-routing-grid">
               <span className="mc-field-label">받는이 {audience === 'student' ? (kind === 'promo' ? '(단일)' : '(다중 선택)') : '(고정)'}</span>
               <span className="mc-field-label mc-kind-label">종류</span>
@@ -533,19 +671,23 @@ export default function BulkSendCard({ students = [] }) {
             {attachedLines.length > 0 && <div className="mc-attached-lines">{attachedLines.join('\n\n')}</div>}
             {mmsImage && <div className="mc-mms-file"><img src={mmsImage.previewUrl} alt="MMS 첨부 미리보기" /><span>{mmsImage.name}<br />{mmsImage.width}×{mmsImage.height}px · {Math.ceil(mmsImage.size / 1024)}KB</span><IconButton svg={ICON_SVG.x} label="첨부 제거" onClick={() => { setMmsImage(null); resetReqId(); }} /></div>}
             {kind === 'info' && setupOpen && <div className="mc-message-setup"><label className="mc-field-label">채널 가입 안내 문구 (비우면 기본 문구)</label><textarea aria-label="채널 가입 안내 문구" className="mc-textarea" rows={2} value={inviteDraft} onChange={(e) => setInviteDraft(e.target.value)} placeholder={DEFAULT_CHANNEL_INVITE} maxLength={280} /><label className="mc-field-label">학원 꼬리말</label><input aria-label="학원 꼬리말" className="mc-tpl-title" value={footerDraft} onChange={(e) => setFooterDraft(e.target.value)} placeholder="예: -임팩트세븐학원 02-2649-0509" maxLength={200} /><div className="mc-vars"><button type="button" className="mc-var-btn" disabled={setupBusy} onClick={onSaveSetup}>{setupBusy ? '저장 중…' : '저장'}</button><IconButton svg={ICON_SVG.x} label="취소" onClick={() => setSetupOpen(false)} /></div></div>}
+            </>}
           </div>
 
           <div className="bulk-right">
             <p className="bulk-col-title">미리보기 &amp; 발송</p>
             <div className="mc-phone">
               <p className="mc-phone-sender">임팩트세븐학원 → {firstEntry ? `${targetName(firstEntry)} 외 ${Math.max(0, selectedCount - 1)}명` : '대상 미선택'}</p>
-              <div className={'mc-bubble' + (effectiveContent ? '' : ' empty')}>
-                {mmsImage && <img className="mc-preview-image" src={mmsImage.previewUrl} alt="MMS 첨부 미리보기" />}
-                {effectiveContent ? applyVars(effectiveContent, firstEntry) : '내용을 입력하면 여기에 표시됩니다.'}
+              <div className={'mc-bubble' + (previewContent ? '' : ' empty')}>
+                {!isAlimtalk && mmsImage && <img className="mc-preview-image" src={mmsImage.previewUrl} alt="MMS 첨부 미리보기" />}
+                {previewText}
+                {isAlimtalk && selectedAlimtalkTemplate?.buttons.length > 0 && <div className="mc-preview-buttons">
+                  {selectedAlimtalkTemplate.buttons.map((button, index) => <span key={`${button.name}-${index}`}>{button.name}</span>)}
+                </div>}
               </div>
             </div>
             <p className="mc-preview-foot">{firstEntry ? `${targetName(firstEntry)} 기준` : '대상 미선택'} · 실제는 선택한 대상별로 발송</p>
-            <div className="bulk-summary">대상 {selectedCount}명 · 예상 {estimatedMessageCount}건 · 받는이 {recipientText} · {messageType} · {kind === 'promo' ? '홍보성' : '정보성'}</div>
+            <div className="bulk-summary">대상 {selectedCount}명 · 예상 {estimatedMessageCount}건 · 받는이 {recipientText} · {messageType} · {messageCategory}</div>
             <div className="bulk-send-row">
               <div className="mc-seg">
                 <button type="button" className={when === 'now' ? 'on' : ''} aria-pressed={when === 'now'} onClick={() => setWhen('now')}>즉시</button>
@@ -556,7 +698,7 @@ export default function BulkSendCard({ students = [] }) {
             {confirming && (
               <div className="mc-note" role="alertdialog" aria-label="발송 확인" style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
                 <span>
-                  {selectedCount}명 · 예상 {estimatedMessageCount}건 · 받는이 {recipientText} · {kind === 'promo' ? '홍보성' : '정보성'}
+                  {selectedCount}명 · 예상 {estimatedMessageCount}건 · 받는이 {recipientText} · {isAlimtalk ? '알림톡 ' : ''}{messageCategory}
                   {when === 'schedule' && scheduledAt ? ` · 예약 ${scheduledAt.replace('T', ' ')}` : ' · 즉시 발송'}
                   — 맞으면 아래 버튼을 다시 눌러 발송하세요.
                 </span>
@@ -567,8 +709,8 @@ export default function BulkSendCard({ students = [] }) {
               {sending ? '발송 중…' : confirming ? `확인 후 ${selectedCount}명에게 발송` : `${selectedCount}명에게 발송`}
             </button>
             {msg && <p className="mc-field-label" role="status" aria-live="polite" style={{ marginTop: 8 }}>{msg}</p>}
-            {mmsImage && <p className="mc-mms-requirement">{MMS_SIZE_NOTICE}</p>}
-            <div className="mc-note" style={{ marginTop: 10 }}>{MESSAGE_KIND_NOTICE[kind]}</div>
+            {!isAlimtalk && mmsImage && <p className="mc-mms-requirement">{MMS_SIZE_NOTICE}</p>}
+            <div className="mc-note" style={{ marginTop: 10 }}>{isAlimtalk ? '솔라피에서 승인된 정보성 템플릿만 발송합니다. 알림톡 전송 실패 시 같은 내용이 SMS/LMS로 자동 대체됩니다.' : MESSAGE_KIND_NOTICE[kind]}</div>
           </div>
         </fieldset>
       </div>

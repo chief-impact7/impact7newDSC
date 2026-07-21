@@ -2,7 +2,6 @@
 // class-setup.js / class-setup-planner.js가 공유하는 가변 상태와 횡단 헬퍼.
 // state.js의 가변 객체 export 패턴을 따른다 (ES Module let 재할당 불가 → 객체/배열로 감싸 in-place mutate).
 import { esc } from './ui-utils.js';
-import { staffLabel } from '@impact7/shared/staff-label';
 
 // 인원현황 권한 — class-setup.js가 로그인 시 채움 (all=전체 집계, classCounts=반별 인원)
 export const popPerms = { all: false, classCounts: false };
@@ -54,7 +53,7 @@ export function renderSummary() {
     const card = document.getElementById('summary-card');
     if (!card) return;
     const d = wizardData;
-    const teacherName = d.teacher ? (teachersList.find(t => t.email === d.teacher)?.name || staffLabel(d.teacher)) : '미지정';
+    const teacherName = d.teacher ? (teachersList.find(t => t.email === d.teacher)?.name || d.teacher) : '미지정';
     const timeForDay = day => d.classType === '정규' ? d.defaultTime : (d.schedule[day] || '');
     const dayTimeStr = d.days.length
         ? d.days.map(day => `${day} ${timeForDay(day)}`).join(', ')

@@ -5,6 +5,7 @@ import {
     enrollmentCode,
     branchFromStudent,
     allClassCodes,
+    summarizeEnrollmentClasses,
     makeDailyRecordId,
     buildNaesinCsKey,
     NAESIN_OVERRIDE_EXCLUDE,
@@ -12,7 +13,16 @@ import {
     displayCodeFromCsKey,
     isWithdrawnAt,
     isOnLeaveAt,
+    createSiblingMap,
+    studentMatchesSearchTerms,
+    siblingStatusSuffix,
+    isNewTenureStart,
+    isCurrentNewTenure,
+    isPotentialNewStudent,
+    findSeparateTeukangVisit,
+    isScheduledWithdrawalDue,
 } from './student-core.js';
+import { deriveTenure } from '@impact7/shared/history';
 
 // ─── normalizeDays ────────────────────────────────────────────────────────────
 
@@ -100,10 +110,106 @@ test('allClassCodes: 코드 목록 반환, 빈 코드 제외', () => {
     assert.deepEqual(allClassCodes(s), ['A101', 'B201']);
 });
 
+test('summarizeEnrollmentClasses: 정규와 기타 수강을 순서대로 묶고 중복을 제거', () => {
+    assert.deepEqual(summarizeEnrollmentClasses([
+        { class_type: '특강', level_symbol: '고급', class_number: 'A' },
+        { class_type: '정규', level_symbol: 'A', class_number: '101' },
+        { class_type: '자유학기', level_symbol: 'F', class_number: '201' },
+        { class_type: '정규', level_symbol: 'A', class_number: '101' },
+    ]), {
+        regular: 'A101',
+        other: '특강 고급A · 자유학기 F201',
+    });
+});
+
 // ─── makeDailyRecordId ────────────────────────────────────────────────────────
 
 test('makeDailyRecordId: studentId_date 형식', () => {
     assert.equal(makeDailyRecordId('abc123', '2026-06-09'), 'abc123_2026-06-09');
+});
+
+test('신규생: 반 이동일이 아닌 현재 연속 재원기간의 첫 등원일을 기준으로 한다', () => {
+    const logs = [{ change_type: 'ENROLL', before: '—', after: '신규 등록: 학생 (HS201)', date: '2026-03-06' }];
+    const { start } = deriveTenure(
+        logs,
+        log => new Date(`${log.date}T00:00:00+09:00`),
+        [
+            { date: '2026-03-13', status: '출석' },
+            { date: '2026-07-10', status: '출석' },
+        ],
+        true
+    );
+    assert.equal(start.toISOString(), '2026-03-12T15:00:00.000Z');
+    assert.equal(isNewTenureStart(start, new Date('2026-07-20T00:00:00+09:00'), 14), false);
+});
+
+test('신규생: 휴원은 이어가고 퇴원 후 재등원은 새 재원기간으로 계산한다', () => {
+    const logs = [
+        { change_type: 'ENROLL', before: '—', after: '신규 등록: 학생 (A101)', date: '2024-01-01' },
+        { change_type: 'UPDATE', before: '상태:재원', after: '상태:실휴원', date: '2024-05-01' },
+        { change_type: 'UPDATE', before: '상태:실휴원', after: '상태:재원', date: '2024-06-01' },
+        { change_type: 'WITHDRAW', before: '{"status":"재원"}', after: '{"status":"퇴원"}', date: '2024-10-25' },
+        { change_type: 'UPDATE', before: '상태:퇴원', after: '상태:재원', date: '2026-02-25' },
+    ];
+    const { start } = deriveTenure(
+        logs,
+        log => new Date(`${log.date}T00:00:00+09:00`),
+        [
+            { date: '2024-01-01', status: '출석' },
+            { date: '2024-06-02', status: '출석' },
+            { date: '2026-03-02', status: '출석' },
+        ],
+        true
+    );
+    assert.equal(start.toISOString(), '2026-03-01T15:00:00.000Z');
+});
+
+test('신규생: 현재 재원계열이며 종료되지 않은 재원기간만 N으로 판정한다', () => {
+    const today = new Date('2026-07-20T00:00:00+09:00');
+    const start = new Date('2026-07-13T00:00:00+09:00');
+    assert.equal(isCurrentNewTenure({ start, end: null }, '재원', today, 14), true);
+    assert.equal(isCurrentNewTenure({ start, end: new Date('2026-07-18T00:00:00+09:00') }, '퇴원', today, 14), false);
+    assert.equal(isCurrentNewTenure({ start, end: null }, '상담', today, 14), false);
+});
+
+test('신규생 조회 후보: 과거 enrollment가 남아있어도 최근 enrollment가 있으면 조회한다', () => {
+    assert.equal(isPotentialNewStudent([
+        { level_symbol: 'A', class_number: '101', start_date: '2024-01-01' },
+        { level_symbol: 'B', class_number: '202', start_date: '2026-07-18' },
+    ], new Date('2026-07-20T00:00:00+09:00'), 14), true);
+});
+
+test('신규생 조회 후보: 등록일이 오래됐어도 최근 신규 기간 안에 출석했으면 조회한다', () => {
+    assert.equal(isPotentialNewStudent([
+        { level_symbol: 'A', class_number: '101', start_date: '2026-06-01' },
+    ], new Date('2026-07-20T00:00:00+09:00'), 14, true), true);
+});
+
+test('createSiblingMap: 재원·퇴원 학생도 같은 학부모 전화면 서로 형제로 연결', () => {
+    const map = createSiblingMap([
+        { docId: 'active', name: '재원형제', status: '재원', parent_phone_1: '010-1234-5678' },
+        { docId: 'past', name: '퇴원형제', status: '퇴원', parent_phone_2: '01012345678' },
+        { docId: 'same-name', name: '재원형제', status: '퇴원', parent_phone_1: '010-1234-5678' },
+    ]);
+    assert.deepEqual([...map.active], ['past']);
+    assert.deepEqual([...map.past], ['active', 'same-name']);
+});
+
+test('studentMatchesSearchTerms: 상태와 무관하게 한 글자·중간 이름·학부모 전화 검색', () => {
+    for (const status of ['상담', '등원예정', '재원', '실휴원', '가휴원', '퇴원', '종강']) {
+        const student = { name: '조아라', status, parent_phone_1: '010-1234-5678' };
+        assert.equal(studentMatchesSearchTerms(student, '아'), true);
+        assert.equal(studentMatchesSearchTerms(student, '아라'), true);
+        assert.equal(studentMatchesSearchTerms(student, '0101234'), true);
+        assert.equal(studentMatchesSearchTerms(student, '없는학생'), false);
+    }
+});
+
+test('siblingStatusSuffix: 상담·퇴원·종강 형제만 상태를 구분', () => {
+    assert.equal(siblingStatusSuffix('상담'), ' (상담)');
+    assert.equal(siblingStatusSuffix('퇴원'), ' (퇴원)');
+    assert.equal(siblingStatusSuffix('종강'), ' (종강)');
+    assert.equal(siblingStatusSuffix('재원'), '');
 });
 
 // ─── buildNaesinCsKey ─────────────────────────────────────────────────────────
@@ -178,6 +284,18 @@ test('isWithdrawnAt: withdrawal_date 없고 status 없음 → false', () => {
     assert.equal(isWithdrawnAt({}, '2026-06-09'), false);
 });
 
+test('isScheduledWithdrawalDue: 종료된 예약 표식이 없으면 과거 퇴원일로 재퇴원시키지 않음', () => {
+    assert.equal(isScheduledWithdrawalDue({
+        status: '재원',
+        withdrawal_date: '2026-05-28',
+    }, '2026-07-20'), false);
+    assert.equal(isScheduledWithdrawalDue({
+        status: '재원',
+        withdrawal_date: '2026-07-20',
+        pre_withdrawal_status: '재원',
+    }, '2026-07-20'), true);
+});
+
 // ─── isOnLeaveAt ──────────────────────────────────────────────────────────────
 
 test('isOnLeaveAt: 가휴원/실휴원이고 날짜 범위 내 → true', () => {
@@ -207,4 +325,45 @@ test('isOnLeaveAt: 재원/등원예정/상담 → false', () => {
 test('isOnLeaveAt: status 없고 scheduled_leave_status 범위 내 → true', () => {
     const s = { scheduled_leave_status: '가휴원', pause_start_date: '2026-06-01', pause_end_date: '2026-06-30' };
     assert.equal(isOnLeaveAt(s, '2026-06-09'), true);
+});
+
+// ─── findSeparateTeukangVisit ────────────────────────────────────────────────
+
+const _reg = { class_type: '정규', level_symbol: 'HA', class_number: '103' };
+const _tk = (over = {}) => ({ class_type: '특강', class_number: 'T1', ...over });
+const _times = (map) => (e) => map[e.class_type === '특강' ? 'tk' : 'reg'] ?? '';
+
+test('findSeparateTeukangVisit: 정규계열+특강은 시간 간격과 무관하게 분리', () => {
+    const r = findSeparateTeukangVisit([_reg, _tk()], _times({ reg: '19:10', tk: '12:30' }));
+    assert.equal(r.time, '12:30');
+    assert.equal(r.enrollment.class_type, '특강');
+    assert.ok(findSeparateTeukangVisit([_reg, _tk()], _times({ reg: '19:10', tk: '17:30' })));
+});
+
+test('findSeparateTeukangVisit: 특강만 있는 날(주=특강) → null', () => {
+    assert.equal(findSeparateTeukangVisit([_tk()], _times({ tk: '12:30' })), null);
+});
+
+test('findSeparateTeukangVisit: 시간이 없어도 특강 출결은 분리', () => {
+    assert.ok(findSeparateTeukangVisit([_reg, _tk()], _times({ reg: '19:10', tk: '' })));
+});
+
+test('findSeparateTeukangVisit: 내신도 주 수업으로 취급', () => {
+    const naesin = { class_type: '내신', level_symbol: 'HA', class_number: '103' };
+    const r = findSeparateTeukangVisit([naesin, _tk()], _times({ reg: '19:10', tk: '12:30' }));
+    assert.equal(r.time, '12:30');
+});
+
+test('findSeparateTeukangVisit: 알 수 없는 수업유형은 정규계열로 취급하지 않음', () => {
+    const unknown = { class_type: '클리닉', class_number: 'C1' };
+    assert.equal(findSeparateTeukangVisit([unknown, _tk()], _times({ tk: '12:30' })), null);
+});
+
+test('findSeparateTeukangVisit: 특강이 여러 개면 가장 이른 시간을 특강계열 대표로 사용', () => {
+    const late = _tk({ class_number: 'T2' });
+    const early = _tk({ class_number: 'T1' });
+    const getTime = e => e === early ? '12:30' : e === late ? '17:00' : '19:10';
+    const result = findSeparateTeukangVisit([_reg, late, early], getTime);
+    assert.equal(result.enrollment, early);
+    assert.equal(result.time, '12:30');
 });

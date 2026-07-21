@@ -50,7 +50,7 @@ state.js               — 전역 상태 (selectedDate, allStudents 등)
 
 학생 상태·이력·라벨·번호 작업 전 먼저 확인:
 ```
-/Users/jongsooyi/projects/impact7-shared/package.json
+/Users/jongsooyi/IMPACT7/impact7-shared/package.json
 ```
 핵심 shared 모듈: `history-classifier`, `enrollment-status`, `student-label`,
 `student-number`, `class-move`

@@ -50,7 +50,7 @@ export const state = {
     tempClassOverrides: [],
     leaveRequests: [],
     withdrawnStudents: [],
-    // 퇴원생 전체 로드 완료 여부 — 부팅 시 미로드(1.5만+건), 퇴원 관련 화면이 lazy-load.
+    // 비원생 전체 로드 완료 여부 — 부팅 시 미로드(1.5만+건), 비원생 관련 화면이 lazy-load.
     // 검색(past-search)의 부분 push와 구분하는 기준.
     _withdrawnFullyLoaded: false,
     selectedDate: todayStr(),
@@ -70,7 +70,6 @@ export const state = {
     selectedBranchLevel: null,
     selectedClassCode: null,
     siblingMap: {},
-    _contactSearchId: 0,
     bulkMode: false,
     selectedStudentIds: new Set(),
     groupViewMode: localStorage.getItem('dsc_groupViewMode') || 'none',

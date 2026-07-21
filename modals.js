@@ -404,6 +404,8 @@ export async function saveEnrollment() {
     if (endDate && classType !== '정규') updated.end_date = endDate;
     else delete updated.end_date;
 
+    delete updated.visit_mode;
+
     enrollments[enrollIdx] = updated;
     if (['재원', '등원예정'].includes(student.status) && !hasActiveCodedEnrollment(enrollments)) {
         alert('재원/등원예정 학생은 활성 반이 최소 1개 필요합니다. 퇴원 처리나 휴퇴원요청서 없이 모든 반을 종료할 수 없습니다.');
