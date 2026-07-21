@@ -116,13 +116,17 @@ export async function fetchPostponedTasksRange(startDate, endDate) {
     ));
 }
 
-export async function fetchClassSettingsMap() {
-    const snap = await getDocs(collection(db, 'class_settings'));
+async function fetchClassSettingsMapWith(fetchDocs) {
+    const snap = await fetchDocs(collection(db, 'class_settings'));
     const map = {};
     snap.forEach(docSnap => {
         map[docSnap.id] = docSnap.data();
     });
     return map;
+}
+
+export function fetchClassSettingsMap() {
+    return fetchClassSettingsMapWith(getDocs);
 }
 
 async function fetchDailyRecordsForDate(date) {
@@ -398,20 +402,41 @@ export async function fetchConsultationsForRange(startDate, endDate) {
 }
 
 // AI 종합상태 요약 전체 — 월 단위 갱신 데이터라 1회 read (서버 전용 쓰기 컬렉션).
-export async function fetchStudentStatusSummaries() {
-    const snap = await getDocs(collection(db, 'student_status_summaries'));
+async function fetchStudentStatusSummariesWith(fetchDocs) {
+    const snap = await fetchDocs(collection(db, 'student_status_summaries'));
     const map = {};
     snap.forEach(d => { map[d.id] = d.data(); });
     return map;
 }
 
+export function fetchStudentStatusSummaries() {
+    return fetchStudentStatusSummariesWith(getDocs);
+}
+
 // HR 인사 명부 — 로컬파트 소문자 → english_name (표시이름 정본, bd56042).
-export async function fetchStaffNameMap() {
-    const snap = await getDocs(collection(db, 'staff_directory'));
+async function fetchStaffNameMapWith(fetchDocs) {
+    const snap = await fetchDocs(collection(db, 'staff_directory'));
     const byLocal = new Map();
     snap.forEach(d => {
         const en = typeof d.data().english_name === 'string' ? d.data().english_name.trim() : '';
         if (en) byLocal.set(en.toLowerCase(), en);
     });
     return byLocal;
+}
+
+export function fetchStaffNameMap() {
+    return fetchStaffNameMapWith(getDocs);
+}
+
+export async function fetchAiStatusDataFromCache() {
+    try {
+        const [summaries, classSettings, staffByLocal] = await Promise.all([
+            fetchStudentStatusSummariesWith(getDocsFromCache),
+            fetchClassSettingsMapWith(getDocsFromCache),
+            fetchStaffNameMapWith(getDocsFromCache),
+        ]);
+        return Object.keys(summaries).length ? { summaries, classSettings, staffByLocal } : null;
+    } catch {
+        return null;
+    }
 }

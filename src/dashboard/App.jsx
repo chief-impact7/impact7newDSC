@@ -146,7 +146,7 @@ export default function App() {
 
     // 데이터 로드
     const { students, loading: studentsLoading, error } = useStudents(user);
-    const { checks, dailyRecords, postponed, dailyLog, loading: dataLoading, error: dashError } = useDashboardData(user, startDate, endDate);
+    const { checks, dailyRecords, postponed, dailyLog, loading: dataLoading, error: dashError } = useDashboardData(user, startDate, endDate, view === 'logbook', rangeType === 'day');
     const { consultations, loading: consultLoading } = useConsultations(user, startDate, endDate, view === 'consult');
     const aiStatus = useAiStatusData(user, view === 'ai');
 
