@@ -21,6 +21,7 @@ import {
     _isOlderThan, _isDetailInputFocused, loadWithdrawnStudents
 } from './data-layer.js';
 import { isNewStudent, ensureNewStudentStatuses, DEFAULT_ATTENDANCE_LABELS } from './attendance.js';
+import { importantRecordTooltip } from './docu-records.js';
 import { renderClassDetail, renderBranchClassDetail } from './class-detail.js';
 import { renderStudentDetail } from './student-detail.js';
 import {
@@ -823,6 +824,12 @@ export function renderListPanel() {
             ? `<span class="item-icon item-icon-sibling" title="형제: ${esc(activeSiblingNames.join(', '))}">${msIcon('group')}</span>`
             : '';
 
+        const importantRecord = state.importantRecordsByStudent.get(s.docId);
+        const importantTooltip = importantRecordTooltip(importantRecord);
+        const importantRecordIcon = importantRecord
+            ? `<span class="item-icon item-icon-important" role="img" tabindex="0" aria-label="${escAttr(importantTooltip)}" title="${escAttr(importantTooltip)}">${msIcon('keep')}</span>`
+            : '';
+
         // 담당 뱃지 (첫 번째 반코드 기준)
         const todayCodes = getActiveEnrollments(s, state.selectedDate).filter(e => e.day.includes(dayN)).map(e => enrollmentCode(e));
         const primaryCode = todayCodes[0] || allClassCodes(s)[0] || '';
@@ -889,7 +896,7 @@ export function renderListPanel() {
         return `<div class="list-item ${isActive}${state.bulkMode ? ' bulk-mode' : ''}${state.selectedStudentIds.has(s.docId) ? ' bulk-selected' : ''}" data-id="${escAttr(s.docId)}" role="button" tabindex="0" data-keyclick onclick="handleListItemClick(event, '${escAttr(s.docId)}')">
             ${canBulkSelect ? `<input type="checkbox" class="list-item-checkbox" aria-label="학생 선택" ${state.selectedStudentIds.has(s.docId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentCheckbox('${escAttr(s.docId)}', this.checked)">` : ''}
             <div class="item-info">
-                <span class="item-title">${esc(s.name)}${newBadge}${naesinBadge}${leaveBadge}${pauseExpiredBadge}${lrPendingTags}${siblingIcon}${hwFailIconHtml}${overrideBadge}${overrideInBadge} ${teacherBadge}</span>
+                <span class="item-title">${esc(s.name)}${newBadge}${naesinBadge}${leaveBadge}${pauseExpiredBadge}${lrPendingTags}${siblingIcon}${importantRecordIcon}${hwFailIconHtml}${overrideBadge}${overrideInBadge} ${teacherBadge}</span>
             </div>
             ${timeHtml}
             <div class="item-actions">${toggleHtml || leavePeriodHtml}</div>

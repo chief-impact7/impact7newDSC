@@ -10,6 +10,7 @@ import { computeExpectedArrival, isLate } from '@impact7/shared/expected-arrival
 import { staffLabel } from '@impact7/shared/staff-label';
 import { formatPhone } from '@impact7/shared/phone';
 import { sortByProcessed, arrivalOrder, departureOrder, groupByState } from '@impact7/shared/attendance-log';
+import { importantRecordsByStudent, importantRecordTooltip } from '../../../docu-records.js';
 
 const ATTENDED_STATUSES = new Set(['출석', '지각', '조퇴']);
 const ALT_VIEW_STATUSES = new Set(['재원', '실휴원', '가휴원']);
@@ -146,7 +147,9 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
         absenceRecords = [],
         leaveRequests = [],
         classSettings = {},
+        importantRecords = [],
     } = dailyLog || {};
+    const importantByStudent = importantRecordsByStudent(importantRecords);
     const records = new Map(dailyRecords.map(rec => [rec.student_id, rec]));
     const hwTasks = mapByStudent(hwFailTasks);
     const testTasks = mapByStudent(testFailTasks);
@@ -170,6 +173,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
                 next: '결과 입력 후 반배정',
                 classCode: '진단평가',
                 groupKey: 'diagnostic',
+                importantRecord: null,
             })),
         regular: {},
         irregular: [],
@@ -220,6 +224,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
                 classCode: leaveCode,
                 classLabel: leaveCode,
                 groupKey: 'leave',
+                importantRecord: importantByStudent.get(id) || null,
             });
             return;
         }
@@ -312,6 +317,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
             classCode: code,
             classLabel,
             groupKey,
+            importantRecord: importantByStudent.get(id) || null,
         };
 
         if (groupKey === 'regular') {
@@ -335,6 +341,7 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
         typeSet: WITHDRAW_REQUEST_TYPES,
         rowType: 'withdrawal',
         classSettings,
+        importantByStudent,
     });
     const leaveRows = buildLeaveRows({
         requests: leaveRequests,
@@ -346,10 +353,12 @@ function buildLogData({ students, dailyLog, branchFilter, classFilter, gradeFilt
         typeSet: LEAVE_REQUEST_TYPES,
         rowType: 'leave',
         classSettings,
+        importantByStudent,
     });
 
     return {
         groups,
+        importantByStudent,
         lateRows: allRows(groups).filter(row => row.attendance === '지각'),
         absentRows: allRows(groups).filter(row => row.attendance === '결석'),
         withdrawalRows,
@@ -368,7 +377,7 @@ function normalizeClassCodes(value) {
     return String(value).split(/[,·\s]+/).map(v => v.trim()).filter(Boolean);
 }
 
-function buildLeaveRows({ requests, students, branchFilter, classFilter, gradeFilter, gradeKey, typeSet, rowType, classSettings }) {
+function buildLeaveRows({ requests, students, branchFilter, classFilter, gradeFilter, gradeKey, typeSet, rowType, classSettings, importantByStudent }) {
     return requests
         .filter(request => request.status === 'approved' && typeSet.has(request.request_type))
         .map(request => {
@@ -402,6 +411,7 @@ function buildLeaveRows({ requests, students, branchFilter, classFilter, gradeFi
                 classCode: classText,
                 sideMeta: teacherNamesForClasses(classSettings, classCodes) || '미지정',
                 notes: note,
+                importantRecord: importantByStudent.get(request.student_id) || null,
             };
         })
         .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
@@ -493,6 +503,16 @@ function SummaryCard({ icon, label, value, note }) {
     );
 }
 
+function ImportantRecordIcon({ record }) {
+    if (!record) return null;
+    const tooltip = importantRecordTooltip(record);
+    return (
+        <span className="daily-log-important" title={tooltip} aria-label={tooltip} tabIndex={0}>
+            <Icon svg={ICON_SVG.important_record} size={16} aria-hidden="true" />
+        </span>
+    );
+}
+
 function ChipList({ chips, empty = '-' }) {
     if (!chips.length) return <span className="daily-log-empty-inline">{empty}</span>;
     return (
@@ -544,7 +564,7 @@ function LogTable({ rows, diagnostic = false }) {
                     {rows.map(row => (
                         <tr key={row.id}>
                             <td>
-                                <span className="daily-log-student">{row.name}</span>
+                                <span className="daily-log-student">{row.name}<ImportantRecordIcon record={row.importantRecord} /></span>
                                 <span className="daily-log-sub">{row.meta}</span>
                             </td>
                             <td>{fmtTime(row.time)}</td>
@@ -645,7 +665,7 @@ function SideList({ title, icon, rows, type, hideEmptyBody = false }) {
                     ) : rows.map(row => (
                         <div key={`${type}-${row.id}`} className="daily-log-side-item">
                             <div className="daily-log-side-top">
-                                <strong>{row.name}</strong>
+                                <strong>{row.name}<ImportantRecordIcon record={row.importantRecord} /></strong>
                                 <span>{[row.classCode, row.sideMeta || row.attendanceMeta || fmtTime(row.time)].filter(Boolean).join(' · ')}</span>
                             </div>
                             <div className="daily-log-side-note">
@@ -684,7 +704,7 @@ function ContactList({ rows, arrivalByStudent, statusById, sending, onSend }) {
                 return (
                     <div key={sid ?? i} className="daily-log-side-item">
                         <div className="daily-log-side-top">
-                            <strong>{s.student_name ?? s.name}</strong>
+                            <strong>{s.student_name ?? s.name}<ImportantRecordIcon record={s.importantRecord} /></strong>
                             <span>{[studentShortLabel(s), `예정 ${fmtTime(arrivalByStudent[sid])}`].filter(Boolean).join(' · ')}</span>
                         </div>
                         <div className="daily-log-side-note">
@@ -785,10 +805,14 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
         return {
             attendanceEvents: events,
             dailyByStudent: byStudent,
-            stateStudents: altStudents.map(s => ({ ...s, student_id: s.id })),
+            stateStudents: altStudents.map(s => ({
+                ...s,
+                student_id: s.id,
+                importantRecord: data.importantByStudent.get(s.id) || null,
+            })),
             arrivalByStudent: arrival,
         };
-    }, [students, dailyLog, branchFilter, gradeFilter, date]);
+    }, [students, dailyLog, branchFilter, gradeFilter, date, data.importantByStudent]);
 
     // '미등원' → 등원전/미도착 세분은 오늘 조회일 때만(과거·미래는 현재시각 비교가 무의미).
     const nowKST = new Date();
@@ -859,7 +883,7 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                     {sortByProcessed(attendanceEvents).map((e, i) => (
                         <div key={i} className="daily-log-event-row">
                             <span className="evt-time">{isoToHHMM(e.occurred_at)}</span>
-                            <span className="evt-name">{e.student_name}</span>
+                            <span className="evt-name">{e.student_name}<ImportantRecordIcon record={data.importantByStudent.get(e.student_id)} /></span>
                             <span className="evt-type">{e.type}</span>
                         </div>
                     ))}
@@ -869,7 +893,7 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                     {arrivalOrder(attendanceEvents, dailyByStudent).map((e, i) => (
                         <div key={i} className="daily-log-event-row">
                             <span className="evt-time">{isoToHHMM(e.occurred_at)}</span>
-                            <span className="evt-name">{e.student_name}</span>
+                            <span className="evt-name">{e.student_name}<ImportantRecordIcon record={data.importantByStudent.get(e.student_id)} /></span>
                             <span className="evt-type">{e.late ? '지각' : '등원'}</span>
                         </div>
                     ))}
@@ -879,7 +903,7 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                     {departureOrder(attendanceEvents).map((e, i) => (
                         <div key={i} className="daily-log-event-row">
                             <span className="evt-time">{isoToHHMM(e.occurred_at)}</span>
-                            <span className="evt-name">{e.student_name}</span>
+                            <span className="evt-name">{e.student_name}<ImportantRecordIcon record={data.importantByStudent.get(e.student_id)} /></span>
                             <span className="evt-type">하원</span>
                         </div>
                     ))}
@@ -908,7 +932,7 @@ export default function DailyLogBoard({ students, dailyLog, branchFilter, classF
                                     ) : (
                                         <div className="daily-log-state-names">
                                             {list.map((s, i) => (
-                                                <span key={s.student_id ?? i} className="daily-log-name-chip">{s.student_name ?? s.name}</span>
+                                                <span key={s.student_id ?? i} className="daily-log-name-chip">{s.student_name ?? s.name}<ImportantRecordIcon record={s.importantRecord} /></span>
                                             ))}
                                         </div>
                                     )}

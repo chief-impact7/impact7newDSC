@@ -5,6 +5,7 @@ import {
   arrowsLeftRight,
   bellRinging,
   bookOpen,
+  bookmark,
   calendar,
   calendarDots,
   caretDown,
@@ -79,6 +80,7 @@ export const ICON_SVG = {
   pause_circle: pauseCircle,
   fact_check: sealCheck,
   event_available: sealCheck,
+  important_record: bookmark,
 
   // literal name/icon 콜사이트용 슬러그 키
   'calendar-dots': calendarDots,

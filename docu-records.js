@@ -49,3 +49,28 @@ export function hasRecentRecord(records, nowMs, windowDays = 14) {
   const list = Array.isArray(records) ? records : [];
   return list.some(r => isRecentRecord(r, nowMs, windowDays));
 }
+
+function compareRecordRecency(a, b) {
+  const occurred = String(a?.occurred_at || '').localeCompare(String(b?.occurred_at || ''));
+  if (occurred) return occurred;
+  return (toMillis(a?.created_at) || 0) - (toMillis(b?.created_at) || 0);
+}
+
+export function importantRecordsByStudent(records) {
+  const result = new Map();
+  for (const record of Array.isArray(records) ? records : []) {
+    if (record?.important !== true || !record.student_id) continue;
+    const current = result.get(record.student_id);
+    if (!current || compareRecordRecency(current, record) < 0) result.set(record.student_id, record);
+  }
+  return result;
+}
+
+export function importantRecordTooltip(record, maxLength = 160) {
+  if (!record) return '';
+  const type = record.type === 'reflection' ? '반성문' : '기타 기록';
+  const date = record.occurred_at ? ` · ${record.occurred_at}` : '';
+  const content = String(record.content || '').replace(/\s+/g, ' ').trim() || '내용 없음';
+  const summary = content.length > maxLength ? `${content.slice(0, maxLength)}…` : content;
+  return `중요 메모 (${type}${date})\n${summary}`;
+}

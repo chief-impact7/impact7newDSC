@@ -149,6 +149,20 @@ postponed_tasks/{autoId}
 ├── created_at: timestamp
 ```
 
+### `student_records` 컬렉션
+```
+student_records/{autoId}
+├── student_id: string
+├── type: string                  # "reflection" | "etc"
+├── occurred_at: string           # YYYY-MM-DD
+├── content: string
+├── files: array
+├── important: boolean            # optional, true면 로그북 중요 메모 표시
+├── created_at: timestamp
+├── updated_by: string
+└── updated_at: timestamp
+```
+
 ### `daily_records` 컬렉션 (메인 입력앱 `app.js` 전용)
 ```
 daily_records/{studentId}_{date}

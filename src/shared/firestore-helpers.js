@@ -245,6 +245,7 @@ async function fetchDashboardDailyLogDataWith(date, fetchDocs, tolerateOptionalE
         classSettings,
         attendanceEventsSnap,
         absenceNoticesSnap,
+        importantRecordsSnap,
     ] = await Promise.all([
         fetchDailyRecordsForDate(date, fetchDocs),
         fetchTempAttendancesForDate(date, fetchDocs),
@@ -255,6 +256,7 @@ async function fetchDashboardDailyLogDataWith(date, fetchDocs, tolerateOptionalE
         fetchClassSettingsMapWith(fetchDocs),
         fetchOptional(query(collection(db, 'attendance_events'), where('date_kst', '==', date))),
         fetchOptional(query(collection(db, 'absence_notices'), where('date', '==', date))),
+        fetchOptional(query(collection(db, 'student_records'), where('important', '==', true))),
     ]);
     const attendanceEvents = (attendanceEventsSnap?.docs ?? []).map(d => {
         const data = d.data();
@@ -284,6 +286,7 @@ async function fetchDashboardDailyLogDataWith(date, fetchDocs, tolerateOptionalE
         classSettings,
         attendanceEvents,
         absenceNoticeStatus,
+        importantRecords: (importantRecordsSnap?.docs ?? []).map(d => ({ id: d.id, ...d.data() })),
     };
 }
 

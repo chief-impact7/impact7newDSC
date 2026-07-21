@@ -1362,6 +1362,7 @@ body {
 .item-icon-sibling .i7-icon {
     color: #1967d2;
 }
+.item-icon-important .i7-icon { color: #b06000; }
 
 
 
@@ -3602,11 +3603,20 @@ textarea.field-input {
 .docu-record-date .i7-icon { font-size: 16px; }
 .docu-record-actions { display: inline-flex; gap: 2px; }
 .docu-edit-btn,
-.docu-del-btn { width: 28px; height: 28px; }
+.docu-del-btn,
+.docu-important-btn { width: 28px; height: 28px; }
 .docu-edit-btn .i7-icon,
-.docu-del-btn .i7-icon { font-size: 18px; }
+.docu-del-btn .i7-icon,
+.docu-important-btn .i7-icon,
+.docu-important-indicator .i7-icon { font-size: 18px; }
 .docu-edit-btn:hover { color: var(--primary); }
 .docu-del-btn:hover { color: var(--danger); }
+.docu-important-btn.active,
+.docu-important-toggle.active,
+.docu-important-indicator { color: #b06000; }
+.docu-important-btn.active,
+.docu-important-toggle.active { background: #fef7e0; }
+.docu-important-indicator { display: inline-flex; align-items: center; padding: 5px; }
 .docu-record-item.docu-editing { border-color: var(--primary); }
 .docu-editing .docu-input-toolbar { margin-top: 8px; }
 .docu-record-content {
