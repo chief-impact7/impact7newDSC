@@ -116,7 +116,7 @@ export async function fetchPostponedTasksRange(startDate, endDate) {
     ));
 }
 
-async function fetchClassSettingsMap() {
+export async function fetchClassSettingsMap() {
     const snap = await getDocs(collection(db, 'class_settings'));
     const map = {};
     snap.forEach(docSnap => {
@@ -345,6 +345,19 @@ export function studentGradeKey(student) {
     return `${LEVEL_SHORT[level] || ''}${grade || ''}`;
 }
 
+// 소속/학년/반 필터 → 허용 student id 집합. 필터 없으면 null(전체).
+export function allowedStudentIds(students, { branchFilter, classFilter, gradeFilter } = {}) {
+    if (!branchFilter && !classFilter && !gradeFilter?.size) return null;
+    const ids = new Set();
+    for (const s of students) {
+        if (branchFilter && branchFromStudent(s) !== branchFilter) continue;
+        if (gradeFilter?.size && !gradeFilter.has(studentGradeKey(s))) continue;
+        if (classFilter && !(s.enrollments || []).some(e => enrollmentCode(e) === classFilter)) continue;
+        ids.add(s.id);
+    }
+    return ids;
+}
+
 // ─── 날짜 유틸 ───
 
 export const toDateStrKST = (date) => formatDateKST(date);
@@ -382,4 +395,23 @@ export async function fetchConsultationsForRange(startDate, endDate) {
         where('date', '<=', endDate),
         orderBy('date', 'desc'),
     ));
+}
+
+// AI 종합상태 요약 전체 — 월 단위 갱신 데이터라 1회 read (서버 전용 쓰기 컬렉션).
+export async function fetchStudentStatusSummaries() {
+    const snap = await getDocs(collection(db, 'student_status_summaries'));
+    const map = {};
+    snap.forEach(d => { map[d.id] = d.data(); });
+    return map;
+}
+
+// HR 인사 명부 — 로컬파트 소문자 → english_name (표시이름 정본, bd56042).
+export async function fetchStaffNameMap() {
+    const snap = await getDocs(collection(db, 'staff_directory'));
+    const byLocal = new Map();
+    snap.forEach(d => {
+        const en = typeof d.data().english_name === 'string' ? d.data().english_name.trim() : '';
+        if (en) byLocal.set(en.toLowerCase(), en);
+    });
+    return byLocal;
 }

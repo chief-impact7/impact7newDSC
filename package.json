@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:node": "node --test consultation-filter.test.js consultation-payload.test.js class-setup-enrollment.test.js student-core.test.js docu-records.test.js save-scheduler.test.js csv.test.js consultation-view.test.js",
+    "test:node": "node --test consultation-filter.test.js consultation-payload.test.js class-setup-enrollment.test.js student-core.test.js docu-records.test.js save-scheduler.test.js csv.test.js consultation-view.test.js ai-status-view.test.js",
     "test:vitest": "vitest run",
     "test": "npm run test:node && npm run test:vitest"
   },
