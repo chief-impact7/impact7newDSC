@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Badge, Icon, IconButton } from '@impact7/ui';
-import { ICON_NAME } from '../icon-map.js';
+import { ICON_SVG } from '../icon-map.js';
 import { allClassCodes } from '../../../student-core.js';
 import { studentShortLabel, toDateStrKST, allowedStudentIds } from '../../shared/firestore-helpers.js';
 import { renderMarkdown } from '../../../ui-utils.js';
@@ -30,7 +30,7 @@ function AiRow({ student, summary, nowMs }) {
     return (
         <details className="ai-row">
             <summary className="ai-row-line">
-                <Icon name={ICON_NAME.chevron_right} size={18} className="ai-row-chevron" aria-hidden="true" />
+                <Icon svg={ICON_SVG.chevron_right} size={18} className="ai-row-chevron" aria-hidden="true" />
                 <strong>{student.name}</strong>
                 <span className="ai-sec">{studentShortLabel(student)}</span>
                 <span className="ai-sec">{classLabel(student)}</span>
@@ -84,7 +84,7 @@ export default function AiStatusBoard({
         return (
             <div className="ai-error" role="alert">
                 <p>AI 종합상태를 불러오지 못했습니다.</p>
-                <IconButton icon={ICON_NAME.refresh} label="다시 시도" onClick={reload} />
+                <IconButton svg={ICON_SVG.refresh} label="다시 시도" onClick={reload} />
             </div>
         );
     }
@@ -107,12 +107,12 @@ export default function AiStatusBoard({
                 <span className="consult-count">
                     {groups.map(g => `${g.label} ${g.items.length}`).join(' · ')}
                 </span>
-                <IconButton icon={ICON_NAME.refresh} label="새로고침" onClick={reload} disabled={loading} />
+                <IconButton svg={ICON_SVG.refresh} label="새로고침" onClick={reload} disabled={loading} />
             </div>
 
             {!total ? (
                 <div className="consult-empty">
-                    <Icon name={ICON_NAME.forum} size={40} style={{ opacity: 0.5 }} aria-hidden="true" />
+                    <Icon svg={ICON_SVG.forum} size={40} style={{ opacity: 0.5 }} aria-hidden="true" />
                     <span>{search ? '검색 결과가 없습니다.' : '표시할 학생이 없습니다.'}</span>
                 </div>
             ) : (
@@ -120,7 +120,7 @@ export default function AiStatusBoard({
                     <details key={g.key} className="ai-group"
                         open={Boolean(search)}>
                         <summary className="consult-group-head">
-                            <Icon name={ICON_NAME.chevron_right} size={20} className="consult-group-chevron" aria-hidden="true" />
+                            <Icon svg={ICON_SVG.chevron_right} size={20} className="consult-group-chevron" aria-hidden="true" />
                             <Badge tone={GROUP_TONES[g.key]}>{g.label}</Badge>
                             <span className="consult-group-count">{g.items.length}명</span>
                         </summary>

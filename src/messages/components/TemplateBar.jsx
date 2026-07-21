@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconButton } from '@impact7/ui';
 import { loadTemplates, saveTemplate, deleteTemplate, migrateLegacyTemplates, getCachedTemplates, subscribeTemplates } from '../message-templates.js';
-import { ICON_NAME } from '../../dashboard/icon-map.js';
+import { ICON_SVG } from '../../dashboard/icon-map.js';
 
 // 자주 쓰는 문구 불러오기/저장 — 전 직원 공유(Firestore). content를 받아 저장하고,
 // 선택 시 onPick(content)로 본문에 채운다. 첫 마운트에 개인 단말(localStorage) 템플릿을 1회 이관.
@@ -116,7 +116,7 @@ export default function TemplateBar({ content, onPick }) {
         {list.map((t) => <option key={t.title} value={t.title}>{t.title}</option>)}
       </select>
       <span ref={manageAnchorRef}>
-        <IconButton icon={ICON_NAME.quiz} label="템플릿 관리" aria-expanded={manageOpen}
+        <IconButton svg={ICON_SVG.quiz} label="템플릿 관리" aria-expanded={manageOpen}
           onClick={() => {
             if (!manageOpen) {
               const rect = manageAnchorRef.current?.getBoundingClientRect();
@@ -131,7 +131,7 @@ export default function TemplateBar({ content, onPick }) {
           <input aria-label="템플릿 이름" className="mc-tpl-title" value={titleInput} onChange={(e) => setTitleInput(e.target.value)}
             placeholder="템플릿 이름" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSave(); } }} />
           <button type="button" className="mc-tpl-save" onClick={onSave} disabled={busy || !titleInput.trim() || !content.trim()}>{busy ? '저장 중…' : '저장'}</button>
-          <IconButton icon="x" label="취소" onClick={() => { setSaveOpen(false); setTitleInput(''); }} />
+          <IconButton svg={ICON_SVG.x} label="취소" onClick={() => { setSaveOpen(false); setTitleInput(''); }} />
         </>
       ) : (
         <button type="button" className="mc-tpl-save" onClick={() => setSaveOpen(true)} disabled={!content.trim()}>현재 내용 저장</button>
@@ -143,7 +143,7 @@ export default function TemplateBar({ content, onPick }) {
           onKeyDown={(e) => { if (e.key === 'Escape') setManageOpen(false); }}>
           <div className="mc-tpl-manage-head">
             템플릿 관리 <span style={{ color: '#999', fontWeight: 400 }}>{list.length}개 · 전 직원 공유</span>
-            <IconButton icon="x" label="닫기" style={{ marginLeft: 'auto' }} onClick={() => setManageOpen(false)} />
+            <IconButton svg={ICON_SVG.x} label="닫기" style={{ marginLeft: 'auto' }} onClick={() => setManageOpen(false)} />
           </div>
           {list.length === 0 && <div style={{ color: '#888', fontSize: 12.5, padding: '6px 0' }}>저장된 템플릿이 없습니다.</div>}
           {list.map((t) => (
@@ -152,8 +152,8 @@ export default function TemplateBar({ content, onPick }) {
                 <div className="mc-tpl-manage-title">{t.title}</div>
                 <div className="mc-tpl-manage-preview">{t.content}</div>
               </div>
-              <IconButton icon="pencil" label="수정 — 본문에 불러온 뒤 저장하면 덮어씀" disabled={busy} onClick={() => startEdit(t)} />
-              <IconButton icon="trash" tone="danger" label="삭제" disabled={busy} onClick={() => removeTemplate(t.title)} />
+              <IconButton svg={ICON_SVG.pencil} label="수정 — 본문에 불러온 뒤 저장하면 덮어씀" disabled={busy} onClick={() => startEdit(t)} />
+              <IconButton svg={ICON_SVG.trash} tone="danger" label="삭제" disabled={busy} onClick={() => removeTemplate(t.title)} />
             </div>
           ))}
         </div>

@@ -5,7 +5,7 @@ import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { filterStudents } from '../bulk-select.js';
 import { getRecipientMessageHistory } from '../../../data-layer.js';
 import { onlyDigits } from '../message-format.js';
-import { ICON_NAME } from '../../dashboard/icon-map.js';
+import { ICON_SVG } from '../../dashboard/icon-map.js';
 import { SOLAPI_ERROR_LABELS } from '../../dashboard/message-error-labels.js';
 
 // 수신자별 발송 이력 타임라인. 카카오 관리자센터는 API 발송 알림톡 원문을 보여주지 않으므로
@@ -61,7 +61,7 @@ export default function RecipientHistoryCard({ students = [] }) {
   return (
     <section className="mc-section">
       <div className="mc-card">
-        <div className="mc-section-title"><Icon name={ICON_NAME.message_history} size={20} aria-hidden="true" /> 수신자별 발송 이력</div>
+        <div className="mc-section-title"><Icon svg={ICON_SVG.message_history} size={20} aria-hidden="true" /> 수신자별 발송 이력</div>
         <p className="mc-field-label">
           이 학부모/번호에게 우리가 보낸 알림톡·문자 원문을 시간순으로 확인합니다.
           (카카오 관리자센터에는 API 발송 원문이 표시되지 않음)
@@ -110,7 +110,7 @@ export default function RecipientHistoryCard({ students = [] }) {
                   {' '}(전화번호 검색·알림톡 본문은 개인정보 보존기간 7일 내 발송만)
                 </span>
               </span>
-              <IconButton icon={historyOpen ? 'caret-up' : 'caret-down'} label={historyOpen ? '접기' : '펼치기'} aria-expanded={historyOpen} onClick={() => setHistoryOpen(open => !open)} />
+              <IconButton svg={historyOpen ? ICON_SVG.expand_less : ICON_SVG.expand_more} label={historyOpen ? '접기' : '펼치기'} aria-expanded={historyOpen} onClick={() => setHistoryOpen(open => !open)} />
             </div>
             {historyOpen && <ul className="rh-timeline">
               {items.map((it) => {

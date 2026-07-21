@@ -5,6 +5,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from './firebase-config.js';
 import { ENROLLABLE_STATUSES, isEnrollableStatus } from '@impact7/shared/enrollment-status';
+import { digitsOf } from '@impact7/shared/phone';
 import { signInWithGoogle, logout } from './auth.js';
 import { fetchPopulationPerms } from './population-perms.js';
 import {
@@ -484,7 +485,7 @@ function buildClassCode() {
 /** 전화번호 뒷 4자리 표시 (parent_phone_1 우선, 없으면 student_phone) */
 function phoneSuffix(s) {
     const ph = s.parent_phone_1 || s.student_phone || '';
-    const digits = ph.replace(/\D/g, '');
+    const digits = digitsOf(ph);
     if (digits.length < 4) return '';
     return ` (${digits.slice(-4)})`;
 }

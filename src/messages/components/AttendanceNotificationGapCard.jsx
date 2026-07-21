@@ -3,7 +3,7 @@ import { Icon, IconButton } from '@impact7/ui';
 import { formatDateTimeKST } from '@impact7/shared/datetime';
 import { getAttendanceNotificationGaps } from '../../../data-layer.js';
 import { downloadCsv } from '../../shared/csv.js';
-import { ICON_NAME } from '../../dashboard/icon-map.js';
+import { ICON_SVG } from '../../dashboard/icon-map.js';
 
 const STATUS_LABEL = { not_queued: '미작성', complete: '완료', retry_failed: '최종 실패', retrying: '재시도 중', pending: '발송 미확정' };
 
@@ -72,12 +72,12 @@ export default function AttendanceNotificationGapCard() {
     <section className="mc-section">
       <div className="mc-card">
         <div className="mc-section-title">
-          <Icon name={ICON_NAME.notification_missing} size={20} aria-hidden="true" /> 학부모 알림 작성 미발송 이력
+          <Icon svg={ICON_SVG.notification_missing} size={20} aria-hidden="true" /> 학부모 알림 작성 미발송 이력
           <span className="mc-tag">매일 오후 3:00 생성</span>
           <input type="date" className="mc-gap-date mc-title-action" aria-label="미발송 이력 날짜" value={dateKST}
             max={latestDateKST} disabled={loading} onChange={(event) => { setDateKST(event.target.value); void load(event.target.value); }} />
-          <IconButton icon={ICON_NAME.download} label="명단 다운로드" disabled={!items.length} onClick={downloadList} />
-          <IconButton icon={ICON_NAME.refresh} label="새로고침" disabled={loading} onClick={() => load()} />
+          <IconButton svg={ICON_SVG.download} label="명단 다운로드" disabled={!items.length} onClick={downloadList} />
+          <IconButton svg={ICON_SVG.refresh} label="새로고침" disabled={loading} onClick={() => load()} />
         </div>
         {content}
       </div>

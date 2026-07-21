@@ -6,7 +6,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from './firebase-config.js';
 import { signInWithGoogle, logout } from './auth.js';
-import { todayStr, getDayName, addDays, PAST_STUDENT_STATUSES, normalizeDays, normalizeEnrollments, enrollmentCode, branchFromStudent } from './src/shared/firestore-helpers.js';
+import { todayStr, getDayName, addDays, ACTIVE_STUDENT_STATUSES, PAST_STUDENT_STATUSES, normalizeDays, normalizeEnrollments, enrollmentCode, branchFromStudent } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditSet, auditAdd, normalizeImpact7Email } from './audit.js';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { getActiveEnrollments, findStudent } from './student-helpers.js';
@@ -180,7 +180,7 @@ window.handleLogin = async () => {
 async function loadAllStudents() {
     try {
         const [snap1, snap2] = await Promise.all([
-            getDocs(query(collection(db, 'students'), where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원', '상담']))),
+            getDocs(query(collection(db, 'students'), where('status', 'in', [...ACTIVE_STUDENT_STATUSES]))),
             getDocs(query(collection(db, 'students'), where('status2', '==', '특강')))
         ]);
         const seen = new Set();

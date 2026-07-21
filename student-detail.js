@@ -11,7 +11,7 @@ import {
 import { db } from './firebase-config.js';
 import { deriveLevelPeriod } from '@impact7/shared/enrollment-derivation';
 import { ENROLLABLE_STATUSES, isEnrollableStatus, STATUS_TONE } from '@impact7/shared/enrollment-status';
-import { formatDateKST } from '@impact7/shared/datetime';
+import { formatDateKST, toDate } from '@impact7/shared/datetime';
 import { imeInputAttrs } from '@impact7/shared/ime-input';
 import { staffLabel } from '@impact7/shared/staff-label';
 import { schoolLevelGradeLabel } from '@impact7/shared/student-label';
@@ -98,7 +98,7 @@ function formatTenure(start, end, startEvent, student) {
         endStr = _fmtTenureDate(end);
     } else if (student?.status === '종강') {
         const ts = student.status_changed_at || student.updated_at;
-        const d = ts?.toDate ? ts.toDate() : (ts ? new Date(ts) : null);
+        const d = toDate(ts);
         endStr = d && !isNaN(d.getTime()) ? _fmtTenureDate(d) : '종강';
     } else {
         endStr = '현재';

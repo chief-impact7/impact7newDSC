@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Icon, IconButton } from '@impact7/ui';
-import { ICON_NAME } from '../icon-map.js';
+import { ICON_SVG } from '../icon-map.js';
 import { branchFromStudent, enrollmentCode, allClassCodes } from '../../../student-core.js';
 import { studentGradeKey, studentShortLabel } from '../../shared/firestore-helpers.js';
 import { downloadCsv } from '../../shared/csv.js';
@@ -99,19 +99,19 @@ export default function ConsultationBoard({
                         onChange={e => setSearch(e.target.value)} />
                 )}
                 <span className="consult-count">총 {exportRows.length}건 · {groups.length}{mode.unit}</span>
-                <IconButton style={{ marginLeft: 'auto' }} icon={ICON_NAME.download} label="CSV 다운로드" onClick={handleExport} disabled={!exportRows.length} />
+                <IconButton style={{ marginLeft: 'auto' }} svg={ICON_SVG.download} label="CSV 다운로드" onClick={handleExport} disabled={!exportRows.length} />
             </div>
 
             {!groups.length ? (
                 <div className="consult-empty">
-                    <Icon name={ICON_NAME.forum} size={40} style={{ opacity: 0.5 }} aria-hidden="true" />
+                    <Icon svg={ICON_SVG.forum} size={40} style={{ opacity: 0.5 }} aria-hidden="true" />
                     <span>{search ? '검색 결과가 없습니다.' : '기간 내 상담이 없습니다.'}</span>
                 </div>
             ) : (
                 groups.map(group => (
                     <details key={group.studentId || group.key} className="consult-group" open={Boolean(search)}>
                         <summary className="consult-group-head">
-                            <Icon name={ICON_NAME.chevron_right} size={20} className="consult-group-chevron" aria-hidden="true" />
+                            <Icon svg={ICON_SVG.chevron_right} size={20} className="consult-group-chevron" aria-hidden="true" />
                             <strong>{group.key || '(미상)'}</strong>
                             <span className="consult-group-count">{group.items.length}건</span>
                         </summary>

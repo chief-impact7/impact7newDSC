@@ -5,7 +5,9 @@ import { state, OX_CYCLE } from './state.js';
 // re-export 전용 구문(export {...} from)은 로컬 스코프에 바인딩하지 않는다 —
 // 이 파일 안에서도 esc/escAttr를 쓰므로 반드시 import 후 export로 분리할 것.
 import { esc, escAttr } from '@impact7/shared/html-escape';
+import { formatTime12h, formatTime12hNoAmPm } from '@impact7/shared/datetime';
 export { esc, escAttr };
+export { formatTime12h, formatTime12hNoAmPm };
 
 // HTML 엔티티 디코딩 (&amp; → &, &#39; → ', &quot; → " 등) — DOM 필요, 로컬 유지.
 export const decodeHtmlEntities = (str) => {
@@ -14,30 +16,6 @@ export const decodeHtmlEntities = (str) => {
     ta.innerHTML = str;
     return ta.value;
 };
-
-// ─── Time Formatting ───────────────────────────────────────────────────────
-function _to12Hour(hour) {
-    return hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-}
-
-export function formatTime12h(time24) {
-    if (!time24) return '';
-    const [h, m] = time24.split(':');
-    const hour = parseInt(h);
-    const ampm = hour < 12 ? '오전' : '오후';
-    return `${ampm} ${_to12Hour(hour)}:${m}`;
-}
-
-// AI 프롬프트용 — 오전/오후 없는 콜론 표기(예: "5:30"). LLM에게 "이렇게 바꿔 써라"고
-// 지시하는 대신 데이터를 넘기기 전에 이미 최종 형태로 만들어, AI가 형식 판단 없이 그대로
-// 옮겨 적게 한다(확률적 프롬프트 준수 대신 결정론적 서버측 포맷).
-export function formatTime12hNoAmPm(time24) {
-    if (!time24) return '';
-    const [h, m] = time24.split(':');
-    const hour = parseInt(h);
-    if (Number.isNaN(hour) || m === undefined) return '';
-    return `${_to12Hour(hour)}:${m}`;
-}
 
 export function renderTime12hOptions(value = '16:00') {
     const normalized = value || '16:00';
