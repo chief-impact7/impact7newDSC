@@ -53,9 +53,10 @@ export function useStudents(user, includeEnded = false) {
         setLoading(true);
         setError(null);
         // 1) 디스크 캐시에서 즉시 선표시 — 새로고침 시 네트워크 왕복을 기다리지 않게.
-        fetchStudentsFromCache(includeEnded).then(cached => {
+        const cacheRequest = fetchStudentsFromCache(includeEnded).catch(() => null);
+        cacheRequest.then(cached => {
             if (!cancelled && cached) { setStudents(cached); setLoading(false); }
-        }).catch(() => {});
+        });
         // 2) 서버 최신으로 갱신.
         fetchStudents(includeEnded)
             .then(list => {
@@ -65,8 +66,13 @@ export function useStudents(user, includeEnded = false) {
                     globalThis.performance?.mark?.('students-loaded');
                 }
             })
-            .catch(err => {
+            .catch(async err => {
+                const cached = await cacheRequest;
                 if (cancelled) return;
+                if (cached) {
+                    console.warn('[useStudents] 서버 갱신 실패, 캐시 데이터 유지:', err);
+                    return;
+                }
                 console.error('[useStudents]', err);
                 setError(err);
             })
@@ -109,9 +115,11 @@ export function useDashboardData(user, startDate, endDate, enabled, dailyView) {
         // daily 뷰(DailyLogBoard)만 dailyLog 단일 요청 — custom 같은 날짜 기간은 PeriodLogBoard가
         // checks·postponed를 쓰므로 범위 조회를 유지한다.
         let request;
+        let cacheRequest = Promise.resolve(null);
         if (dailyView) {
             let serverDone = false;
-            fetchDashboardDailyLogDataFromCache(startDate).then(dailyLog => {
+            cacheRequest = fetchDashboardDailyLogDataFromCache(startDate).catch(() => null);
+            cacheRequest.then(dailyLog => {
                 if (serverDone || reqId !== reqIdRef.current || !dailyLog) return;
                 applyData({ checks: [], dailyRecords: dailyLog.dailyRecords, postponed: [], dailyLog });
                 setLoading(false);
@@ -135,8 +143,13 @@ export function useDashboardData(user, startDate, endDate, enabled, dailyView) {
                 if (reqId !== reqIdRef.current) return;
                 applyData(data);
             })
-            .catch(err => {
+            .catch(async err => {
+                const cached = await cacheRequest;
                 if (reqId !== reqIdRef.current) return;
+                if (cached) {
+                    console.warn('[useDashboardData] 서버 갱신 실패, 캐시 데이터 유지:', err);
+                    return;
+                }
                 console.error('[useDashboardData]', err);
                 setError(err);
             })
