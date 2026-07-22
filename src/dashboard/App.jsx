@@ -120,11 +120,6 @@ export default function App() {
     const [loginError, setLoginError] = useState('');
     const [view, setView] = useState('logbook'); // 'logbook' | 'consult' | 'ai'
 
-    // 학기 설정 로드 (1회)
-    useEffect(() => {
-        fetchSemesterSettings().then(setSemesterSettings).catch(() => {});
-    }, []);
-
     // 인증 상태
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (u) => {
@@ -150,6 +145,19 @@ export default function App() {
         });
         return unsub;
     }, []);
+
+    // Firestore 인증 미러링까지 끝난 사용자에게만 학기 설정을 조회한다.
+    useEffect(() => {
+        if (!user) {
+            setSemesterSettings({});
+            return undefined;
+        }
+        let cancelled = false;
+        fetchSemesterSettings()
+            .then(settings => { if (!cancelled) setSemesterSettings(settings); })
+            .catch(err => console.error('[dashboard semester_settings] 재시도 실패:', err));
+        return () => { cancelled = true; };
+    }, [user]);
 
     // custom 날짜 범위 검증: start > end 이면 swap
     const validCustomStart = customStart <= customEnd ? customStart : customEnd;

@@ -21,7 +21,15 @@ const LEVEL_SEMESTERS = {
 
 // semester_settings 전체 로드
 export async function fetchSemesterSettings() {
-    const snap = await getDocs(collection(db, 'semester_settings'));
+    const ref = collection(db, 'semester_settings');
+    let snap;
+    try {
+        snap = await getDocs(ref);
+    } catch (err) {
+        console.warn('[semester_settings] 조회 실패, 재시도합니다.', err);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        snap = await getDocs(ref);
+    }
     const map = {};
     snap.forEach(d => { map[d.id] = d.data(); });
     return map;

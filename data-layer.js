@@ -324,14 +324,20 @@ function _applyStudentDocs(docs) {
     state.allStudents.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
 }
 
-export async function loadStudents() {
+export async function loadStudents({ onCache } = {}) {
     const q1 = query(collection(db, 'students'), where('status', 'in', ['등원예정', '재원', '실휴원', '가휴원', '상담']));
     const q2 = query(collection(db, 'students'), where('status2', '==', '특강'));
+    const hadMemory = state.allStudents.length > 0;
+    let hasCache = false;
 
     // 캐시 우선: 캐시 결과가 있으면 즉시 반영 후 서버에서 갱신
     try {
         const [c1, c2] = await Promise.all([getDocsFromCache(q1), getDocsFromCache(q2)]);
-        if (c1.size + c2.size > 0) _applyStudentDocs(_mergeSnapshots(c1, c2));
+        if (c1.size + c2.size > 0) {
+            _applyStudentDocs(_mergeSnapshots(c1, c2));
+            hasCache = true;
+            onCache?.();
+        }
     } catch { /* 캐시 없음 — 서버 로드로 계속 */ }
 
     try {
@@ -339,9 +345,15 @@ export async function loadStudents() {
         const allDocs = _mergeSnapshots(snap1, snap2);
         console.log('[loadStudents] 문서 수:', allDocs.length);
         _applyStudentDocs(allDocs);
+        if (snap1.metadata?.fromCache || snap2.metadata?.fromCache) {
+            return { source: 'cache', stale: true, error: null };
+        }
+        return { source: 'server', stale: false, error: null };
     } catch (err) {
         console.error('[loadStudents] 로드 실패:', err.message, err);
-        if (!state.allStudents.length) state.allStudents = [];
+        const stale = hasCache || hadMemory;
+        if (!stale) state.allStudents = [];
+        return { source: stale ? 'cache' : 'none', stale, error: err };
     }
 }
 
@@ -572,27 +584,40 @@ export function loadDailyRecords(date) {
 }
 
 export function loadRetakeSchedules() {
-    const q = query(collection(db, 'retake_schedule'), where('status', '==', '예정'));
     const past = new Date();
     past.setDate(past.getDate() - 30);
     const pastStr = past.toISOString().slice(0, 10);
+    const q = query(collection(db, 'retake_schedule'), where('scheduled_date', '>=', pastStr));
     return _listenCollection('retake_schedule', q, (d) => {
         const data = { docId: d.id, ...d.data() };
-        return data.scheduled_date < pastStr ? null : data;
+        return data.status === '예정' ? data : null;
     }, (data) => { state.retakeSchedules = data; });
 }
 
-export function loadHwFailTasks() {
-    // '취소'도 포함: 후속대책 카드가 closed read-only로 표시해 자동 reopen을 차단(45b93b9)하려면
-    // state에 task가 남아 있어야 한다. 빠지면 빈 입력 필드로 다시 그려져 saveHwFailAction의
-    // existing 가드가 안 걸리고 같은 docId로 pending이 덮어써짐.
-    const q = query(collection(db, 'hw_fail_tasks'), where('status', 'in', ['pending', '완료', '취소', '기타']));
-    return _listenCollection('hw_fail_tasks', q, null, (data) => { state.hwFailTasks = data; });
+function _loadFailTasks(collectionName, stateKey, date) {
+    const parts = { pending: [], sourceDate: [], scheduledDate: [] };
+    const apply = () => {
+        const merged = new Map(parts.pending.map(task => [task.docId, task]));
+        parts.sourceDate.forEach(task => merged.set(task.docId, task));
+        parts.scheduledDate.forEach(task => merged.set(task.docId, task));
+        state[stateKey] = [...merged.values()];
+    };
+    const pendingQuery = query(collection(db, collectionName), where('status', '==', 'pending'));
+    const sourceDateQuery = query(collection(db, collectionName), where('source_date', '==', date));
+    const scheduledDateQuery = query(collection(db, collectionName), where('scheduled_date', '==', date));
+    return Promise.all([
+        _listenCollection(`${collectionName}_pending`, pendingQuery, null, (data) => { parts.pending = data; apply(); }),
+        _listenCollection(`${collectionName}_selected_date`, sourceDateQuery, null, (data) => { parts.sourceDate = data; apply(); }),
+        _listenCollection(`${collectionName}_scheduled_date`, scheduledDateQuery, null, (data) => { parts.scheduledDate = data; apply(); }),
+    ]);
 }
 
-export function loadTestFailTasks() {
-    const q = query(collection(db, 'test_fail_tasks'), where('status', 'in', ['pending', '완료', '취소', '기타']));
-    return _listenCollection('test_fail_tasks', q, null, (data) => { state.testFailTasks = data; });
+export function loadHwFailTasks(date = state.selectedDate) {
+    return _loadFailTasks('hw_fail_tasks', 'hwFailTasks', date);
+}
+
+export function loadTestFailTasks(date = state.selectedDate) {
+    return _loadFailTasks('test_fail_tasks', 'testFailTasks', date);
 }
 
 export function loadTempAttendances(date) {
@@ -695,19 +720,19 @@ export async function cancelTempClassOverride(docId, studentId) {
 }
 
 export function loadAbsenceRecords() {
-    const q = query(collection(db, 'absence_records'), where('status', 'in', ['open', 'done']));
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 90);
     const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const q = query(collection(db, 'absence_records'), where('absence_date', '>=', cutoffStr));
     return _listenCollection('absence_records', q, (d) => {
         const data = { docId: d.id, ...d.data() };
-        if (data.absence_date < cutoffStr) return null;
+        if (data.status !== 'open' && data.status !== 'done') return null;
         // 비재원(퇴원·종강) 제외 — allStudents 부재 기준.
         // withdrawnStudents가 아니라 allStudents를 보는 이유: 퇴원생 로드는 idle 지연이라
         // 타이밍에 의존하면 안 되고, live 조회라 학생 증감도 즉시 반영된다.
         if (!state.allStudents.some(s => s.docId === data.student_id)) return null;
         return data;
-    }, (data) => { state.absenceRecords = data; });
+    }, (data) => { state.absenceRecords = data; }, { rejectOnInitialError: true });
 }
 
 // ─── 실시간 리스너 공통 인프라 ────────────────────────────────────────────────
@@ -725,7 +750,7 @@ export function _isDetailInputFocused() {
     return !!detailPanel && detailPanel.contains(el);
 }
 
-function _realtimeRefreshUI() {
+export function _realtimeRefreshUI() {
     if (_rtDebounce) return;
     _rtDebounce = setTimeout(() => {
         _rtDebounce = null;
@@ -742,8 +767,8 @@ function _realtimeRefreshUI() {
     }, 200);
 }
 
-function _listenCollection(key, q, parser, onData) {
-    return new Promise((resolve) => {
+function _listenCollection(key, q, parser, onData, { rejectOnInitialError = false } = {}) {
+    return new Promise((resolve, reject) => {
         if (_unsubs[key]) { _unsubs[key](); delete _unsubs[key]; }
         let initialLoad = true;
 
@@ -765,8 +790,10 @@ function _listenCollection(key, q, parser, onData) {
             console.error(`[${key}] 실시간 리스너 실패:`, err.message);
             // 에러 후 재연결 첫 스냅샷이 refresh 경로를 타도록 initialLoad를 내린다.
             // (안 내리면 재연결돼도 initialLoad=true라 _realtimeRefreshUI를 영영 건너뛰어 화면이 stale)(M-6)
+            const failedInitially = initialLoad;
             initialLoad = false;
-            resolve();
+            if (failedInitially && rejectOnInitialError) reject(err);
+            else resolve();
         });
     });
 }
@@ -1079,11 +1106,11 @@ export async function reloadForDate() {
     updateDateDisplay();   // 데이터 로드를 기다리지 않고 날짜 칩/배너 즉시 갱신
     state._visitStatusPending = {};
 
-    // 날짜 의존 컬렉션만 재로드. retake/hw_fail/test_fail/absence는 날짜 무관 onSnapshot
-    // 리스너라 로그인 시 1회 구독으로 계속 살아있고, teachers는 정적 목록이므로 날짜 화살표마다
+    // 현재 날짜의 닫힌 미통과 task를 pending 전체 리스너와 합쳐야 자동 reopen 가드가 유지된다.
+    // 그 외 retake/absence는 날짜 무관 onSnapshot이고, teachers는 정적 목록이므로 날짜 화살표마다
     // 재구독/재조회하면 읽기 스파이크만 유발한다(M-3). loadClassSettings는 _classSettingsLoaded
     // 가드로 이미 no-op. (초기 구독·전체 새로고침은 app.js 로그인/visibilitychange 경로에서 담당)
-    await Promise.allSettled([loadDailyRecords(state.selectedDate), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadClassNextHw(state.selectedDate)]);
+    await Promise.allSettled([loadDailyRecords(state.selectedDate), loadHwFailTasks(state.selectedDate), loadTestFailTasks(state.selectedDate), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadClassNextHw(state.selectedDate)]);
     await syncAbsenceRecords();
     state.selectedNextHwClass = null;
     renderSubFilters();

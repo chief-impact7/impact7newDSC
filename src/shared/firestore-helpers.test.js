@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { where, getDocs, getDocsFromCache } = vi.hoisted(() => ({
   where: vi.fn((field, op, value) => ({ field, op, value })),
@@ -23,7 +23,9 @@ vi.mock('../../student-core.js', () => ({
   normalizeDays: vi.fn(),
 }));
 
-import { fetchAiStatusDataFromCache, fetchDashboardDailyLogDataFromCache, fetchStudents } from './firestore-helpers.js';
+import { fetchAiStatusDataFromCache, fetchDashboardDailyLogDataFromCache, fetchSemesterSettings, fetchStudents } from './firestore-helpers.js';
+
+afterEach(() => vi.restoreAllMocks());
 
 const snapshot = (docs) => ({
   forEach(callback) {
@@ -48,6 +50,22 @@ describe('fetchStudents', () => {
     expect(statusWhere?.[2]).toEqual([
       '재원', '등원예정', '실휴원', '가휴원', '상담', '퇴원', '종강',
     ]);
+    expect(getDocs).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('fetchSemesterSettings', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('첫 조회 실패 후 한 번 재시도한다', async () => {
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(callback => callback());
+    getDocs
+      .mockRejectedValueOnce(new Error('unauthenticated'))
+      .mockResolvedValueOnce(snapshot({ '중등-2026-spring': { start_date: '2026-03-01' } }));
+
+    await expect(fetchSemesterSettings()).resolves.toEqual({
+      '중등-2026-spring': { start_date: '2026-03-01' },
+    });
     expect(getDocs).toHaveBeenCalledTimes(2);
   });
 });

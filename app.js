@@ -126,7 +126,8 @@ import {
     loadAbsenceRecords, loadLeaveRequests, loadImportantStudentRecords,
     _toDate, _isOlderThan, syncTaskStudentNames, autoCloseOldRecords,
     loadWithdrawnStudents, saveDailyRecord, saveRetakeSchedule, saveImmediately,
-    updateDateDisplay, reloadForDate, changeDate, openDatePicker, goToday, unsubscribeAll
+    updateDateDisplay, reloadForDate, changeDate, openDatePicker, goToday, unsubscribeAll,
+    _realtimeRefreshUI
 } from './data-layer.js';
 import {
     initRoleMemoDeps,
@@ -537,6 +538,21 @@ window.cycleTempArrival = cycleTempArrival;
 
 // updateDateDisplay, reloadForDate, changeDate, openDatePicker, goToday → imported from data-layer.js
 
+function renderInitialList() {
+    buildSiblingMap();
+    renderBranchFilter();
+    renderSubFilters();
+    updateL1ExpandIcons();
+    renderListPanel();
+}
+
+function showStudentLoadError(result) {
+    if (!result?.error) return;
+    showToast(result.stale
+        ? '서버 갱신에 실패해 저장된 학생 목록을 표시합니다. 새로고침으로 다시 시도해 주세요.'
+        : '학생 목록을 불러오지 못했습니다. 새로고침으로 다시 시도해 주세요.', 'error');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     initHelpGuide();
 
@@ -636,33 +652,42 @@ onAuthStateChanged(auth, async (user) => {
         // 날짜/UI는 데이터 로드 실패와 무관하게 반드시 표시
         updateDateDisplay();
 
+        let absenceSync = Promise.resolve();
         try {
-            await loadStudents();
+            const studentLoad = await loadStudents({ onCache: renderInitialList });
+            renderInitialList();
+            showStudentLoadError(studentLoad);
             await promoteEnrollPending();
             await backfillStudentNumbers();
             await promoteWithdrawalDate();
             await promoteScheduledLeave();
-            buildSiblingMap();
             // 비차단: write가 서버 ack을 못 받아도 초기 렌더링을 막지 않음 (내부 try-catch 있음)
             trackTeacherLogin(user);
-            await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadImportantStudentRecords(), loadUserRole(), loadClassSettings(), loadClassNextHw(state.selectedDate), loadTeachers()]);
+            await Promise.allSettled([loadDailyRecords(state.selectedDate), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadUserRole(), loadClassSettings(), loadClassNextHw(state.selectedDate), loadTeachers()]);
+            absenceSync = loadAbsenceRecords()
+                .then(() => {
+                    _realtimeRefreshUI();
+                    return syncAbsenceRecords();
+                })
+                .catch(err => console.warn('[init-absence]', err));
+            [
+                loadRetakeSchedules(), loadHwFailTasks(state.selectedDate), loadTestFailTasks(state.selectedDate),
+                loadLeaveRequests(), loadImportantStudentRecords(),
+            ].forEach(ready => ready.then(_realtimeRefreshUI));
         } catch (err) {
             console.error('[init] 데이터 로드 중 오류:', err);
         }
         // 백그라운드 후처리 (실패해도 앱 동작에 영향 없음)
         syncTaskStudentNames().catch(e => console.warn('[syncNames]', e));
         updateDateDisplay();
-        renderBranchFilter();
-        renderSubFilters();
-        updateL1ExpandIcons();
-        renderListPanel();
+        renderInitialList();
 
         // ── 첫 렌더 후 지연 작업. 퇴원생(1.5만+건)은 시스템 전반이 비원생 포함
         //    전제라 전체 적재가 필요하다 — 단 첫 조작(학생 클릭) 경합을 피해
         //    idle에 시작하고, 로드 자체도 캐시 우선 + 청크 분할(data-layer 참조).
         (async () => {
             try {
-                await syncAbsenceRecords();
+                await absenceSync;
                 await autoCleanupClasses();
                 await loadRoleMemos().catch(() => {});
                 renderListPanel();
@@ -799,14 +824,15 @@ window.renderStudentDetail = renderStudentDetail;
 
 window.refreshData = async () => {
     showSaveIndicator('saving');
-    await loadStudents();
+    const studentLoad = await loadStudents();
+    showStudentLoadError(studentLoad);
     await promoteEnrollPending();
     await backfillStudentNumbers();
     await promoteWithdrawalDate();
     await promoteScheduledLeave();
     // 비원생(1.5만+건)은 전체 로드된 적 있을 때만 갱신 (검색의 부분 push는 제외)
     if (state._withdrawnFullyLoaded) await loadWithdrawnStudents();
-    await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(), loadTestFailTasks(), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadRoleMemos(), loadClassSettings(true), loadClassNextHw(state.selectedDate), loadTeachers()]);
+    await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(state.selectedDate), loadTestFailTasks(state.selectedDate), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadRoleMemos(), loadClassSettings(true), loadClassNextHw(state.selectedDate), loadTeachers()]);
     await syncAbsenceRecords();
     await autoCleanupClasses();
     renderBranchFilter();
