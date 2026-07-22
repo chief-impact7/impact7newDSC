@@ -263,7 +263,7 @@ function _renderClinicCard(studentId, extraVisit, selectedDate) {
         <div class="detail-card">
             <div class="detail-card-title detail-card-title-row">
                 <span style="display:flex;align-items:center;gap:6px;">
-                    ${msIcon('stethoscope')}
+                    ${msIcon('first-aid')}
                     클리닉
                     ${statusHtml}
                 </span>
