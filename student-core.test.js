@@ -13,6 +13,7 @@ import {
     displayCodeFromCsKey,
     isWithdrawnAt,
     isOnLeaveAt,
+    isScheduledVisitEligibleAt,
     createSiblingMap,
     studentMatchesSearchTerms,
     siblingStatusSuffix,
@@ -325,6 +326,21 @@ test('isOnLeaveAt: 재원/등원예정/상담 → false', () => {
 test('isOnLeaveAt: status 없고 scheduled_leave_status 범위 내 → true', () => {
     const s = { scheduled_leave_status: '가휴원', pause_start_date: '2026-06-01', pause_end_date: '2026-06-30' };
     assert.equal(isOnLeaveAt(s, '2026-06-09'), true);
+});
+
+test('isScheduledVisitEligibleAt: 퇴원 특강과 휴원기간 일정은 제외한다', () => {
+    assert.equal(isScheduledVisitEligibleAt({ status: '퇴원', status2: '특강' }, '2026-07-22'), false);
+    assert.equal(isScheduledVisitEligibleAt({
+        status: '실휴원',
+        pause_start_date: '2026-07-01',
+        pause_end_date: '2026-07-31',
+    }, '2026-07-22'), false);
+});
+
+test('isScheduledVisitEligibleAt: 휴원기간 밖의 일정과 재원생 일정은 유지한다', () => {
+    const leave = { status: '실휴원', pause_start_date: '2026-07-01', pause_end_date: '2026-07-31' };
+    assert.equal(isScheduledVisitEligibleAt(leave, '2026-08-01'), true);
+    assert.equal(isScheduledVisitEligibleAt({ status: '재원' }, '2026-07-22'), true);
 });
 
 // ─── findSeparateTeukangVisit ────────────────────────────────────────────────

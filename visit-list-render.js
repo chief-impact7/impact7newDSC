@@ -18,6 +18,7 @@ import {
 import {
     matchesBranchFilter, enrollmentCode
 } from './student-helpers.js';
+import { isScheduledVisitEligibleAt } from './student-core.js';
 import {
     todayStr, getDayName, studentShortLabel, ATTENDANCE_ACTIONS, normalizeAttendanceLabel
 } from './src/shared/firestore-helpers.js';
@@ -73,18 +74,16 @@ export function getScheduledVisits() {
         });
     }
 
-    // 학생 이름 조회용 Map (동명이인 구분을 위해 실시간 이름 사용)
-    const studentNameMap = new Map(state.allStudents.map(s => [s.docId, s.name]));
-    // 비재원(퇴원·종강) 잔존 task 안전망 필터 — allStudents 부재(studentNameMap 미포함) 기준.
-    // withdrawnStudents가 아니라 allStudents를 보는 이유: 퇴원생 로드는 idle 지연이라
-    // 타이밍에 의존하면 안 됨 (렌더마다 새로 만들어 학생 증감 즉시 반영).
+    const studentMap = new Map(state.allStudents.map(s => [s.docId, s]));
+    const hasActiveSchedule = studentId => isScheduledVisitEligibleAt(studentMap.get(studentId), state.selectedDate);
 
     // 2) 숙제미통과 등원 (state.hwFailTasks)
     const today = todayStr();
     const isToday = state.selectedDate === today;
     for (const t of state.hwFailTasks) {
-        if (!studentNameMap.has(t.student_id)) continue;
         if (t.type !== '등원' || (t.status !== 'pending' && t.status !== '완료' && t.status !== '기타')) continue;
+        if (!studentMap.has(t.student_id)) continue;
+        if (t.status === 'pending' && !hasActiveSchedule(t.student_id)) continue;
         // 해당 날짜 task이거나, 오늘 볼 때 지연된(overdue) pending task 포함
         const isScheduledToday = t.scheduled_date === state.selectedDate;
         const isOverdue = isToday && t.status === 'pending' && t.scheduled_date && t.scheduled_date < today;
@@ -95,7 +94,7 @@ export function getScheduledVisits() {
             sourceLabel: '숙제미통과',
             sourceColor: '#dc2626',
             studentId: t.student_id,
-            name: studentNameMap.get(t.student_id) || t.student_name || t.student_id,
+            name: studentMap.get(t.student_id)?.name || t.student_name || t.student_id,
             time: t.scheduled_time || '',
             detail: `${t.domain || ''} (${_stripYear(t.source_date)})`,
             status: (t.status === '완료' || t.status === '기타') ? 'completed' : 'pending',
@@ -112,8 +111,9 @@ export function getScheduledVisits() {
 
     // 3) 테스트미통과 등원 (state.testFailTasks)
     for (const t of state.testFailTasks) {
-        if (!studentNameMap.has(t.student_id)) continue;
         if (t.type !== '등원' || (t.status !== 'pending' && t.status !== '완료' && t.status !== '기타')) continue;
+        if (!studentMap.has(t.student_id)) continue;
+        if (t.status === 'pending' && !hasActiveSchedule(t.student_id)) continue;
         const isScheduledToday = t.scheduled_date === state.selectedDate;
         const isOverdue = isToday && t.status === 'pending' && t.scheduled_date && t.scheduled_date < today;
         if (!isScheduledToday && !isOverdue) continue;
@@ -123,7 +123,7 @@ export function getScheduledVisits() {
             sourceLabel: '테스트미통과',
             sourceColor: '#ea580c',
             studentId: t.student_id,
-            name: studentNameMap.get(t.student_id) || t.student_name || t.student_id,
+            name: studentMap.get(t.student_id)?.name || t.student_name || t.student_id,
             time: t.scheduled_time || '',
             detail: `${t.item || t.domain || ''} (${_stripYear(t.source_date)})`,
             status: (t.status === '완료' || t.status === '기타') ? 'completed' : 'pending',
@@ -141,7 +141,8 @@ export function getScheduledVisits() {
     for (const [sid, rec] of Object.entries(state.dailyRecords)) {
         const ev = rec.extra_visit;
         if (!ev || ev.date !== state.selectedDate) continue;
-        const student = state.allStudents.find(s => s.docId === sid);
+        const student = studentMap.get(sid);
+        if (ev.visit_status !== '완료' && ev.visit_status !== '기타' && !hasActiveSchedule(sid)) continue;
         visits.push({
             id: `extra_${sid}`,
             source: 'extra',
@@ -163,13 +164,14 @@ export function getScheduledVisits() {
     // 5) 결석보충 (state.absenceRecords) — 등원예정은 정규 쪽으로 이동
     for (const r of state.absenceRecords) {
         if (r.resolution !== '보충' || r.makeup_date !== state.selectedDate || r.status === 'closed' || r.makeup_status === '미등원') continue;
+        if (r.makeup_status !== '완료' && !hasActiveSchedule(r.student_id)) continue;
         visits.push({
             id: `absence_makeup_${r.docId}`,
             source: 'absence_makeup',
             sourceLabel: '결석보충',
             sourceColor: '#dc2626',
             studentId: r.student_id,
-            name: studentNameMap.get(r.student_id) || r.student_name || r.student_id,
+            name: studentMap.get(r.student_id)?.name || r.student_name || r.student_id,
             time: r.makeup_time || '',
             detail: `${r.class_code || ''} (${_stripYear(r.absence_date)})`,
             status: r.makeup_status === '완료' ? 'completed' : 'pending',
@@ -184,7 +186,7 @@ export function getScheduledVisits() {
     // 소속 필터 적용 (글로벌 branch 필터)
     const filtered = (state.selectedBranch || state.selectedBranchLevel) ? visits.filter(v => {
         if (!v.studentId) return true; // 진단평가 등 학생 미연동 항목은 항상 포함
-        const student = state.allStudents.find(s => s.docId === v.studentId);
+        const student = studentMap.get(v.studentId);
         return student ? matchesBranchFilter(student) : true;
     }) : visits;
 

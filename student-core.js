@@ -155,6 +155,13 @@ export function isOnLeaveAt(s, dateStr) {
     return false;
 }
 
+export function isScheduledVisitEligibleAt(s, dateStr) {
+    return Boolean(s)
+        && s.status !== '종강'
+        && !isWithdrawnAt(s, dateStr)
+        && !isOnLeaveAt(s, dateStr);
+}
+
 // ─── 분리 등원 특강 판정 ─────────────────────────────────────────────────────
 // 정규계열과 특강은 수업료가 다르므로 같은 날이면 시간 간격과 무관하게 출결을 분리한다.
 export function findSeparateTeukangVisit(dayEnrollments, getTime) {
