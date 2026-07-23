@@ -847,13 +847,18 @@ body {
   gap: 6px;
 }
 
+.visit-pair > .item-time-block {
+  flex: 0 0 64px;
+  min-width: 0;
+}
+
+.bonus-visit-pair {
+  flex: 0 0 100%;
+}
+
 .visit-pair .toggle-group {
   min-width: 0;
   flex-wrap: wrap;
-}
-
-.visit-pair + .visit-pair {
-  padding-left: 10px;
 }
 
 /* 휴/퇴원 학생: 출결 버튼 대신 기간 표시 */

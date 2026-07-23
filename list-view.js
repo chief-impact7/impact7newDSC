@@ -523,8 +523,8 @@ export function renderListPanel() {
         let toggleHtml = '';
         let mainAttendanceToggle = '';
         let visit2AttendanceToggle = '';
-        let visit2First = false;
         const isLeave = LEAVE_STATUSES.includes(s.status);
+        const usesAttendancePairs = state.currentCategory === 'attendance' && canBulkSelect && !isLeave;
         const sepVisit = isLeave ? null : findSeparateTeukangVisit(_todayEnrolls, (e) => getStudentStartTime(e, dayN));
         const mainEnrolls = _todayEnrolls.filter(e => REGULAR_CLASS_TYPES.includes(e.class_type || '정규'));
         // dayN 전달 — 합성 내신/자유학기 enrollment의 schedule 객체에서 요일별 시간 조회 가능해야 함.
@@ -785,23 +785,26 @@ export function renderListPanel() {
                 timeBlocks.push({ sort: v2Time || '99:99', html: visit2TimeBlockHtml });
             }
             timeBlocks.sort((a, b) => a.sort.localeCompare(b.sort));
-            const bonusTimeHtml = uniqueBonusTimes.map(t => `<div class="item-time-block" style="color:var(--danger);">
+            const bonusTimeBlocks = uniqueBonusTimes.map(t => `<div class="item-time-block" style="color:var(--danger);">
                 <span class="item-time-label" style="color:var(--danger);">보충</span>
                 <span class="item-time-value" style="color:var(--danger);">${esc(formatTime12h(t))}</span>
-            </div>`).join('');
-            timeHtml = [
-                ...timeBlocks.map(b => b.html),
-                bonusTimeHtml
-            ].join('');
-
-            if (state.currentCategory === 'attendance' && sepVisit) {
-                visit2First = (rec?.visit2?.arrival_time || sepVisit.time || '99:99')
-                    < (arrivalTime || scheduledTime || '99:99');
-                const pair1 = `<div class="visit-pair">${mainTimeBlockHtml}${mainAttendanceToggle}</div>`;
-                const pair2 = `<div class="visit-pair">${visit2TimeBlockHtml}${visit2AttendanceToggle}</div>`;
-                const pairedAttendance = visit2First ? pair2 + pair1 : pair1 + pair2;
-                timeHtml = bonusTimeHtml;
-                toggleHtml = pairedAttendance;
+            </div>`);
+            if (usesAttendancePairs) {
+                const mainPair = `<div class="visit-pair">${mainTimeBlockHtml || '<div class="item-time-block" aria-hidden="true"></div>'}${mainAttendanceToggle}</div>`;
+                if (sepVisit) {
+                    const visit2First = (rec?.visit2?.arrival_time || sepVisit.time || '99:99')
+                        < (arrivalTime || scheduledTime || '99:99');
+                    const visit2Pair = `<div class="visit-pair">${visit2TimeBlockHtml}${visit2AttendanceToggle}</div>`;
+                    toggleHtml = visit2First ? visit2Pair + mainPair : mainPair + visit2Pair;
+                } else {
+                    toggleHtml = mainPair;
+                }
+                toggleHtml += bonusTimeBlocks.map(html => `<div class="visit-pair bonus-visit-pair">${html}</div>`).join('');
+            } else {
+                timeHtml = [
+                    ...timeBlocks.map(b => b.html),
+                    ...bonusTimeBlocks
+                ].join('');
             }
         }
 
@@ -899,7 +902,7 @@ export function renderListPanel() {
                 <span class="item-title">${esc(s.name)}${newBadge}${naesinBadge}${leaveBadge}${pauseExpiredBadge}${lrPendingTags}${siblingIcon}${importantRecordIcon}${hwFailIconHtml}${overrideBadge}${overrideInBadge}</span>
                 ${teacherBadge}
             </div>
-            <div class="item-times">${timeHtml}</div>
+            ${usesAttendancePairs ? '' : `<div class="item-times">${timeHtml}</div>`}
             <div class="item-actions">${toggleHtml || leavePeriodHtml}</div>
             ${followUpBtnHtml}
         </div>`;
