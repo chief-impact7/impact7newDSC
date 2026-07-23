@@ -86,6 +86,10 @@
                         <span class="type-name">특강</span>
                         <span class="type-desc">자유 텍스트 (예: 여름특강A)</span>
                     </button>
+                    <button class="type-card" data-type="기타" onclick="chooseClassTypeAndAdvance('기타')">
+                        <span class="type-name">기타</span>
+                        <span class="type-desc">자유 반명 (예: 보강클리닉)</span>
+                    </button>
                 </div>
             </section>
 
@@ -205,6 +209,26 @@
                             </div>
                         </div>
                         <div class="class-preview" id="special-preview"></div>
+                    </div>
+                    <!-- 기타: 자유 반명 + 기간 -->
+                    <div id="name-other" style="display:none;">
+                        <div class="form-row">
+                            <div class="form-field full">
+                                <label for="input-other-name">반 이름</label>
+                                <input type="text" id="input-other-name" placeholder="예: 보강클리닉">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-field">
+                                <label for="input-other-start">시작일</label>
+                                <input type="date" id="input-other-start" required>
+                            </div>
+                            <div class="form-field">
+                                <label for="input-other-end">종료일</label>
+                                <input type="date" id="input-other-end">
+                            </div>
+                        </div>
+                        <div class="class-preview" id="other-preview"></div>
                     </div>
                     <!-- 담당 선생님 (공통) -->
                     <div class="form-row" style="margin-top:16px;">

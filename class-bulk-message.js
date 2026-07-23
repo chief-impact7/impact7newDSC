@@ -7,7 +7,7 @@ import { state } from './state.js';
 import { esc, escAttr, showToast } from './ui-utils.js';
 import { READ_ONLY } from './audit.js';
 import { createBulkMessage } from './data-layer.js';
-import { getRegularClassStudents, getFreeSemesterClassStudents, getTeukangClassStudents, getNaesinStudentsByDerivedCode, _isNaesinClassCode } from './class-resolver.js';
+import { getRegularClassStudents, getFreeSemesterClassStudents, getTeukangClassStudents, getOtherClassStudents, getNaesinStudentsByDerivedCode, _isNaesinClassCode } from './class-resolver.js';
 import { onlyDigits } from './src/messages/message-format.js';
 
 // 백엔드 recipientPhone.js의 RECIPIENT_FIELDS와 일치.
@@ -34,6 +34,7 @@ let _lastSendSig = null;
 // 특강 반코드에 한글이 있어 _isNaesinClassCode 오탐 가능 → 특강을 먼저 판정.
 export function resolveClassMembers(classCode) {
     if (state.classSettings[classCode]?.class_type === '특강' || state._classMgmtMode === 'teukang') return getTeukangClassStudents(classCode);
+    if (state.classSettings[classCode]?.class_type === '기타' || state._classMgmtMode === 'other') return getOtherClassStudents(classCode);
     if (state._classMgmtMode === 'naesin' || _isNaesinClassCode(classCode)) return getNaesinStudentsByDerivedCode(classCode).map(x => x.student);
     if (state._classMgmtMode === 'free') return getFreeSemesterClassStudents(classCode);
     return getRegularClassStudents(classCode);

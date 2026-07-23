@@ -15,6 +15,7 @@ import { enrollmentCode, findStudent } from './student-helpers.js';
 import { checkCanEditGrading } from './attendance.js';
 import { renderStudentDetail } from './student-detail.js';
 import { getClassCodesForDate, hasActiveCodedEnrollment } from './class-resolver.js';
+import { mergeEnrollmentEdit } from './class-setup-enrollment.js';
 
 // 잔류 모듈(클러스터 1·4) 함수 주입
 let renderSubFilters, renderListPanel;
@@ -287,11 +288,11 @@ export function openEnrollmentModal(studentId, enrollIdx) {
 
     const enroll = student.enrollments[enrollIdx] || {};
 
-    // 가드: 이 모달은 정규/특강만 편집 가능 (select 옵션이 둘뿐).
+    // 가드: 이 모달은 계정 유형(정규/특강/기타)만 편집 가능.
     // 내신/자유학기 enrollment를 열면 class_type이 '정규'로 silent 변경되는 회로가 있어 차단.
     // 반생성마법사를 사용하도록 안내.
     if (enroll.class_type === '내신' || enroll.class_type === '자유학기') {
-        alert(`${enroll.class_type} enrollment는 이 모달로 편집할 수 없습니다.\n반생성마법사에서 편집하세요. (정규/특강만 이 모달로 편집 가능)`);
+        alert(`${enroll.class_type} enrollment는 이 모달로 편집할 수 없습니다.\n반생성마법사에서 편집하세요. (정규/특강/기타만 이 모달로 편집 가능)`);
         return;
     }
 
@@ -308,6 +309,7 @@ export function openEnrollmentModal(studentId, enrollIdx) {
 
     // 정규는 종료일 입력 불가 — 정규 종료는 status(퇴원/종강)로만. 특강만 종료일 활성.
     const typeEl = document.getElementById('enroll-class-type');
+    typeEl.disabled = true;
     const endEl = document.getElementById('enroll-end-date');
     const syncEndDisabled = () => {
         const isRegular = typeEl.value === '정규';
@@ -360,8 +362,8 @@ export async function saveEnrollment() {
         alert(`${classType}는 레벨기호와 반넘버를 모두 입력해야 합니다. (예: HA101)`);
         return;
     }
-    if (classType === '특강' && !classNumber) {
-        alert('특강은 반넘버(반 이름)를 입력해야 합니다.');
+    if ((classType === '특강' || classType === '기타') && !classNumber) {
+        alert(`${classType}는 반넘버(반 이름)를 입력해야 합니다.`);
         return;
     }
     if (selectedDays.length === 0) { alert('수업 요일을 1개 이상 선택하세요.'); return; }
@@ -390,14 +392,13 @@ export async function saveEnrollment() {
         return;
     }
 
-    const updated = {
-        ...enrollments[enrollIdx],
+    const updated = mergeEnrollmentEdit(enrollments[enrollIdx], {
         level_symbol: levelSymbol,
         class_number: classNumber,
         class_type: classType,
         day: selectedDays,
         start_time: startTime
-    };
+    });
     if (startDate) updated.start_date = startDate;
     else delete updated.start_date;
     // 정규는 end_date를 박지 않는다 — 정규 종료는 status(퇴원/종강)로만. (자유학기·특강은 기간제라 유지)

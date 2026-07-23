@@ -19,6 +19,11 @@ import {
     activeClassCodes,
     getStudentStartTime,
 } from '../../student-helpers.js';
+import {
+    _getAllClassCodes,
+    isInOtherClass,
+    isInTeukangClass,
+} from '../../class-resolver.js';
 
 // 프로덕션 enrollmentCode를 그대로 사용 — 코드 포맷이 바뀌면 테스트도 함께 따라가
 // 파생/대표정렬 검증이 옛 포맷에 갇히지 않도록 한다.
@@ -27,6 +32,11 @@ const TODAY = '2026-06-28';
 
 beforeEach(() => {
     state.classSettings = {};
+    state.allStudents = [];
+    state.tempClassOverrides = [];
+    state.selectedBranch = null;
+    state.selectedBranchLevel = null;
+    state.selectedDate = TODAY;
 });
 
 // ─── getActiveEnrollments: 날짜 필터 ────────────────────────────────────────
@@ -49,9 +59,49 @@ describe('getActiveEnrollments — 날짜 필터', () => {
         expect(codes(getActiveEnrollments(s, TODAY))).toEqual(['A101']);
     });
 
+    test('기타 계정은 같은 반코드라도 계정별 기간을 독립 판정한다', () => {
+        const s = { enrollments: [
+            { account_id: 'other-active', account_type: '기타', class_type: '기타', class_number: '자습실', start_date: '2026-06-01', day: ['월'] },
+            { account_id: 'other-ended', account_type: '기타', class_type: '기타', class_number: '자습실', end_date: '2026-06-01', day: ['화'] },
+        ]};
+        const out = getActiveEnrollments(s, TODAY);
+        expect(out).toHaveLength(1);
+        expect(out[0].account_id).toBe('other-active');
+    });
+
     test('enrollments 없음 → 빈 배열', () => {
         expect(getActiveEnrollments({ enrollments: [] }, TODAY)).toEqual([]);
         expect(getActiveEnrollments({}, TODAY)).toEqual([]);
+    });
+});
+
+describe('class-resolver — 계정 유형과 활성 기간', () => {
+    test('기타 class_settings를 정규와 분리하고 기타 그룹에 노출한다', () => {
+        state.classSettings = {
+            A101: { class_type: '정규', account_type: '정규' },
+            자습실: { class_type: '기타', account_type: '기타', branch: '2단지', schedule: { 월: '18:00' } },
+        };
+
+        expect(_getAllClassCodes()).toMatchObject({
+            regular: ['A101'],
+            other: ['자습실'],
+        });
+    });
+
+    test('기타·특강 멤버십은 종료일이 지난 계정을 제외한다', () => {
+        state.classSettings = {
+            자습실: { class_type: '기타', account_type: '기타', schedule: { 월: '18:00' } },
+            여름특강: { class_type: '특강', account_type: '특강', schedule: { 월: '19:00' } },
+        };
+        const activeOther = { enrollments: [
+            { account_id: 'other', account_type: '기타', class_type: '기타', class_number: '자습실', start_date: '2026-06-01', day: ['월'] },
+        ]};
+        const endedSpecial = { enrollments: [
+            { account_id: 'special', account_type: '특강', class_type: '특강', class_number: '여름특강', end_date: '2026-06-01', day: ['월'] },
+        ]};
+
+        expect(isInOtherClass(activeOther, '자습실')).toBe(true);
+        expect(isInTeukangClass(endedSpecial, '여름특강')).toBe(false);
     });
 });
 

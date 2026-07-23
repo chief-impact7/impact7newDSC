@@ -118,7 +118,7 @@ import {
     initDataLayerDeps, initDataLayerDeps2,
     loadClassSettings, getClassDomains, loadTeachers, trackTeacherLogin, getTeacherName,
     loadClassNextHw, saveClassNextHw, getNextHwStatus, getStudentDomains, getStudentTestItems,
-    saveClassSettings, loadStudents, promoteEnrollPending, backfillStudentNumbers, promoteWithdrawalDate, promoteScheduledLeave,
+    saveClassSettings, loadStudents, promoteEnrollPending, backfillStudentNumbers,
     loadDailyRecords, loadRetakeSchedules, loadHwFailTasks, loadTestFailTasks,
     loadTempAttendances, loadTempClassOverrides,
     getStudentOverrides, getOverrideStudentsForClass, getOverridingOutFromClass, addOverrideInStudents,
@@ -665,8 +665,6 @@ onAuthStateChanged(auth, async (user) => {
             showStudentLoadError(studentLoad);
             await promoteEnrollPending();
             await backfillStudentNumbers();
-            await promoteWithdrawalDate();
-            await promoteScheduledLeave();
             // 비차단: write가 서버 ack을 못 받아도 초기 렌더링을 막지 않음 (내부 try-catch 있음)
             trackTeacherLogin(user);
             await Promise.allSettled([loadDailyRecords(state.selectedDate), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadUserRole(), loadClassNextHw(state.selectedDate)]);
@@ -835,8 +833,6 @@ window.refreshData = async () => {
     showStudentLoadError(studentLoad);
     await promoteEnrollPending();
     await backfillStudentNumbers();
-    await promoteWithdrawalDate();
-    await promoteScheduledLeave();
     // 비원생(1.5만+건)은 전체 로드된 적 있을 때만 갱신 (검색의 부분 push는 제외)
     if (state._withdrawnFullyLoaded) await loadWithdrawnStudents();
     await Promise.allSettled([loadDailyRecords(state.selectedDate), loadRetakeSchedules(), loadHwFailTasks(state.selectedDate), loadTestFailTasks(state.selectedDate), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadAbsenceRecords(), loadLeaveRequests(), loadRoleMemos(), loadClassSettings(true), loadClassNextHw(state.selectedDate), loadTeachers()]);

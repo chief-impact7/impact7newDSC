@@ -527,6 +527,7 @@
                         <select id="enroll-class-type" class="field-input">
                             <option value="정규">정규</option>
                             <option value="특강">특강</option>
+                            <option value="기타">기타</option>
                         </select>
                     </div>
                     <div class="form-field">
@@ -946,6 +947,7 @@
                         <option value="휴원요청">휴원요청</option>
                         <option value="휴원연장">휴원연장</option>
                         <option value="퇴원요청">퇴원요청</option>
+                        <option value="종강요청">종강요청</option>
                         <option value="휴원→퇴원">휴원→퇴원</option>
                         <option value="퇴원→휴원">퇴원→휴원</option>
                     </select>
@@ -975,6 +977,11 @@
                         <span>학생: <span id="lr-student-phone"></span></span>
                         <span style="margin-left:12px;">보호자: <span id="lr-parent-phone"></span></span>
                     </div>
+                </div>
+                <div id="lr-account-target-wrap" style="display:none;">
+                    <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">요청 대상</label>
+                    <select id="lr-account-target" class="field-input" style="width:100%;"></select>
+                    <div id="lr-account-target-fixed" style="display:none;padding:8px 10px;background:#f5f3ff;color:#6d28d9;border:1px solid #c4b5fd;border-radius:6px;font-size:12px;font-weight:600;"></div>
                 </div>
                 <!-- 날짜 필드 (동적) -->
                 <div id="lr-date-fields"></div>
@@ -1011,6 +1018,7 @@
                     </div>
                     <div id="rfl-leave-period" style="font-size:12px;color:var(--text-sec);"></div>
                 </div>
+                <div id="rfl-account-target" style="display:none;padding:8px 10px;background:#f5f3ff;color:#6d28d9;border:1px solid #c4b5fd;border-radius:6px;font-size:12px;font-weight:600;"></div>
                 <!-- 복귀일 -->
                 <div>
                     <label id="rfl-date-label" style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">복귀일</label>

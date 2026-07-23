@@ -5,13 +5,13 @@
 import {
     collection, getDocs, getDocsFromCache, doc, getDoc,
     query, where, orderBy, limit, startAfter, documentId, serverTimestamp, writeBatch, Timestamp,
-    onSnapshot, deleteField
+    onSnapshot
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from './firebase-config.js';
 import { auditUpdate, auditSet, auditAdd, auditDelete, batchUpdate, batchSet, READ_ONLY } from './audit.js';
 import { parseDateKST, toDateStrKST, todayStr, getDayName, PAST_STUDENT_STATUSES } from './src/shared/firestore-helpers.js';
-import { state, DEFAULT_DOMAINS, LEAVE_STATUSES, DEFAULT_TEST_SECTIONS } from './state.js';
+import { state, DEFAULT_DOMAINS, DEFAULT_TEST_SECTIONS } from './state.js';
 import { showSaveIndicator, showToast } from './ui-utils.js';
 import { openKoreanDatePicker } from './date-picker.js';
 import { normalizeDays, enrollmentCode, branchFromStudent, makeDailyRecordId, getActiveEnrollments, deriveClassLabelAt, getSeparateTeukangVisit } from './student-helpers.js';
@@ -24,7 +24,6 @@ import { staffLabel } from '@impact7/shared/staff-label';
 import { teacherDisplayName } from '@impact7/shared/teacher-label';
 import { deriveTenure, isAttendedStatus } from '@impact7/shared/history';
 import { MESSAGE_RECIPIENT_SETTINGS_FIELD } from './src/messages/recipient-settings.js';
-import { isScheduledWithdrawalDue } from './student-core.js';
 import { importantRecordsByStudent } from './docu-records.js';
 
 const _promoteEnrollPending = createPromoteEnrollPending(
@@ -510,68 +509,6 @@ export async function cancelStudentPendingTasks(studentId) {
     pendingTest.forEach(t => { t.status = '취소'; });
     openAbsence.forEach(r => { r.status = 'closed'; });
     console.log(`[cancelStudentPendingTasks] ${studentId}: hw=${pendingHw.length}, test=${pendingTest.length}, absence=${openAbsence.length}건 취소/종결`);
-}
-
-export async function promoteWithdrawalDate() {
-    const today = todayStr();
-    const ACTIVE_FOR_PROMOTE = new Set(['재원', '등원예정']);
-    const toWithdraw = state.allStudents.filter(s =>
-        ACTIVE_FOR_PROMOTE.has(s.status) && isScheduledWithdrawalDue(s, today)
-    );
-    if (toWithdraw.length === 0) return;
-    const batch = writeBatch(db);
-    for (const s of toWithdraw) {
-        batchUpdate(batch, doc(db, 'students', s.docId), {
-            status: '퇴원',
-            enrollments: [],
-            pre_withdrawal_status: deleteField()
-        });
-    }
-    try {
-        await batch.commit();
-        if (READ_ONLY) return;
-        toWithdraw.forEach(s => {
-            s.status = '퇴원';
-            s.enrollments = [];
-            delete s.pre_withdrawal_status;
-        });
-        const toWithdrawSet = new Set(toWithdraw);
-        state.allStudents = state.allStudents.filter(s => !toWithdrawSet.has(s));
-        state.withdrawnStudents.push(...toWithdraw);
-        console.log(`[promoteWithdrawalDate] ${toWithdraw.length}명 재원→퇴원 전환:`, toWithdraw.map(s => s.name));
-        await Promise.all(toWithdraw.map(s => cancelStudentPendingTasks(s.docId)));
-    } catch (err) {
-        console.error('[promoteWithdrawalDate] 전환 실패:', err);
-    }
-}
-
-// 미래 휴원 예약(scheduled_leave_status)의 시작일이 도래하면 status로 발효.
-// promoteWithdrawalDate(미래 퇴원)와 대칭 — 서버 buildUpdate는 미래 휴원을 status 재원 유지 +
-// scheduled_leave_status로 저장만 하고, 발효는 클라 promote가 담당한다. 발효 후 예약 필드는 제거.
-export async function promoteScheduledLeave() {
-    const today = todayStr();
-    const ACTIVE_FOR_PROMOTE = new Set(['재원', '등원예정']);
-    const toLeave = state.allStudents.filter(s =>
-        ACTIVE_FOR_PROMOTE.has(s.status)
-        && LEAVE_STATUSES.includes(s.scheduled_leave_status)
-        && s.pause_start_date && s.pause_start_date <= today
-    );
-    if (toLeave.length === 0) return;
-    const batch = writeBatch(db);
-    for (const s of toLeave) {
-        batchUpdate(batch, doc(db, 'students', s.docId), {
-            status: s.scheduled_leave_status,
-            scheduled_leave_status: deleteField(),
-        });
-    }
-    try {
-        await batch.commit();
-        if (READ_ONLY) return;
-        toLeave.forEach(s => { s.status = s.scheduled_leave_status; delete s.scheduled_leave_status; });
-        console.log(`[promoteScheduledLeave] ${toLeave.length}명 예약 휴원 발효:`, toLeave.map(s => s.name));
-    } catch (err) {
-        console.error('[promoteScheduledLeave] 발효 실패:', err);
-    }
 }
 
 export function loadDailyRecords(date) {

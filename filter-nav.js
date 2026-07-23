@@ -13,7 +13,7 @@ import { renderStudentDetail } from './student-detail.js';
 import { CLASS_MODE_LABELS } from './class-detail.js';
 import {
     _getClassesForBranchLevel, _getAllClassCodes, getClassMgmtCount,
-    getTeukangClassStudents, getUniqueClassCodes
+    getTeukangClassStudents, getOtherClassStudents, getUniqueClassCodes
 } from './class-resolver.js';
 import { _isOlderThan, getStudentDomains, getNextHwStatus, getStudentTestItems, updateDateDisplay } from './data-layer.js';
 import { clearVisitCache, getScheduledVisits, getEnrollPendingVisits } from './visit-list-render.js';
@@ -329,9 +329,14 @@ export function renderBranchFilter() {
     branchL1.classList.toggle('has-filter', !!state.selectedBranch);
 }
 
-function _renderL3Chip(code, displayLabel, count, mode) {
+function _renderL3Chip(code, displayLabel, count, mode, deletable = true) {
     const isActive = state.selectedClassCode === code ? 'active' : '';
     const isDeleteMode = state._classDeleteMode;
+    if (isDeleteMode && !deletable) {
+        return `<div class="nav-l2 nav-l3" aria-disabled="true" style="opacity:.55;cursor:not-allowed;">
+            ${esc(displayLabel)}${count > 0 ? `<span class="nav-l2-count">${count}</span>` : ''}
+        </div>`;
+    }
     const selectKey = `${mode}|${code}`;
     const isSelected = isDeleteMode && state._classDeleteSelected.has(selectKey);
     const onclick = isDeleteMode
@@ -358,7 +363,7 @@ export function renderClassCodeFilter() {
         classL1.after(container);
     }
 
-    const { regular, naesin, teukang, free } = _getAllClassCodes();
+    const { regular, naesin, teukang, other, free } = _getAllClassCodes();
 
     let html = '';
 
@@ -381,7 +386,8 @@ export function renderClassCodeFilter() {
         { mode: 'regular', label: '정규', list: regular, chip: code => _renderL3Chip(code, code, getClassMgmtCount(code), 'regular') },
         { mode: 'free', label: '자유학기', list: free, chip: ({ code, count }) => _renderL3Chip(code, code, count, 'free') },
         { mode: 'naesin', label: '내신', list: naesin, chip: ({ code, displayCode, count }) => _renderL3Chip(code, displayCode, count, 'naesin') },
-        { mode: 'teukang', label: '특강', list: teukang, chip: code => _renderL3Chip(code, code, getTeukangClassStudents(code).length, 'teukang') }
+        { mode: 'teukang', label: '특강', list: teukang, chip: code => _renderL3Chip(code, code, getTeukangClassStudents(code).length, 'teukang') },
+        { mode: 'other', label: '기타', list: other, chip: code => _renderL3Chip(code, code, getOtherClassStudents(code).length, 'other', false) }
     ];
     for (const { mode, label, list, chip } of sections) {
         const expanded = state._classMgmtMode === mode;
@@ -681,7 +687,7 @@ function _getSubFilterBase() {
     const visitStudentIds = new Set();
     state.allStudents.forEach(s => {
         if (existingIds.has(s.docId)) return;
-        if (state.selectedClassCode && !s.enrollments.some(e => enrollmentCode(e) === state.selectedClassCode)) return;
+        if (state.selectedClassCode && !getActiveEnrollments(s, state.selectedDate).some(e => enrollmentCode(e) === state.selectedClassCode)) return;
         if (isVisitStudent(s.docId)) {
             todayStudents.push(s);
             existingIds.add(s.docId);

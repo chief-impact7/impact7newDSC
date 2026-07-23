@@ -7,6 +7,7 @@ import { applyNaesinFreeDerivation, isNaesinActiveAt } from '@impact7/shared/enr
 import { currentSchool, normalizeRealLevelGrade } from '@impact7/shared/student-label';
 import { classSettingsGet } from '@impact7/shared/class-code';
 import { startTime } from '@impact7/shared/expected-arrival';
+import { activeEnrollmentsAt } from '@impact7/shared/enrollment-status';
 import {
     normalizeDays, enrollmentCode, branchFromStudent, allClassCodes,
     summarizeEnrollmentClasses,
@@ -133,14 +134,7 @@ export function getActiveEnrollments(s, dateStr) {
     if (enrollments.length === 0) return [];
     const today = dateStr || todayStr();
 
-    // 1) start_date가 미래 또는 end_date가 과거인 enrollment 제외
-    //    - 정규는 end_date 없으면 유지
-    //    - start_date 없는 옛 데이터는 유지 (호환성)
-    const current = enrollments.filter(e => {
-        if (isValidDateStr(e.start_date) && e.start_date > today) return false; // 아직 시작 안 함
-        if (isValidDateStr(e.end_date) && e.end_date < today) return false;     // 이미 종료
-        return true;
-    });
+    const current = activeEnrollmentsAt(enrollments, today);
 
     // 2) 내신/자유학기 기간 파생 (공유 모듈 @impact7/shared/enrollment-derivation).
     //    내신(기간 활성) > 자유학기(기간 활성) > 정규 그대로. 활성 시 정규를 숨긴다.
@@ -157,9 +151,7 @@ export function getActiveEnrollments(s, dateStr) {
 // (미시작·종료 제외)를 적용한 뒤 넘겨, '내신 라벨'과 '파생 등원일정'이 항상 일치한다.
 export function isNaesinActiveToday(s, dateStr) {
     const today = dateStr || todayStr();
-    const current = (s.enrollments || []).filter(e =>
-        !(isValidDateStr(e.start_date) && e.start_date > today) &&
-        !(isValidDateStr(e.end_date) && e.end_date < today));
+    const current = activeEnrollmentsAt(s.enrollments || [], today);
     return isNaesinActiveAt(current, {
         classSettings: state.classSettings,
         dateStr: today,

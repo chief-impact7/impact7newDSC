@@ -4,6 +4,8 @@
 
 import { msIcon } from './ms-icon.js';
 import { branchFromClassCode } from '@impact7/shared/branch';
+import { accountStateAt, openAccounts } from '@impact7/shared/enrollment-status';
+import { leaveRequestSortKey } from '@impact7/shared/leave-cycles';
 import { collection, doc, serverTimestamp, deleteField, writeBatch, getDocFromServer } from 'firebase/firestore';
 import { db } from './firebase-config.js';
 import { parseDateKST, todayStr, finalApprovalDate } from './src/shared/firestore-helpers.js';
@@ -12,6 +14,12 @@ import { state, LEAVE_STATUSES } from './state.js';
 import { esc, escAttr, showSaveIndicator, _fmtTs } from './ui-utils.js';
 import { branchFromStudent, allClassCodes, activeClassCodes, enrollmentCode, findStudent } from './student-helpers.js';
 import { schoolSearchTerms } from './school-normalizer.js';
+import {
+    accountLabel,
+    accountTargetExists,
+    buildSelectedAccountTarget,
+    sameAccountTarget,
+} from './class-setup-enrollment.js';
 
 // ─── deps injection ─────────────────────────────────────────────────────────
 let renderSubFilters, renderListPanel, renderStudentDetail, getTeacherName, _isOlderThan, _toDate, loadWithdrawnStudents, renderFilterChips;
@@ -37,6 +45,8 @@ function _daysSinceRequested(r) {
 
 // ─── 휴퇴원 유형 헬퍼 ──────────────────────────────────────────────────────
 const _isWithdrawalType = (t) => t === '퇴원요청' || t === '휴원→퇴원';
+const _isAccountEndType = (t) => t === '종강요청';
+const _usesWithdrawalDate = (t) => _isWithdrawalType(t) || _isAccountEndType(t);
 const _isLeaveSubType = (t) => t === '휴원요청' || t === '퇴원→휴원';
 const _isLeaveExtension = (t) => t === '휴원연장';
 const _isReturnType = (t) => t === '복귀요청' || t === '재등원요청';
@@ -48,6 +58,7 @@ function _leaveRequestTypeBadge(r) {
         '휴원요청': { label: '휴원', color: '#2563eb' },
         '휴원연장': { label: '연장', color: '#0891b2' },
         '퇴원요청': { label: '퇴원', color: '#dc2626' },
+        '종강요청': { label: '종강', color: '#9333ea' },
         '휴원→퇴원': { label: '휴→퇴', color: '#dc2626' },
         '퇴원→휴원': { label: '퇴→휴', color: '#7c3aed' },
         '복귀요청': { label: '복귀', color: '#16a34a' },
@@ -59,6 +70,11 @@ function _leaveRequestTypeBadge(r) {
         badge += `<span style="font-size:11px;color:var(--text-sec);margin-left:2px;">${esc(r.leave_sub_type)}</span>`;
     }
     return badge;
+}
+
+function _accountTargetBadge(r) {
+    if (!r?.account_target?.account_id) return '';
+    return `<span style="display:inline-block;padding:1px 6px;border:1px solid #7c3aed;border-radius:4px;font-size:11px;font-weight:600;color:#6d28d9;background:#f5f3ff;">계정 · ${esc(r.account_target.label || r.account_target.account_type || r.account_target.account_id)}</span>`;
 }
 
 function _leaveTypeBadgeOrFallback(lr, statusText) {
@@ -158,7 +174,7 @@ export function renderLeaveRequestList() {
                 extraAttr: ` data-leave-id="${escAttr(r.docId)}"`,
                 onclickExpr: `selectLeaveRequest('${escAttr(r.docId)}')`,
                 nameHtml: esc(r.student_name),
-                badges: [_leaveRequestTypeBadge(r), _leaveRequestStatusBadge(r)],
+                badges: [_leaveRequestTypeBadge(r), _accountTargetBadge(r), _leaveRequestStatusBadge(r)].filter(Boolean),
                 metaHtml: `${esc(classCodes)}${_by ? ' · ' + esc(_by) : ''} · ${esc(tsStr)}`
             });
         }
@@ -377,10 +393,11 @@ export function renderReturnConsultCard(studentId) {
 
 function _renderLRRow(r, idx, studentId) {
     const typeBadge = _leaveRequestTypeBadge(r);
+    const accountBadge = _accountTargetBadge(r);
 
     let dateStr = '';
     if (r.return_date) dateStr = `복귀일: ${r.return_date}`;
-    else if (r.withdrawal_date) dateStr = `퇴원일: ${r.withdrawal_date}`;
+    else if (r.withdrawal_date) dateStr = `${_isAccountEndType(r.request_type) ? '종강일' : '퇴원일'}: ${r.withdrawal_date}`;
     else if (_isLeaveExtension(r.request_type)) dateStr = `연장 종료일: ${r.leave_end_date || '—'}`;
     else if (r.leave_start_date) dateStr = `${r.leave_start_date} ~ ${r.leave_end_date || ''}`;
 
@@ -432,7 +449,7 @@ function _renderLRRow(r, idx, studentId) {
     // 복귀상담 메모 (최종 승인 완료 건) — 단, 복귀/재등원 요청은 이미 복귀가 끝난 건이라
     // 복귀유도 상담이 무의미하므로 입력칸을 띄우지 않는다.
     let returnConsultHtml = '';
-    if (r.status === 'approved' && !_isReturnType(r.request_type)) {
+    if (r.status === 'approved' && !_isReturnType(r.request_type) && !r.account_target) {
         const stu = state.allStudents.find(x => x.docId === studentId);
         const consultDone = stu?.return_consult_done;
         const consultChecked = consultDone ? 'check_circle' : 'phone_in_talk';
@@ -449,10 +466,18 @@ function _renderLRRow(r, idx, studentId) {
             </div>`;
     }
 
+    const accountReturnHtml = r.status === 'approved'
+        && r.account_target?.account_id
+        && (_isLeaveSubType(r.request_type) || _isLeaveExtension(r.request_type))
+        ? `<button class="lr-btn lr-btn-tonal" style="margin-top:8px;font-size:11px;padding:3px 8px;"
+            onclick="openReturnFromLeaveModal('${escAttr(studentId)}','${escAttr(r.docId)}')">
+            ${msIcon('undo', '', 'style="font-size:14px;"')}계정 복귀 요청</button>`
+        : '';
+
     return `
         <div class="pending-task-row" data-lr-idx="${idx}" style="background:#f0f5ff;">
             <div class="pending-task-summary" onclick="this.parentElement.classList.toggle('expanded')">
-                <span>${typeBadge} ${_leaveRequestStatusBadge(r)} <span style="font-size:12px;color:var(--text-sec);margin-left:4px;">${esc(dateStr)}</span></span>
+                <span>${typeBadge} ${accountBadge} ${_leaveRequestStatusBadge(r)} <span style="font-size:12px;color:var(--text-sec);margin-left:4px;">${esc(dateStr)}</span></span>
                 ${msIcon('expand_more', 'pending-task-arrow', 'style="font-size:16px;color:var(--text-sec);"')}
             </div>
             <div class="pending-task-expand">
@@ -461,6 +486,7 @@ function _renderLRRow(r, idx, studentId) {
                 ${metaHtml}
                 ${actionsHtml}
                 ${returnConsultHtml}
+                ${accountReturnHtml}
             </div>
         </div>`;
 }
@@ -498,8 +524,12 @@ export function renderLeaveRequestCard(studentId) {
 
     // 복귀요청은 "휴원 → 재원" 이므로 휴원 라이프사이클(휴원요청서 카드)에 소속.
     // 재등원요청(퇴원 → 재원)만 퇴원요청서 카드에 남김.
-    const leaveRecords = records.filter(r => !_isWithdrawalType(r.request_type) && !_isReEnrollType(r.request_type));
-    const withdrawRecords = records.filter(r => _isWithdrawalType(r.request_type) || _isReEnrollType(r.request_type));
+    const leaveRecords = records.filter(r =>
+        !_isWithdrawalType(r.request_type) && !_isAccountEndType(r.request_type) && !_isReEnrollType(r.request_type)
+    );
+    const withdrawRecords = records.filter(r =>
+        _isWithdrawalType(r.request_type) || _isAccountEndType(r.request_type) || _isReEnrollType(r.request_type)
+    );
     const approvedWithdrawalRecords = withdrawRecords.filter(r => _isWithdrawalType(r.request_type) && r.status === 'approved');
     const futureWithdrawal = approvedWithdrawalRecords.find(r => r.withdrawal_date && r.withdrawal_date > today);
     const isWithdrawalStarted = approvedWithdrawalRecords.some(r => r.withdrawal_date && r.withdrawal_date <= today)
@@ -540,7 +570,7 @@ export function renderLeaveRequestCard(studentId) {
         cards += `<div class="detail-card">
             <div class="detail-card-title" style="display:flex;align-items:center;gap:6px;">
                 ${msIcon('description', '', 'style="color:#dc2626;font-size:18px;"')}
-                퇴원요청서 <span style="font-size:12px;color:var(--text-sec);">(${withdrawRecords.length}건)</span>
+                퇴원·종강요청서 <span style="font-size:12px;color:var(--text-sec);">(${withdrawRecords.length}건)</span>
                 ${withdrawBtn}
             </div>
             ${withdrawRecords.map((r, i) => _renderLRRow(r, i, studentId)).join('')}
@@ -554,6 +584,87 @@ export function renderLeaveRequestCard(studentId) {
 
 let _leaveRequestStudentId = null;
 let _leaveRequestStudentData = null;
+let _leaveRequestInheritedTarget = null;
+
+function _latestAccountTarget(studentId, types) {
+    return state.leaveRequests
+        .filter(r =>
+            r.student_id === studentId
+            && r.status === 'approved'
+            && types.includes(r.request_type)
+            && r.account_target?.account_id
+        )
+        .sort((a, b) => leaveRequestSortKey(b) - leaveRequestSortKey(a))[0]?.account_target || null;
+}
+
+function _renderAccountTargetPicker(student, type) {
+    const wrap = document.getElementById('lr-account-target-wrap');
+    const select = document.getElementById('lr-account-target');
+    const fixed = document.getElementById('lr-account-target-fixed');
+    const accounts = openAccounts(student?.enrollments, state.selectedDate || todayStr());
+
+    // 최신순 정렬 후 계정당 첫 등장(=최신 스냅샷)만 채택 — Map(entries)로 만들면
+    // 동일 키는 마지막 값이 남아 오히려 가장 오래된 스냅샷이 살아남는 버그가 된다.
+    const extensionTargets = [];
+    if (type === '휴원연장') {
+        const seenAccountIds = new Set();
+        state.leaveRequests
+            .filter(r =>
+                r.student_id === student.docId
+                && r.status === 'approved'
+                && ['휴원요청', '휴원연장', '퇴원→휴원'].includes(r.request_type)
+                && r.account_target?.account_id
+            )
+            .sort((a, b) => leaveRequestSortKey(b) - leaveRequestSortKey(a))
+            .forEach(r => {
+                const accountId = r.account_target.account_id;
+                if (seenAccountIds.has(accountId)) return;
+                seenAccountIds.add(accountId);
+                extensionTargets.push(r.account_target);
+            });
+    }
+    _leaveRequestInheritedTarget = extensionTargets.length === 1 ? extensionTargets[0] : null;
+
+    if (_leaveRequestInheritedTarget) {
+        select.innerHTML = `<option value="${escAttr(_leaveRequestInheritedTarget.account_id)}">${esc(_leaveRequestInheritedTarget.label || _leaveRequestInheritedTarget.account_type)}</option>`;
+        select.value = _leaveRequestInheritedTarget.account_id;
+        select.style.display = 'none';
+        fixed.textContent = _leaveRequestInheritedTarget.label || _leaveRequestInheritedTarget.account_type || '';
+        fixed.style.display = '';
+        wrap.style.display = '';
+        return;
+    }
+    if (extensionTargets.length > 1) {
+        select.innerHTML = extensionTargets.map(target =>
+            `<option value="${escAttr(target.account_id)}">${esc(target.label || target.account_type)}</option>`
+        ).join('');
+        select.style.display = '';
+        fixed.style.display = 'none';
+        wrap.style.display = '';
+        return;
+    }
+
+    const mustSelectAccount = _isAccountEndType(type);
+    if (accounts.length < 2) {
+        select.innerHTML = accounts[0]
+            ? `<option value="${escAttr(accounts[0].key)}">${esc(accountLabel(accounts[0]))}</option>`
+            : '';
+        select.value = accounts[0]?.key || '';
+        wrap.style.display = 'none';
+        fixed.style.display = 'none';
+        return;
+    }
+
+    select.innerHTML = [
+        ...(mustSelectAccount ? [] : ['<option value="">학생 전체</option>']),
+        ...accounts.map(account =>
+            `<option value="${escAttr(account.key)}">${esc(accountLabel(account))}</option>`
+        ),
+    ].join('');
+    select.style.display = '';
+    fixed.style.display = 'none';
+    wrap.style.display = '';
+}
 
 export function openLeaveRequestModal() {
     document.getElementById('lr-request-type').value = '휴원요청';
@@ -575,16 +686,18 @@ export function onLeaveRequestTypeChange() {
     // 검색 초기화
     _leaveRequestStudentId = null;
     _leaveRequestStudentData = null;
+    _leaveRequestInheritedTarget = null;
     document.getElementById('lr-student-search').value = '';
     document.getElementById('lr-student-results').innerHTML = '';
     document.getElementById('lr-student-info').style.display = 'none';
+    document.getElementById('lr-account-target-wrap').style.display = 'none';
 }
 
 function _renderLeaveRequestDateFields(type) {
     const container = document.getElementById('lr-date-fields');
-    if (_isWithdrawalType(type)) {
+    if (_usesWithdrawalDate(type)) {
         container.innerHTML = `
-            <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">퇴원시작일</label>
+            <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">${_isAccountEndType(type) ? '종강 적용일' : '퇴원시작일'}</label>
             <input type="date" id="lr-withdrawal-date" class="field-input" style="width:100%;">`;
     } else if (_isLeaveExtension(type)) {
         container.innerHTML = `
@@ -617,7 +730,11 @@ export function searchLeaveRequestStudent(term) {
         pool = state.withdrawnStudents;
     } else if (type === '휴원→퇴원' || type === '휴원연장') {
         // 휴원연장은 이미 휴원 중인 학생 대상
-        pool = state.allStudents.filter(s => LEAVE_STATUSES.includes(s.status));
+        pool = state.allStudents.filter(s =>
+            LEAVE_STATUSES.includes(s.status)
+            || openAccounts(s.enrollments, state.selectedDate || todayStr())
+                .some(account => accountStateAt(account, state.selectedDate || todayStr()) === '휴원')
+        );
     } else {
         // 휴원요청/퇴원요청 — 재원·등원예정 학생 대상
         pool = state.allStudents.filter(s => s.status === '재원' || s.status === '등원예정');
@@ -660,6 +777,7 @@ export function selectLeaveRequestStudentById(id) {
     document.getElementById('lr-student-status').textContent = s.status || '';
     document.getElementById('lr-student-phone').textContent = s.student_phone || '—';
     document.getElementById('lr-parent-phone').textContent = s.parent_phone_1 || '—';
+    _renderAccountTargetPicker(s, type);
 }
 
 // 제출 in-flight 가드 — 더블클릭 시 중복 요청서 생성(→ 중복 finalize·복귀는 중복 enrollment) 방지(M-7).
@@ -674,8 +792,19 @@ export async function submitLeaveRequest() {
 
     const type = document.getElementById('lr-request-type').value;
     const s = _leaveRequestStudentData;
-    const isWithdrawal = _isWithdrawalType(type);
+    const usesWithdrawalDate = _usesWithdrawalDate(type);
     const showSub = _isLeaveSubType(type);
+    const selectedAccountId = document.getElementById('lr-account-target')?.value || '';
+    const accountTarget = _leaveRequestInheritedTarget || buildSelectedAccountTarget(
+        s,
+        state.selectedDate || todayStr(),
+        selectedAccountId,
+        { force: _isAccountEndType(type) },
+    );
+    if (_isAccountEndType(type) && !accountTarget) {
+        alert('종강할 수강계정을 선택해주세요.');
+        return;
+    }
 
     const data = {
         student_id: _leaveRequestStudentId,
@@ -692,14 +821,15 @@ export async function submitLeaveRequest() {
         requested_at: serverTimestamp(),
         created_at: serverTimestamp()
     };
+    if (accountTarget) data.account_target = structuredClone(accountTarget);
 
     if (showSub) {
         data.leave_sub_type = document.getElementById('lr-sub-type').value;
     }
 
-    if (isWithdrawal) {
+    if (usesWithdrawalDate) {
         const wd = document.getElementById('lr-withdrawal-date')?.value;
-        if (!wd) { alert('퇴원시작일을 입력해주세요.'); return; }
+        if (!wd) { alert(`${_isAccountEndType(type) ? '종강 적용일' : '퇴원시작일'}을 입력해주세요.`); return; }
         data.withdrawal_date = wd;
     } else if (_isLeaveExtension(type)) {
         const le = document.getElementById('lr-leave-end')?.value;
@@ -837,8 +967,30 @@ export async function cancelScheduledWithdrawal(studentId) {
 
 // 방어 가드: 최종 승인 시 RETURN 유형(복귀/재등원)은 반드시 target_class_code 필요
 // 정상 UI 경로에서는 세팅되지만, 데이터 마이그레이션/수동 생성 등 비정상 경로 방어용.
-function _checkLegacyReturnTarget(r, willFinalize) {
+async function _validateFinalApprovalTarget(docId, r, studentId, willFinalize) {
     if (!willFinalize) return true;
+    if (r.account_target?.account_id) {
+        try {
+            const [requestSnapshot, studentSnapshot] = await Promise.all([
+                getDocFromServer(doc(db, 'leave_requests', docId)),
+                getDocFromServer(doc(db, 'students', studentId)),
+            ]);
+            const storedTarget = requestSnapshot.data()?.account_target;
+            const student = studentSnapshot.data();
+            if (!sameAccountTarget(r.account_target, storedTarget)) {
+                alert('수강계정 대상 정보가 요청 생성 후 변경되었습니다.\n새로고침 후 다시 확인해주세요.');
+                return false;
+            }
+            if (!student || !accountTargetExists(student, storedTarget)) {
+                alert('대상 수강계정이 학생에게 존재하지 않습니다.\n요청을 취소하고 새로 작성해주세요.');
+                return false;
+            }
+        } catch (err) {
+            alert('승인 전 수강계정 검증 실패: ' + err.message);
+            return false;
+        }
+        return true;
+    }
     const isReturn = _isReturnType(r.request_type);
     if (isReturn && !r.target_class_code) {
         alert('이 요청에 "복귀할 반" 정보가 없습니다.\n요청을 취소하고 새로 작성해주세요.');
@@ -870,8 +1022,7 @@ async function _approveLeave(docId, studentId, { byField, atField, otherByField,
     }
     const typeLabel = `${r.request_type}${r.leave_sub_type ? ' (' + r.leave_sub_type + ')' : ''}`;
     const isFinal = !!r[otherByField];
-    // 레거시 가드 (최종 승인 시점에만 체크)
-    if (!_checkLegacyReturnTarget(r, isFinal)) return;
+    if (!await _validateFinalApprovalTarget(docId, r, studentId, isFinal)) return;
     const confirmMsg = isFinal
         ? `${r.student_name} — ${typeLabel}\n\n주의: ${otherLabel} 승인이 이미 완료되어, ${label} 승인 시 최종 승인 처리됩니다.\n학생 상태가 변경됩니다. 진행하시겠습니까?`
         : `${r.student_name} — ${typeLabel}\n${label} 승인하시겠습니까?`;
@@ -922,13 +1073,21 @@ export const approveLeaveRequest = (docId, studentId) =>
 
 let _returnModalStudentId = null;
 let _returnModalType = null; // '재등원요청' | '복귀요청'
+let _returnModalAccountTarget = null;
 
-function _openReturnModal(studentId, type) {
+function _openReturnModal(studentId, type, sourceRequestId = '') {
     const student = findStudent(studentId);
     if (!student) { alert('학생 정보를 찾을 수 없습니다.'); return; }
 
     _returnModalStudentId = studentId;
     _returnModalType = type;
+    const sourceRequest = sourceRequestId
+        ? state.leaveRequests.find(r => r.docId === sourceRequestId)
+        : null;
+    _returnModalAccountTarget = type === '복귀요청'
+        ? sourceRequest?.account_target
+            || _latestAccountTarget(studentId, ['휴원요청', '휴원연장', '퇴원→휴원'])
+        : null;
 
     // 모달 제목
     const titleEl = document.querySelector('#return-from-leave-modal .modal-header h3');
@@ -955,11 +1114,20 @@ function _openReturnModal(studentId, type) {
     const today = state.selectedDate || todayStr();
     document.getElementById('rfl-return-date').value = today;
     document.getElementById('rfl-consultation-note').value = '';
+    const accountTargetEl = document.getElementById('rfl-account-target');
+    if (_returnModalAccountTarget?.account_id) {
+        accountTargetEl.textContent = `대상 계정 · ${_returnModalAccountTarget.label || _returnModalAccountTarget.account_type}`;
+        accountTargetEl.style.display = '';
+    } else {
+        accountTargetEl.style.display = 'none';
+    }
 
     // class_settings에 level(초/중/고) 메타가 없어 branch만으로 필터.
     // 학부 이동은 재등원 후 학생 상세에서 수동 처리.
     const branch = branchFromStudent(student);
     const select = document.getElementById('rfl-target-class');
+    const targetClassWrap = document.getElementById('rfl-target-class-wrap');
+    targetClassWrap.style.display = _returnModalAccountTarget?.account_id ? 'none' : '';
     select.innerHTML = '<option value="">-- 반 선택 --</option>';
     const candidates = Object.entries(state.classSettings || {})
         .filter(([code, cs]) => {
@@ -1003,8 +1171,8 @@ export function openReEnrollModal(studentId) {
     _openReturnModal(studentId, '재등원요청');
 }
 
-export function openReturnFromLeaveModal(studentId) {
-    _openReturnModal(studentId, '복귀요청');
+export function openReturnFromLeaveModal(studentId, sourceRequestId = '') {
+    _openReturnModal(studentId, '복귀요청', sourceRequestId);
 }
 
 export async function submitReturnFromLeave() {
@@ -1018,7 +1186,7 @@ export async function submitReturnFromLeave() {
     if (!returnDate) { alert(_isReEnrollType(_returnModalType) ? '재등원일을 입력해주세요.' : '복귀일을 입력해주세요.'); return; }
 
     const targetClassCode = document.getElementById('rfl-target-class').value || '';
-    if (!targetClassCode) {
+    if (!targetClassCode && !_returnModalAccountTarget?.account_id) {
         alert('복귀할 반을 선택해주세요.');
         return;
     }
@@ -1044,6 +1212,10 @@ export async function submitReturnFromLeave() {
             requested_at: serverTimestamp(),
             created_at: serverTimestamp()
         };
+        if (_returnModalAccountTarget?.account_id) {
+            data.account_target = structuredClone(_returnModalAccountTarget);
+            delete data.target_class_code;
+        }
 
         const docRef = await auditAdd(collection(db, 'leave_requests'), data);
         state.leaveRequests.push({ docId: docRef.id, ...data, requested_at: new Date(), created_at: new Date() });
@@ -1052,6 +1224,7 @@ export async function submitReturnFromLeave() {
         const savedStudentId = _returnModalStudentId;
         _returnModalStudentId = null;
         _returnModalType = null;
+        _returnModalAccountTarget = null;
         showSaveIndicator('saved');
         renderSubFilters();
         if (state.currentCategory === 'admin' && state.currentSubFilter.has('leave_request')) {

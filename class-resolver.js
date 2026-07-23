@@ -3,6 +3,8 @@
 // 순수 조회 로직. RULES 7.4: _getAllClassCodes()는 class_settings + enrollment 양쪽에서 정규 반코드 수집.
 
 import { branchFromClassNumber } from '@impact7/shared/branch';
+import { classSettingsAccountType } from '@impact7/shared/class-code';
+import { accountTypeOf } from '@impact7/shared/enrollment-status';
 import { state } from './state.js';
 import { getDayName, todayStr, studentLevel } from './src/shared/firestore-helpers.js';
 import {
@@ -17,26 +19,33 @@ export function getUniqueClassCodes() {
     const dayName = getDayName(state.selectedDate);
     const regularCodes = new Set();
     const naesinCodes = new Set();
+    const teukangCodes = new Set();
+    const otherCodes = new Set();
     state.allStudents.forEach(s => {
         if (isWithdrawnAt(s, state.selectedDate)) return;
         if (!matchesBranchFilter(s)) return;
         getActiveEnrollments(s, state.selectedDate).forEach(e => {
             const days = normalizeDays(e.day);
             if (!days.includes(dayName)) return;
-            if (e.class_type === '내신') {
-                const code = enrollmentCode(e);
-                if (code) naesinCodes.add(code);
-            } else {
-                const code = enrollmentCode(e);
-                if (code) regularCodes.add(code);
-            }
+            const code = enrollmentCode(e);
+            if (!code) return;
+            const accountType = accountTypeOf(e);
+            if (e.class_type === '내신') naesinCodes.add(code);
+            else if (accountType === '정규') regularCodes.add(code);
+            else if (accountType === '특강') teukangCodes.add(code);
+            else if (accountType === '기타') otherCodes.add(code);
         });
     });
     // 타반수업 target_class_code도 포함
     state.tempClassOverrides.forEach(o => {
         if (o.target_class_code) regularCodes.add(o.target_class_code);
     });
-    return { regular: [...regularCodes].sort(), naesin: [...naesinCodes].sort() };
+    return {
+        regular: [...regularCodes].sort(),
+        naesin: [...naesinCodes].sort(),
+        teukang: [...teukangCodes].sort(),
+        other: [...otherCodes].sort(),
+    };
 }
 
 // 반설정 정규 chip 카운트: 요일 무관, getRegularClassStudents 위임.
@@ -48,14 +57,22 @@ export function getClassMgmtCount(code) {
     return members.length + extra;
 }
 
-export function isInTeukangClass(s, classCode, _scheduleDays) {
+function isInAccountClass(s, classCode, accountType, _scheduleDays) {
     const scheduleDays = _scheduleDays ?? new Set(Object.keys(state.classSettings[classCode]?.schedule || {}));
-    return (s.enrollments || []).some(e => {
-        if (e.class_type !== '특강') return false;
+    return getActiveEnrollments(s, state.selectedDate).some(e => {
+        if (accountTypeOf(e) !== accountType) return false;
         const ec = enrollmentCode(e);
         if (ec) return ec === classCode;
         return scheduleDays.size > 0 && e.day?.some(d => scheduleDays.has(d));
     });
+}
+
+export function isInTeukangClass(s, classCode, scheduleDays) {
+    return isInAccountClass(s, classCode, '특강', scheduleDays);
+}
+
+export function isInOtherClass(s, classCode, scheduleDays) {
+    return isInAccountClass(s, classCode, '기타', scheduleDays);
 }
 
 export function getTeukangClassStudents(classCode) {
@@ -63,6 +80,15 @@ export function getTeukangClassStudents(classCode) {
     // 특강 enrollment 자체가 필터 역할. 퇴원 학생도 특강 수강 가능.
     return state.allStudents.filter(s =>
         matchesBranchFilter(s) && isInTeukangClass(s, classCode, scheduleDays)
+    );
+}
+
+export function getOtherClassStudents(classCode) {
+    const scheduleDays = new Set(Object.keys(state.classSettings[classCode]?.schedule || {}));
+    return state.allStudents.filter(s =>
+        !isWithdrawnAt(s, state.selectedDate)
+        && matchesBranchFilter(s)
+        && isInOtherClass(s, classCode, scheduleDays)
     );
 }
 
@@ -97,11 +123,19 @@ export function _getAllClassCodes() {
     const regularCodes = new Set();
     const freeCounts = new Map();
     const naesinCounts = new Map();
+    const otherCodes = new Set();
 
     // 1. class_settings 기반 등록 — 자유학기/내신/정규/특강 분류
     Object.entries(state.classSettings).forEach(([code, cs]) => {
         if (!cs) return;
-        if (cs.class_type === '특강') return; // teukang 그룹에서 별도 처리
+        const accountType = classSettingsAccountType(cs)
+            ?? (cs.class_type === '내신' ? '정규' : null);
+        if (accountType === '특강') return;
+        if (accountType === '기타') {
+            otherCodes.add(code);
+            return;
+        }
+        if (accountType !== '정규') return;
 
         if (cs.naesin_start && cs.naesin_end) {
             const branch = branchFromClassNumber(code);
@@ -120,7 +154,7 @@ export function _getAllClassCodes() {
     state.allStudents.forEach(s => {
         if (isWithdrawnAt(s, state.selectedDate)) return;
         (s.enrollments || []).forEach(e => {
-            if ((e.class_type || '정규') !== '정규') return;
+            if (accountTypeOf(e) !== '정규' || (e.class_type && e.class_type !== '정규')) return;
             const code = enrollmentCode(e);
             if (code && !state.classSettings[code]) regularCodes.add(code);
         });
@@ -152,13 +186,14 @@ export function _getAllClassCodes() {
         .map(([key, { displayCode, count }]) => ({ code: key, displayCode, count }))
         .sort((a, b) => a.displayCode.localeCompare(b.displayCode, 'ko'));
     const teukang = Object.entries(state.classSettings)
-        .filter(([, cs]) => cs.class_type === '특강')
+        .filter(([, cs]) => classSettingsAccountType(cs) === '특강')
         .map(([code]) => code)
         .sort();
+    const other = [...otherCodes].sort((a, b) => a.localeCompare(b, 'ko'));
     const free = [...freeCounts.entries()]
         .map(([code, count]) => ({ code, count }))
         .sort((a, b) => a.code.localeCompare(b.code));
-    return { regular: [...regularCodes].sort(), naesin: naesinWithCounts, teukang, free };
+    return { regular: [...regularCodes].sort(), naesin: naesinWithCounts, teukang, other, free };
 }
 
 // 내신 반코드(Firestore 키)로 학생 목록 조회
@@ -192,8 +227,9 @@ export function getNaesinStudentsByDerivedCode(classKey) {
 //   자유학기: cs.free_schedule (객체) + free_start/end 기간
 //   내신: cs.schedule (객체) + naesin_start/end 기간
 //   특강: cs.schedule (객체) + special_start/end 기간 (옵션)
+//   기타: cs.schedule (객체), 계정 start/end 기간은 activeEnrollmentsAt에서 판정
 export function _getClassesForBranchLevel(branch, level) {
-    const { regular, naesin, teukang, free } = _getAllClassCodes();
+    const { regular, naesin, teukang, other, free } = _getAllClassCodes();
     const dayName = getDayName(state.selectedDate);
     const today = state.selectedDate;
     const inPeriod = (start, end) =>
@@ -222,10 +258,11 @@ export function _getClassesForBranchLevel(branch, level) {
         const cs = state.classSettings[code];
         return !!cs?.schedule?.[dayName] && inPeriod(cs.special_start, cs.special_end);
     };
+    const hasOtherToday = (code) => !!state.classSettings[code]?.schedule?.[dayName];
 
     const branchStudents = state.allStudents.filter(s =>
         !isWithdrawnAt(s, today) &&
-        branchFromStudent(s) === branch
+        branchFromStudent(s, today) === branch
     );
     const students = branchStudents.filter(s => studentLevel(s) === level);
     const countBy = (pred) => students.filter(s => (s.enrollments || []).some(pred)).length;
@@ -265,10 +302,23 @@ export function _getClassesForBranchLevel(branch, level) {
     }
     for (const code of teukang) {
         if (!hasTeukangToday(code)) continue;
-        const matchesClass = e => e.class_type === '특강' && enrollmentCode(e) === code;
-        if (dominantLevel(s => (s.enrollments || []).some(matchesClass)) !== level) continue;
-        const count = countBy(matchesClass);
+        const matchesClass = s => getActiveEnrollments(s, today).some(e =>
+            accountTypeOf(e) === '특강' && enrollmentCode(e) === code
+        );
+        if (dominantLevel(matchesClass) !== level) continue;
+        const count = students.filter(matchesClass).length;
         if (count > 0) result.push({ mode: 'teukang', code, display: code, count });
+    }
+    for (const code of other) {
+        if (!hasOtherToday(code)) continue;
+        const csBranch = state.classSettings[code]?.branch;
+        if (csBranch && csBranch !== branch) continue;
+        const matchesClass = s => getActiveEnrollments(s, today).some(e =>
+            accountTypeOf(e) === '기타' && enrollmentCode(e) === code
+        );
+        if (dominantLevel(matchesClass) !== level) continue;
+        const count = students.filter(matchesClass).length;
+        if (count > 0) result.push({ mode: 'other', code, display: code, count });
     }
     return result;
 }

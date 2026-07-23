@@ -14,7 +14,7 @@ import { saveImmediately, saveDailyRecord, reloadForDate, loadStudentTenures, lo
 
 // 토글 UI의 "기본" 라벨 집합 — 이 라벨들을 클릭하면 attendance.status는 '미확인'으로 리셋.
 // 오늘 수업 유형/비정규 여부에 따라 첫 버튼 라벨이 동적으로 바뀌지만, 의미는 모두 동일("아직 미확인").
-export const DEFAULT_ATTENDANCE_LABELS = new Set(['정규', '특강', '내신', '자유', '비정규']);
+export const DEFAULT_ATTENDANCE_LABELS = new Set(['정규', '특강', '기타반', '내신', '자유', '비정규']);
 
 // ─── 휴원 만료 경고 (status 자동 전환 금지, 경고만) ──────────────────────────
 // 휴원(가휴원/실휴원)인데 pause_end_date가 지난 학생을 출결 마킹/선택할 때 confirm을 띄워

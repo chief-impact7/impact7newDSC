@@ -3,7 +3,7 @@
 
 import { msIcon } from './ms-icon.js';
 import {
-    state, LEAVE_STATUSES, SV_L3_KEYS, DEFAULT_TONE, REGULAR_CLASS_TYPES
+    state, LEAVE_STATUSES, SV_L3_KEYS, DEFAULT_TONE
 } from './state.js';
 import { getDayName, todayStr, PAST_STUDENT_STATUSES, finalApprovalDate } from './src/shared/firestore-helpers.js';
 import {
@@ -14,7 +14,7 @@ import {
 } from './student-helpers.js';
 import { findSeparateTeukangVisit } from './student-core.js';
 import { schoolSearchTerms } from './school-normalizer.js';
-import { ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
+import { accountTypeOf, ENROLLABLE_STATUSES } from '@impact7/shared/enrollment-status';
 import { esc, escAttr, formatTime12h, oxChip, oxChipBtn } from './ui-utils.js';
 import {
     getTeacherName, addOverrideInStudents, getStudentOverrides, getStudentDomains, getStudentTestItems,
@@ -34,7 +34,7 @@ import { renderLeaveRequestList, renderReturnUpcomingList } from './leave-reques
 import { renderNextHwClassList } from './hw-management.js';
 import { exitBulkMode, updateBulkBar } from './bulk-mode.js';
 import {
-    getRegularClassStudents, getTeukangClassStudents, getFreeSemesterClassStudents,
+    getRegularClassStudents, getTeukangClassStudents, getOtherClassStudents, getFreeSemesterClassStudents,
     getNaesinStudentsByDerivedCode, _isNaesinClassCode
 } from './class-resolver.js';
 
@@ -52,7 +52,7 @@ export function hasRegularEnrollmentToday(student) {
     const dayName = _regularDayCache.dayName;
     return getActiveEnrollments(student, state.selectedDate).some(e =>
         e.day.includes(dayName) &&
-        REGULAR_CLASS_TYPES.includes(e.class_type || '정규')
+        accountTypeOf(e) === '정규'
     );
 }
 
@@ -120,8 +120,9 @@ export function isVisitStudent(docId) {
 // 전부 OR 논리라 절 평가 순서는 결과에 영향 없다.
 function studentMatchesQuery(s, q, { enroll = false, phone = false, teacher = false } = {}) {
     const extraTerms = [...schoolSearchTerms(s)];
-    if (enroll) extraTerms.push(...(s.enrollments || []).map(enrollmentCode));
-    if (teacher) extraTerms.push(...(s.enrollments || []).map(e => {
+    const activeEnrollments = getActiveEnrollments(s, state.selectedDate);
+    if (enroll) extraTerms.push(...activeEnrollments.map(enrollmentCode));
+    if (teacher) extraTerms.push(...activeEnrollments.map(e => {
         const t = state.classSettings[enrollmentCode(e)]?.teacher;
         return t ? getTeacherName(t) : '';
     }));
@@ -149,9 +150,15 @@ export function getFilteredStudents() {
         return students;
     }
 
-    // 반 설정: 특강 모드 — 날짜 무관, 특강 반 전체 학생 + 오늘 그 반으로 들어온 타반수업 학생
+    // 반 설정: 특강 모드 — 기준일 활성 특강 학생 + 오늘 그 반으로 들어온 타반수업 학생
     if (state._classMgmtMode === 'teukang' && state.selectedClassCode) {
         const students = getTeukangClassStudents(state.selectedClassCode);
+        addOverrideInStudents(students, state.selectedClassCode);
+        return students;
+    }
+
+    if (state._classMgmtMode === 'other' && state.selectedClassCode) {
+        const students = getOtherClassStudents(state.selectedClassCode);
         addOverrideInStudents(students, state.selectedClassCode);
         return students;
     }
@@ -347,7 +354,7 @@ export function getFilteredStudents() {
         const existingIds = new Set(students.map(s => s.docId));
         const visitStudents = state.allStudents.filter(s => {
             if (existingIds.has(s.docId)) return false;
-            if (state.selectedClassCode && !s.enrollments.some(e => enrollmentCode(e) === state.selectedClassCode)) return false;
+            if (state.selectedClassCode && !getActiveEnrollments(s, state.selectedDate).some(e => enrollmentCode(e) === state.selectedClassCode)) return false;
             if (!matchesBranchFilter(s)) return false;
             return isVisitStudent(s.docId);
         });
@@ -516,7 +523,7 @@ export function renderListPanel() {
             ? studentOverrides.map(o => `<span class="override-badge">→${esc(o.target_class_code)}</span>`).join('')
             : '';
         const overrideInEntries = state.tempClassOverrides.filter(o => o.student_id === s.docId);
-        const overrideInBadge = overrideInEntries.length > 0 && !getActiveEnrollments(s, state.selectedDate).some(e => e.day.includes(dayN))
+        const overrideInBadge = overrideInEntries.length > 0 && !_activeEnrolls.some(e => e.day.includes(dayN))
             ? overrideInEntries.map(o => `<span class="override-in-badge">타반(${esc(o.original_class_code)})</span>`).join('')
             : '';
 
@@ -526,7 +533,7 @@ export function renderListPanel() {
         const isLeave = LEAVE_STATUSES.includes(s.status);
         const usesAttendancePairs = state.currentCategory === 'attendance' && canBulkSelect && !isLeave;
         const sepVisit = isLeave ? null : findSeparateTeukangVisit(_todayEnrolls, (e) => getStudentStartTime(e, dayN));
-        const mainEnrolls = _todayEnrolls.filter(e => REGULAR_CLASS_TYPES.includes(e.class_type || '정규'));
+        const mainEnrolls = _todayEnrolls.filter(e => accountTypeOf(e) === '정규');
         // dayN 전달 — 합성 내신/자유학기 enrollment의 schedule 객체에서 요일별 시간 조회 가능해야 함.
         // 누락 시 fallback이 hw_fail/test_fail 보충 시간(17:30 등)을 가장 이른 시간으로 끌어와 정규 등원시간을 덮음.
         let scheduledTime = mainEnrolls.map(e => getStudentStartTime(e, dayN)).filter(Boolean).sort()[0] || '';
@@ -535,27 +542,27 @@ export function renderListPanel() {
             const eff = getEffectiveAttendanceTime(s, state.selectedDate, dayN);
             if (eff !== '99:99') scheduledTime = eff;
         }
-        // classSettings 검증 인라인 — end_date 없는 구 정규/고아 enrollment 오분류 방지, _todayEnrolls 재사용
-        const isTeukangOnly = !isLeave
-            && _todayEnrolls.some(e => { const ec = enrollmentCode(e); return e.class_type === '특강' && ec && state.classSettings[ec]?.class_type === '특강'; })
-            && !_todayEnrolls.some(e => { if (!REGULAR_CLASS_TYPES.includes(e.class_type || '정규')) return false; const ec = enrollmentCode(e); return !ec || state.classSettings[ec] !== undefined; });
+        const accountTypes = new Set(_todayEnrolls.map(accountTypeOf));
+        const isTeukangOnly = !isLeave && accountTypes.has('특강') && !accountTypes.has('정규') && !accountTypes.has('기타');
+        const isOtherOnly = !isLeave && accountTypes.has('기타') && !accountTypes.has('정규') && !accountTypes.has('특강');
 
         if (!canBulkSelect || isLeave) {
             toggleHtml = '';
         } else if (state.currentCategory === 'attendance') {
             const rec = state.dailyRecords[s.docId];
             const attStatus = rec?.attendance?.status || '미확인';
-            // 학생 레벨 현재 모드 판정 — 우선순위 내신 > 자유 > 특강 > 비정규 > 정규.
+            // 학생 레벨 현재 모드 판정 — 우선순위 내신 > 자유 > 특강 > 기타반 > 비정규 > 정규.
             // enrollment.class_type 단독 판정은 옛 자유학기 enrollment가 내신 기간에 살아남는
             // 경우(getActiveEnrollments step 2 결과) 오분류를 내므로 class_settings 윈도우를 확인.
             let defaultLabel;
             if (isNaesinActiveToday(s, state.selectedDate)) defaultLabel = '내신';
             else if (isFreeSemesterActiveToday(s, state.selectedDate)) defaultLabel = '자유';
             else if (isTeukangOnly) defaultLabel = '특강';
+            else if (isOtherOnly) defaultLabel = '기타반';
             else if (_todayEnrolls.length === 0 && isVisitStudent(s.docId)) defaultLabel = '비정규';
             else defaultLabel = '정규';
             const statuses = [defaultLabel, '출석', '지각', '결석', '조퇴', '기타'];
-            // 저장된 기본 라벨(정규/특강/내신/자유/비정규)과 '미확인'은 현재 컨텍스트의 defaultLabel로 표시
+            // 저장된 기본 라벨(정규/특강/기타반/내신/자유/비정규)과 '미확인'은 현재 컨텍스트의 defaultLabel로 표시
             const currentDisplay = (attStatus === '미확인' || DEFAULT_ATTENDANCE_LABELS.has(attStatus)) ? defaultLabel : attStatus;
             mainAttendanceToggle = `<div class="toggle-group">` +
                 statuses.map(st => {

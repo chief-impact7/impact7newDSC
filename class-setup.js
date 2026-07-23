@@ -23,10 +23,17 @@ import { batchSet, batchUpdate, normalizeImpact7Email } from './audit.js';
 import { recordTeacherChange } from './teacher-history.js';
 import { staffLabel } from '@impact7/shared/staff-label';
 import {
+    buildClassSettingsData,
     buildClassTimeFields,
+    buildEnrollmentAccountFields,
     buildReactivationCleanupFields,
     buildReactivationHistoryBefore,
+    CLASS_TYPES,
+    hasClassSettingsTypeConflict,
+    hasActiveAccountClass,
     hasActiveRegularClass,
+    resolveClassBranch,
+    resolveRegularBaseAccountId,
     resolveRegularDefaultTime,
 } from './class-setup-enrollment.js';
 import { esc } from './ui-utils.js';
@@ -45,6 +52,7 @@ const CLASS_TYPE_LABELS = {
     '내신': '내신반',
     '자유학기': '자유학기반',
     '특강': '특강',
+    '기타': '기타반',
 };
 
 function setStepTitle(id, suffix) {
@@ -175,6 +183,10 @@ function collectFormData() {
 
 // wizardData만 검사하는 순수 검증기 (부수효과 없음).
 function validateForm() {
+    if (!CLASS_TYPES.includes(wizardData.classType)) {
+        showToast(`알 수 없는 반 유형(${wizardData.classType || '없음'})입니다.`, 'error');
+        return false;
+    }
     if (!wizardData.classCode) {
         showToast('반 이름 정보를 입력하세요.', 'error');
         return false;
@@ -192,6 +204,10 @@ function validateForm() {
         showToast('유료/무료를 선택하세요.', 'error');
         return false;
     }
+    if (wizardData.classType === '기타' && !wizardData.otherStart) {
+        showToast('기타반 시작일을 입력하세요.', 'error');
+        return false;
+    }
     if (wizardData.students.length === 0) {
         showToast('학생을 1명 이상 추가하세요.', 'error');
         return false;
@@ -200,12 +216,20 @@ function validateForm() {
         showToast('요일을 1개 이상 선택하세요.', 'error');
         return false;
     }
+    if (wizardData.classType === '기타' && !resolveClassBranch(wizardData)) {
+        showToast('기타반은 같은 지점 학생끼리 생성해야 합니다.', 'error');
+        return false;
+    }
     return true;
 }
 
 // ─── Step 1: 반 유형 ────────────────────────────────────────────────────────
 // 카드 클릭 시 type 저장 → 자동으로 Step 2 진행. 서로 다른 type으로 전환 시 stale 데이터 reset.
 window.chooseClassTypeAndAdvance = function (type) {
+    if (!CLASS_TYPES.includes(type)) {
+        showToast(`알 수 없는 반 유형(${type || '없음'})입니다.`, 'error');
+        return;
+    }
     if (wizardData.classType && wizardData.classType !== type) {
         resetWizardForTypeChange();
     }
@@ -225,9 +249,10 @@ function resetWizardForTypeChange() {
         levelSymbol: '', classNumber: '',
         school: '', grade: '',
         naesinBranch: '', naesinLevel: '', naesinGroup: '',
-        specialName: '',
+        specialName: '', otherName: '',
         naesinStart: '', naesinEnd: '',
         specialStart: '', specialEnd: '',
+        otherStart: '', otherEnd: '',
         freeStart: '', freeEnd: '',
         teacher: '',
         students: [], days: [], defaultTime: '', defaultTimeEdited: false, schedule: {},
@@ -240,6 +265,7 @@ function resetWizardForTypeChange() {
         'input-school', 'input-grade', 'input-naesin-group',
         'input-naesin-start', 'input-naesin-end',
         'input-special-name', 'input-special-start', 'input-special-end',
+        'input-other-name', 'input-other-start', 'input-other-end',
         'input-teacher',
     ].forEach(id => {
         const el = document.getElementById(id);
@@ -249,7 +275,7 @@ function resetWizardForTypeChange() {
     document.querySelectorAll('.day-chip').forEach(c => c.classList.remove('selected'));
     document.querySelectorAll('.fee-type-btn').forEach(c => c.classList.remove('selected'));
 
-    ['regular-preview', 'naesin-preview', 'special-preview'].forEach(id => {
+    ['regular-preview', 'naesin-preview', 'special-preview', 'other-preview'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.textContent = '';
     });
@@ -276,6 +302,7 @@ function toggleNameForms(t) {
     document.getElementById('name-regular').style.display = (t === '정규' || t === '자유학기') ? '' : 'none';
     document.getElementById('name-naesin').style.display = t === '내신' ? '' : 'none';
     document.getElementById('name-special').style.display = t === '특강' ? '' : 'none';
+    document.getElementById('name-other').style.display = t === '기타' ? '' : 'none';
     document.getElementById('free-semester-dates').style.display = t === '자유학기' ? '' : 'none';
 }
 
@@ -318,6 +345,7 @@ function bindDateValidations() {
     setupDateValidation('input-free-start', 'input-free-end');
     setupDateValidation('input-naesin-start', 'input-naesin-end');
     setupDateValidation('input-special-start', 'input-special-end');
+    setupDateValidation('input-other-start', 'input-other-end');
 }
 
 // 동일 element-event 조합에 핸들러를 안전하게 재바인딩(중복 등록 방지).
@@ -343,6 +371,9 @@ function bindPreviewListeners() {
     rebind(
         ['input-special-name', 'input-special-start', 'input-special-end'],
         ['input', 'change'], updateSpecialPreview);
+    rebind(
+        ['input-other-name', 'input-other-start', 'input-other-end'],
+        ['input', 'change'], updateOtherPreview);
     rebind('input-teacher', 'change', updateTeacherPreview);
 }
 
@@ -351,6 +382,13 @@ function syncPreviewFromDom(t) {
     if (t === '정규' || t === '자유학기') updateRegularPreview();
     else if (t === '내신') updateNaesinPreview();
     else if (t === '특강') updateSpecialPreview();
+    else if (t === '기타') {
+        const start = document.getElementById('input-other-start');
+        if (start && !start.value) start.value = wizardData.otherStart || todayStr();
+        updateOtherPreview();
+    } else {
+        throw new Error(`알 수 없는 반 유형(${t || '없음'})입니다.`);
+    }
     updateTeacherPreview();
 }
 
@@ -420,6 +458,16 @@ function updateSpecialPreview() {
     renderSummary();
 }
 
+function updateOtherPreview() {
+    const name = document.getElementById('input-other-name').value.trim();
+    document.getElementById('other-preview').textContent = name;
+    wizardData.otherName = name;
+    wizardData.otherStart = document.getElementById('input-other-start').value;
+    wizardData.otherEnd = document.getElementById('input-other-end').value;
+    wizardData.classCode = name;
+    renderSummary();
+}
+
 window.selectFeeType = function (type) {
     wizardData.feeType = type;
     document.querySelectorAll('.fee-type-btn').forEach(b => {
@@ -472,13 +520,14 @@ function buildClassCode() {
         wizardData.classCode = buildNaesinCsKey({ branch: br, school: s, level: lv, grade: g, group: grp });
         return wizardData.classCode;
     }
-    if (t === '특강') {
-        const name = document.getElementById('input-special-name').value.trim();
+    if (t === '특강' || t === '기타') {
+        const prefix = t === '특강' ? 'special' : 'other';
+        const name = document.getElementById(`input-${prefix}-name`).value.trim();
         if (!name) return '';
         wizardData.classCode = name;
         return wizardData.classCode;
     }
-    return '';
+    throw new Error(`알 수 없는 반 유형(${t || '없음'})입니다.`);
 }
 
 // ─── 학생 추가 (Step 2 - students-section) ─────────────────────────────────
@@ -590,6 +639,13 @@ window.addStudent = function (docId) {
         const classCode = buildClassCode();
         if (classCode && hasActiveRegularClass(found.enrollments, classCode, todayStr())) {
             showToast(`${found.name} 학생은 이미 ${classCode} 정규반에 등록되어 있습니다.`, 'error');
+            return;
+        }
+    }
+    if (wizardData.classType === '기타') {
+        const classCode = buildClassCode();
+        if (classCode && hasActiveAccountClass(found.enrollments, '기타', classCode, todayStr())) {
+            showToast(`${found.name} 학생은 이미 ${classCode} 기타반에 등록되어 있습니다.`, 'error');
             return;
         }
     }
@@ -719,7 +775,10 @@ window.submitWizard = async function () {
 
     try {
         const d = wizardData;
-        if (d.classType === '내신' || d.classType === '자유학기') {
+        if (!CLASS_TYPES.includes(d.classType)) {
+            throw new Error(`알 수 없는 반 유형(${d.classType || '없음'})입니다.`);
+        }
+        if (d.classType !== '특강') {
             const rejected = d.students.filter(student => !isEnrollableStatus(student.status));
             if (rejected.length) {
                 alert(
@@ -735,6 +794,13 @@ window.submitWizard = async function () {
         const existingDoc = await getDoc(doc(db, 'class_settings', d.classCode));
         const existingSettings = existingDoc.exists() ? existingDoc.data() : {};
         if (existingDoc.exists()) {
+            if (hasClassSettingsTypeConflict(existingSettings, d.classType)) {
+                alert(
+                    `"${d.classCode}" 반은 이미 ${existingSettings.class_type} 유형으로 저장되어 있습니다.\n` +
+                    `${d.classType} 유형으로 덮어쓸 수 없습니다.`
+                );
+                return;
+            }
             // 내신 기간 변경 시 학생 enrollment.end_date 자동 sync 안내
             // (Cloud Function onClassSettingsNaesinPeriodChanged가 처리하지만 사용자에게 명시 인지시킴)
             const ex = existingSettings;
@@ -748,8 +814,10 @@ window.submitWizard = async function () {
         }
 
         // 2. class_settings 데이터 준비 (commit은 batch에서 한번에)
-        const classSettingsData = {
+        const branch = resolveClassBranch(d);
+        const commonSettings = {
             teacher: d.teacher || '',
+            branch,
             ...buildClassTimeFields(
                 d.classType,
                 d.days,
@@ -761,21 +829,24 @@ window.submitWizard = async function () {
                 ),
             ),
         };
+        const typeSettings = {};
         if (d.classType === '내신') {
-            classSettingsData.class_type = '내신';
-            classSettingsData.naesin_start = d.naesinStart;
-            classSettingsData.naesin_end = d.naesinEnd;
+            typeSettings.naesin_start = d.naesinStart;
+            typeSettings.naesin_end = d.naesinEnd;
         } else if (d.classType === '자유학기') {
-            if (d.freeStart) classSettingsData.free_start = d.freeStart;
-            if (d.freeEnd) classSettingsData.free_end = d.freeEnd;
-        } else {
-            classSettingsData.class_type = d.classType;
-            if (d.classType === '특강') {
-                if (d.feeType) classSettingsData.fee_type = d.feeType;
-                if (d.specialStart) classSettingsData.special_start = d.specialStart;
-                if (d.specialEnd) classSettingsData.special_end = d.specialEnd;
-            }
+            if (d.freeStart) typeSettings.free_start = d.freeStart;
+            if (d.freeEnd) typeSettings.free_end = d.freeEnd;
+        } else if (d.classType === '특강') {
+            if (d.feeType) typeSettings.fee_type = d.feeType;
+            if (d.specialStart) typeSettings.special_start = d.specialStart;
+            if (d.specialEnd) typeSettings.special_end = d.specialEnd;
+        } else if (d.classType !== '정규' && d.classType !== '기타') {
+            throw new Error(`알 수 없는 반 유형(${d.classType})입니다.`);
         }
+        const classSettingsData = buildClassSettingsData(existingSettings, d.classType, {
+            ...commonSettings,
+            ...typeSettings,
+        });
 
         // 3. 학생별 enrollment 추가 (batch + arrayUnion으로 경합 방지)
         const today = todayStr();
@@ -784,7 +855,7 @@ window.submitWizard = async function () {
         // 정규도 같은 학생의 옛 정규 enrollment를 자동 종료해야 하므로 미리 읽는다.
         // 직렬 await 대신 한 번에 병렬로 받아 RTT를 학생 수만큼이 아닌 1번으로 줄인다.
         const enrollmentsByDocId = new Map();
-        if (d.classType === '내신' || d.classType === '자유학기' || d.classType === '정규') {
+        if (d.classType !== '특강') {
             const snaps = await Promise.all(
                 d.students.map(s => getDoc(doc(db, 'students', s.docId)))
             );
@@ -825,7 +896,7 @@ window.submitWizard = async function () {
 
         // class_settings + 학생 enrollment를 한 batch에 묶어 부분 실패 시 데이터 불일치를 방지.
         const batch = writeBatch(db);
-        batchSet(batch, doc(db, 'class_settings', d.classCode), classSettingsData, { merge: true });
+        batchSet(batch, doc(db, 'class_settings', d.classCode), classSettingsData);
 
         // 반생성마법사 수업이력 로그 — DB의 UPDATE 로그와 동일 필드/형식으로 기록.
         // 공유 분류기(@impact7/shared)가 before/after를 파싱해 전반/수업추가로 분류한다.
@@ -886,6 +957,10 @@ window.submitWizard = async function () {
                 _duplicateStudents.push(student.name || student.docId);
                 continue;
             }
+            if (d.classType === '기타' && hasActiveAccountClass(existing, '기타', d.classCode, today)) {
+                _duplicateStudents.push(student.name || student.docId);
+                continue;
+            }
 
             // 특강 수강생은 모두 status2: '특강' 설정
             if (d.classType === '특강') {
@@ -909,6 +984,7 @@ window.submitWizard = async function () {
 
             const newEnrollment = {
                 class_type: d.classType,
+                ...buildEnrollmentAccountFields(d.classType),
                 level_symbol: d.levelSymbol || '',
                 class_number: d.classNumber || '',
                 day: d.days,
@@ -933,6 +1009,12 @@ window.submitWizard = async function () {
                 if (d.specialStart) newEnrollment.start_date = d.specialStart;
                 if (d.specialEnd) newEnrollment.end_date = d.specialEnd;
             }
+            if (d.classType === '기타') {
+                newEnrollment.level_symbol = '';
+                newEnrollment.class_number = d.classCode;
+                newEnrollment.start_date = d.otherStart;
+                if (d.otherEnd) newEnrollment.end_date = d.otherEnd;
+            }
 
             // 안전망 가드: class_type ↔ 반 코드 정합성 (정채리 케이스 같은 빈 placeholder 차단).
             // validateForm/buildClassCode를 우회해 여기 도달하는 경로가 생기더라도 마지막에서 throw.
@@ -940,8 +1022,8 @@ window.submitWizard = async function () {
             if ((d.classType === '정규' || d.classType === '자유학기') && (!newEnrollment.level_symbol || !newEnrollment.class_number)) {
                 throw new Error(`${d.classType} 반 등록에 level_symbol과 class_number가 모두 필요합니다.`);
             }
-            if (d.classType === '특강' && !newEnrollment.class_number) {
-                throw new Error('특강 반 등록에 class_number(반 이름)가 필요합니다.');
+            if ((d.classType === '특강' || d.classType === '기타') && !newEnrollment.class_number) {
+                throw new Error(`${d.classType} 반 등록에 class_number(반 이름)가 필요합니다.`);
             }
             if (d.classType === '내신' && _hasCode) {
                 throw new Error('내신 enrollment는 level_symbol/class_number를 비워야 합니다 (csKey 별도 관리).');
@@ -950,21 +1032,31 @@ window.submitWizard = async function () {
             if (d.classType === '내신') {
                 // 정규/자유학기 enrollment에 naesin_class_override 박아 명시 매핑.
                 // arrayUnion으로는 기존 element 수정 불가 → 전체 enrollments 다시 쓰기.
-                const hasRegular = existing.some(e => isActiveNaesinBase(e));
-                if (!hasRegular) throw new Error(`${student.name} 학생은 활성 정규/자유학기 등록(종료 안 됨·요일 있음)이 없어 내신반에 추가할 수 없습니다. 정규반을 먼저 정상 등록하세요.`);
+                const regularBases = existing.filter(e => isActiveNaesinBase(e));
+                if (!regularBases.length) throw new Error(`${student.name} 학생은 활성 정규/자유학기 등록(종료 안 됨·요일 있음)이 없어 내신반에 추가할 수 없습니다. 정규반을 먼저 정상 등록하세요.`);
+                const regularAccountId = resolveRegularBaseAccountId(regularBases);
                 const updated = existing.map(e =>
                     isActiveNaesinBase(e)
-                        ? { ...e, naesin_class_override: d.classCode }
+                        ? {
+                            ...e,
+                            ...buildEnrollmentAccountFields('내신', regularAccountId),
+                            naesin_class_override: d.classCode,
+                        }
                         : e
                 );
                 batchUpdate(batch, studentRef, { enrollments: updated });
                 _pushFormationLog(batch, student.docId, '—', `추가: ${d.classCode} (내신) 누적`);
             } else if (d.classType === '자유학기') {
-                const hasRegular = existing.some(e => isActiveNaesinBase(e));
-                if (!hasRegular) throw new Error(`${student.name} 학생은 활성 정규반 등록(종료 안 됨·요일 있음)이 없어 자유학기반에 추가할 수 없습니다.`);
+                const regularBase = existing.find(e => isActiveNaesinBase(e));
+                if (!regularBase) throw new Error(`${student.name} 학생은 활성 정규반 등록(종료 안 됨·요일 있음)이 없어 자유학기반에 추가할 수 없습니다.`);
+                const regularAccount = buildEnrollmentAccountFields(
+                    '자유학기',
+                    regularBase.account_id || crypto.randomUUID(),
+                );
                 const updated = existing.filter(e =>
                     !(e.class_type === '자유학기' && `${e.level_symbol || ''}${e.class_number || ''}` === d.classCode)
-                );
+                ).map(e => e === regularBase ? { ...e, ...regularAccount } : e);
+                Object.assign(newEnrollment, regularAccount);
                 updated.push(newEnrollment);
                 batchUpdate(batch, studentRef, { enrollments: updated });
                 _pushFormationLog(batch, student.docId, '—', `추가: ${d.classCode} (자유학기) 누적`);
@@ -980,6 +1072,7 @@ window.submitWizard = async function () {
                 const updated = oldReg
                     ? existing.map(e => e === oldReg
                         ? { ...e,
+                            ...buildEnrollmentAccountFields('정규', oldReg.account_id || newEnrollment.account_id),
                             level_symbol: newEnrollment.level_symbol,
                             class_number: newEnrollment.class_number,
                             day: newEnrollment.day,
@@ -997,25 +1090,27 @@ window.submitWizard = async function () {
                     _pushFormationLog(batch, student.docId, '—',
                         `추가: ${newCode} (정규), 총 ${updated.length}개 누적`);
                 }
-            } else {
+            } else if (d.classType === '특강' || d.classType === '기타') {
                 batchUpdate(batch, studentRef, {
                     ...(studentUpdate || {}),
                     enrollments: arrayUnion(newEnrollment),
                 });
-                _pushFormationLog(batch, student.docId, '—', `추가: ${d.classCode} (특강) 누적`);
+                _pushFormationLog(batch, student.docId, '—', `추가: ${d.classCode} (${d.classType}) 누적`);
+            } else {
+                throw new Error(`알 수 없는 반 유형(${d.classType})입니다.`);
             }
         }
         await batch.commit();
 
         if (_duplicateStudents.length) {
-            alert(`이미 ${d.classCode} 정규반에 등록된 학생은 중복 추가하지 않았습니다:\n${_duplicateStudents.join(', ')}`);
+            alert(`이미 ${d.classCode} ${d.classType}반에 등록된 학생은 중복 추가하지 않았습니다:\n${_duplicateStudents.join(', ')}`);
         }
 
         // 반 생성 시 첫 강사 배정을 이력에 기록 (prev=''=신규). class_settings 저장(commit) 성공 후.
         if (d.teacher) {
             await recordTeacherChange(d.classCode, {
                 class_type: d.classType || '',
-                branch: d.classType === '내신' ? (d.naesinBranch || '') : '',
+                branch,
                 teacher: d.teacher,
                 sub_teacher: '',
                 prev_teacher: '',

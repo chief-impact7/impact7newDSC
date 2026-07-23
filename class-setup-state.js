@@ -8,7 +8,7 @@ export const popPerms = { all: false, classCounts: false };
 
 // 마법사 데이터 — 단일 진실 원천
 export const wizardData = {
-    classType: '',       // '정규' | '내신' | '자유학기' | '특강'
+    classType: '',       // '정규' | '내신' | '자유학기' | '특강' | '기타'
     feeType: '',         // 특강 전용: '유료' | '무료'
     classCode: '',       // 생성될 반 코드
     levelSymbol: '',
@@ -19,10 +19,13 @@ export const wizardData = {
     naesinLevel: '',
     naesinGroup: '',
     specialName: '',
+    otherName: '',
     naesinStart: '',
     naesinEnd: '',
     specialStart: '',
     specialEnd: '',
+    otherStart: '',
+    otherEnd: '',
     freeStart: '',
     freeEnd: '',
     teacher: '',
@@ -68,6 +71,9 @@ export function renderSummary() {
     }
     if (d.classType === '특강' && d.specialStart) {
         typeLabel += ` (${d.specialStart} ~ ${d.specialEnd || '미정'})`;
+    }
+    if (d.classType === '기타' && d.otherStart) {
+        typeLabel += ` (${d.otherStart} ~ ${d.otherEnd || '무기한'})`;
     }
 
     card.innerHTML = `

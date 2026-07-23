@@ -19,13 +19,14 @@ import { schoolSearchTerms } from './school-normalizer.js';
 const _esc = (str) => window._esc(str);
 const _escAttr = (str) => window._escAttr(str);
 
-export function renderAddStudentCard({ key, idPrefix, searchHandlerName, footerText }) {
+export function renderAddStudentCard({ key, idPrefix, searchHandlerName, footerText, extraHtml = '' }) {
     return `
         <div class="detail-card">
             <div class="detail-card-title">
                 ${msIcon('person_add')}
                 학생 추가
             </div>
+            ${extraHtml}
             <div class="domain-add-row">
                 <input type="text" id="${idPrefix}-search" class="field-input"
                     placeholder="이름 또는 학교 검색" style="flex:1;"

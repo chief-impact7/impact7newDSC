@@ -9,6 +9,7 @@ import { signInWithGoogle, logout } from './auth.js';
 import { todayStr, getDayName, addDays, ACTIVE_STUDENT_STATUSES, PAST_STUDENT_STATUSES, normalizeDays, normalizeEnrollments, enrollmentCode, branchFromStudent } from './src/shared/firestore-helpers.js';
 import { auditUpdate, auditSet, auditAdd, normalizeImpact7Email } from './audit.js';
 import { staffLabel } from '@impact7/shared/staff-label';
+import { accountTypeOf } from '@impact7/shared/enrollment-status';
 import { getActiveEnrollments, findStudent } from './student-helpers.js';
 import { openKoreanDatePicker } from './date-picker.js';
 import { loadClassSettings } from './data-layer.js';
@@ -386,6 +387,7 @@ function getStudentsForDay(branchFilter, classFilter) {
                 enrollment: e,
                 enrollIdx: origIdx >= 0 ? origIdx : idx,
                 code,
+                accountType: accountTypeOf(e),
                 branch,
                 checkId: makeDailyCheckId(selectedDate, s.id, origIdx >= 0 ? origIdx : idx),
                 startTime: e.start_time || e.time || '',
@@ -409,6 +411,7 @@ function getStudentsForDay(branchFilter, classFilter) {
             enrollment: null,
             enrollIdx: -1,
             code: o.target_class_code,
+            accountType: '타반',
             branch,
             checkId: `${selectedDate}_${s.id}_ovr`,
             startTime: o.target_start_time || '',
@@ -486,7 +489,7 @@ function renderTable(rows) {
             ? ` <span class="override-badge">타반수업→${esc(row.overrideTargetClass)}</span>`
             : '';
         html += `<td class="sticky-col col-name">${esc(row.student.name)}${nameBadge}</td>`;
-        html += `<td class="sticky-col col-class">${esc(row.code)}</td>`;
+        html += `<td class="sticky-col col-class">${esc(`${row.accountType} ${row.code}`)}</td>`;
         html += `<td class="sticky-col col-time">${esc(row.startTime)}</td>`;
 
         // Data fields — override-out 학생은 비활성
@@ -679,7 +682,7 @@ function renderCards(rows) {
                 <div class="card-header-left">
                     <span class="card-name">${esc(row.student.name)}</span>
                     ${overrideBadge}
-                    <span class="card-class">${esc(row.code)}</span>
+                    <span class="card-class">${esc(`${row.accountType} ${row.code}`)}</span>
                     <span class="card-time">${esc(row.startTime)}</span>
                 </div>
                 <span class="card-att-badge ${row.isOverridingOut ? 'none' : attClass}">${esc(attLabel)}</span>
