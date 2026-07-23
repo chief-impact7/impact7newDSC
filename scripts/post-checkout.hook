@@ -1,0 +1,11 @@
+#!/bin/sh
+
+[ "${3:-0}" = "1" ] || exit 0
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+command -v codegraph >/dev/null 2>&1 || exit 0
+
+if [ -d "$ROOT/.codegraph" ]; then
+  nohup codegraph sync -q "$ROOT" >/dev/null 2>&1 &
+else
+  nohup codegraph init "$ROOT" >/dev/null 2>&1 &
+fi

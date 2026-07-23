@@ -77,6 +77,107 @@ let _lastCardsHtml = null;
 let _renderConsultationFn = null;
 let _renderMessageFn = null;
 let _renderDocuFn = null;
+let _departmentsPromise = null;
+
+function _consumePrefetchedTab(tab, studentId) {
+    const el = document.getElementById(`${tab}-tab`);
+    if (!studentId || el?.dataset.preloadedStudentId !== studentId) return false;
+    delete el.dataset.preloadedStudentId;
+    return true;
+}
+
+function _markPrefetchedTab(tab, studentId) {
+    const el = document.getElementById(`${tab}-tab`);
+    if (el && state.selectedStudentId === studentId) el.dataset.preloadedStudentId = studentId;
+}
+
+async function _ensureConsultationRenderer() {
+    if (_renderConsultationFn) return _renderConsultationFn;
+    const { renderConsultationTab, initConsultationCardDeps } = await import('./consultation-card.js');
+    initConsultationCardDeps({
+        getStudent: (id) => findStudent(id),
+        getCurrentTeacher: () => ({
+            id: state.currentUser?.uid ?? '',
+            name: getTeacherName(state.currentUser?.email ?? ''),
+        }),
+        getAssignedTeachers: (id) => {
+            const student = findStudent(id);
+            if (!student) return [];
+            const emails = new Set();
+            for (const code of allClassCodes(student)) {
+                const cs = state.classSettings?.[code];
+                if (cs?.teacher) emails.add(cs.teacher);
+                if (cs?.sub_teacher) emails.add(cs.sub_teacher);
+            }
+            return [...emails].map(e => getTeacherName(e)).filter(Boolean);
+        },
+        toast: (msg) => showToast(msg),
+        readonly: READ_ONLY,
+    });
+    _renderConsultationFn = renderConsultationTab;
+    return renderConsultationTab;
+}
+
+async function _ensureMessageRenderer() {
+    if (_renderMessageFn) return _renderMessageFn;
+    const { renderMessageTab, initMessageCardDeps } = await import('./message-card.js');
+    initMessageCardDeps({
+        getStudent: (id) => findStudent(id),
+        toast: (msg, type) => showToast(msg, type),
+        readonly: READ_ONLY,
+    });
+    _renderMessageFn = renderMessageTab;
+    return renderMessageTab;
+}
+
+async function _ensureDocuRenderer() {
+    if (_renderDocuFn) return _renderDocuFn;
+    const { renderDocuTab, initDocuCardDeps } = await import('./docu-card.js');
+    initDocuCardDeps({
+        toast: (msg, type) => showToast(msg, type),
+        readonly: READ_ONLY,
+        refreshBadge: (id) => _refreshDocuBadge(id),
+    });
+    _renderDocuFn = renderDocuTab;
+    return renderDocuTab;
+}
+
+export function preloadStudentDetailTabs() {
+    return Promise.allSettled([
+        _ensureConsultationRenderer(),
+        _ensureMessageRenderer(),
+        _ensureDocuRenderer(),
+    ]);
+}
+
+function _preloadStudentDetailData(studentId) {
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 300));
+    idle(() => {
+        const canLoad = (tab) => state.selectedStudentId === studentId && state.detailTab !== tab;
+        const preload = async (tab, load) => {
+            if (!canLoad(tab)) return;
+            const pending = load();
+            _markPrefetchedTab(tab, studentId);
+            try {
+                await pending;
+            } catch (err) {
+                _consumePrefetchedTab(tab, studentId);
+                throw err;
+            }
+        };
+        const preloadRenderer = async (tab, ensureRenderer) => {
+            const render = await ensureRenderer();
+            return preload(tab, () => render(studentId));
+        };
+        void Promise.allSettled([
+            preload('report', () => _loadReportOrHistoryCard(studentId)),
+            preload('score', () => loadScoreCard(studentId)),
+            preloadRenderer('consultation', _ensureConsultationRenderer),
+            preloadRenderer('message', _ensureMessageRenderer),
+            preloadRenderer('docu', _ensureDocuRenderer),
+        ]);
+    }, { timeout: 1500 });
+}
 
 // ─── 재원기간 (tenure) ───────────────────────────────────────────────────────
 // history_logs에서 공유 deriveTenure로 파생해 헤더에 표시 (DB app.js와 동일 SSoT 로직).
@@ -393,41 +494,19 @@ export function switchDetailTab(tab) {
     if (docuTabEl) docuTabEl.style.display = tab === 'docu' ? '' : 'none';
     if (tab === 'score') {
         if (state.selectedStudentId) _openedDetailTabs.add(`${state.selectedStudentId}:score`);
-        loadScoreCard();
+        if (!_consumePrefetchedTab('score', state.selectedStudentId)) loadScoreCard();
     }
     if (tab === 'report') {
-        if (state.selectedStudentId) _loadReportOrHistoryCard(state.selectedStudentId);
+        if (!_consumePrefetchedTab('report', state.selectedStudentId) && state.selectedStudentId) {
+            _loadReportOrHistoryCard(state.selectedStudentId);
+        }
     }
     if (tab === 'consultation') {
         if (state.selectedStudentId) _openedDetailTabs.add(`${state.selectedStudentId}:consultation`);
-        if (_renderConsultationFn) {
-            _renderConsultationFn(state.selectedStudentId);
-            return;
+        if (_consumePrefetchedTab('consultation', state.selectedStudentId)) return;
+        if (state.selectedStudentId) {
+            _ensureConsultationRenderer().then(render => render(state.selectedStudentId));
         }
-        import('./consultation-card.js').then(({ renderConsultationTab, initConsultationCardDeps }) => {
-            initConsultationCardDeps({
-                getStudent: (id) => findStudent(id),
-                getCurrentTeacher: () => ({
-                    id: state.currentUser?.uid ?? '',
-                    name: getTeacherName(state.currentUser?.email ?? ''),
-                }),
-                getAssignedTeachers: (id) => {
-                    const student = findStudent(id);
-                    if (!student) return [];
-                    const emails = new Set();
-                    for (const code of allClassCodes(student)) {
-                        const cs = state.classSettings?.[code];
-                        if (cs?.teacher) emails.add(cs.teacher);
-                        if (cs?.sub_teacher) emails.add(cs.sub_teacher);
-                    }
-                    return [...emails].map(e => getTeacherName(e)).filter(Boolean);
-                },
-                toast: (msg) => showToast(msg),
-                readonly: READ_ONLY,
-            });
-            _renderConsultationFn = renderConsultationTab;
-            renderConsultationTab(state.selectedStudentId);
-        });
     }
     if (tab === 'message') {
         // 소속반 뷰(학생 미선택 + L4 반 선택): 개인 메시지 대신 반 단체 안내 탭
@@ -435,34 +514,16 @@ export function switchDetailTab(tab) {
             renderClassBulkMessageTab(state.selectedClassCode);
             return;
         }
-        if (_renderMessageFn) {
-            _renderMessageFn(state.selectedStudentId);
-            return;
+        if (_consumePrefetchedTab('message', state.selectedStudentId)) return;
+        if (state.selectedStudentId) {
+            _ensureMessageRenderer().then(render => render(state.selectedStudentId));
         }
-        import('./message-card.js').then(({ renderMessageTab, initMessageCardDeps }) => {
-            initMessageCardDeps({
-                getStudent: (id) => findStudent(id),
-                toast: (msg, type) => showToast(msg, type),
-                readonly: READ_ONLY,
-            });
-            _renderMessageFn = renderMessageTab;
-            renderMessageTab(state.selectedStudentId);
-        });
     }
     if (tab === 'docu') {
-        if (_renderDocuFn) {
-            _renderDocuFn(state.selectedStudentId);
-            return;
+        if (_consumePrefetchedTab('docu', state.selectedStudentId)) return;
+        if (state.selectedStudentId) {
+            _ensureDocuRenderer().then(render => render(state.selectedStudentId));
         }
-        import('./docu-card.js').then(({ renderDocuTab, initDocuCardDeps }) => {
-            initDocuCardDeps({
-                toast: (msg, type) => showToast(msg, type),
-                readonly: READ_ONLY,
-                refreshBadge: (id) => _refreshDocuBadge(id),
-            });
-            _renderDocuFn = renderDocuTab;
-            renderDocuTab(state.selectedStudentId);
-        });
     }
 }
 
@@ -568,11 +629,11 @@ function _loadReportOrHistoryCard(studentId) {
     const dateRangeEl = document.querySelector('#report-tab .report-date-range');
     if (student && _isInactiveDetailStudent(student)) {
         if (dateRangeEl) dateRangeEl.style.display = 'none';
-        loadClassHistoryCard(studentId);
+        return loadClassHistoryCard(studentId);
     } else {
         if (dateRangeEl) dateRangeEl.style.display = '';
         _ensureReportInputDefaults();
-        loadReportCard(studentId);
+        return loadReportCard(studentId);
     }
 }
 
@@ -611,6 +672,7 @@ export async function loadReportCard(studentId = state.selectedStudentId) {
 
         renderReportCard(records);
     } catch (err) {
+        if (state.selectedStudentId !== studentId) return;
         console.error('출결현황 조회 실패:', err);
         contentEl.innerHTML = '<div class="detail-card-empty" style="padding:32px;text-align:center;color:var(--danger);">조회 실패: ' + esc(err.message) + '</div>';
     }
@@ -928,6 +990,22 @@ function buildExternalRows(entries, type) {
     }).filter(Boolean).sort((a, b) => (b._sortKey || '').localeCompare(a._sortKey || ''));
 }
 
+function loadDepartmentsById() {
+    if (!_departmentsPromise) {
+        _departmentsPromise = getDocs(collection(db, 'departments'))
+            .then(snap => {
+                const byId = new Map();
+                snap.forEach(d => byId.set(d.id, d.data()));
+                return byId;
+            })
+            .catch(err => {
+                _departmentsPromise = null;
+                throw err;
+            });
+    }
+    return _departmentsPromise;
+}
+
 // studentId 인자 우선 — renderStudentDetail이 그리는 상단 프로필과 동일 학생으로 점수를
 // 채우기 위함(인자 생략 시 현재 선택 학생). selectedStudentId만 읽으면 상단≠점수 불일치 가능.
 export async function loadScoreCard(studentId = state.selectedStudentId) {
@@ -938,15 +1016,13 @@ export async function loadScoreCard(studentId = state.selectedStudentId) {
     contentEl.innerHTML = '<div class="detail-card-empty" style="padding:32px;text-align:center;">성적을 불러오는 중...</div>';
 
     try {
-        // student_scores/{studentId} 요약 1회 + departments 1회로 4개 섹션을 구성한다(과거 N+1 제거). F-11.
-        const [scoreSnap, deptSnap] = await Promise.all([
+        // student_scores/{studentId} 요약 1회 + 세션 공통 departments로 4개 섹션을 구성한다.
+        const [scoreSnap, departmentsById] = await Promise.all([
             getDoc(doc(db, 'student_scores', studentId)),
-            getDocs(collection(db, 'departments')),
+            loadDepartmentsById(),
         ]);
         if (state.selectedStudentId !== studentId) return;
         const sdata = scoreSnap.exists() ? scoreSnap.data() : {};
-        const departmentsById = new Map();
-        deptSnap.forEach(d => departmentsById.set(d.id, d.data()));
         const externalAll = Object.values(sdata.external || {});
         const academyRows = buildAcademyRows(sdata.academy, departmentsById);
         const suneungRows = buildSuneungRows(externalAll.filter(e => e.type === 'suneung_index'));
@@ -986,6 +1062,7 @@ export async function loadScoreCard(studentId = state.selectedStudentId) {
 
         contentEl.innerHTML = `<div class="score-tab-content">${academyHtml}${suneungHtml}${schoolHtml}${mockHtml}</div>`;
     } catch (err) {
+        if (state.selectedStudentId !== studentId) return;
         console.error('성적 조회 실패:', err);
         contentEl.innerHTML = '<div class="detail-card-empty" style="padding:32px;text-align:center;color:var(--danger);">성적 조회 실패: ' + esc(err.message) + '</div>';
     }
@@ -1612,6 +1689,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
 
     // 좁은 화면(<=1100px)에서 패널 표시 — 데스크톱에선 무해
     document.getElementById('detail-panel').classList.add('mobile-visible');
+    if (studentChanged) _preloadStudentDetailData(studentId);
 }
 
 // ─── 클리닉 저장 ────────────────────────────────────────────────────────────

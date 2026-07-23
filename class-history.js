@@ -33,10 +33,12 @@ export async function loadClassHistoryCard(studentId) {
             limit(200)
         );
         const snap = await getDocs(q);
+        if (state.selectedStudentId !== studentId) return;
         const logs = [];
         snap.forEach(d => logs.push({ id: d.id, ...d.data() }));
         _renderClassHistory(logs, contentEl, _deriveCardItems(studentId, logs));
     } catch (e) {
+        if (state.selectedStudentId !== studentId) return;
         console.error('[CLASS HISTORY]', e);
         const indexUrl = e.message?.match(/https:\/\/console\.firebase\.google\.com\/[^\s]+/)?.[0];
         const safeIndexUrl = indexUrl && /^https:\/\/console\.firebase\.google\.com\//.test(indexUrl) ? indexUrl : null;

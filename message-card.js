@@ -25,6 +25,7 @@ let _alimtalkRecipientFields = new Set(['parent_1']);
 let _smsRecipientFields = new Set(['parent_1']);
 let _sending = false;
 let _quickBusy = false;
+let _currentStudentId = null;
 // 멱등키 — 폼 단위로 안정 유지(응답 타임아웃 후 재시도의 중복 발송 차단), 발송 성공 시 재발급.
 let _noticeReqId = null;
 let _promoReqId = null;
@@ -122,6 +123,7 @@ function saveRecipientSettings(studentId) {
 export function renderMessageTab(studentId) {
   const el = document.getElementById('message-tab');
   if (!el) return;
+  _currentStudentId = studentId;
   _mode = 'notice';
   _noticeReqId = null;
   _promoReqId = null;
@@ -321,6 +323,7 @@ async function loadHistory(studentId) {
   box.innerHTML = headHtml('불러오는 중…');
   try {
     const { items } = await getRecipientMessageHistory({ studentId, limit: HISTORY_LIMIT });
+    if (_currentStudentId !== studentId) return;
     if (!items || !items.length) {
       box.innerHTML = headHtml('발송 내역 없음');
       bindRefresh();
@@ -344,6 +347,7 @@ async function loadHistory(studentId) {
       row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
     });
   } catch (err) {
+    if (_currentStudentId !== studentId) return;
     box.innerHTML = `<div style="color:#c82014;font-size:13px;">내역 조회 실패: ${esc(err?.message || '')}</div>`;
   }
 }
@@ -430,6 +434,7 @@ async function loadQuickState(studentId, readonly) {
     studentNumber ? tabletCheckin({ studentNumber }).catch(() => null) : Promise.resolve(null),
     getAbsenceNoticeToday(studentId).catch(() => null),
   ]);
+  if (_currentStudentId !== studentId) return;
   const cand = lookup?.candidates?.find((c) => c.studentId === studentId) || null;
   const allowed = new Set(cand?.allowedActions ?? []);
   // '아직 미등원' 판정은 상태 문자열 비교 대신 서버가 계산한 가능 액션으로 —

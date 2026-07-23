@@ -150,7 +150,7 @@ import {
 } from './visit-list-render.js';
 import {
     initStudentDetailDeps,
-    renderStudentDetail, renderClinicInputs, switchDetailTab, loadReportCard,
+    renderStudentDetail, renderClinicInputs, switchDetailTab, loadReportCard, preloadStudentDetailTabs,
     confirmDeparture, saveExtraVisit, addExtraVisit, clearExtraVisit,
     getStudentChecklistStatus, refreshDocuBadge
 } from './student-detail.js';
@@ -698,6 +698,7 @@ onAuthStateChanged(auth, async (user) => {
                 await loadRoleMemos().catch(() => {});
                 renderListPanel();
                 await new Promise(r => (window.requestIdleCallback || ((f) => setTimeout(f, 3000)))(r));
+                void preloadStudentDetailTabs();
                 await loadWithdrawnStudents();
                 buildSiblingMap();
                 renderListPanel();

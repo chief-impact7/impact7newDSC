@@ -38,7 +38,7 @@ function Tag({ value, className = '' }) {
 export default function ConsultationBoard({
     consultations, students, branchFilter, classFilter, gradeFilter, startDate, endDate,
 }) {
-    const [groupMode, setGroupMode] = useState('date'); // 'date' | 'student' | 'teacher'
+    const [groupMode, setGroupMode] = useState('student');
     const [search, setSearch] = useState('');
 
     const studentInfo = useMemo(() => buildStudentInfo(students), [students]);

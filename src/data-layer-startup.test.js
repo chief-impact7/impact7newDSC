@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 const mocks = vi.hoisted(() => ({
   getDocs: vi.fn(),
@@ -165,4 +166,20 @@ it('index용 named icon과 React/full icon map의 manual chunk 경계를 분리�
   expect(chunk('/node_modules/@impact7/ui/dist/icons-named.js')).toBe('impact7-ui-icons-named');
   expect(chunk('/node_modules/@impact7/ui/dist/impact7-ui.js')).toBeUndefined();
   expect(chunk('/node_modules/@impact7/ui/dist/phosphor-icons-abc.js')).toBe('impact7-ui-icons-full');
+});
+
+it('상세 탭은 첫 렌더 뒤 idle에 준비하고 학생 전환 stale 응답을 버린다', () => {
+  const appSource = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+  const detailSource = readFileSync(new URL('../student-detail.js', import.meta.url), 'utf8');
+  const historySource = readFileSync(new URL('../class-history.js', import.meta.url), 'utf8');
+  const messageSource = readFileSync(new URL('../message-card.js', import.meta.url), 'utf8');
+  const idleIndex = appSource.indexOf('await new Promise(r => (window.requestIdleCallback');
+  const preloadIndex = appSource.indexOf('void preloadStudentDetailTabs();');
+
+  expect(idleIndex).toBeGreaterThan(-1);
+  expect(preloadIndex).toBeGreaterThan(-1);
+  expect(idleIndex).toBeLessThan(preloadIndex);
+  expect(detailSource).toContain('if (studentChanged) _preloadStudentDetailData(studentId);');
+  expect(historySource).toContain('if (state.selectedStudentId !== studentId) return;');
+  expect(messageSource).toContain('if (_currentStudentId !== studentId) return;');
 });
