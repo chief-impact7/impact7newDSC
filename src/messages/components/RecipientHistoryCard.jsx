@@ -18,6 +18,7 @@ const KIND_LABEL = {
 };
 const STATUS_META = {
   pending: { label: '대기', cls: 'pending' },
+  split_waiting: { label: '분할 대기', cls: 'pending' },
   processing: { label: '처리중', cls: 'pending' },
   awaiting_delivery_result: { label: '결과 확인중', cls: 'pending' },
   sent: { label: '발송완료', cls: 'sent' },

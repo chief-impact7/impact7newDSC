@@ -5,7 +5,15 @@ import { studentFullLabel, currentSchool } from '@impact7/shared/student-label';
 import { formatPhone } from '@impact7/shared/phone';
 import { allClassCodes } from '../../shared/firestore-helpers.js';
 import GradeFilter from '../../dashboard/components/GradeFilter.jsx';
-import { MESSAGE_KIND_NOTICE, MMS_SIZE_NOTICE, messageMeta, normalizePhones, onlyDigits, readMmsImage } from '../message-format.js';
+import {
+  MESSAGE_KIND_NOTICE,
+  MMS_SIZE_NOTICE,
+  alimtalkMeta,
+  messageMeta,
+  normalizePhones,
+  onlyDigits,
+  readMmsImage,
+} from '../message-format.js';
 import { parsePhonesFromFile, sampleCsv } from '../message-import.js';
 import {
   ALIMTALK_NAME_VARIABLE,
@@ -15,6 +23,7 @@ import {
   buildAlimtalkAudienceRequests,
   buildAudienceRequests,
   completedTargetKeys,
+  DIRECT_MAX_QUEUE_MESSAGES,
   DIRECT_MAX_RECIPIENTS,
   estimateAudienceMessages,
   groupSelectedTargets,
@@ -75,7 +84,12 @@ function targetName(entry) {
 function responseSummary(audience, response, fallbackCount) {
   if (response.duplicate) return `${AUDIENCE_LABELS[audience]} 중복 요청`;
   const stats = audience === 'direct'
-    ? { queued: response.queued, skipped_invalid: response.invalid?.length }
+    ? {
+        queued: response.queued,
+        skipped_invalid: response.invalid?.length,
+        split_groups: response.splitGroups,
+        converted_to_sms: response.convertedToSms,
+      }
     : (response.stats || {});
   const parts = [`${AUDIENCE_LABELS[audience]} ${stats.queued ?? fallbackCount}건`];
   if (stats.ad_sms != null) parts[0] = `${AUDIENCE_LABELS[audience]} 문자광고 ${stats.ad_sms || 0}건`;
@@ -84,6 +98,8 @@ function responseSummary(audience, response, fallbackCount) {
   if (stats.skipped_no_phone) parts.push(`번호없음 ${stats.skipped_no_phone}`);
   if (stats.skipped_invalid) parts.push(`무효번호 ${stats.skipped_invalid}`);
   if (stats.skipped_revoked) parts.push(`수신거부 ${stats.skipped_revoked}`);
+  if (stats.split_groups) parts.push(`분할 ${stats.split_groups}명`);
+  if (stats.converted_to_sms) parts.push(`문자 전환 ${stats.converted_to_sms}건`);
   return parts.join(' · ');
 }
 
@@ -127,13 +143,20 @@ export default function BulkSendCard({ students = [] }) {
   const [alimtalkError, setAlimtalkError] = useState('');
   const [alimtalkTemplateId, setAlimtalkTemplateId] = useState('');
   const [alimtalkValues, setAlimtalkValues] = useState({});
+  const [splitLongMessage, setSplitLongMessage] = useState(false);
+  const [serverSplitParts, setServerSplitParts] = useState(0);
   const reqIdRef = useRef(newReqId());
   const fileRef = useRef(null);
   const imageRef = useRef(null);
   const isStaff = audience === 'staff';
   const isDirect = audience === 'direct';
   const isAlimtalk = channel === 'alimtalk';
-  const resetReqId = () => { reqIdRef.current = newReqId(); setConfirming(false); };
+  const resetReqId = (clearLengthError = true, clearSplitChoice = true) => {
+    reqIdRef.current = newReqId();
+    setConfirming(false);
+    if (clearLengthError) setServerSplitParts(0);
+    if (clearSplitChoice) setSplitLongMessage(false);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -229,6 +252,7 @@ export default function BulkSendCard({ students = [] }) {
   function selectChannel(nextChannel) {
     if (nextChannel === channel) return;
     setChannel(nextChannel);
+    setSplitLongMessage(false);
     setConfirming(false);
     setMsg('');
     if (nextChannel === 'alimtalk') setKind('info');
@@ -265,7 +289,12 @@ export default function BulkSendCard({ students = [] }) {
     setDirectConsentConfirmed(false);
     resetReqId();
   }
-  function clearAll() { setPicked(new Map()); setDirectConsentConfirmed(false); resetReqId(); }
+  function clearAll() {
+    setPicked(new Map());
+    setDirectConsentConfirmed(false);
+    setSplitLongMessage(false);
+    resetReqId();
+  }
   function selectAudience(nextAudience) {
     if (nextAudience === audience) return;
     setAudience(nextAudience);
@@ -328,6 +357,7 @@ export default function BulkSendCard({ students = [] }) {
   function selectKind(k) {
     if (k === 'promo' && hasStaffTargets) { setMsg('교직원은 정보성 문자만 지원합니다.'); return; }
     setKind(k);
+    setSplitLongMessage(false);
     // 홍보로 전환 시 받는이를 단일로 축소(서버 promo는 단일 필드만 처리).
     if (k === 'promo') {
       setRecipientFields((prev) => new Set([[...prev][0] || 'parent_1']));
@@ -342,6 +372,7 @@ export default function BulkSendCard({ students = [] }) {
     try {
       const image = await readMmsImage(file);
       setMmsImage(image);
+      setSplitLongMessage(false);
       setMsg(image.converted
         ? `${file.name} → JPG 변환·압축 (${Math.ceil(image.size / 1024)}KB) · MMS로 발송됩니다.`
         : `${file.name} 첨부 완료 · MMS로 발송됩니다.`);
@@ -386,6 +417,12 @@ export default function BulkSendCard({ students = [] }) {
     if (!isAlimtalk && !content.trim()) { setMsg('내용을 입력하세요.'); return; }
     if (kind === 'promo' && hasStaffTargets) { setMsg('교직원은 홍보성 문자 대상에 포함할 수 없습니다.'); return; }
     if (kind === 'promo' && hasDirectTargets && !directConsentConfirmed) { setMsg('직접 입력 번호의 광고 수신동의를 확인하세요.'); return; }
+    if (lengthBlocked) {
+      setMsg(canSplitLongMessage
+        ? `현재 내용은 한 건으로 발송할 수 없습니다. 문자 ${splitParts}건으로 나눠 발송을 선택하세요.`
+        : 'Solapi 제한으로 현재 내용은 발송할 수 없습니다. 내용을 줄이거나 복사해 일반폰에서 보내세요.');
+      return;
+    }
     const invalidVariables = isAlimtalk ? [] : invalidVariablesForGroups(selectedGroups, effectiveContent);
     if (invalidVariables.length) { setMsg(`선택한 대상과 함께 보낼 수 없는 변수입니다: ${invalidVariables.join('·')}`); return; }
     if (when === 'schedule' && !scheduledAt) { setMsg('예약 시각을 입력하세요.'); return; }
@@ -393,8 +430,12 @@ export default function BulkSendCard({ students = [] }) {
       setMsg(`직접 입력 번호는 한 번에 최대 ${DIRECT_MAX_RECIPIENTS}명까지 발송할 수 있습니다.`);
       return;
     }
-    if (estimatedMessageCount > BULK_MAX_MESSAGES) {
-      setMsg(`한 번에 최대 ${BULK_MAX_MESSAGES}건까지 발송할 수 있습니다 (현재 예상 ${estimatedMessageCount}건).`);
+    if (estimatedQueueCount > BULK_MAX_MESSAGES) {
+      setMsg(`한 번에 최대 ${BULK_MAX_MESSAGES}건까지 발송할 수 있습니다 (분할 포함 예상 ${estimatedQueueCount}건).`);
+      return;
+    }
+    if (estimatedDirectQueueCount > DIRECT_MAX_QUEUE_MESSAGES) {
+      setMsg(`직접 입력 번호는 분할 포함 한 번에 최대 ${DIRECT_MAX_QUEUE_MESSAGES}건까지 등록할 수 있습니다 (현재 예상 ${estimatedDirectQueueCount}건).`);
       return;
     }
     if (selectedCount >= BULK_CONFIRM_THRESHOLD && !confirming) { setConfirming(true); setMsg(''); return; }
@@ -414,6 +455,7 @@ export default function BulkSendCard({ students = [] }) {
         templateVariables: alimtalkValues,
         requestId: reqIdRef.current,
         scheduledAt: normalizedSchedule,
+        splitLongMessage,
       }) : buildAudienceRequests({
         groups: selectedGroups,
         recipientFields: [...recipientFields],
@@ -423,6 +465,7 @@ export default function BulkSendCard({ students = [] }) {
         requestId: reqIdRef.current,
         scheduledAt: normalizedSchedule,
         mmsImage: mmsImage ? { name: mmsImage.name, dataBase64: mmsImage.dataBase64 } : null,
+        splitLongMessage,
       });
       const results = await Promise.allSettled(requests.map(async (request) => {
         let response;
@@ -434,6 +477,8 @@ export default function BulkSendCard({ students = [] }) {
       const completed = results.filter((result) => result.status === 'fulfilled').map((result) => result.value);
       const failed = results.filter((result) => result.status === 'rejected');
       if (failed.length) {
+        const splitFailure = failed.find((result) => result.reason?.details?.canSplit)?.reason?.details;
+        if (splitFailure) setServerSplitParts(splitFailure.splitParts || 1);
         const completedKeys = completedTargetKeys(requests, results, selectedGroups);
         const failedDetails = results.flatMap((result, index) => result.status === 'rejected'
           ? [`${AUDIENCE_LABELS[requests[index].audience]}: ${result.reason?.message || result.reason}`]
@@ -444,7 +489,11 @@ export default function BulkSendCard({ students = [] }) {
           return next;
         });
         setDirectConsentConfirmed(false);
-        setMsg(`일부 발송 실패 — ${completed.join(' / ') || '접수 없음'} · ${failedDetails.join(' / ')}`);
+        const splitHelp = splitFailure
+          ? ` · 아래에서 문자 ${splitFailure.splitParts || 1}건 ${splitFailure.splitParts > 1 ? '분할' : '전환'} 발송을 선택할 수 있습니다.`
+          : '';
+        const failureTitle = completed.length ? '일부 발송 실패' : '발송하지 않음';
+        setMsg(`${failureTitle} — ${completed.join(' / ') || '접수 없음'} · ${failedDetails.join(' / ')}${splitHelp}`);
         return;
       }
       setMsg('발송 접수 — ' + completed.join(' / '));
@@ -458,7 +507,6 @@ export default function BulkSendCard({ students = [] }) {
     ? composeWithExtras(content, [withInvite ? invite : '', withFooter ? footer : ''])
     : content;
   const effectiveContent = kind === 'promo' ? ensurePromoCompliance(baseContent) : baseContent;
-  const meta = messageMeta(effectiveContent);
   const firstEntry = rows.find((entry) => entry.on);
   const alimtalkPreviewName = firstEntry?.audience === 'direct'
     ? (alimtalkValues[ALIMTALK_NAME_VARIABLE] || ALIMTALK_NAME_VARIABLE)
@@ -466,6 +514,17 @@ export default function BulkSendCard({ students = [] }) {
   const previewContent = isAlimtalk
     ? applyAlimtalkPreview(selectedAlimtalkTemplate, alimtalkValues, alimtalkPreviewName)
     : effectiveContent;
+  const meta = messageMeta(isAlimtalk ? previewContent : effectiveContent);
+  const alimtalkLength = isAlimtalk ? alimtalkMeta(previewContent) : null;
+  const needsSplit = (isAlimtalk ? alimtalkLength.overLimit : meta.overLimit) || serverSplitParts > 0;
+  const canSplitLongMessage = kind === 'info' && !mmsImage;
+  const splitParts = Math.max(isAlimtalk ? alimtalkLength.splitParts : meta.splitParts, serverSplitParts);
+  const lengthBlocked = needsSplit && (!canSplitLongMessage || !splitLongMessage);
+  const estimatedQueueCount = estimatedMessageCount * (needsSplit && splitLongMessage ? splitParts : 1);
+  const estimatedDirectQueueCount = selectedGroups.direct.length * (needsSplit && splitLongMessage ? splitParts : 1);
+  const splitActionLabel = splitParts > 1
+    ? `문자 ${splitParts}건으로 나눠 발송`
+    : '문자 1건으로 전환 발송';
   let previewText = '내용을 입력하면 여기에 표시됩니다.';
   if (isAlimtalk) previewText = previewContent || '템플릿을 선택하면 여기에 표시됩니다.';
   else if (previewContent) previewText = applyVars(previewContent, firstEntry);
@@ -623,7 +682,8 @@ export default function BulkSendCard({ students = [] }) {
               </>}
               <div className="mc-meta">
                 <span className="mc-pill lms">알림톡</span>
-                <span>대상 {selectedCount}명 · 예상 {estimatedMessageCount}건</span>
+                <span>{alimtalkLength.chars} / {alimtalkLength.maxChars}자 · 대체문자 {alimtalkLength.fallbackBytes} / {alimtalkLength.maxFallbackBytes}byte</span>
+                <span>대상 {selectedCount}명 · 예상 {estimatedQueueCount}건</span>
               </div>
             </> : <>
             <div className="mc-routing-grid">
@@ -662,8 +722,8 @@ export default function BulkSendCard({ students = [] }) {
             <div className="mc-meta">
               <span>{meta.chars}자 · {meta.bytes}byte</span>
               <span className={'mc-pill' + (messageType !== 'SMS' ? ' lms' : '')}>{messageType}</span>
-              <span>· 대상 {selectedCount}명 · 예상 {estimatedMessageCount}건</span>
-              <label className="mc-mms-toggle"><input type="checkbox" checked={!!mmsImage} onChange={(e) => { if (e.target.checked) imageRef.current?.click(); else { setMmsImage(null); resetReqId(); } }} /> MMS</label>
+              <span>· 대상 {selectedCount}명 · 예상 {estimatedQueueCount}건</span>
+              <label className="mc-mms-toggle"><input type="checkbox" checked={!!mmsImage} onChange={(e) => { if (e.target.checked) { setSplitLongMessage(false); imageRef.current?.click(); } else { setMmsImage(null); resetReqId(); } }} /> MMS</label>
             </div>
             {kind === 'info' && <div className="mc-promo-checks"><label title={invite}><input type="checkbox" checked={withInvite} onChange={(e) => { setWithInvite(e.target.checked); resetReqId(); }} /> 채널 가입 안내</label><label title={footer || '문구 설정에서 꼬리말을 등록하세요'}><input type="checkbox" checked={withFooter} disabled={!footer} onChange={(e) => { setWithFooter(e.target.checked); resetReqId(); }} /> 학원 꼬리말</label><IconButton svg={ICON_SVG.gear} label="문구 설정" aria-expanded={setupOpen} onClick={() => { setFooterDraft(footer); setInviteDraft(inviteCustom); setSetupOpen(!setupOpen); }} /></div>}
             {hasStaffTargets && <div className="mc-note">교직원 문자는 관리자 이상만 발송할 수 있으며 업무성 정보 문자만 지원합니다.</div>}
@@ -672,6 +732,14 @@ export default function BulkSendCard({ students = [] }) {
             {mmsImage && <div className="mc-mms-file"><img src={mmsImage.previewUrl} alt="MMS 첨부 미리보기" /><span>{mmsImage.name}<br />{mmsImage.width}×{mmsImage.height}px · {Math.ceil(mmsImage.size / 1024)}KB</span><IconButton svg={ICON_SVG.x} label="첨부 제거" onClick={() => { setMmsImage(null); resetReqId(); }} /></div>}
             {kind === 'info' && setupOpen && <div className="mc-message-setup"><label className="mc-field-label">채널 가입 안내 문구 (비우면 기본 문구)</label><textarea aria-label="채널 가입 안내 문구" className="mc-textarea" rows={2} value={inviteDraft} onChange={(e) => setInviteDraft(e.target.value)} placeholder={DEFAULT_CHANNEL_INVITE} maxLength={280} /><label className="mc-field-label">학원 꼬리말</label><input aria-label="학원 꼬리말" className="mc-tpl-title" value={footerDraft} onChange={(e) => setFooterDraft(e.target.value)} placeholder="예: -임팩트세븐학원 02-2649-0509" maxLength={200} /><div className="mc-vars"><button type="button" className="mc-var-btn" disabled={setupBusy} onClick={onSaveSetup}>{setupBusy ? '저장 중…' : '저장'}</button><IconButton svg={ICON_SVG.x} label="취소" onClick={() => setSetupOpen(false)} /></div></div>}
             </>}
+            {needsSplit && <div className="mc-note" role="alert">
+              {isAlimtalk
+                ? `Solapi 알림톡 또는 대체문자 제한을 초과했습니다. 현재 ${alimtalkLength.chars}자 / ${alimtalkLength.fallbackBytes}byte입니다.`
+                : `Solapi 문자 한 건의 2,000byte 제한을 초과했습니다. 현재 ${meta.bytes}byte입니다.`}
+              {canSplitLongMessage
+                ? <label className="mc-mms-toggle"><input type="checkbox" checked={splitLongMessage} onChange={(e) => { setSplitLongMessage(e.target.checked); resetReqId(false, false); }} /> {splitActionLabel}</label>
+                : <span> 내용을 줄이거나 복사해 일반폰에서 보내세요.</span>}
+            </div>}
           </div>
 
           <div className="bulk-right">
@@ -687,7 +755,7 @@ export default function BulkSendCard({ students = [] }) {
               </div>
             </div>
             <p className="mc-preview-foot">{firstEntry ? `${targetName(firstEntry)} 기준` : '대상 미선택'} · 실제는 선택한 대상별로 발송</p>
-            <div className="bulk-summary">대상 {selectedCount}명 · 예상 {estimatedMessageCount}건 · 받는이 {recipientText} · {messageType} · {messageCategory}</div>
+            <div className="bulk-summary">대상 {selectedCount}명 · 예상 {estimatedQueueCount}건 · 받는이 {recipientText} · {messageType} · {messageCategory}</div>
             <div className="bulk-send-row">
               <div className="mc-seg">
                 <button type="button" className={when === 'now' ? 'on' : ''} aria-pressed={when === 'now'} onClick={() => setWhen('now')}>즉시</button>
@@ -698,14 +766,14 @@ export default function BulkSendCard({ students = [] }) {
             {confirming && (
               <div className="mc-note" role="alertdialog" aria-label="발송 확인" style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
                 <span>
-                  {selectedCount}명 · 예상 {estimatedMessageCount}건 · 받는이 {recipientText} · {isAlimtalk ? '알림톡 ' : ''}{messageCategory}
+                  {selectedCount}명 · 예상 {estimatedQueueCount}건 · 받는이 {recipientText} · {isAlimtalk ? '알림톡 ' : ''}{messageCategory}
                   {when === 'schedule' && scheduledAt ? ` · 예약 ${scheduledAt.replace('T', ' ')}` : ' · 즉시 발송'}
                   — 맞으면 아래 버튼을 다시 눌러 발송하세요.
                 </span>
                 <IconButton svg={ICON_SVG.x} label="취소" onClick={() => setConfirming(false)} />
               </div>
             )}
-            <button className="mc-send bulk-send-btn" disabled={sending} onClick={onSendClick}>
+            <button className="mc-send bulk-send-btn" disabled={sending || lengthBlocked} onClick={onSendClick}>
               {sending ? '발송 중…' : confirming ? `확인 후 ${selectedCount}명에게 발송` : `${selectedCount}명에게 발송`}
             </button>
             {msg && <p className="mc-field-label" role="status" aria-live="polite" style={{ marginTop: 8 }}>{msg}</p>}
