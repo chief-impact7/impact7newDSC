@@ -15,6 +15,7 @@ import { todayKST } from '@impact7/shared/datetime';
 
 let _sendingReport = false;
 let _parentMsgRecipientFields = new Set(['parent_1']);
+let _reportRequest = null;
 
 // 백엔드 recipientPhone.js의 RECIPIENT_FIELDS와 일치. 번호가 있는 대상만 노출한다.
 const RECIPIENT_OPTIONS = [
@@ -512,6 +513,19 @@ function selectedParentMsgRecipients() {
     return [..._parentMsgRecipientFields];
 }
 
+function reportRequestId(kind, payload) {
+    const signature = JSON.stringify([kind, payload]);
+    if (_reportRequest?.signature !== signature) {
+        const suffix = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        _reportRequest = { signature, id: `report-${suffix}` };
+    }
+    return _reportRequest.id;
+}
+
+function clearReportRequest(requestId) {
+    if (_reportRequest?.id === requestId) _reportRequest = null;
+}
+
 function consultationTargetLabel(recipientFields) {
     if (recipientFields.length === 1 && recipientFields[0] === 'student') return '학생';
     if (recipientFields.includes('student')) return '학생/학부모';
@@ -536,14 +550,33 @@ async function _sendReportAlimtalk() {
     _sendingReport = true;
     btnIds.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
     try {
-        await sendParentNotice({
+        const payload = {
             studentId: parentMsgStudentId,
             templateKey: 'report',
             reportDate: state.selectedDate || todayKST(),
             variables: { 날짜: reportDateLabel(), 내용: content },
             recipientFields,
-        });
-        alert('알림톡 발송을 요청했습니다.');
+        };
+        payload.requestId = reportRequestId('alimtalk', payload);
+        let result;
+        try {
+            result = await sendParentNotice(payload);
+        } catch (err) {
+            const details = err?.details;
+            if (!details?.canSplit) throw err;
+            const alternative = details.splitParts > 1
+                ? `문자 ${details.splitParts}건으로 나누어 발송할까요?\n각 문자에 [1/${details.splitParts}]처럼 순서가 표시됩니다.`
+                : '문자 1건으로 전환하여 발송할까요?';
+            const split = confirm(
+                `${err?.message || err}\n\n알림톡 대신 ${alternative}\n취소하면 복사 버튼으로 일반폰에서 보낼 수 있습니다.`,
+            );
+            if (!split) return;
+            result = await sendParentNotice({ ...payload, splitLongMessage: true });
+        }
+        clearReportRequest(payload.requestId);
+        alert(result?.channel === 'sms'
+            ? `알림톡 대신 문자 ${result.splitParts}건으로 ${result.splitParts > 1 ? '나누어 ' : ''}발송 대기열에 등록했습니다.`
+            : '알림톡 발송 대기열에 등록했습니다.');
     } catch (err) {
         console.error('알림톡 발송 실패:', err);
         alert('알림톡 발송 실패: ' + (err?.message || err));
@@ -566,15 +599,27 @@ async function _sendReportWithConsultation() {
     _sendingReport = true;
     btnIds.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
     try {
-        // 멱등키를 두지 않는다 — 같은 날 수정본 재발송을 허용. 더블클릭 중복은 _sendingReport
-        // 플래그 + 버튼 disabled로 막는다(응답 전까지 재진입 불가).
-        const res = await sendDailyReport({
+        const payload = {
             studentId: parentMsgStudentId,
             content,
             reportDate: sendDate,
             recipientField: recipientFields[0],
             recipientFields,
-        });
+        };
+        payload.requestId = reportRequestId('sms', payload);
+        let res;
+        try {
+            res = await sendDailyReport(payload);
+        } catch (err) {
+            const details = err?.details;
+            if (!details?.canSplit) throw err;
+            const split = confirm(
+                `${err?.message || err}\n\n문자 ${details.splitParts}건으로 나누어 발송할까요?\n각 문자에 [1/${details.splitParts}]처럼 순서가 표시됩니다.`,
+            );
+            if (!split) return;
+            res = await sendDailyReport({ ...payload, splitLongMessage: true });
+        }
+        clearReportRequest(payload.requestId);
         let msg = `${res?.queuedCount ?? recipientFields.length}건 문자 발송을 요청했습니다.`;
 
         try {

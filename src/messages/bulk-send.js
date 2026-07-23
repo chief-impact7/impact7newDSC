@@ -1,5 +1,6 @@
 export const BULK_MAX_MESSAGES = 10000;
 export const DIRECT_MAX_RECIPIENTS = 100;
+export const DIRECT_MAX_QUEUE_MESSAGES = 400;
 
 export function audienceMaxMessages(audience) {
   return audience === 'direct' ? DIRECT_MAX_RECIPIENTS : BULK_MAX_MESSAGES;
@@ -41,8 +42,17 @@ export function applyAlimtalkPreview(template, values = {}, recipientName = '') 
 }
 
 // #{학생명}은 학생·교직원엔 서버가 자동 주입하므로 제외하고, 이름을 모르는 직접 번호에만 전달한다.
-export function buildAlimtalkAudienceRequests({ groups, recipientFields, templateId, templateVariables, requestId, scheduledAt }) {
+export function buildAlimtalkAudienceRequests({
+  groups,
+  recipientFields,
+  templateId,
+  templateVariables,
+  requestId,
+  scheduledAt,
+  splitLongMessage = false,
+}) {
   const schedule = scheduledAt ? { scheduledAt } : {};
+  const split = splitLongMessage ? { splitLongMessage: true } : {};
   const autoVariables = Object.fromEntries(
     Object.entries(templateVariables).filter(([key]) => key !== ALIMTALK_NAME_VARIABLE),
   );
@@ -60,6 +70,7 @@ export function buildAlimtalkAudienceRequests({ groups, recipientFields, templat
         templateVariables: autoVariables,
         requestId: `${requestId}-student`,
         ...schedule,
+        ...split,
       },
     });
   }
@@ -67,14 +78,14 @@ export function buildAlimtalkAudienceRequests({ groups, recipientFields, templat
     requests.push({
       audience: 'staff',
       call: 'bulk',
-      payload: { ...base, staffIds: groups.staff, templateVariables: autoVariables, requestId: `${requestId}-staff`, ...schedule },
+      payload: { ...base, staffIds: groups.staff, templateVariables: autoVariables, requestId: `${requestId}-staff`, ...schedule, ...split },
     });
   }
   if (groups.direct.length) {
     requests.push({
       audience: 'direct',
       call: 'direct',
-      payload: { ...base, recipients: groups.direct.join('\n'), templateVariables, requestId: `${requestId}-direct`, ...schedule },
+      payload: { ...base, recipients: groups.direct.join('\n'), templateVariables, requestId: `${requestId}-direct`, ...schedule, ...split },
     });
   }
   return requests;
@@ -90,7 +101,17 @@ export function completedTargetKeys(requests, results, groups) {
   return keys;
 }
 
-export function buildAudienceRequests({ groups, recipientFields, content, kind, consentConfirmed, requestId, scheduledAt, mmsImage }) {
+export function buildAudienceRequests({
+  groups,
+  recipientFields,
+  content,
+  kind,
+  consentConfirmed,
+  requestId,
+  scheduledAt,
+  mmsImage,
+  splitLongMessage = false,
+}) {
   const requests = [];
   for (const audience of ['student', 'staff', 'direct']) {
     const ids = groups[audience];
@@ -106,6 +127,7 @@ export function buildAudienceRequests({ groups, recipientFields, content, kind, 
       requestId: `${requestId}-${audience}`,
       scheduledAt,
       mmsImage,
+      splitLongMessage,
     });
     requests.push({ audience, ...request });
   }
@@ -115,9 +137,11 @@ export function buildAudienceRequests({ groups, recipientFields, content, kind, 
 export function buildAudienceRequest({
   audience, ids, recipientFields, directRecipients, content, kind,
   consentConfirmed, requestId, scheduledAt, mmsImage,
+  splitLongMessage = false,
 }) {
   const schedule = scheduledAt ? { scheduledAt } : {};
   const image = mmsImage ? { mmsImage } : {};
+  const split = splitLongMessage ? { splitLongMessage: true } : {};
   if (audience === 'direct') {
     return {
       call: 'direct',
@@ -129,11 +153,12 @@ export function buildAudienceRequest({
         requestId,
         ...schedule,
         ...image,
+        ...split,
       },
     };
   }
 
-  const payload = { title: '문자 발송', content, requestId, ...schedule, ...image };
+  const payload = { title: '문자 발송', content, requestId, ...schedule, ...image, ...split };
   if (audience === 'staff') return { call: 'bulk', payload: { ...payload, staffIds: ids } };
   Object.assign(payload, {
     studentIds: ids,

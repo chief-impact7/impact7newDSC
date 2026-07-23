@@ -1,9 +1,12 @@
 // 문자 길이/종류 표시용. 솔라피 SMS 기준 90바이트(한글·전각 2바이트, ASCII 1바이트, EUC-KR 근사).
 // 90바이트 이하면 SMS(단문), 초과하면 LMS(장문)로 자동 분류된다.
-const SMS_BYTE_LIMIT = 90;
+export const SMS_BYTE_LIMIT = 90;
+export const LMS_BYTE_LIMIT = 2000;
+export const ALIMTALK_CHAR_LIMIT = 1000;
 const MMS_MAX_BYTES = 200 * 1024;
 const MMS_MAX_WIDTH = 1500;
 const MMS_MAX_HEIGHT = 1440;
+const SPLIT_BODY_MAX_BYTES = LMS_BYTE_LIMIT - 8;
 
 export const MMS_SIZE_NOTICE = '이미지는 JPG 200KB 이하로 자동 변환·압축됩니다. PDF는 1페이지짜리만 첨부할 수 있습니다.';
 export const MESSAGE_KIND_NOTICE = {
@@ -14,9 +17,44 @@ export const MESSAGE_KIND_NOTICE = {
 export function smsByteLen(text) {
   let n = 0;
   for (const ch of String(text ?? '')) {
-    n += ch.codePointAt(0) > 0x7f ? 2 : 1;
+    const codePoint = ch.codePointAt(0);
+    n += codePoint > 0xffff ? 4 : codePoint > 0x7f ? 2 : 1;
   }
   return n;
+}
+
+export function splitSmsText(text) {
+  const source = String(text ?? '').trim();
+  if (smsByteLen(source) <= LMS_BYTE_LIMIT) return [source];
+
+  const chars = [...source];
+  const bodies = [];
+  let start = 0;
+  while (start < chars.length) {
+    let end = start;
+    let bytes = 0;
+    let lastBreak = -1;
+    while (end < chars.length) {
+      const nextBytes = smsByteLen(chars[end]);
+      if (bytes + nextBytes > SPLIT_BODY_MAX_BYTES) break;
+      bytes += nextBytes;
+      end += 1;
+      if (/\s/.test(chars[end - 1])) lastBreak = end;
+    }
+    if (end < chars.length && lastBreak > start) {
+      let tokenBytes = 0;
+      let tokenEnd = lastBreak;
+      while (tokenEnd < chars.length && !/\s/.test(chars[tokenEnd])) {
+        tokenBytes += smsByteLen(chars[tokenEnd]);
+        tokenEnd += 1;
+      }
+      if (tokenBytes <= SPLIT_BODY_MAX_BYTES) end = lastBreak;
+    }
+    bodies.push(chars.slice(start, end).join(''));
+    start = end;
+  }
+  if (bodies.length > 99) throw new Error('문자가 너무 길어 최대 99건으로도 나눌 수 없습니다.');
+  return bodies.map((body, index) => `[${index + 1}/${bodies.length}] ${body}`);
 }
 
 import { digitsOf } from '@impact7/shared/phone';
@@ -35,7 +73,35 @@ export function normalizePhones(raw) {
 export function messageMeta(text) {
   const s = String(text ?? '');
   const bytes = smsByteLen(s);
-  return { chars: [...s].length, bytes, type: bytes <= SMS_BYTE_LIMIT ? 'SMS' : 'LMS', limit: SMS_BYTE_LIMIT };
+  let splitParts = 1;
+  if (bytes > LMS_BYTE_LIMIT) {
+    try {
+      splitParts = splitSmsText(s).length;
+    } catch {
+      splitParts = 100;
+    }
+  }
+  return {
+    chars: [...s].length,
+    bytes,
+    type: bytes <= SMS_BYTE_LIMIT ? 'SMS' : bytes <= LMS_BYTE_LIMIT ? 'LMS' : '발송 불가',
+    limit: bytes <= SMS_BYTE_LIMIT ? SMS_BYTE_LIMIT : LMS_BYTE_LIMIT,
+    overLimit: bytes > LMS_BYTE_LIMIT,
+    splitParts,
+  };
+}
+
+export function alimtalkMeta(text, fallbackText = text) {
+  const chars = [...String(text ?? '')].length;
+  const fallback = messageMeta(fallbackText);
+  return {
+    chars,
+    maxChars: ALIMTALK_CHAR_LIMIT,
+    fallbackBytes: fallback.bytes,
+    maxFallbackBytes: LMS_BYTE_LIMIT,
+    overLimit: chars > ALIMTALK_CHAR_LIMIT || fallback.overLimit,
+    splitParts: fallback.splitParts,
+  };
 }
 
 function readFileAsDataUrl(file) {

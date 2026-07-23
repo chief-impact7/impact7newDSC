@@ -17,6 +17,7 @@ const UNCONFIRMED_CODE = 'delivery_result_timeout';
 // 큐 상태 표시 메타 (계약 §2.4). failed_permanent는 미확정/확정으로 나눠 두 카드로 보여준다.
 const QUEUE_STATUS = [
     { key: 'pending', keys: ['pending'], label: '대기', cls: 'pending' },
+    { key: 'split_waiting', keys: ['split_waiting'], label: '분할 대기', cls: 'pending' },
     { key: 'processing', keys: ['processing', 'awaiting_delivery_result'], label: '처리중', cls: 'processing' },
     { key: 'failed_retryable', keys: ['failed_retryable'], label: '재시도 대기', cls: 'retry' },
     { key: 'failed_unconfirmed', keys: ['failed_permanent'], label: '결과 미확정', cls: 'retry', codeFilter: (code) => code === UNCONFIRMED_CODE },

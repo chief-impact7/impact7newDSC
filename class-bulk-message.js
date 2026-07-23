@@ -162,13 +162,25 @@ export async function sendClassBulkMessage(classCode) {
     const btn = document.getElementById('class-bulk-send');
     if (btn) btn.disabled = true;
     try {
-        const res = await createBulkMessage({
+        const payload = {
             title: `반 단체 안내-${classCode}`,
             content,
             studentIds,
             recipientFields,
             requestId: _reqId,
-        });
+        };
+        let res;
+        try {
+            res = await createBulkMessage(payload);
+        } catch (err) {
+            const details = err?.details;
+            if (!details?.canSplit) throw err;
+            const split = confirm(
+                `${err?.message || err}\n\n문자 ${details.splitParts}건으로 나누어 발송할까요?\n각 문자에 [1/${details.splitParts}]처럼 순서가 표시됩니다.\n취소하면 내용을 복사해 일반폰에서 보낼 수 있습니다.`,
+            );
+            if (!split) return;
+            res = await createBulkMessage({ ...payload, splitLongMessage: true });
+        }
         if (res?.duplicate) {
             showToast('이미 발송된 요청입니다.');
         } else {

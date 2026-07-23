@@ -125,6 +125,18 @@ describe('알림톡 단체발송 요청', () => {
       requestId: 'bulk-2-direct',
     });
   });
+
+  it('사용자가 선택한 경우에만 문자 분할 옵션을 각 요청에 전달한다', () => {
+    const requests = buildAlimtalkAudienceRequests({
+      groups: { student: ['s1'], staff: ['t1'], direct: ['01011112222'] },
+      recipientFields: ['parent_1'],
+      templateId: 'KA01TP1',
+      templateVariables: { '#{학생명}': '학부모', '#{수업명}': '중등 수학' },
+      requestId: 'bulk-3',
+      splitLongMessage: true,
+    });
+    expect(requests.every(({ payload }) => payload.splitLongMessage === true)).toBe(true);
+  });
 });
 
 it('직접번호는 100명, DB 대상은 10,000건 제한을 유지한다', () => {
@@ -160,6 +172,21 @@ it('혼합 대상은 기존 API별 요청으로 분리하고 요청 ID를 고정
     'mixed-1-student', 'mixed-1-staff', 'mixed-1-direct',
   ]);
   expect(requests[2].payload.recipients).toBe('01011112222');
+});
+
+it('정보성 문자 자동 분할 선택을 기존 요청 계약에 전달한다', () => {
+  const requests = buildAudienceRequests({
+    groups: { student: ['s1'], staff: [], direct: ['01011112222'] },
+    recipientFields: ['parent_1'],
+    content: '가'.repeat(1001),
+    kind: 'info',
+    consentConfirmed: false,
+    requestId: 'split-1',
+    scheduledAt: '',
+    mmsImage: null,
+    splitLongMessage: true,
+  });
+  expect(requests.every(({ payload }) => payload.splitLongMessage === true)).toBe(true);
 });
 
 it('교직원·직접번호와 함께 쓸 수 없는 치환 변수를 구분한다', () => {

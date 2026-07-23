@@ -29,6 +29,7 @@ let _currentStudentId = null;
 // 멱등키 — 폼 단위로 안정 유지(응답 타임아웃 후 재시도의 중복 발송 차단), 발송 성공 시 재발급.
 let _noticeReqId = null;
 let _promoReqId = null;
+let _freeReqId = null;
 
 // 백엔드 PARENT_NOTICE_TEMPLATES와 변수 키가 일치해야 한다(parentNoticeHandler.js).
 const NOTICE_TEMPLATES = {
@@ -84,6 +85,7 @@ const KIND_LABEL = {
 // 발송 이력 상태 배지 — message_queue status 전체 커버(메시지센터와 동일 의미).
 const HISTORY_STATUS = {
   pending: { label: '대기', bg: '#eef1f4', fg: '#5f6b76' },
+  split_waiting: { label: '분할 대기', bg: '#eef1f4', fg: '#5f6b76' },
   processing: { label: '처리중', bg: '#eef1f4', fg: '#5f6b76' },
   awaiting_delivery_result: { label: '확인중', bg: '#eef1f4', fg: '#5f6b76' },
   sent: { label: '발송완료', bg: '#e6f4ea', fg: '#1e7e34' },
@@ -127,6 +129,7 @@ export function renderMessageTab(studentId) {
   _mode = 'notice';
   _noticeReqId = null;
   _promoReqId = null;
+  _freeReqId = null;
   const student = _deps.getStudent?.(studentId) || {};
   const readonly = _deps.readonly === true;
 
@@ -181,6 +184,7 @@ export function renderMessageTab(studentId) {
     r.addEventListener('change', () => {
       if (r.checked) _alimtalkRecipientFields.add(r.value);
       else _alimtalkRecipientFields.delete(r.value);
+      _noticeReqId = null;
       void saveRecipientSettings(studentId);
     });
   });
@@ -188,6 +192,8 @@ export function renderMessageTab(studentId) {
     r.addEventListener('change', () => {
       if (r.checked) _smsRecipientFields.add(r.value);
       else _smsRecipientFields.delete(r.value);
+      _freeReqId = null;
+      _promoReqId = null;
       void saveRecipientSettings(studentId);
     });
   });
@@ -403,8 +409,12 @@ function renderForm(studentId, hasRecipient, readonly) {
          </label>`,
       ).join('');
     };
-    sel.addEventListener('change', renderVars);
+    sel.addEventListener('change', () => {
+      _noticeReqId = null;
+      renderVars();
+    });
     renderVars();
+    document.getElementById('msg-vars').addEventListener('input', () => { _noticeReqId = null; });
     document.getElementById('msg-send').addEventListener('click', () => sendNotice(studentId, sel));
   } else if (_mode === 'free') {
     form.innerHTML = `
@@ -412,6 +422,7 @@ function renderForm(studentId, hasRecipient, readonly) {
       <textarea id="msg-content" class="field-input" aria-label="자유 안내 본문" rows="4" style="width:100%;box-sizing:border-box;margin:0;" placeholder="보낼 내용을 입력하세요." ${dis}></textarea>
       <button type="button" id="msg-send" class="btn btn-primary" style="margin-top:8px;padding:6px 16px;" ${dis}>문자 발송</button>
     `;
+    document.getElementById('msg-content').addEventListener('input', () => { _freeReqId = null; });
     document.getElementById('msg-send').addEventListener('click', () => sendFree(studentId));
   } else {
     form.innerHTML = `
@@ -419,6 +430,7 @@ function renderForm(studentId, hasRecipient, readonly) {
       <textarea id="msg-content" class="field-input" aria-label="홍보 메시지 본문" rows="4" style="width:100%;box-sizing:border-box;margin:0;" placeholder="${escAttr(PROMO_PLACEHOLDER)}" ${dis}></textarea>
       <button type="button" id="msg-send" class="btn btn-primary" style="margin-top:8px;padding:6px 16px;" ${dis}>홍보 문자 발송</button>
     `;
+    document.getElementById('msg-content').addEventListener('input', () => { _promoReqId = null; });
     document.getElementById('msg-send').addEventListener('click', () => sendPromo(studentId));
   }
 }
@@ -530,10 +542,14 @@ async function sendNotice(studentId, sel) {
   const variables = {};
   document.querySelectorAll('.msg-var').forEach((i) => { variables[i.dataset.key] = i.value.trim(); });
   if (!_noticeReqId) _noticeReqId = `notice_${studentId}_${Date.now()}`;
+  const payload = { studentId, templateKey, variables, recipientFields, requestId: _noticeReqId };
   await doSend(
-    () => sendParentNotice({ studentId, templateKey, variables, recipientFields, requestId: _noticeReqId }),
-    '알림톡 발송을 요청했습니다.',
+    () => sendParentNotice(payload),
+    (res) => res?.channel === 'sms'
+      ? `알림톡 대신 문자 ${res.splitParts}건 발송을 요청했습니다.`
+      : '알림톡 발송을 요청했습니다.',
     () => { _noticeReqId = null; scheduleHistoryReload(studentId); },
+    () => sendParentNotice({ ...payload, splitLongMessage: true }),
   );
 }
 
@@ -557,27 +573,44 @@ async function sendPromo(studentId) {
 }
 
 // 자유 안내(템플릿 없음) — SMS/LMS로 보낸다.
-// 멱등키 없이 재발송 허용(더블클릭은 _sending으로 차단) — parent-message.js 정책과 동일.
 async function sendFree(studentId) {
   if (_sending) return;
   const recipientFields = selectedRecipientFields('sms');
   if (!recipientFields.length) { _deps.toast?.('문자 수신 대상을 선택하세요.', 'error'); return; }
   const content = document.getElementById('msg-content').value.trim();
   if (!content) { _deps.toast?.('내용을 입력하세요.', 'error'); return; }
+  if (!_freeReqId) _freeReqId = `free_${studentId}_${Date.now()}`;
+  const payload = {
+    studentId, content, recipientFields, recipientField: recipientFields[0], requestId: _freeReqId,
+  };
   await doSend(
-    () => sendDailyReport({ studentId, content, recipientFields, recipientField: recipientFields[0] }),
-    '문자 발송을 요청했습니다.',
-    () => scheduleHistoryReload(studentId),
+    () => sendDailyReport(payload),
+    (res) => res?.splitParts > 1
+      ? `문자 ${res.splitParts}건으로 나누어 발송을 요청했습니다.`
+      : '문자 발송을 요청했습니다.',
+    () => { _freeReqId = null; scheduleHistoryReload(studentId); },
+    () => sendDailyReport({ ...payload, splitLongMessage: true }),
   );
 }
 
 // onSuccess는 발송 성공 시에만 호출 — 멱등키를 비워 다음 발송에 새 키를 발급하게 한다.
-async function doSend(fn, okMsg, onSuccess) {
+async function doSend(fn, okMsg, onSuccess, retrySplit) {
   const btn = document.getElementById('msg-send');
   _sending = true;
   if (btn) btn.disabled = true;
   try {
-    const res = await fn();
+    let res;
+    try {
+      res = await fn();
+    } catch (err) {
+      const details = err?.details;
+      if (!retrySplit || !details?.canSplit) throw err;
+      const split = confirm(
+        `${err?.message || err}\n\n문자 ${details.splitParts}건으로 나누어 발송할까요?\n각 문자에 [1/${details.splitParts}]처럼 순서가 표시됩니다.\n취소하면 내용을 복사해 일반폰에서 보낼 수 있습니다.`,
+      );
+      if (!split) return;
+      res = await retrySplit();
+    }
     _deps.toast?.(typeof okMsg === 'function' ? okMsg(res) : okMsg, 'success');
     onSuccess?.();
   } catch (err) {
