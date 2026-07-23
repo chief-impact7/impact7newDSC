@@ -173,16 +173,13 @@ export function useConsultations(user, startDate, endDate, enabled) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const reqIdRef = useRef(0);
-    const prevEnabledRef = useRef(false);
-
-    // enabled가 막 켜졌으면 첫 렌더에 즉시 로딩 표시 — 데이터 도착 전 '없음' 빈 상태 깜빡임 방지.
-    if (enabled && !prevEnabledRef.current) setLoading(true);
-    prevEnabledRef.current = enabled;
 
     const reload = useCallback(() => {
         if (!enabled || !user || !startDate || !endDate) {
             ++reqIdRef.current; // 비활성 후 도착한 in-flight 응답이 비운 상태를 덮지 않도록 무효화
             setConsultations([]);
+            setLoading(false);
+            setError(null);
             return;
         }
         const reqId = ++reqIdRef.current; // 빠른 기간 변경 시 stale 응답이 최신을 덮지 않도록
@@ -199,7 +196,7 @@ export function useConsultations(user, startDate, endDate, enabled) {
     }, [enabled, user, startDate, endDate]);
 
     useEffect(() => { reload(); }, [reload]);
-    return { consultations, loading, error };
+    return { consultations, loading, error, reload };
 }
 
 // 메시지 발송 현황 집계. message_queue는 평문 번호를 보유한 서버 전용 데이터라 클라가 직접

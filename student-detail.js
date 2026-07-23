@@ -1472,45 +1472,51 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
             </div>
         </div>`;
 
-    const cardsHtml = isInactive ? inactiveHtml : `
+    let studentCardsHtml = inactiveHtml;
+    if (!isInactive) {
+        studentCardsHtml = `
+            <!-- 복귀상담 카드 (복귀예정 뷰) -->
+            ${renderReturnConsultCard(studentId)}
+
+            ${renderChecklistCard(studentId)}
+            ${reasonHtml}
+
+            <!-- 개별 등원시간 카드 -->
+            ${arrivalTimeHtml}
+
+            <!-- 타반수업 카드 -->
+            ${renderTempClassOverrideCard(studentId)}
+
+            <!-- 영역별 숙제 카드 -->
+            ${domainHwHtml}
+
+            <!-- 테스트 현황 카드 -->
+            ${domainTestHtml}
+
+            <!-- 다음숙제 카드 -->
+            ${nextHwHtml}
+
+            <!-- 숙제 미통과 카드 (출석 학생만, 내신기간 제외) -->
+            ${showStudyCards ? renderHwFailActionCard(studentId, detailDomains, d2nd, rec.hw_fail_action || {}, has2ndHw ? 'default' : '1st_only') : ''}
+
+            <!-- 테스트 미통과 카드 (출석 학생만, 내신기간 제외) -->
+            ${showStudyCards ? renderTestFailActionCard(studentId, detailTestSections, t2nd, rec.test_fail_action || {}, has2ndTest ? 'default' : '1st_only') : ''}
+
+            <!-- 밀린 Task 카드 (숙제 + 테스트) -->
+            ${renderPendingTasksCard(studentId, [...studentHwTasks, ...studentTestTasks])}
+
+            <!-- 결석대장 카드 -->
+            ${renderAbsenceRecordCard(studentId)}
+
+            <!-- 클리닉 카드 -->
+            ${extraVisitHtml}
+        `;
+    }
+    const cardsHtml = `
         <!-- AI 종합 상태 카드 (비동기 마운트) -->
         <div id="student-status-mount" data-student-id="${escAttr(studentId)}"></div>
 
-        <!-- 복귀상담 카드 (복귀예정 뷰) -->
-        ${renderReturnConsultCard(studentId)}
-
-        ${renderChecklistCard(studentId)}
-        ${reasonHtml}
-
-        <!-- 개별 등원시간 카드 -->
-        ${arrivalTimeHtml}
-
-        <!-- 타반수업 카드 -->
-        ${renderTempClassOverrideCard(studentId)}
-
-        <!-- 영역별 숙제 카드 -->
-        ${domainHwHtml}
-
-        <!-- 테스트 현황 카드 -->
-        ${domainTestHtml}
-
-        <!-- 다음숙제 카드 -->
-        ${nextHwHtml}
-
-        <!-- 숙제 미통과 카드 (출석 학생만, 내신기간 제외) -->
-        ${showStudyCards ? renderHwFailActionCard(studentId, detailDomains, d2nd, rec.hw_fail_action || {}, has2ndHw ? 'default' : '1st_only') : ''}
-
-        <!-- 테스트 미통과 카드 (출석 학생만, 내신기간 제외) -->
-        ${showStudyCards ? renderTestFailActionCard(studentId, detailTestSections, t2nd, rec.test_fail_action || {}, has2ndTest ? 'default' : '1st_only') : ''}
-
-        <!-- 밀린 Task 카드 (숙제 + 테스트) -->
-        ${renderPendingTasksCard(studentId, [...studentHwTasks, ...studentTestTasks])}
-
-        <!-- 결석대장 카드 -->
-        ${renderAbsenceRecordCard(studentId)}
-
-        <!-- 클리닉 카드 -->
-        ${extraVisitHtml}
+        ${studentCardsHtml}
     `;
     // 메모 카드는 기록(docu) 탭의 휴퇴원 요청서 아래로 이동(docu-card.js renderDocuTab).
 
@@ -1519,7 +1525,7 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
     // detail-cards는 naesin/class/diagnostic 등과 공유되므로 마커로 점유 출처를 확인해
     // 다른 화면이 컨테이너를 점유한 사이의 stale skip을 방지한다.
     const cardsUnchanged = incremental && !studentChanged && _lastCardsHtml === cardsHtml &&
-        !isInactive && !!cardsContainer.querySelector(`#student-status-mount[data-student-id="${CSS.escape(studentId)}"]`);
+        !!cardsContainer.querySelector(`#student-status-mount[data-student-id="${CSS.escape(studentId)}"]`);
 
     if (!cardsUnchanged) {
         cardsContainer.innerHTML = cardsHtml;
@@ -1534,18 +1540,21 @@ export function renderStudentDetail(studentId, { incremental = false } = {}) {
         // 재원기간 — 헤더에 비동기로 채움 (history_logs deriveTenure, DB와 동일 로직)
         if (document.getElementById('detail-header-tenure')) fillTenure(studentId, student);
 
-        // AI 종합 상태 카드 — 비동기 마운트 (퇴원 뷰 제외)
-        if (!isInactive) {
-            const statusMount = document.getElementById('student-status-mount');
-            if (statusMount) {
-                import('./student-status-card.js').then(({ renderStudentStatusCard, initStudentStatusCardDeps }) => {
-                    initStudentStatusCardDeps({ readonly: READ_ONLY });
-                    // stale 방지: 그 사이 다른 학생으로 바뀌었으면 스킵
-                    if (statusMount.dataset.studentId === studentId) {
-                        renderStudentStatusCard(studentId, statusMount);
-                    }
-                });
-            }
+        // AI 종합 상태 카드 — 학생 상태와 무관하게 표시
+        const statusMount = document.getElementById('student-status-mount');
+        if (statusMount) {
+            import('./student-status-card.js').then(({ renderStudentStatusCard, initStudentStatusCardDeps }) => {
+                initStudentStatusCardDeps({ readonly: READ_ONLY });
+                // stale 방지: 그 사이 다른 학생으로 바뀌었으면 스킵
+                if (statusMount.dataset.studentId === studentId) {
+                    return renderStudentStatusCard(studentId, statusMount);
+                }
+            }).catch(err => {
+                console.error('[student-status-card] 로드 실패:', err);
+                if (statusMount.dataset.studentId === studentId) {
+                    statusMount.innerHTML = '<div class="detail-card"><em>AI 의견을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</em></div>';
+                }
+            });
         }
     }
 

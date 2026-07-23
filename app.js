@@ -654,7 +654,13 @@ onAuthStateChanged(auth, async (user) => {
 
         let absenceSync = Promise.resolve();
         try {
-            const studentLoad = await loadStudents({ onCache: renderInitialList });
+            const listMetadataReady = Promise.allSettled([
+                loadClassSettings(), loadTeachers(), loadImportantStudentRecords(),
+            ]);
+            const studentLoad = await loadStudents({
+                onCache: () => listMetadataReady.then(renderInitialList),
+            });
+            await listMetadataReady;
             renderInitialList();
             showStudentLoadError(studentLoad);
             await promoteEnrollPending();
@@ -663,7 +669,7 @@ onAuthStateChanged(auth, async (user) => {
             await promoteScheduledLeave();
             // 비차단: write가 서버 ack을 못 받아도 초기 렌더링을 막지 않음 (내부 try-catch 있음)
             trackTeacherLogin(user);
-            await Promise.allSettled([loadDailyRecords(state.selectedDate), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadUserRole(), loadClassSettings(), loadClassNextHw(state.selectedDate), loadTeachers()]);
+            await Promise.allSettled([loadDailyRecords(state.selectedDate), loadTempAttendances(state.selectedDate), loadTempClassOverrides(state.selectedDate), loadUserRole(), loadClassNextHw(state.selectedDate)]);
             absenceSync = loadAbsenceRecords()
                 .then(() => {
                     _realtimeRefreshUI();
@@ -672,7 +678,7 @@ onAuthStateChanged(auth, async (user) => {
                 .catch(err => console.warn('[init-absence]', err));
             [
                 loadRetakeSchedules(), loadHwFailTasks(state.selectedDate), loadTestFailTasks(state.selectedDate),
-                loadLeaveRequests(), loadImportantStudentRecords(),
+                loadLeaveRequests(),
             ].forEach(ready => ready.then(_realtimeRefreshUI));
         } catch (err) {
             console.error('[init] 데이터 로드 중 오류:', err);

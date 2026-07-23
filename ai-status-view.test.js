@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
     STATUS_GROUPS, summaryStatusKey, generatedAtMs, isStale,
     teacherOptions, buildGroups, countParts, gapLabel,
@@ -105,4 +106,11 @@ test('gapLabel: 경고 없으면 빈 문자열, days null이면 기록 없음', 
     assert.equal(gapLabel({}), '');
     assert.equal(gapLabel({ consultation_gap_warning: true, consultation_gap_days: 42 }), '상담공백 42일');
     assert.equal(gapLabel({ consultation_gap_warning: true, consultation_gap_days: null }), '상담기록 없음');
+});
+
+test('학생 ID를 인라인 JavaScript에 삽입하지 않는다', () => {
+    const source = readFileSync(new URL('./student-status-card.js', import.meta.url), 'utf8');
+
+    assert.doesNotMatch(source, /onclick="onGenerateStudentStatusAi/);
+    assert.match(source, /\.status-ai-btn'\)\?\.addEventListener\('click'/);
 });

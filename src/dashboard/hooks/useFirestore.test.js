@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
     fetchStudentsFromCache: vi.fn(),
     fetchDashboardDailyLogData: vi.fn(),
     fetchDashboardDailyLogDataFromCache: vi.fn(),
+    fetchConsultationsForRange: vi.fn(),
 }));
 
 vi.mock('react', () => ({
@@ -28,7 +29,7 @@ vi.mock('../../shared/firestore-helpers.js', () => ({
     fetchDailyChecksRange: vi.fn(),
     fetchDailyRecordsRange: vi.fn(),
     fetchPostponedTasksRange: vi.fn(),
-    fetchConsultationsForRange: vi.fn(),
+    fetchConsultationsForRange: mocks.fetchConsultationsForRange,
     fetchStudentStatusSummaries: vi.fn(),
     fetchClassSettingsMap: vi.fn(),
     fetchStaffNameMap: vi.fn(),
@@ -36,7 +37,7 @@ vi.mock('../../shared/firestore-helpers.js', () => ({
 }));
 vi.mock('../message-period.js', () => ({ kstDayRangeParams: vi.fn() }));
 
-import { useDashboardData, useStudents } from './useFirestore.js';
+import { useConsultations, useDashboardData, useStudents } from './useFirestore.js';
 
 const flushPromises = () => new Promise(resolve => setImmediate(resolve));
 
@@ -92,5 +93,34 @@ describe('cache-first 서버 오류 처리', () => {
         await flushPromises();
 
         expect(mocks.stateSetters[5]).toHaveBeenCalledWith(serverError);
+    });
+});
+
+describe('상담현황 로딩 상태', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mocks.stateSetters.length = 0;
+    });
+
+    it('비활성화하면 진행 중 로딩과 오류를 함께 초기화한다', () => {
+        const result = useConsultations({ uid: 'user-1' }, '2026-07-22', '2026-07-22', false);
+
+        expect(mocks.stateSetters[0]).toHaveBeenCalledWith([]);
+        expect(mocks.stateSetters[1]).toHaveBeenCalledWith(false);
+        expect(mocks.stateSetters[2]).toHaveBeenCalledWith(null);
+        expect(mocks.fetchConsultationsForRange).not.toHaveBeenCalled();
+        expect(result.reload).toEqual(expect.any(Function));
+    });
+
+    it('조회 실패 후 로딩을 종료하고 오류를 노출한다', async () => {
+        const error = new Error('consultation unavailable');
+        mocks.fetchConsultationsForRange.mockRejectedValue(error);
+
+        useConsultations({ uid: 'user-1' }, '2026-07-22', '2026-07-22', true);
+        await flushPromises();
+
+        expect(mocks.stateSetters[1]).toHaveBeenCalledWith(true);
+        expect(mocks.stateSetters[1]).toHaveBeenLastCalledWith(false);
+        expect(mocks.stateSetters[2]).toHaveBeenCalledWith(error);
     });
 });

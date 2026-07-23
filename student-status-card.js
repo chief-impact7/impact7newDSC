@@ -40,7 +40,7 @@ function renderAction(studentId, artifact) {
   return `
     <div class="status-ai-action">
       <span class="hint">${meta}</span>
-      <button class="status-ai-btn" onclick="onGenerateStudentStatusAi('${esc(studentId)}')" ${dis}>
+      <button class="status-ai-btn" ${dis}>
         ${generating ? '생성 중...' : label}
       </button>
     </div>
@@ -96,6 +96,13 @@ function cardHtml(studentId, artifact) {
   `;
 }
 
+function updateCard(mountEl, studentId, artifact) {
+  mountEl.innerHTML = cardHtml(studentId, artifact);
+  mountEl.querySelector('.status-ai-btn')?.addEventListener('click', () => {
+    window.onGenerateStudentStatusAi(studentId);
+  });
+}
+
 // artifact 조회 후 카드 재렌더. 조회 실패 시 골격(artifact=null)으로 폴백.
 async function refresh(studentId, mountEl) {
   if (!mountEl) return;
@@ -105,13 +112,13 @@ async function refresh(studentId, mountEl) {
   });
   // stale 방지: 그 사이 다른 학생으로 전환됐으면 무시
   if (mountEl.dataset.studentId && mountEl.dataset.studentId !== studentId) return;
-  mountEl.innerHTML = cardHtml(studentId, artifact);
+  updateCard(mountEl, studentId, artifact);
 }
 
 export async function renderStudentStatusCard(studentId, mountEl) {
   if (!studentId || !mountEl) return;
   // 즉시 골격 렌더(생성 전이라도 버튼 노출), 데이터는 비동기로 채움
-  mountEl.innerHTML = cardHtml(studentId, null);
+  updateCard(mountEl, studentId, null);
   await refresh(studentId, mountEl);
 }
 
@@ -119,7 +126,7 @@ window.onGenerateStudentStatusAi = async function (studentId) {
   if (_deps.readonly || _generatingFor) return;
   const mountEl = document.getElementById('student-status-slot')?.parentElement;
   _generatingFor = studentId;
-  if (mountEl) mountEl.innerHTML = cardHtml(studentId, null);
+  if (mountEl) updateCard(mountEl, studentId, null);
   try {
     await generateStudentReportAi(studentId);
     showToast('AI 종합 분석 완료');

@@ -176,7 +176,12 @@ export default function App() {
     // 데이터 로드
     const { students, loading: studentsLoading, error } = useStudents(user);
     const { checks, dailyRecords, postponed, dailyLog, loading: dataLoading, error: dashError } = useDashboardData(user, startDate, endDate, view === 'logbook', rangeType === 'day');
-    const { consultations, loading: consultLoading } = useConsultations(user, startDate, endDate, view === 'consult');
+    const {
+        consultations,
+        loading: consultLoading,
+        error: consultError,
+        reload: reloadConsultations,
+    } = useConsultations(user, startDate, endDate, view === 'consult');
     const aiStatus = useAiStatusData(user, view === 'ai');
 
     // 선택 날짜 기준 학기 감지
@@ -432,7 +437,7 @@ export default function App() {
             </div>
 
             {view === 'ai' ? (
-                <ErrorBoundary>
+                <ErrorBoundary key="ai">
                     <Suspense fallback={<div className="dash-grid"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>}>
                         <AiStatusBoard
                             students={students}
@@ -447,10 +452,15 @@ export default function App() {
                     </Suspense>
                 </ErrorBoundary>
             ) : view === 'consult' ? (
-                consultLoading ? (
+                consultError ? (
+                    <div className="ai-error" role="alert">
+                        <p>상담현황을 불러오지 못했습니다.</p>
+                        <IconButton svg={ICON_SVG.refresh} label="다시 시도" onClick={reloadConsultations} />
+                    </div>
+                ) : consultLoading ? (
                     <div className="dash-grid"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>
                 ) : (
-                    <ErrorBoundary>
+                    <ErrorBoundary key="consult">
                         <Suspense fallback={<div className="dash-grid"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>}>
                             <ConsultationBoard
                                 consultations={consultations}
@@ -472,7 +482,7 @@ export default function App() {
                         <SkeletonCard />
                     </div>
                 ) : (
-                    <ErrorBoundary>
+                    <ErrorBoundary key="daily">
                         <DailyLogBoard
                             students={students}
                             dailyLog={dailyLog}
