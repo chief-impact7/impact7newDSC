@@ -899,7 +899,7 @@ export function renderListPanel() {
                 <span class="item-title">${esc(s.name)}${newBadge}${naesinBadge}${leaveBadge}${pauseExpiredBadge}${lrPendingTags}${siblingIcon}${importantRecordIcon}${hwFailIconHtml}${overrideBadge}${overrideInBadge}</span>
                 ${teacherBadge}
             </div>
-            ${timeHtml}
+            <div class="item-times">${timeHtml}</div>
             <div class="item-actions">${toggleHtml || leavePeriodHtml}</div>
             ${followUpBtnHtml}
         </div>`;

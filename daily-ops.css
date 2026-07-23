@@ -758,7 +758,6 @@ body {
   min-width: 0;
   padding-right: 14px;
   box-sizing: border-box;
-  border-right: 1px solid var(--border);
 }
 
 .item-title {
@@ -792,6 +791,19 @@ body {
   min-width: 36px;
 }
 
+.item-times {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex: 0 0 64px;
+  min-width: 0;
+  gap: 2px;
+}
+
+.item-times > .item-time-block {
+  min-width: 0;
+}
+
 .item-time-label {
   font-size: 10px;
   color: var(--text-sec);
@@ -822,6 +834,7 @@ body {
   flex: 1;
   min-width: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
 }
@@ -830,12 +843,17 @@ body {
 .visit-pair {
   display: flex;
   align-items: center;
+  min-width: 0;
   gap: 6px;
+}
+
+.visit-pair .toggle-group {
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .visit-pair + .visit-pair {
   padding-left: 10px;
-  border-left: 1px solid var(--border);
 }
 
 /* 휴/퇴원 학생: 출결 버튼 대신 기간 표시 */
