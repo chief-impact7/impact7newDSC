@@ -209,7 +209,7 @@ service cloud.firestore {
           && data.doc_id is string
           && data.doc_id.size() > 0
           && data.change_type is string
-          && data.change_type in ['ENROLL', 'UPDATE', 'WITHDRAW', 'DELETE', 'RETURN', 'STATUS_CHANGE', 'RESTORE', 'LR_AMEND', 'PROMOTION']
+          && data.change_type in ['ENROLL', 'UPDATE', 'WITHDRAW', 'DELETE', 'RETURN', 'STATUS_CHANGE', 'RESTORE', 'LR_AMEND', 'PROMOTION', 'ACCOUNT_PAUSE', 'ACCOUNT_RESUME', 'ACCOUNT_END']
           && data.before is string
           && data.after is string
           && data.google_login_id is string
@@ -570,7 +570,7 @@ service cloud.firestore {
           'free_schedule', 'free_start', 'free_end',
           'special_start', 'special_end',
           'class_type', 'fee_type', 'updated_at', 'updated_by',
-          'default_days'
+          'default_days', 'account_type', 'branch'
         ]);
       }
 
@@ -578,7 +578,12 @@ service cloud.firestore {
 
       allow create, update: if isAuthorized()
         && hasOnlyAllowedClassSettingsFields()
-        && withinFieldLimit(20);
+        && (!('account_type' in request.resource.data)
+          || (request.resource.data.account_type is string
+            && request.resource.data.account_type in ['정규', '특강', '기타']))
+        && (!('branch' in request.resource.data)
+          || request.resource.data.branch is string)
+        && withinFieldLimit(22);
 
       allow delete: if isAuthorized();
     }
@@ -770,8 +775,42 @@ service cloud.firestore {
           'teacher_approved_by', 'teacher_approved_at',
           'return_date',
           'previous_status', 'created_at', 'updated_by', 'updated_at',
+          'account_target',
           // Cloud Function 연동 (재등원·복귀 반 선택 + 서버사이드 finalize)
           'target_class_code', 'target_semester',
+          'finalized_at', 'finalize_error', 'finalize_attempts'
+        ]);
+      }
+
+      function validAccountTargetOnCreate() {
+        return !('account_target' in request.resource.data)
+          || (request.resource.data.account_target is map
+            && request.resource.data.account_target.keys().hasAll(['account_id'])
+            && request.resource.data.account_target.keys().hasOnly([
+              'account_id', 'account_type', 'class_code', 'class_types', 'branch', 'label'
+            ])
+            && request.resource.data.account_target.account_id is string
+            && request.resource.data.account_target.account_id.size() > 0
+            && (!('account_type' in request.resource.data.account_target)
+              || (request.resource.data.account_target.account_type is string
+                && request.resource.data.account_target.account_type in ['정규', '특강', '기타']))
+            && (!('class_code' in request.resource.data.account_target)
+              || request.resource.data.account_target.class_code is string)
+            && (!('class_types' in request.resource.data.account_target)
+              || request.resource.data.account_target.class_types is list)
+            && (!('branch' in request.resource.data.account_target)
+              || request.resource.data.account_target.branch is string)
+            && (!('label' in request.resource.data.account_target)
+              || request.resource.data.account_target.label is string));
+      }
+
+      function accountTargetUnchanged() {
+        return request.resource.data.get('account_target', null)
+          == resource.data.get('account_target', null);
+      }
+
+      function hasNoAdminFieldsOnCreate() {
+        return !request.resource.data.keys().hasAny([
           'finalized_at', 'finalize_error', 'finalize_attempts'
         ]);
       }
@@ -785,11 +824,20 @@ service cloud.firestore {
 
       allow read: if isAuthorized();
 
-      allow create, update: if isAuthorized()
+      allow create: if isAuthorized()
         && hasOnlyAllowedLeaveRequestFields()
         && request.resource.data.status is string
         && request.resource.data.status in ['requested', 'approved', 'rejected', 'cancelled']
         && withinFieldLimit(30)
+        && validAccountTargetOnCreate()
+        && hasNoAdminFieldsOnCreate();
+
+      allow update: if isAuthorized()
+        && hasOnlyAllowedLeaveRequestFields()
+        && request.resource.data.status is string
+        && request.resource.data.status in ['requested', 'approved', 'rejected', 'cancelled']
+        && withinFieldLimit(30)
+        && accountTargetUnchanged()
         && notTouchingAdminFields();
 
       allow delete: if isAuthorized();
