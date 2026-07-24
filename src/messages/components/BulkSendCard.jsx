@@ -104,7 +104,7 @@ function responseSummary(audience, response, fallbackCount) {
 }
 
 export default function BulkSendCard({ students = [] }) {
-  const [channel, setChannel] = useState('sms');
+  const [channel, setChannel] = useState('alimtalk');
   const [audience, setAudience] = useState('student');
   const [staff, setStaff] = useState([]);
   const [staffLoaded, setStaffLoaded] = useState(false);
@@ -549,8 +549,8 @@ export default function BulkSendCard({ students = [] }) {
       <div className="mc-card">
         <h2 className="mc-section-title"><Icon svg={ICON_SVG.bulk_message} size={20} aria-hidden="true" /> 단체 메시지</h2>
         <div className="mc-seg mc-channel-seg" role="group" aria-label="발송 채널">
-          <button type="button" disabled={sending} className={!isAlimtalk ? 'on' : ''} aria-pressed={!isAlimtalk} onClick={() => selectChannel('sms')}>문자</button>
           <button type="button" disabled={sending} className={isAlimtalk ? 'on' : ''} aria-pressed={isAlimtalk} onClick={() => selectChannel('alimtalk')}>알림톡</button>
+          <button type="button" disabled={sending} className={!isAlimtalk ? 'on' : ''} aria-pressed={!isAlimtalk} onClick={() => selectChannel('sms')}>문자</button>
         </div>
         <fieldset className="bulk-split bulk-send-fieldset" disabled={sending}>
           <div className="bulk-left">
